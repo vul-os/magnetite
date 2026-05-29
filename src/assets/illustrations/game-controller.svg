@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">
+  <defs>
+    <linearGradient id="ctrlGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <linearGradient id="magField" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.4"/>
+      <stop offset="50%" stop-color="#f59e0b" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="120" fill="#0a0a0f"/>
+  <path d="M40,60 Q60,30 100,35 Q140,30 160,60 Q140,90 100,85 Q60,90 40,60" fill="none" stroke="url(#magField)" stroke-width="40"/>
+  <g transform="translate(100,60)">
+    <path d="M-55,-5 Q-55,-25 -35,-25 L35,-25 Q55,-25 55,-5 Q55,25 35,25 L-35,25 Q-55,25 -55,5 Z" fill="#1a1a25" stroke="url(#ctrlGrad)" stroke-width="2.5" rx="12"/>
+    <circle cx="-25" cy="0" r="12" fill="none" stroke="#27272a" stroke-width="2"/>
+    <circle cx="-25" cy="0" r="4" fill="#f59e0b"/>
+    <circle cx="25" cy="0" r="12" fill="none" stroke="#27272a" stroke-width="2"/>
+    <circle cx="25" cy="0" r="4" fill="#f59e0b"/>
+    <rect x="-8" y="-8" width="16" height="4" rx="2" fill="#27272a"/>
+    <rect x="-8" y="4" width="16" height="4" rx="2" fill="#27272a"/>
+    <circle cx="0" cy="-18" r="5" fill="#27272a"/>
+    <circle cx="0" cy="-18" r="2" fill="#f59e0b"/>
+    <rect x="-6" y="16" width="12" height="6" rx="2" fill="#27272a"/>
+  </g>
+  <g opacity="0.5">
+    <path d="M20,40 Q30,50 20,60" stroke="#f59e0b" stroke-width="1.5" fill="none"/>
+    <path d="M15,45 Q28,50 15,55" stroke="#f59e0b" stroke-width="1" fill="none"/>
+    <path d="M180,40 Q170,50 180,60" stroke="#f59e0b" stroke-width="1.5" fill="none"/>
+    <path d="M185,45 Q172,50 185,55" stroke="#f59e0b" stroke-width="1" fill="none"/>
+  </g>
+</svg>

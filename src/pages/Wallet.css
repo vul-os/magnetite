@@ -1,0 +1,604 @@
+.wallet {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.wallet-header {
+  margin-bottom: 32px;
+}
+
+.wallet-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.wallet-header p {
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.wallet-grid {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 24px;
+}
+
+.wallet-left {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.wallet-right {
+  min-width: 0;
+}
+
+.balance-card {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 20px;
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+}
+
+.balance-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.balance-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.usdc-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.usdc-icon {
+  font-size: 14px;
+}
+
+.balance-label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.balance-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.balance-amount .currency {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.balance-amount .amount {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.balance-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.btn-add-funds {
+  flex: 1;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.btn-add-funds span {
+  margin-right: 6px;
+}
+
+.btn-outline {
+  padding: 14px 20px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-outline:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.quick-action {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-action:hover {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--color-accent);
+}
+
+.qa-icon {
+  font-size: 18px;
+}
+
+.quick-deposit-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.quick-deposit-section h3 {
+  margin: 0 0 20px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.preset-amounts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.preset-btn {
+  padding: 12px 8px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.preset-btn.active {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.custom-amount-row {
+  margin-bottom: 20px;
+}
+
+.custom-amount-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.custom-amount-input .input-prefix {
+  position: absolute;
+  left: 16px;
+  color: var(--color-text-muted);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.custom-amount-input input {
+  width: 100%;
+  padding: 14px 16px 14px 32px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  transition: border-color 0.2s;
+}
+
+.custom-amount-input input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.custom-amount-input input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.deposit-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.method-option {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.method-option:hover {
+  border-color: var(--color-text-muted);
+}
+
+.method-option.active {
+  border-color: var(--color-accent);
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.method-option input {
+  display: none;
+}
+
+.method-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.method-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-card);
+  border-radius: 10px;
+}
+
+.method-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.method-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.method-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.btn-deposit {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.btn-deposit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-address-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.wallet-address-section h3 {
+  margin: 0 0 20px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.address-card {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.qr-placeholder {
+  flex-shrink: 0;
+}
+
+.qr-box {
+  width: 100px;
+  height: 100px;
+  background: white;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #000;
+  font-size: 14px;
+}
+
+.address-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.address-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.address-value {
+  flex: 1;
+}
+
+.address-value code {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.btn-copy {
+  align-self: flex-start;
+  padding: 8px 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-copy:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.address-notice {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.transactions-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+  height: fit-content;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-text:hover {
+  text-decoration: underline;
+}
+
+.transactions-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.transaction-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.transaction-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.transaction-item:first-child {
+  padding-top: 0;
+}
+
+.tx-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.tx-icon-deposit {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.tx-icon-withdraw {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.tx-icon-game {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-accent);
+}
+
+.tx-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tx-description {
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.tx-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.tx-amount {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tx-amount.positive {
+  color: #22c55e;
+}
+
+.tx-amount.negative {
+  color: var(--color-text-primary);
+}
+
+.tx-status {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.status-success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.status-pending {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-accent);
+}
+
+.status-failed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+@media (max-width: 900px) {
+  .wallet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-left {
+    order: 2;
+  }
+
+  .wallet-right {
+    order: 1;
+  }
+}
+
+@media (max-width: 500px) {
+  .balance-amount .amount {
+    font-size: 36px;
+  }
+
+  .balance-actions {
+    flex-direction: column;
+  }
+
+  .preset-amounts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .address-card {
+    flex-direction: column;
+  }
+
+  .qr-box {
+    width: 80px;
+    height: 80px;
+  }
+}

@@ -1,0 +1,27 @@
+export const themes = {
+  dark: {
+    '--color-bg-primary': '#0a0a0f',
+    '--color-bg-secondary': '#12121a',
+    '--color-bg-card': '#1a1a25',
+    '--color-text-primary': '#e4e4e7',
+    '--color-text-secondary': '#a1a1aa',
+    '--color-text-muted': '#71717a',
+    '--color-border': '#27272a',
+    '--shadow-sm': '0 1px 2px rgba(0,0,0,0.3)',
+    '--shadow-md': '0 4px 6px rgba(0,0,0,0.4)',
+    '--shadow-lg': '0 10px 25px rgba(0,0,0,0.5)',
+  },
+  light: {
+    '--color-bg-primary': '#fafafa',
+    '--color-bg-secondary': '#f4f4f5',
+    '--color-bg-card': '#ffffff',
+    '--color-text-primary': '#18181b',
+    '--color-text-secondary': '#52525b',
+    '--color-text-muted': '#a1a1aa',
+    '--color-border': '#e4e4e7',
+    '--shadow-sm': '0 1px 2px rgba(0,0,0,0.05)',
+    '--shadow-md': '0 4px 6px rgba(0,0,0,0.1)',
+    '--shadow-lg': '0 10px 25px rgba(0,0,0,0.15)',
+  },
+  system: {},
+};

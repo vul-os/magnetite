@@ -1,0 +1,24 @@
+SUBSCRIPTION CONFIRMED - {{tier_name}}
+
+Thank you for subscribing to {{tier_name}}! You now have access to all the features included in your plan.
+
+SUBSCRIPTION DETAILS
+====================
+Plan: {{tier_name}}
+Price: {{price}} / {{billing_cycle}}
+Next Billing Date: {{next_billing_date}}
+
+FEATURES
+========
+{% for feature in features %}
+- {{feature}}
+{% endfor %}
+
+Manage your subscription: {{base_url}}/subscription
+
+---
+&copy; {{year}} Magnetite. All rights reserved.
+
+Website: {{base_url}}
+Privacy Policy: {{base_url}}/privacy
+Terms of Service: {{base_url}}/terms

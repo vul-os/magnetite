@@ -1,0 +1,35 @@
+WELCOME TO MAGNETITE, {{name}}!
+
+We're thrilled to have you join the future of competitive gaming.
+
+GET STARTED: {{base_url}}/games
+
+PLATFORM HIGHLIGHTS
+====================
+
+Tournaments
+Compete in daily and weekly tournaments
+
+Fast Payouts
+Get paid in USDC within 24 hours
+
+Community
+Join thousands of competitive gamers
+
+QUICK START GUIDE
+=================
+1. Complete your profile
+2. Browse available tournaments
+3. Register and compete
+4. Claim your winnings
+
+Complete Your Profile: {{base_url}}/profile
+
+---
+&copy; {{year}} Magnetite. All rights reserved.
+
+Website: {{base_url}}
+Privacy Policy: {{base_url}}/privacy
+Terms of Service: {{base_url}}/terms
+
+Need help? Contact us at support@magnetite.com

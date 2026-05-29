@@ -1,0 +1,68 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<!-- Hero Section -->
+<tr>
+    <td style="padding: 50px 30px 40px 30px; text-align: center;">
+        <h1 style="margin: 0 0 20px 0; font-size: 32px; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            Welcome to Magnetite, {{name}}!
+        </h1>
+        <p style="margin: 0 0 30px 0; font-size: 18px; color: #9ca3af; line-height: 1.6;">
+            We're thrilled to have you join the future of competitive gaming.
+        </p>
+        <a href="{{base_url}}/games" style="display: inline-block; padding: 16px 40px; background-color: #8b5cf6; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            Start Playing
+        </a>
+    </td>
+</tr>
+
+<!-- Platform Highlights -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 20px; background-color: #1a1a26; border-radius: 12px; text-align: center; width: 33.33%;">
+                    <img src="{{base_url}}/images/icons/trophy.png" alt="Tournaments" width="48" height="48" style="display: block; margin: 0 auto 12px auto;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #ffffff;">Tournaments</h3>
+                    <p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.4;">Compete in daily and weekly tournaments</p>
+                </td>
+                <td style="width: 20px;"></td>
+                <td style="padding: 20px; background-color: #1a1a26; border-radius: 12px; text-align: center; width: 33.33%;">
+                    <img src="{{base_url}}/images/icons/wallet.png" alt="Payouts" width="48" height="48" style="display: block; margin: 0 auto 12px auto;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #ffffff;">Fast Payouts</h3>
+                    <p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.4;">Get paid in USDC within 24 hours</p>
+                </td>
+                <td style="width: 20px;"></td>
+                <td style="padding: 20px; background-color: #1a1a26; border-radius: 12px; text-align: center; width: 33.33%;">
+                    <img src="{{base_url}}/images/icons/community.png" alt="Community" width="48" height="48" style="display: block; margin: 0 auto 12px auto;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #ffffff;">Community</h3>
+                    <p style="margin: 0; font-size: 14px; color: #9ca3af; line-height: 1.4;">Join thousands of competitive gamers</p>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Divider -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <hr style="border: none; border-top: 1px solid #2a2a3a; margin: 0;">
+    </td>
+</tr>
+
+<!-- Getting Started -->
+<tr>
+    <td style="padding: 0 30px 50px 30px; text-align: center;">
+        <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: #ffffff;">Quick Start Guide</h2>
+        <p style="margin: 0 0 24px 0; font-size: 15px; color: #9ca3af; line-height: 1.6;">
+            1. Complete your profile<br>
+            2. Browse available tournaments<br>
+            3. Register and compete<br>
+            4. Claim your winnings
+        </p>
+        <a href="{{base_url}}/profile" style="color: #8b5cf6; text-decoration: none; font-size: 15px;">
+            Complete Your Profile &rarr;
+        </a>
+    </td>
+</tr>
+{% endblock %}

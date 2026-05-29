@@ -1,0 +1,93 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<!-- Warning Icon -->
+<tr>
+    <td style="padding: 50px 30px 30px 30px; text-align: center;">
+        <img src="{{base_url}}/images/icons/warning.png" alt="Warning" width="64" height="64" style="display: inline-block;">
+    </td>
+</tr>
+
+<!-- Header -->
+<tr>
+    <td style="padding: 0 30px 20px 30px; text-align: center;">
+        <h1 style="margin: 0 0 12px 0; font-size: 28px; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            Account Restriction Notice
+        </h1>
+        <p style="margin: 0; font-size: 16px; color: #ef4444; font-weight: 600;">
+            Your account access has been restricted.
+        </p>
+    </td>
+</tr>
+
+<!-- Reason -->
+<tr>
+    <td style="padding: 0 30px 30px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 24px; background-color: #1a1a26; border-radius: 12px; border-left: 3px solid #ef4444;">
+                    <p style="margin: 0 0 8px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Reason</p>
+                    <p style="margin: 0; font-size: 16px; color: #ffffff; line-height: 1.5;">{{reason}}</p>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Duration -->
+{% if duration %}
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" style="margin: auto;">
+            <tr>
+                <td style="padding: 16px 24px; background-color: rgba(239, 68, 68, 0.1); border-radius: 8px;">
+                    <p style="margin: 0; font-size: 14px; color: #9ca3af;">
+                        Duration: <strong style="color: #ef4444;">{{duration}}</strong>
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+{% endif %}
+
+<!-- Appeal Instructions -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 24px; background-color: #1a1a26; border-radius: 12px;">
+                    <p style="margin: 0 0 16px 0; font-size: 16px; color: #ffffff; font-weight: 600;">Appeal Process</p>
+                    <p style="margin: 0 0 12px 0; font-size: 14px; color: #9ca3af; line-height: 1.6;">
+                        If you believe this action was taken in error, you have the right to appeal.
+                    </p>
+                    <ol style="margin: 0; padding-left: 20px; font-size: 14px; color: #9ca3af; line-height: 1.8;">
+                        <li>Submit an appeal through our <a href="{{base_url}}/support/appeal" style="color: #8b5cf6; text-decoration: none;">appeal form</a></li>
+                        <li>Provide any relevant details or evidence</li>
+                        <li>Wait for our team to review (typically 48-72 hours)</li>
+                    </ol>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Divider -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <hr style="border: none; border-top: 1px solid #2a2a3a; margin: 0;">
+    </td>
+</tr>
+
+<!-- Contact Support -->
+<tr>
+    <td style="padding: 0 30px 50px 30px; text-align: center;">
+        <p style="margin: 0 0 16px 0; font-size: 14px; color: #9ca3af;">
+            Have questions? Our support team is here to help.
+        </p>
+        <a href="mailto:support@magnetite.com" style="display: inline-block; padding: 14px 32px; background-color: #2a2a3a; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            Contact Support
+        </a>
+    </td>
+</tr>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<!-- Success Icon -->
+<tr>
+    <td style="padding: 50px 30px 30px 30px; text-align: center;">
+        <img src="{{base_url}}/images/icons/check-circle.png" alt="Success" width="64" height="64" style="display: inline-block;">
+    </td>
+</tr>
+
+<!-- Header -->
+<tr>
+    <td style="padding: 0 30px 20px 30px; text-align: center;">
+        <h1 style="margin: 0 0 12px 0; font-size: 28px; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            Payout Processed
+        </h1>
+        <p style="margin: 0; font-size: 18px; color: #10b981; font-weight: 600;">
+            {{amount}} USDC
+        </p>
+    </td>
+</tr>
+
+<!-- Transaction Details -->
+<tr>
+    <td style="padding: 0 30px 30px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 24px; background-color: #1a1a26; border-radius: 12px;">
+                    <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td style="padding: 0 0 16px 0; border-bottom: 1px solid #2a2a3a;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Amount</p>
+                                <p style="margin: 0; font-size: 24px; color: #ffffff; font-weight: 700;">{{amount}} USDC</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 16px 0 0 0;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Destination</p>
+                                <p style="margin: 0; font-size: 14px; color: #ffffff; font-family: monospace;">{{destination}}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Transaction ID -->
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Transaction ID</p>
+        <p style="margin: 0; font-size: 14px; color: #9ca3af; font-family: monospace;">
+            <a href="{{explorer_url}}" style="color: #8b5cf6; text-decoration: none;">{{transaction_id}}</a>
+        </p>
+    </td>
+</tr>
+
+<!-- Balance Remaining -->
+<tr>
+    <td style="padding: 0 30px 40px 30px; text-align: center;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" style="margin: auto;">
+            <tr>
+                <td style="padding: 16px 24px; background-color: rgba(16, 185, 129, 0.1); border-radius: 8px;">
+                    <p style="margin: 0; font-size: 14px; color: #9ca3af;">
+                        New balance: <strong style="color: #ffffff;">{{balance}} USDC</strong>
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Divider -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <hr style="border: none; border-top: 1px solid #2a2a3a; margin: 0;">
+    </td>
+</tr>
+
+<!-- CTA -->
+<tr>
+    <td style="padding: 0 30px 50px 30px; text-align: center;">
+        <a href="{{base_url}}/earnings" style="display: inline-block; padding: 16px 40px; background-color: #8b5cf6; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            View Earnings
+        </a>
+    </td>
+</tr>
+{% endblock %}

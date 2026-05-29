@@ -1,0 +1,154 @@
+.card {
+  position: relative;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1c1c2e 0%, #16162a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.3s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.card-default {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.card-elevated {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5),
+              0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.card-interactive {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.card-glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.card-hoverable:hover,
+.card-clickable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5),
+              0 0 0 1px rgba(245, 158, 11, 0.15),
+              0 8px 24px rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.card-interactive:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.card-glass:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.card-clickable {
+  cursor: pointer;
+  border: none;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+
+.card-clickable:focus {
+  outline: none;
+}
+
+.card-clickable:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.5);
+  outline-offset: 2px;
+}
+
+.padding-none {
+  padding: 0;
+}
+
+.padding-sm {
+  padding: 12px;
+}
+
+.padding-md {
+  padding: 20px;
+}
+
+.padding-lg {
+  padding: 28px;
+}
+
+.card-header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 16px;
+}
+
+.card-body {
+  flex: 1;
+}
+
+.card-footer {
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 16px;
+}
+
+.padding-none .card-header {
+  padding: 20px 20px 16px 20px;
+  margin: 0;
+}
+
+.padding-none .card-body {
+  padding: 0 20px;
+}
+
+.padding-none .card-footer {
+  padding: 16px 20px 20px 20px;
+  margin: 0;
+}
+
+.padding-sm .card-header {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.padding-sm .card-footer {
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.padding-lg .card-header {
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+}
+
+.padding-lg .card-footer {
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+@media (max-width: 640px) {
+  .card {
+    border-radius: 12px;
+  }
+
+  .padding-md {
+    padding: 16px;
+  }
+
+  .padding-lg {
+    padding: 20px;
+  }
+
+  .card-hoverable:hover,
+  .card-clickable:hover {
+    transform: translateY(-2px);
+  }
+}

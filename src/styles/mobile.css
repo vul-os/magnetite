@@ -1,0 +1,215 @@
+/* Mobile breakpoints */
+/* sm: 640px */
+/* md: 768px */
+/* lg: 1024px */
+
+@media (max-width: 768px) {
+  /* Stack layouts */
+  .container { padding: 0 1rem; }
+  .grid-cols-3 { grid-template-columns: 1fr; }
+  .grid-cols-2 { grid-template-columns: 1fr; }
+  
+  /* Hide non-essential elements */
+  .desktop-only { display: none; }
+  
+  /* Full-width buttons */
+  .btn { width: 100%; margin-bottom: 0.5rem; }
+  
+  /* Stack cards */
+  .card { margin-bottom: 1rem; }
+}
+
+/* Additional mobile fixes */
+@media (max-width: 640px) {
+  /* Marketplace grid - ensure 1 column */
+  .game-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+
+  /* Wallet layout - stack cards */
+  .wallet-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .wallet-left,
+  .wallet-right {
+    width: 100%;
+  }
+
+  /* Game detail sidebar - stack on mobile */
+  .game-content {
+    grid-template-columns: 1fr !important;
+    padding: 0 1rem;
+  }
+
+  .game-sidebar {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Developer dashboard tables - horizontal scroll */
+  .games-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .games-table th,
+  .games-table td {
+    min-width: 120px;
+  }
+
+  /* Auth forms - fit mobile */
+  .auth-card {
+    padding: 1.5rem 1rem;
+    margin: 0 0.5rem;
+  }
+
+  .auth-container-center {
+    max-width: 100%;
+  }
+
+  /* Navbar mobile fixes */
+  .navbar-container {
+    padding: 12px 16px;
+  }
+
+  .navbar-nav {
+    display: none;
+  }
+
+  .mobile-menu-toggle {
+    display: flex !important;
+  }
+
+  /* Hide desktop-only elements on mobile */
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Quick actions stack */
+  .quick-actions {
+    flex-direction: column;
+  }
+
+  .quick-action {
+    width: 100%;
+  }
+
+  /* Stats grid - single column */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Main content grid - stack */
+  .main-content-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Filters bar - stack */
+  .filters-bar {
+    flex-direction: column !important;
+    gap: 16px;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  /* Preset amounts - 2 columns */
+  .preset-amounts {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Extra small screens */
+  .game-title {
+    font-size: 1.5rem !important;
+  }
+
+  .balance-amount .amount {
+    font-size: 36px !important;
+  }
+
+  .btn-play {
+    padding: 0.75rem 1rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .btn-wishlist {
+    width: 100%;
+  }
+
+  .hero-content {
+    padding: 1rem !important;
+  }
+
+  .tab-btn {
+    padding: 0.75rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  .tab-content {
+    padding: 1rem !important;
+  }
+
+  .achievements-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .reviews-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .rating-overview {
+    flex-direction: row !important;
+  }
+
+  .big-rating {
+    font-size: 2rem !important;
+  }
+
+  /* Address card - stack */
+  .address-card {
+    flex-direction: column !important;
+    align-items: center;
+    text-align: center;
+  }
+
+  .address-details {
+    align-items: center;
+  }
+
+  /* Transactions - compact */
+  .transaction-item {
+    padding: 12px 0;
+  }
+
+  .tx-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+
+  /* Auth form elements */
+  .input-field,
+  .email-input,
+  .password-input {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+
+  .oauth-btn {
+    padding: 0.625rem 0.75rem;
+  }
+
+  /* Social proof - hide on very small screens */
+  .social-proof {
+    display: none;
+  }
+}

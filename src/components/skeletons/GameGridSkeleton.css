@@ -1,0 +1,11 @@
+.game-grid-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 640px) {
+  .game-grid-skeleton {
+    grid-template-columns: 1fr;
+  }
+}

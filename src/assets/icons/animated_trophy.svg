@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="trophyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="50%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="trophyShine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="trophyGlow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      @keyframes sparkle {
+        0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1) rotate(180deg); }
+      }
+      @keyframes trophy-bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+    </style>
+  </defs>
+  <rect width="64" height="64" fill="transparent"/>
+  <g transform="translate(32, 34)" style="animation: trophy-bounce 2s ease-in-out infinite;">
+    <path d="M20 0h-8v-4c0-6.6 5.4-12 12-12h8c6.6 0 12 5.4 12 12v4h-8" fill="url(#trophyGradient)" filter="url(#trophyGlow)"/>
+    <path d="M32 -16c-6.6 0-12 5.4-12 12v4h8v-4c0-4.4 3.6-8 8-8s8 3.6 8 8v4h8v-4c0-6.6-5.4-12-12-12z" fill="url(#trophyShine)"/>
+    <rect x="18" y="0" width="8" height="12" fill="#D97706"/>
+    <rect x="14" y="12" width="16" height="4" rx="1" fill="#F59E0B"/>
+    <rect x="16" y="16" width="12" height="3" fill="#D97706"/>
+    <path d="M12 0h-6c0 5.5 4.5 10 10 10v-4c-2.2 0-4-4-4-6z" fill="#FBBF24"/>
+    <path d="M32 0h8c0 5.5-4.5 10-10 10v-4c2.2 0 4-4 2-6z" fill="#FBBF24"/>
+  </g>
+  <g>
+    <circle cx="12" cy="12" r="3" fill="#FBBF24" style="animation: sparkle 1.5s ease-in-out infinite; animation-delay: 0s;"/>
+    <circle cx="52" cy="10" r="2" fill="#FBBF24" style="animation: sparkle 1.5s ease-in-out infinite; animation-delay: 0.3s;"/>
+    <circle cx="48" cy="50" r="2.5" fill="#F59E0B" style="animation: sparkle 1.5s ease-in-out infinite; animation-delay: 0.6s;"/>
+    <circle cx="16" cy="48" r="2" fill="#FBBF24" style="animation: sparkle 1.5s ease-in-out infinite; animation-delay: 0.9s;"/>
+    <circle cx="54" cy="32" r="1.5" fill="#FBBF24" style="animation: sparkle 1.5s ease-in-out infinite; animation-delay: 1.2s;"/>
+  </g>
+</svg>

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="coinGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2775CA"/>
+      <stop offset="50%" stop-color="#4E9CDC"/>
+      <stop offset="100%" stop-color="#2775CA"/>
+    </linearGradient>
+    <linearGradient id="coinHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      @keyframes flip {
+        0% { transform: rotateY(0deg); }
+        50% { transform: rotateY(90deg); }
+        100% { transform: rotateY(0deg); }
+      }
+      @keyframes glow-pulse {
+        0%, 100% { filter: drop-shadow(0 0 4px #FBBF24); }
+        50% { filter: drop-shadow(0 0 12px #F59E0B); }
+      }
+    </style>
+  </defs>
+  <rect width="64" height="64" fill="transparent"/>
+  <g transform="translate(32, 32)" style="animation: flip 3s ease-in-out infinite, glow-pulse 1.5s ease-in-out infinite;">
+    <ellipse cx="0" cy="0" rx="26" ry="26" fill="url(#coinGradient)" filter="url(#glow)"/>
+    <ellipse cx="0" cy="-8" rx="26" ry="20" fill="url(#coinHighlight)"/>
+    <text x="0" y="6" text-anchor="middle" fill="#FFFFFF" font-size="20" font-weight="bold" font-family="Arial, sans-serif">$</text>
+  </g>
+</svg>

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">
+  <title>No Games Found</title>
+  <desc>Empty state illustration with friendly gaming controller</desc>
+
+  <defs>
+    <linearGradient id="emptyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="500" height="400" fill="#0a0a0f"/>
+
+  <g id="controller-bg" transform="translate(150, 80)">
+    <ellipse cx="100" cy="60" rx="95" ry="48" fill="#1a1a24"/>
+    <ellipse cx="100" cy="60" rx="90" ry="43" fill="#252530"/>
+
+    <rect x="25" y="45" width="150" height="28" rx="14" fill="#1a1a24"/>
+    <rect x="30" y="48" width="140" height="22" rx="11" fill="#252530"/>
+
+    <circle cx="55" cy="60" r="16" fill="#0a0a0f" stroke="url(#emptyGrad)" stroke-width="2"/>
+    <circle cx="55" cy="60" r="5" fill="#f59e0b"/>
+
+    <circle cx="145" cy="60" r="16" fill="#0a0a0f" stroke="url(#emptyGrad)" stroke-width="2"/>
+    <path d="M140 60 L145 54 L150 60 L145 66 Z" fill="#f59e0b"/>
+
+    <ellipse cx="100" cy="60" rx="85" ry="38" fill="none" stroke="url(#emptyGrad)" stroke-width="2" opacity="0.5"/>
+  </g>
+
+  <g id="question-mark" transform="translate(235, 115)">
+    <circle cx="15" cy="15" r="22" fill="#1a1a24" stroke="#f59e0b" stroke-width="2"/>
+    <text x="15" y="23" text-anchor="middle" fill="#f59e0b" font-size="24" font-weight="bold">?</text>
+  </g>
+
+  <g id="search-box" transform="translate(125, 220)">
+    <rect x="0" y="0" width="250" height="40" rx="20" fill="#1a1a24" stroke="#252530" stroke-width="1"/>
+
+    <g transform="translate(20, 12)">
+      <circle cx="8" cy="8" r="7" fill="none" stroke="#888" stroke-width="2"/>
+      <line x1="13" y1="13" x2="18" y2="18" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    </g>
+
+    <text x="55" y="25" fill="#888" font-size="13">Search games...</text>
+  </g>
+
+  <text x="250" y="310" text-anchor="middle" fill="#f59e0b" font-size="18" font-weight="bold">No games found</text>
+  <text x="250" y="335" text-anchor="middle" fill="#888" font-size="13">Try adjusting your search or filters</text>
+
+  <g id="decorative" opacity="0.3">
+    <circle cx="80" cy="320" r="4" fill="#f59e0b"/>
+    <circle cx="420" cy="280" r="3" fill="#ea580c"/>
+    <circle cx="100" cy="150" r="3" fill="#ea580c"/>
+    <circle cx="400" cy="350" r="4" fill="#f59e0b"/>
+  </g>
+</svg>

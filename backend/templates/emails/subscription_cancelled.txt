@@ -1,0 +1,25 @@
+SUBSCRIPTION CANCELLED
+
+Your subscription to {{tier_name}} has been cancelled.
+
+CANCELLATION DETAILS
+====================
+Plan: {{tier_name}}
+Cancelled On: {{cancellation_date}}
+Access Expires: {{access_expires_date}}
+
+WHAT HAPPENS NEXT?
+==================
+You will retain access to your subscription features until {{access_expires_date}}.
+After that, your account will revert to the free tier.
+
+Reactivate your subscription: {{base_url}}/subscription/reactivate
+
+Need help? Contact us at support@magnetite.com
+
+---
+&copy; {{year}} Magnetite. All rights reserved.
+
+Website: {{base_url}}
+Privacy Policy: {{base_url}}/privacy
+Terms of Service: {{base_url}}/terms

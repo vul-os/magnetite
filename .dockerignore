@@ -1,0 +1,68 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Build artifacts
+target/
+dist/
+build/
+*.egg-info/
+.next/
+.nuxt/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.docker
+
+# Documentation
+*.md
+!README.md
+docs/
+LICENSE
+
+# Testing
+coverage/
+htmlcov/
+.tox/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.npm
+.yarn
+
+# Rust
+**/target/
+**/*.rs.bk
+Cargo.lock
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak

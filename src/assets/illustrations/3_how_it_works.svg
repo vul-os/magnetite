@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300">
+  <title>How It Works</title>
+  <desc>Three step process: Search, Pay, Play</desc>
+
+  <defs>
+    <linearGradient id="stepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="300" fill="#0a0a0f"/>
+
+  <line x1="175" y1="150" x2="320" y2="150" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrow)"/>
+  <line x1="420" y1="150" x2="565" y2="150" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrow)"/>
+
+  <g id="step-1" transform="translate(50, 40)">
+    <circle cx="75" cy="75" r="65" fill="#1a1a24"/>
+    <circle cx="75" cy="75" r="55" fill="#252530"/>
+
+    <g transform="translate(75, 65)">
+      <circle cx="0" cy="0" r="30" fill="#0a0a0f" stroke="url(#stepGrad)" stroke-width="2"/>
+      <circle cx="0" cy="0" r="22" fill="#1a1a24"/>
+
+      <line x1="-12" y1="-12" x2="12" y2="12" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+      <line x1="12" y1="-12" x2="-12" y2="12" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <circle cx="75" cy="30" r="18" fill="url(#stepGrad)"/>
+    <text x="75" y="36" text-anchor="middle" fill="#0a0a0f" font-size="16" font-weight="bold">1</text>
+
+    <text x="75" y="170" text-anchor="middle" fill="#f59e0b" font-size="14" font-weight="bold">SEARCH</text>
+    <text x="75" y="190" text-anchor="middle" fill="#888" font-size="11">Browse games</text>
+  </g>
+
+  <g id="step-2" transform="translate(325, 40)">
+    <circle cx="75" cy="75" r="65" fill="#1a1a24"/>
+    <circle cx="75" cy="75" r="55" fill="#252530"/>
+
+    <g transform="translate(75, 65)">
+      <rect x="-30" y="-20" width="60" height="40" rx="6" fill="#0a0a0f" stroke="url(#stepGrad)" stroke-width="2"/>
+      <rect x="-22" y="-12" width="44" height="24" rx="3" fill="#1a1a24"/>
+
+      <circle cx="-10" cy="0" r="4" fill="#f59e0b"/>
+      <circle cx="0" cy="0" r="4" fill="#ea580c"/>
+      <circle cx="10" cy="0" r="4" fill="#f59e0b"/>
+
+      <rect x="-18" y="5" width="36" height="4" rx="2" fill="#252530"/>
+    </g>
+
+    <circle cx="75" cy="30" r="18" fill="url(#stepGrad)"/>
+    <text x="75" y="36" text-anchor="middle" fill="#0a0a0f" font-size="16" font-weight="bold">2</text>
+
+    <text x="75" y="170" text-anchor="middle" fill="#f59e0b" font-size="14" font-weight="bold">PAY</text>
+    <text x="75" y="190" text-anchor="middle" fill="#888" font-size="11">Connect wallet</text>
+  </g>
+
+  <g id="step-3" transform="translate(600, 40)">
+    <circle cx="75" cy="75" r="65" fill="#1a1a24"/>
+    <circle cx="75" cy="75" r="55" fill="#252530"/>
+
+    <g transform="translate(75, 60)">
+      <ellipse cx="0" cy="0" rx="40" ry="22" fill="#0a0a0f" stroke="url(#stepGrad)" stroke-width="2"/>
+      <rect x="-25" y="-5" width="50" height="10" rx="5" fill="#1a1a24"/>
+
+      <circle cx="-18" cy="0" r="7" fill="#0a0a0f" stroke="#f59e0b" stroke-width="1.5"/>
+      <circle cx="-18" cy="0" r="2" fill="#f59e0b"/>
+
+      <path d="M12 0 L22 -5 L22 5 Z" fill="#f59e0b"/>
+    </g>
+
+    <g transform="translate(50, 100)">
+      <rect x="0" y="0" width="20" height="20" rx="3" fill="#f59e0b"/>
+      <circle cx="7" cy="7" r="2" fill="#0a0a0f"/>
+      <circle cx="13" cy="7" r="2" fill="#0a0a0f"/>
+      <circle cx="7" cy="13" r="2" fill="#0a0a0f"/>
+      <circle cx="13" cy="13" r="2" fill="#0a0a0f"/>
+    </g>
+
+    <g transform="translate(80, 95)">
+      <circle cx="10" cy="10" r="10" fill="#ea580c"/>
+      <text x="10" y="15" text-anchor="middle" fill="#0a0a0f" font-size="12" font-weight="bold">$</text>
+    </g>
+
+    <circle cx="75" cy="30" r="18" fill="url(#stepGrad)"/>
+    <text x="75" y="36" text-anchor="middle" fill="#0a0a0f" font-size="16" font-weight="bold">3</text>
+
+    <text x="75" y="170" text-anchor="middle" fill="#f59e0b" font-size="14" font-weight="bold">PLAY & WIN</text>
+    <text x="75" y="190" text-anchor="middle" fill="#888" font-size="11">Win rewards</text>
+  </g>
+</svg>

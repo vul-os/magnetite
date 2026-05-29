@@ -1,0 +1,152 @@
+.progress {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.progress.progress-linear {
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress.progress-circular {
+  width: 80px;
+  height: 80px;
+  justify-content: center;
+}
+
+.progress.progress-circular.progress-sm {
+  width: 48px;
+  height: 48px;
+}
+
+.progress.progress-circular.progress-md {
+  width: 80px;
+  height: 80px;
+}
+
+.progress.progress-circular.progress-lg {
+  width: 120px;
+  height: 120px;
+}
+
+.progress.progress-linear.progress-sm {
+  height: 4px;
+}
+
+.progress.progress-linear.progress-md {
+  height: 8px;
+}
+
+.progress.progress-linear.progress-lg {
+  height: 12px;
+}
+
+.progress-track {
+  width: 100%;
+  background: var(--color-bg-secondary, #12121a);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress.progress-linear .progress-track {
+  position: relative;
+}
+
+.progress.progress-circular .progress-track {
+  stroke: var(--color-border, #27272a);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.6s ease-out;
+}
+
+.progress.progress-circular .progress-fill {
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease-out;
+}
+
+.progress.progress-circular .progress-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.progress-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #71717a);
+}
+
+.progress.progress-circular .progress-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #fafafa);
+}
+
+.progress.progress-circular.progress-sm .progress-label {
+  font-size: 10px;
+}
+
+.progress.progress-circular.progress-md .progress-label {
+  font-size: 14px;
+}
+
+.progress.progress-circular.progress-lg .progress-label {
+  font-size: 20px;
+}
+
+.progress.progress-circular.progress-sm .progress-track,
+.progress.progress-circular.progress-sm .progress-fill {
+  stroke-width: 6;
+}
+
+.progress.progress-circular.progress-md .progress-track,
+.progress.progress-circular.progress-md .progress-fill {
+  stroke-width: 8;
+}
+
+.progress.progress-circular.progress-lg .progress-track,
+.progress.progress-circular.progress-lg .progress-fill {
+  stroke-width: 10;
+}
+
+.progress.progress-primary .progress-fill {
+  background: var(--color-accent, #f59e0b);
+}
+
+.progress.progress-primary.progress-circular .progress-fill {
+  stroke: var(--color-accent, #f59e0b);
+}
+
+.progress.progress-success .progress-fill {
+  background: var(--color-success, #22c55e);
+}
+
+.progress.progress-success.progress-circular .progress-fill {
+  stroke: var(--color-success, #22c55e);
+}
+
+.progress.progress-warning .progress-fill {
+  background: var(--color-warning, #eab308);
+}
+
+.progress.progress-warning.progress-circular .progress-fill {
+  stroke: var(--color-warning, #eab308);
+}
+
+.progress.progress-danger .progress-fill {
+  background: var(--color-danger, #ef4444);
+}
+
+.progress.progress-danger.progress-circular .progress-fill {
+  stroke: var(--color-danger, #ef4444);
+}
+
+

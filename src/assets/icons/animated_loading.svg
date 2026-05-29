@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="amberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="50%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <style>
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+    </style>
+  </defs>
+  <rect width="64" height="64" fill="transparent"/>
+  <g transform="translate(32, 32)">
+    <circle
+      r="24"
+      fill="none"
+      stroke="url(#amberGradient)"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-dasharray="100 50"
+      style="animation: spin 1.2s linear infinite; transform-origin: center;"
+    />
+    <circle
+      r="24"
+      fill="none"
+      stroke="#FBBF24"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-dasharray="30 150"
+      stroke-dashoffset="30"
+      style="animation: spin 1.2s linear infinite reverse; transform-origin: center; opacity: 0.6;"
+    />
+  </g>
+</svg>

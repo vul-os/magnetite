@@ -1,0 +1,119 @@
+.subscription-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.subscription-card:hover {
+  border-color: var(--color-text-muted);
+}
+
+.subscription-card.current {
+  border-color: var(--color-accent);
+  background: linear-gradient(135deg, var(--color-bg-card) 0%, rgba(245, 158, 11, 0.03) 100%);
+}
+
+.subscription-card.recommended {
+  border-color: var(--color-accent);
+}
+
+.subscription-card-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-accent);
+  color: #000;
+  padding: 4px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.subscription-card-header {
+  text-align: center;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+  position: relative;
+}
+
+.subscription-tier-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.subscription-tier-name {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  margin: 0 0 12px;
+}
+
+.subscription-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+}
+
+.price-amount {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.price-period {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.subscription-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  flex: 1;
+}
+
+.subscription-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.feature-check {
+  color: #22c55e;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.subscription-card-footer {
+  margin-top: auto;
+}
+
+.subscription-btn {
+  width: 100%;
+  padding: 14px;
+  font-weight: 600;
+}
+
+.subscription-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

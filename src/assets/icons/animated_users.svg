@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="user1Gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="user2Gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="user3Gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="100%" stop-color="#FBBF24"/>
+    </linearGradient>
+    <style>
+      @keyframes bounce1 {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+      }
+      @keyframes bounce2 {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+      }
+      @keyframes bounce3 {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+      }
+      @keyframes wave {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        25% { transform: translateY(-3px) rotate(-5deg); }
+        75% { transform: translateY(-3px) rotate(5deg); }
+      }
+    </style>
+  </defs>
+  <rect width="64" height="64" fill="transparent"/>
+  <g transform="translate(14, 20)" style="animation: bounce1 1.2s ease-in-out infinite;">
+    <circle cx="8" cy="8" r="8" fill="url(#user1Gradient)"/>
+    <path d="M-6 28c0-7.7 6.3-14 14-14s14 6.3 14 14v4H-6v-4z" fill="url(#user1Gradient)"/>
+  </g>
+  <g transform="translate(28, 18)" style="animation: bounce2 1.2s ease-in-out infinite; animation-delay: 0.15s;">
+    <circle cx="8" cy="8" r="8" fill="url(#user2Gradient)"/>
+    <path d="M-6 28c0-7.7 6.3-14 14-14s14 6.3 14 14v4H-6v-4z" fill="url(#user2Gradient)"/>
+  </g>
+  <g transform="translate(42, 20)" style="animation: bounce3 1.2s ease-in-out infinite; animation-delay: 0.3s;">
+    <circle cx="8" cy="8" r="8" fill="url(#user3Gradient)"/>
+    <path d="M-6 28c0-7.7 6.3-14 14-14s14 6.3 14 14v4H-6v-4z" fill="url(#user3Gradient)"/>
+  </g>
+  <g transform="translate(22, 50)" style="animation: wave 2s ease-in-out infinite;">
+    <path d="M0 4 Q10 0 20 4 Q10 8 0 4" fill="#FBBF24" opacity="0.6"/>
+  </g>
+</svg>

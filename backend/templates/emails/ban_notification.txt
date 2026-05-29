@@ -1,0 +1,24 @@
+ACCOUNT RESTRICTION NOTICE
+
+Your account access has been restricted.
+
+REASON
+======
+{{reason}}
+
+{% if duration %}
+DURATION: {{duration}}
+{% endif %}
+
+APPEAL PROCESS
+==============
+If you believe this action was taken in error, you have the right to appeal:
+
+1. Submit an appeal through our appeal form: {{base_url}}/support/appeal
+2. Provide any relevant details or evidence
+3. Wait for our team to review (typically 48-72 hours)
+
+Have questions? Contact us at support@magnetite.com
+
+---
+&copy; {{year}} Magnetite. All rights reserved.

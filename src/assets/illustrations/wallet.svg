@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160">
+  <defs>
+    <linearGradient id="coinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="walletGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a25"/>
+      <stop offset="100%" stop-color="#12121a"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="160" fill="#0a0a0f"/>
+  <path d="M30,50 L30,130 Q30,140 40,140 L160,140 Q170,140 170,130 L170,50 Q170,40 160,40 L40,40 Q30,40 30,50 Z" fill="url(#walletGrad)" stroke="#27272a" stroke-width="2"/>
+  <rect x="25" y="45" width="150" height="25" rx="5" fill="#27272a"/>
+  <circle cx="155" cy="57" r="8" fill="#0a0a0f" stroke="#f59e0b" stroke-width="2"/>
+  <g transform="translate(100,105)">
+    <circle cx="0" cy="0" r="35" fill="url(#coinGrad)"/>
+    <circle cx="0" cy="0" r="28" fill="none" stroke="#0a0a0f" stroke-width="2" opacity="0.3"/>
+    <text x="0" y="8" text-anchor="middle" fill="#0a0a0f" font-family="Arial, sans-serif" font-weight="bold" font-size="28">$</text>
+  </g>
+  <text x="100" y="155" text-anchor="middle" fill="#71717a" font-family="Arial, sans-serif" font-size="10">USDC</text>
+</svg>

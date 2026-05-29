@@ -1,0 +1,45 @@
+name: Game CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Run tests
+        run: cargo test
+      - name: Build WASM
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          wasm-bindgen --target web --out-dir ./dist --out-name game target/wasm32-unknown-unknown/release/*.wasm
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run security scan
+        run: |
+          # Run cargo-audit or similar
+          cargo audit || true
+
+  deploy:
+    needs: [test, security]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Deploy to staging
+      - name: Deploy to Staging
+        run: echo "Deploying to staging..."
+      # Wait for manual approval
+      - name: Deploy to Production
+        if: github.event_name == 'release'
+        run: echo "Deploying to production..."

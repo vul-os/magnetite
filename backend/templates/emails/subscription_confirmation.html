@@ -1,0 +1,98 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<!-- Success Icon -->
+<tr>
+    <td style="padding: 50px 30px 30px 30px; text-align: center;">
+        <img src="{{base_url}}/images/icons/check-circle.png" alt="Success" width="64" height="64" style="display: inline-block;">
+    </td>
+</tr>
+
+<!-- Header -->
+<tr>
+    <td style="padding: 0 30px 20px 30px; text-align: center;">
+        <h1 style="margin: 0 0 12px 0; font-size: 28px; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            Subscription Confirmed
+        </h1>
+        <p style="margin: 0; font-size: 18px; color: #10b981; font-weight: 600;">
+            {{tier_name}}
+        </p>
+    </td>
+</tr>
+
+<!-- Welcome Message -->
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <p style="margin: 0; font-size: 16px; color: #9ca3af; line-height: 1.6;">
+            Thank you for subscribing to {{tier_name}}! You now have access to all the features included in your plan.
+        </p>
+    </td>
+</tr>
+
+<!-- Subscription Details Card -->
+<tr>
+    <td style="padding: 0 30px 30px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 24px; background-color: #1a1a26; border-radius: 12px;">
+                    <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td style="padding: 0 0 16px 0; border-bottom: 1px solid #2a2a3a;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Plan</p>
+                                <p style="margin: 0; font-size: 20px; color: #ffffff; font-weight: 600;">{{tier_name}}</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 16px 0; border-bottom: 1px solid #2a2a3a;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Price</p>
+                                <p style="margin: 0; font-size: 16px; color: #ffffff;">{{price}} / {{billing_cycle}}</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 16px 0 0 0;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Next Billing Date</p>
+                                <p style="margin: 0; font-size: 16px; color: #ffffff;">{{next_billing_date}}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Features -->
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">Your plan includes:</p>
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0">
+            <tr>
+                {% for feature in features %}
+                <td style="padding: 8px 16px; background-color: #1a1a26; border-radius: 6px; text-align: center;">
+                    <p style="margin: 0; font-size: 14px; color: #9ca3af;">{{feature}}</p>
+                </td>
+                {% if not forloop.last %}
+                <td style="width: 10px;"></td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Divider -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <hr style="border: none; border-top: 1px solid #2a2a3a; margin: 0;">
+    </td>
+</tr>
+
+<!-- CTA -->
+<tr>
+    <td style="padding: 0 30px 50px 30px; text-align: center;">
+        <a href="{{base_url}}/subscription" style="display: inline-block; padding: 16px 40px; background-color: #8b5cf6; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            Manage Subscription
+        </a>
+    </td>
+</tr>
+{% endblock %}

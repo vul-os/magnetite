@@ -1,0 +1,14 @@
+{{inviter_name}} INVITED YOU TO PLAY {{game_name}}!
+
+Game: {{game_name}}
+Players: {{player_count}}
+Entry Fee: {{entry_fee}}
+
+{% if inviter_message %}
+Message from {{inviter_name}}:
+"{{inviter_message}}"
+{% endif %}
+
+Join Game: {{game_url}}
+
+This invitation expires in {{expires_in}}.

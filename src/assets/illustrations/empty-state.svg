@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160">
+  <defs>
+    <linearGradient id="emptyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a25"/>
+      <stop offset="100%" stop-color="#12121a"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="160" fill="#0a0a0f"/>
+  <rect x="30" y="30" width="140" height="100" rx="12" fill="url(#emptyGrad)" stroke="#27272a" stroke-width="2" stroke-dasharray="8 4"/>
+  <circle cx="100" cy="75" r="25" fill="none" stroke="#27272a" stroke-width="2"/>
+  <circle cx="100" cy="75" r="18" fill="none" stroke="#27272a" stroke-width="1"/>
+  <circle cx="100" cy="75" r="10" fill="none" stroke="#27272a" stroke-width="1"/>
+  <circle cx="100" cy="75" r="4" fill="#27272a"/>
+  <text x="100" y="115" text-anchor="middle" fill="#71717a" font-family="Arial" font-size="11">No games yet</text>
+  <text x="100" y="130" text-anchor="middle" fill="#52525b" font-family="Arial" font-size="9">Start a new game to play</text>
+</svg>

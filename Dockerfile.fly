@@ -1,0 +1,43 @@
+FROM rust:1.75-slim as builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/Cargo.toml backend/Cargo.lock ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release && rm -rf src
+
+COPY backend/src ./src
+COPY backend/migrations ./migrations
+COPY backend/tools/migrate.sh ./migrate.sh
+RUN chmod +x migrate.sh
+RUN touch src/main.rs && cargo build --release
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/magnetite-backend /app/magnetite
+COPY --from=builder /app/backend/migrations ./migrations
+COPY --from=builder /app/migrate.sh /app/migrate.sh
+RUN chmod +x /app/migrate.sh
+
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+ENV SERVER_HOST=0.0.0.0
+ENV SERVER_PORT=8080
+
+ENTRYPOINT ["/app/magnetite"]

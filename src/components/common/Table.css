@@ -1,0 +1,229 @@
+.table-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table-head {
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table-row-head .table-header {
+  padding: 16px 20px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.table-header.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+
+.table-header.sortable:hover {
+  color: var(--color-text-primary);
+}
+
+.table-header.sorted {
+  color: var(--color-accent);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sort-icon {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+
+.table-header.sortable:hover .sort-icon {
+  opacity: 1;
+}
+
+.sort-icon-neutral {
+  opacity: 0.3;
+}
+
+.sort-icon-active {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.sort-icon-active-desc {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.table-body {
+  background: var(--color-bg-secondary);
+}
+
+.table-row {
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color var(--transition-fast);
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.table-row:hover:not(.table-row-empty):not(.table-row-head) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.table-row.selected {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.table-row.selected:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.table-row.clickable {
+  cursor: pointer;
+}
+
+.table-cell {
+  padding: 16px 20px;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.table-cell-checkbox {
+  width: 48px;
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.table-row-empty {
+  border-bottom: none;
+}
+
+.table-cell-empty {
+  padding: 0;
+}
+
+.table-cell-empty .empty-state {
+  padding: 64px 24px;
+}
+
+.table-pagination {
+  margin-top: 16px;
+}
+
+.checkbox-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+}
+
+.checkbox-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-input:checked + .checkbox-custom {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.checkbox-input:checked + .checkbox-custom::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid var(--color-bg-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+.checkbox-input:indeterminate + .checkbox-custom {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.checkbox-input:indeterminate + .checkbox-custom::after {
+  content: '';
+  width: 8px;
+  height: 2px;
+  background: var(--color-bg-primary);
+}
+
+.checkbox-input:focus-visible + .checkbox-custom {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.checkbox-wrapper:hover .checkbox-custom {
+  border-color: var(--color-accent);
+}
+
+@media (max-width: 640px) {
+  .table-row-head .table-header {
+    padding: 12px 16px;
+  }
+
+  .table-cell {
+    padding: 12px 16px;
+  }
+
+  .table-cell-checkbox {
+    padding: 12px;
+  }
+
+  .sort-icon {
+    display: none;
+  }
+
+  .table-header.sortable::after {
+    content: '↕';
+    font-size: 0.625rem;
+    opacity: 0.3;
+    margin-left: 4px;
+  }
+
+  .table-header.sorted::after {
+    opacity: 1;
+    color: var(--color-accent);
+  }
+}

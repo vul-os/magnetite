@@ -1,0 +1,44 @@
+[package]
+name = "magnetite-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7", features = ["macros", "ws", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1", features = ["serde"] }
+jsonwebtoken = "9"
+argon2 = "0.5"
+rand = "0.8"
+rand_chacha = "0.3"
+base64 = "0.13"
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1"
+anyhow = "1"
+dotenvy = "0.15"
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+urlencoding = "2"
+handlebars = "5"
+lettre = { version = "0.11", features = ["tokio1-native-tls", "tokio1", "smtp-transport", "builder"] }
+sys-info = "0.9"
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1"
+tokio-stream = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+rust_decimal_macros = "1"
+temp-env = "0.3"

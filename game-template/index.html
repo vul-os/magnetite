@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnetite Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <script type="module">
+        import init from './pkg/magnetite_game_template.js';
+
+        async function run() {
+            const wasm = await init();
+
+            window.magnetite = {
+                get_state: () => wasm.get_state(),
+                handle_input: (player_id, input_json) => wasm.handle_input(player_id, input_json),
+            };
+        }
+
+        run();
+    </script>
+</body>
+</html>

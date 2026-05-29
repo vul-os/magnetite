@@ -1,0 +1,34 @@
+.onboarding-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+}
+
+.progress-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-border);
+  transition: all 0.3s ease;
+}
+
+.progress-dot.completed {
+  background: var(--color-success);
+}
+
+.progress-dot.active {
+  background: var(--color-accent);
+  transform: scale(1.2);
+}
+
+.progress-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}

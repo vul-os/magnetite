@@ -1,0 +1,65 @@
+.dot-grid {
+  position: relative;
+  background-color: var(--color-bg-primary);
+  background-image: radial-gradient(rgba(245, 158, 11, 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.dot-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 100% 100% at 50% 0%, rgba(245, 158, 11, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.dot-grid-subtle {
+  background-image: radial-gradient(rgba(245, 158, 11, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.dot-grid-light {
+  background-color: var(--color-bg-secondary);
+  background-image: radial-gradient(rgba(245, 158, 11, 0.1) 1px, transparent 1px);
+}
+
+.dot-grid-pattern {
+  position: relative;
+}
+
+.dot-grid-pattern::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+}
+
+.dot-grid-dense {
+  background-size: 16px 16px;
+}
+
+.dot-grid-sparse {
+  background-size: 48px 48px;
+}
+
+.dot-grid-card {
+  background-color: var(--color-bg-card);
+  background-image: radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.dot-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(245, 158, 11, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+}
+
+.dot-grid-section {
+  background-color: var(--color-bg-secondary);
+  background-image: radial-gradient(rgba(245, 158, 11, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

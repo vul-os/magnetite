@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300">
+  <title>Magnetite Features</title>
+  <desc>Three feature icons: Play, Earn, Community</desc>
+
+  <defs>
+    <linearGradient id="featGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="300" fill="#0a0a0f"/>
+
+  <g id="feature-1" transform="translate(75, 50)">
+    <rect x="0" y="0" width="200" height="200" rx="20" fill="#1a1a24"/>
+
+    <g transform="translate(100, 80)">
+      <ellipse cx="0" cy="0" rx="50" ry="28" fill="#252530"/>
+      <rect x="-35" y="-8" width="70" height="16" rx="8" fill="#1a1a24"/>
+
+      <circle cx="-25" cy="0" r="10" fill="#0a0a0f" stroke="#f59e0b" stroke-width="2"/>
+      <circle cx="-25" cy="0" r="3" fill="#f59e0b"/>
+
+      <circle cx="25" cy="0" r="10" fill="#0a0a0f" stroke="#f59e0b" stroke-width="2"/>
+      <path d="M21 0 L28 -5 L28 5 Z" fill="#f59e0b"/>
+    </g>
+
+    <text x="100" y="165" text-anchor="middle" fill="#f59e0b" font-size="14" font-weight="bold">PLAY</text>
+    <text x="100" y="185" text-anchor="middle" fill="#888" font-size="11">Instant gaming</text>
+  </g>
+
+  <g id="feature-2" transform="translate(350, 50)">
+    <rect x="0" y="0" width="200" height="200" rx="20" fill="#1a1a24"/>
+
+    <g transform="translate(100, 75)">
+      <circle cx="0" cy="0" r="45" fill="url(#featGrad1)"/>
+      <circle cx="0" cy="0" r="35" fill="#0a0a0f"/>
+      <text x="0" y="12" text-anchor="middle" fill="#f59e0b" font-size="36" font-weight="bold">$</text>
+
+      <g transform="translate(-55, -20)">
+        <circle cx="0" cy="0" r="12" fill="#f59e0b" opacity="0.8"/>
+        <text x="0" y="5" text-anchor="middle" fill="#0a0a0f" font-size="12" font-weight="bold">$</text>
+      </g>
+      <g transform="translate(55, 20)">
+        <circle cx="0" cy="0" r="10" fill="#ea580c" opacity="0.8"/>
+        <text x="0" y="4" text-anchor="middle" fill="#0a0a0f" font-size="10" font-weight="bold">$</text>
+      </g>
+    </g>
+
+    <text x="100" y="165" text-anchor="middle" fill="#f59e0b" font-size="14" font-weight="bold">EARN</text>
+    <text x="100" y="185" text-anchor="middle" fill="#888" font-size="11">Win real rewards</text>
+  </g>
+
+  <g id="feature-3" transform="translate(625, 50)">
+    <rect x="0" y="0" width="200" height="200" rx="20" fill="#1a1a24"/>
+
+    <g transform="translate(100, 75)">
+      <circle cx="-25" cy="-15" r="22" fill="#f59e0b"/>
+      <circle cx="-25" cy="-15" r="14" fill="#0a0a0f"/>
+      <circle cx="-25" cy="-20" r="5" fill="#f59e0b"/>
+
+      <circle cx="25" cy="-15" r="22" fill="#ea580c"/>
+      <circle cx="25" cy="-15" r="14" fill="#0a0a0f"/>
+      <circle cx="25" cy="-20" r="5" fill="#ea580c"/>
+
+      <circle cx="0" cy="25" r="22" fill="#f59e0b"/>
+      <circle cx="0" cy="25" r="14" fill="#0a0a0f"/>
+      <circle cx="0" cy="20" r="5" fill="#f59e0b"/>
+
+      <path d="M-40 25 Q-15 10 0 25" stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.5"/>
+      <path d="M40 25 Q15 10 0 25" stroke="#ea580c" stroke-width="2" fill="none" opacity="0.5"/>
+    </g>
+
+    <text x="100" y="165" text-anchor="middle" fill="#f59e0b" font-size="14" font-weight="bold">COMMUNITY</text>
+    <text x="100" y="185" text-anchor="middle" fill="#888" font-size="11">Play together</text>
+  </g>
+</svg>

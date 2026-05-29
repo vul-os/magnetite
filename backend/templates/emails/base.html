@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="x-apple-disable-message-reformatting">
+    <title>{{subject}}</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <style>
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+        table { border-collapse: collapse !important; }
+        body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }
+        a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }
+        @media screen and (max-width: 620px) {
+            .email-container { width: 100% !important; }
+            .fluid { max-width: 100% !important; height: auto !important; margin-left: auto !important; margin-right: auto !important; }
+            .stack-column { display: block !important; width: 100% !important; max-width: 100% !important; }
+            .hero-image { height: auto !important; }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <center style="width: 100%; background-color: #0a0a0f;">
+        <!--[if mso]>
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="margin: auto;">
+        <tr>
+        <td>
+        <![endif]-->
+
+        <table role="presentation" class="email-container" align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: auto; background-color: #12121a;">
+            <!-- Header -->
+            <tr>
+                <td style="padding: 40px 30px 30px 30px; text-align: center;">
+                    <a href="{{base_url}}" style="text-decoration: none;">
+                        <img src="{{logo_url}}" alt="Magnetite" width="160" height="40" style="display: inline-block; outline: none; border: 0;">
+                    </a>
+                </td>
+            </tr>
+
+            {% block content %}{% endblock %}
+
+            <!-- Footer -->
+            <tr>
+                <td style="padding: 40px 30px; background-color: #0a0a0f; text-align: center;">
+                    <p style="margin: 0 0 16px 0; font-size: 14px; color: #6b7280; line-height: 1.5;">
+                        &copy; {{year}} Magnetite. All rights reserved.
+                    </p>
+                    <p style="margin: 0 0 16px 0; font-size: 12px; color: #4b5563;">
+                        <a href="{{base_url}}" style="color: #8b5cf6; text-decoration: none;">Website</a>
+                        &nbsp;&bull;&nbsp;
+                        <a href="{{base_url}}/privacy" style="color: #8b5cf6; text-decoration: none;">Privacy Policy</a>
+                        &nbsp;&bull;&nbsp;
+                        <a href="{{base_url}}/terms" style="color: #8b5cf6; text-decoration: none;">Terms of Service</a>
+                    </p>
+                    <p style="margin: 0; font-size: 12px; color: #4b5563;">
+                        Need help? Contact us at <a href="mailto:support@magnetite.com" style="color: #8b5cf6; text-decoration: none;">support@magnetite.com</a>
+                    </p>
+                </td>
+            </tr>
+        </table>
+
+        <!--[if mso]>
+        </td>
+        </tr>
+        </table>
+        <![endif]-->
+    </center>
+</body>
+</html>

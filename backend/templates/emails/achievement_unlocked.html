@@ -1,0 +1,84 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<!-- Trophy Icon -->
+<tr>
+    <td style="padding: 50px 30px 30px 30px; text-align: center;">
+        <img src="{{badge_url}}" alt="{{achievement_name}}" width="96" height="96" style="display: inline-block;">
+    </td>
+</tr>
+
+<!-- Header -->
+<tr>
+    <td style="padding: 0 30px 20px 30px; text-align: center;">
+        <h1 style="margin: 0 0 12px 0; font-size: 28px; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            Achievement Unlocked!
+        </h1>
+        <p style="margin: 0; font-size: 22px; color: #f59e0b; font-weight: 600;">
+            {{achievement_name}}
+        </p>
+    </td>
+</tr>
+
+<!-- Description -->
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <p style="margin: 0; font-size: 16px; color: #9ca3af; line-height: 1.6;">
+            {{achievement_description}}
+        </p>
+    </td>
+</tr>
+
+<!-- Achievement Details Card -->
+<tr>
+    <td style="padding: 0 30px 30px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 24px; background-color: #1a1a26; border-radius: 12px; border: 1px solid #f59e0b;">
+                    <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td style="padding: 0 0 16px 0; border-bottom: 1px solid #2a2a3a; text-align: center;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Reward Earned</p>
+                                <p style="margin: 0; font-size: 24px; color: #f59e0b; font-weight: 700;">{{reward}}</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 16px 0 0 0;">
+                                <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280; text-align: center;">Progress Stats</p>
+                                <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0">
+                                    <tr>
+                                        <td style="padding: 0 20px 0 0; text-align: center;">
+                                            <p style="margin: 0 0 2px 0; font-size: 20px; color: #ffffff; font-weight: 600;">{{current_progress}}</p>
+                                            <p style="margin: 0; font-size: 12px; color: #6b7280;">Current</p>
+                                        </td>
+                                        <td style="padding: 0 0 0 20px; text-align: center;">
+                                            <p style="margin: 0 0 2px 0; font-size: 20px; color: #ffffff; font-weight: 600;">{{max_progress}}</p>
+                                            <p style="margin: 0; font-size: 12px; color: #6b7280;">Goal</p>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Divider -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <hr style="border: none; border-top: 1px solid #2a2a3a; margin: 0;">
+    </td>
+</tr>
+
+<!-- CTA -->
+<tr>
+    <td style="padding: 0 30px 50px 30px; text-align: center;">
+        <a href="{{base_url}}/achievements" style="display: inline-block; padding: 16px 40px; background-color: #8b5cf6; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            View Achievements
+        </a>
+    </td>
+</tr>
+{% endblock %}

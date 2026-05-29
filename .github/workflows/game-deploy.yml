@@ -1,0 +1,67 @@
+name: Game Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      game_id:
+        description: 'Game ID to deploy'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build WASM
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          wasm-bindgen --target web --out-dir ./dist --out-name game target/wasm32-unknown-unknown/release/*.wasm
+
+      - name: Deploy to Magnetite Platform
+        run: |
+          MAGNITUDE_API_URL="${{ vars.MAGNETITE_API_URL }}"
+          curl -X POST "${MAGNITUDE_API_URL}/games/${{ github.event.inputs.game_id }}/deploy" \
+            -H "Authorization: Bearer ${{ secrets.MAGNETITE_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"environment": "${{ github.event.inputs.environment }}", "version": "${{ github.sha }}"}'
+
+      - name: Update Game Status
+        run: |
+          MAGNITUDE_API_URL="${{ vars.MAGNETITE_API_URL }}"
+          curl -X PATCH "${MAGNITUDE_API_URL}/games/${{ github.event.inputs.game_id }}/status" \
+            -H "Authorization: Bearer ${{ secrets.MAGNETITE_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"status": "deployed", "environment": "${{ github.event.inputs.environment }}", "deployed_at": "${{ github.event.inputs.environment == 'production' && '2024-01-01' || now() }}"}'
+
+      - name: Notify Webhook
+        if: always()
+        run: |
+          WEBHOOK_URL="${{ vars.DEPLOYMENT_WEBHOOK_URL }}"
+          STATUS="${{ job.status }}"
+          curl -X POST "${WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "event": "deployment",
+              "game_id": "${{ github.event.inputs.game_id }}",
+              "environment": "${{ github.event.inputs.environment }}",
+              "status": "'"${STATUS}"'",
+              "sha": "${{ github.sha }}",
+              "actor": "${{ github.actor }}",
+              "run_id": ${{ github.run_id }}
+            }'

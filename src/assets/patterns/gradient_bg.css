@@ -1,0 +1,111 @@
+.gradient-bg {
+  position: relative;
+  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 50%, var(--color-bg-primary) 100%);
+  overflow: hidden;
+}
+
+.gradient-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(249, 115, 22, 0.1) 50%, rgba(245, 158, 11, 0.05) 100%);
+  animation: gradientShift 8s ease-in-out infinite;
+}
+
+.gradient-bg::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 30% 20%, rgba(245, 158, 11, 0.08) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, rgba(249, 115, 22, 0.06) 0%, transparent 50%);
+  animation: gradientMove 12s ease-in-out infinite;
+}
+
+.gradient-hero {
+  background: linear-gradient(180deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+}
+
+.gradient-hero::before {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.12) 0%, rgba(249, 115, 22, 0.08) 50%, transparent 100%);
+}
+
+.gradient-amber {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(249, 115, 22, 0.15) 50%, rgba(245, 158, 11, 0.08) 100%);
+}
+
+.gradient-amber::before {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
+}
+
+.gradient-radial {
+  background: radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.15) 0%, var(--color-bg-primary) 70%);
+}
+
+.gradient-radial::before {
+  background: radial-gradient(ellipse at 50% 0%, rgba(249, 115, 22, 0.1) 0%, transparent 50%);
+}
+
+.gradient-spotlight {
+  overflow: hidden;
+}
+
+.gradient-spotlight::before {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: -100%;
+  width: 300%;
+  height: 300%;
+  background: conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(245, 158, 11, 0.1) 60deg, transparent 120deg);
+  animation: spotlightRotate 20s linear infinite;
+}
+
+.gradient-mesh {
+  position: relative;
+}
+
+.gradient-mesh::before {
+  background: 
+    radial-gradient(ellipse at 20% 30%, rgba(245, 158, 11, 0.1) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 70%, rgba(249, 115, 22, 0.08) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 50%, rgba(245, 158, 11, 0.05) 0%, transparent 50%);
+}
+
+.gradient-overlay {
+  position: relative;
+}
+
+.gradient-overlay::before {
+  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 15, 0.8) 100%);
+}
+
+.gradient-card {
+  background: linear-gradient(135deg, var(--color-bg-card) 0%, rgba(245, 158, 11, 0.05) 100%);
+}
+
+@keyframes gradientShift {
+  0%, 100% { opacity: 1; transform: translateX(0); }
+  50% { opacity: 0.7; transform: translateX(10px); }
+}
+
+@keyframes gradientMove {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(2%, 2%); }
+  66% { transform: translate(-2%, 1%); }
+}
+
+@keyframes spotlightRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.gradient-animated::before {
+  animation: gradientShift 6s ease-in-out infinite;
+}
+
+.gradient-animated::after {
+  animation: gradientMove 10s ease-in-out infinite;
+}

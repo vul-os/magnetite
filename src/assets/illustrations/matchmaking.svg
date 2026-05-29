@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160">
+  <defs>
+    <linearGradient id="player1Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <linearGradient id="player2Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="160" fill="#0a0a0f"/>
+  <g transform="translate(50,80)">
+    <circle cx="0" cy="0" r="25" fill="url(#player1Grad)"/>
+    <circle cx="-8" cy="-5" r="4" fill="#0a0a0f"/>
+    <circle cx="8" cy="-5" r="4" fill="#0a0a0f"/>
+    <path d="M-8,8 Q0,14 8,8" stroke="#0a0a0f" stroke-width="2" fill="none"/>
+    <text x="0" y="4" text-anchor="middle" fill="#0a0a0f" font-family="Arial" font-size="10" font-weight="bold">P1</text>
+  </g>
+  <g transform="translate(150,80)">
+    <circle cx="0" cy="0" r="25" fill="url(#player2Grad)"/>
+    <circle cx="-8" cy="-5" r="4" fill="#0a0a0f"/>
+    <circle cx="8" cy="-5" r="4" fill="#0a0a0f"/>
+    <path d="M-8,8 Q0,14 8,8" stroke="#0a0a0f" stroke-width="2" fill="none"/>
+    <text x="0" y="4" text-anchor="middle" fill="#0a0a0f" font-family="Arial" font-size="10" font-weight="bold">P2</text>
+  </g>
+  <path d="M75,80 Q100,40 125,80" stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M75,80 Q100,120 125,80" stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M75,80 L125,80" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.3"/>
+  <circle cx="100" cy="80" r="8" fill="#1a1a25" stroke="#f59e0b" stroke-width="2"/>
+  <path d="M96,80 L104,80 M100,76 L100,84" stroke="#f59e0b" stroke-width="2"/>
+  <circle cx="75" cy="80" r="3" fill="#f59e0b" opacity="0.5"/>
+  <circle cx="125" cy="80" r="3" fill="#f59e0b" opacity="0.5"/>
+  <text x="100" y="25" text-anchor="middle" fill="#71717a" font-family="Arial" font-size="9">MATCHMAKING</text>
+</svg>

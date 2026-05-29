@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="controllerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="50%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="controllerDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+    <filter id="controllerGlow">
+      <feGaussianBlur stdDeviation="1" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      @keyframes button-press {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(0.85); }
+      }
+      @keyframes button-glow {
+        0%, 100% { filter: drop-shadow(0 0 2px #F59E0B); }
+        50% { filter: drop-shadow(0 0 6px #FBBF24); }
+      }
+      @keyframes dpad-move {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(2px, 0); }
+        75% { transform: translate(-2px, 0); }
+      }
+    </style>
+  </defs>
+  <rect width="64" height="64" fill="transparent"/>
+  <g transform="translate(32, 32)" filter="url(#controllerGlow)">
+    <rect x="-28" y="-12" width="56" height="28" rx="10" fill="url(#controllerGradient)"/>
+    <rect x="-28" y="-12" width="56" height="14" rx="10" fill="url(#controllerDark)" opacity="0.3"/>
+    <g transform="translate(-18, 2)">
+      <circle cx="0" cy="0" r="6" fill="#1F2937"/>
+      <circle cx="0" cy="-2" r="2" fill="#374151" style="animation: button-press 0.8s ease-in-out infinite; transform-origin: center;"/>
+    </g>
+    <g transform="translate(18, 2)">
+      <circle cx="0" cy="0" r="6" fill="#1F2937"/>
+      <circle cx="0" cy="-2" r="2" fill="#FBBF24" style="animation: button-press 0.8s ease-in-out infinite; animation-delay: 0.2s; transform-origin: center;"/>
+    </g>
+    <g transform="translate(-20, -4)" style="animation: dpad-move 2s ease-in-out infinite;">
+      <rect x="-4" y="-1.5" width="8" height="3" rx="1" fill="#1F2937"/>
+      <rect x="-1.5" y="-4" width="3" height="8" rx="1" fill="#1F2937"/>
+    </g>
+    <g transform="translate(20, -4)">
+      <circle cx="-3" cy="0" r="2" fill="#EF4444" style="animation: button-glow 1s ease-in-out infinite; transform-origin: center;"/>
+      <circle cx="3" cy="0" r="2" fill="#22C55E" style="animation: button-glow 1s ease-in-out infinite; animation-delay: 0.15s; transform-origin: center;"/>
+      <circle cx="0" cy="-3" r="2" fill="#3B82F6" style="animation: button-glow 1s ease-in-out infinite; animation-delay: 0.3s; transform-origin: center;"/>
+      <circle cx="0" cy="3" r="2" fill="#A855F7" style="animation: button-glow 1s ease-in-out infinite; animation-delay: 0.45s; transform-origin: center;"/>
+    </g>
+    <ellipse cx="-10" cy="8" rx="3" ry="1.5" fill="#1F2937" opacity="0.5"/>
+    <ellipse cx="10" cy="8" rx="3" ry="1.5" fill="#1F2937" opacity="0.5"/>
+  </g>
+</svg>

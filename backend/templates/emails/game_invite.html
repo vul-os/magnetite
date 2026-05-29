@@ -1,0 +1,91 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<!-- Header -->
+<tr>
+    <td style="padding: 50px 30px 30px 30px; text-align: center;">
+        <h1 style="margin: 0 0 16px 0; font-size: 28px; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            {{inviter_name}} invited you to play {{game_name}}!
+        </h1>
+        <p style="margin: 0; font-size: 16px; color: #9ca3af; line-height: 1.6;">
+            You've been invited to join a game on Magnetite.
+        </p>
+    </td>
+</tr>
+
+<!-- Game Thumbnail -->
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <img src="{{game_thumbnail_url}}" alt="{{game_name}}" width="400" height="225" style="display: inline-block; max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #2a2a3a;">
+    </td>
+</tr>
+
+<!-- Inviter Message -->
+{% if inviter_message %}
+<tr>
+    <td style="padding: 0 30px 30px 30px;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+                <td style="padding: 20px; background-color: #1a1a26; border-radius: 12px;">
+                    <p style="margin: 0 0 12px 0; font-size: 14px; color: #6b7280;">{{inviter_name}} says:</p>
+                    <p style="margin: 0; font-size: 16px; color: #ffffff; font-style: italic; line-height: 1.5;">"{{inviter_message}}"</p>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+{% endif %}
+
+<!-- CTA Button -->
+<tr>
+    <td style="padding: 0 30px 30px 30px; text-align: center;">
+        <a href="{{game_url}}" style="display: inline-block; padding: 16px 40px; background-color: #8b5cf6; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+            Join Game
+        </a>
+    </td>
+</tr>
+
+<!-- Game Details -->
+<tr>
+    <td style="padding: 0 30px 40px 30px; text-align: center;">
+        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" style="margin: auto;">
+            <tr>
+                <td style="padding: 20px 30px; background-color: #1a1a26; border-radius: 12px;">
+                    <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="padding: 0 30px 0 0; border-right: 1px solid #2a2a3a;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Game</p>
+                                <p style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 600;">{{game_name}}</p>
+                            </td>
+                            <td style="padding: 0 30px 0 30px; border-right: 1px solid #2a2a3a;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Players</p>
+                                <p style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 600;">{{player_count}}</p>
+                            </td>
+                            <td style="padding: 0 0 0 30px;">
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Entry Fee</p>
+                                <p style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 600;">{{entry_fee}}</p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+<!-- Divider -->
+<tr>
+    <td style="padding: 0 30px 40px 30px;">
+        <hr style="border: none; border-top: 1px solid #2a2a3a; margin: 0;">
+    </td>
+</tr>
+
+<!-- Footer Note -->
+<tr>
+    <td style="padding: 0 30px 50px 30px; text-align: center;">
+        <p style="margin: 0; font-size: 14px; color: #6b7280;">
+            This invitation expires in {{expires_in}}.
+        </p>
+    </td>
+</tr>
+{% endblock %}

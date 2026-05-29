@@ -1,0 +1,15 @@
+ACHIEVEMENT UNLOCKED: {{achievement_name}}!
+
+{{achievement_description}}
+
+REWARD EARNED: {{reward}}
+
+PROGRESS STATS
+==============
+Current: {{current_progress}}
+Goal: {{max_progress}}
+
+View Achievements: {{base_url}}/achievements
+
+---
+&copy; {{year}} Magnetite. All rights reserved.

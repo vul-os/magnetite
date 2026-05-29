@@ -1,0 +1,231 @@
+.subscription-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.subscription-header {
+  margin-bottom: 32px;
+}
+
+.subscription-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.subscription-header p {
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.subscription-content {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+}
+
+.subscription-main {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.subscription-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.current-plan-section h2,
+.plans-section h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.current-plan-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.current-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.current-plan-label {
+  font-size: 13px;
+  color: #22c55e;
+  font-weight: 500;
+}
+
+.current-plan-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-label {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.detail-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.payment-history-section,
+.danger-zone-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.payment-history-section h3,
+.danger-zone-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.payment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.payment-item:last-child {
+  border-bottom: none;
+}
+
+.payment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payment-description {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.payment-date {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.payment-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.payment-amount {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.payment-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.payment-status.completed {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.view-all-btn {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.danger-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+}
+
+.danger-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.danger-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ef4444;
+}
+
+.danger-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.btn-danger {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-danger:hover {
+  background: #ef4444;
+  color: white;
+}
+
+@media (max-width: 900px) {
+  .subscription-content {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-sidebar {
+    order: -1;
+  }
+}

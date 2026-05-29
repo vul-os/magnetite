@@ -1,0 +1,14 @@
+[package]
+name = "magnetite-game-template"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bevy = "0.13"
+magnetite-sdk = { path = "../backend/magnetite-sdk" }
+serde = { version = "1", features = ["derive"] }
+wasm-bindgen = "0.2"
+getrandom = { version = "0.2", features = ["js"] }

@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <title>Magnetite Hero Illustration</title>
+  <desc>Stylized game controller with magnetic field lines and floating gaming elements</desc>
+
+  <defs>
+    <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <linearGradient id="fieldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#ea580c" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.8"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="800" height="600" fill="#0a0a0f"/>
+
+  <g id="magnetic-field">
+    <path d="M150 300 Q300 200 400 300 Q500 400 650 300" stroke="url(#fieldGrad)" stroke-width="2" fill="none" opacity="0.6"/>
+    <path d="M150 320 Q300 220 400 320 Q500 420 650 320" stroke="url(#fieldGrad)" stroke-width="1.5" fill="none" opacity="0.4"/>
+    <path d="M150 280 Q300 180 400 280 Q500 380 650 280" stroke="url(#fieldGrad)" stroke-width="1.5" fill="none" opacity="0.4"/>
+    <path d="M130 300 Q280 170 400 300 Q520 430 670 300" stroke="#f59e0b" stroke-width="1" fill="none" opacity="0.2"/>
+  </g>
+
+  <g id="controller" transform="translate(250, 220)">
+    <ellipse cx="150" cy="90" rx="140" ry="70" fill="#1a1a24"/>
+    <ellipse cx="150" cy="90" rx="135" ry="65" fill="#252530"/>
+
+    <rect x="40" y="70" width="220" height="40" rx="20" fill="#1a1a24"/>
+    <rect x="45" y="75" width="210" height="30" rx="15" fill="#252530"/>
+
+    <circle cx="80" cy="90" r="25" fill="#0a0a0f" stroke="url(#heroGrad)" stroke-width="2"/>
+    <circle cx="80" cy="90" r="8" fill="#f59e0b"/>
+
+    <circle cx="220" cy="90" r="25" fill="#0a0a0f" stroke="url(#heroGrad)" stroke-width="2"/>
+    <path d="M213 90 L220 83 L227 90 L220 97 Z" fill="#f59e0b"/>
+
+    <rect x="135" y="78" width="30" height="24" rx="4" fill="#0a0a0f"/>
+    <text x="150" y="96" text-anchor="middle" fill="#f59e0b" font-size="12" font-weight="bold">⚙</text>
+
+    <ellipse cx="150" cy="90" rx="130" ry="60" fill="none" stroke="url(#heroGrad)" stroke-width="3" filter="url(#glow)"/>
+  </g>
+
+  <g id="floating-coins">
+    <g transform="translate(120, 150)">
+      <circle cx="30" cy="30" r="28" fill="#f59e0b"/>
+      <circle cx="30" cy="30" r="22" fill="#ea580c"/>
+      <text x="30" y="38" text-anchor="middle" fill="#0a0a0f" font-size="24" font-weight="bold">$</text>
+    </g>
+
+    <g transform="translate(620, 120)">
+      <circle cx="25" cy="25" r="23" fill="#f59e0b"/>
+      <circle cx="25" cy="25" r="17" fill="#ea580c"/>
+      <text x="25" y="32" text-anchor="middle" fill="#0a0a0f" font-size="18" font-weight="bold">$</text>
+    </g>
+
+    <g transform="translate(680, 320)">
+      <circle cx="20" cy="20" r="18" fill="#f59e0b"/>
+      <circle cx="20" cy="20" r="13" fill="#ea580c"/>
+      <text x="20" y="26" text-anchor="middle" fill="#0a0a0f" font-size="14" font-weight="bold">$</text>
+    </g>
+  </g>
+
+  <g id="gaming-elements">
+    <g transform="translate(80, 380)">
+      <rect x="0" y="0" width="50" height="50" rx="8" fill="#f59e0b"/>
+      <circle cx="17" cy="17" r="5" fill="#0a0a0f"/>
+      <circle cx="33" cy="17" r="5" fill="#0a0a0f"/>
+      <circle cx="17" cy="33" r="5" fill="#0a0a0f"/>
+      <circle cx="33" cy="33" r="5" fill="#0a0a0f"/>
+    </g>
+
+    <g transform="translate(650, 420)">
+      <rect x="0" y="0" width="60" height="35" rx="6" fill="#ea580c"/>
+      <text x="30" y="24" text-anchor="middle" fill="#0a0a0f" font-size="18" font-weight="bold">USDC</text>
+    </g>
+
+    <g transform="translate(100, 280)">
+      <circle cx="20" cy="20" r="18" fill="#252530" stroke="#f59e0b" stroke-width="2"/>
+      <circle cx="14" cy="14" r="4" fill="#f59e0b"/>
+      <circle cx="26" cy="14" r="4" fill="#f59e0b"/>
+      <circle cx="14" cy="26" r="4" fill="#f59e0b"/>
+      <circle cx="26" cy="26" r="4" fill="#f59e0b"/>
+      <circle cx="20" cy="20" r="4" fill="#f59e0b"/>
+    </g>
+  </g>
+
+  <g id="particles">
+    <circle cx="200" cy="100" r="3" fill="#f59e0b" opacity="0.8"/>
+    <circle cx="500" cy="80" r="2" fill="#ea580c" opacity="0.6"/>
+    <circle cx="700" cy="200" r="3" fill="#f59e0b" opacity="0.7"/>
+    <circle cx="100" cy="500" r="2" fill="#ea580c" opacity="0.5"/>
+    <circle cx="600" cy="500" r="3" fill="#f59e0b" opacity="0.6"/>
+    <circle cx="350" cy="520" r="2" fill="#f59e0b" opacity="0.4"/>
+    <circle cx="450" cy="150" r="2" fill="#ea580c" opacity="0.5"/>
+  </g>
+</svg>

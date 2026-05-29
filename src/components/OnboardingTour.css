@@ -1,0 +1,36 @@
+.tour-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.tour-progress {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.tour-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border, #27272a);
+  transition: all 0.2s ease;
+}
+
+.tour-progress-dot.active {
+  background: var(--color-accent, #3b82f6);
+  transform: scale(1.25);
+}
+
+.tour-progress-dot.completed {
+  background: var(--color-accent, #3b82f6);
+  opacity: 0.6;
+}
+
+.tour-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}

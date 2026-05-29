@@ -1,0 +1,85 @@
+.magnetic-field {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg-primary);
+}
+
+.magnetic-field::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse 80% 50% at 50% 50%, rgba(245, 158, 11, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 50%, rgba(245, 158, 11, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(245, 158, 11, 0.03) 0%, transparent 40%);
+  animation: magneticPulse 4s ease-in-out infinite;
+}
+
+.magnetic-field::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: 
+    conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(245, 158, 11, 0.03) 30deg, transparent 60deg),
+    conic-gradient(from 120deg at 50% 50%, transparent 120deg, rgba(245, 158, 11, 0.02) 150deg, transparent 180deg),
+    conic-gradient(from 240deg at 50% 50%, transparent 240deg, rgba(245, 158, 11, 0.03) 270deg, transparent 300deg);
+  animation: magneticRotate 20s linear infinite;
+}
+
+.magnetic-field-lines {
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse 100% 100% at 50% 50%, transparent 30%, rgba(245, 158, 11, 0.02) 31%, transparent 32%),
+    radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(245, 158, 11, 0.02) 41%, transparent 42%),
+    radial-gradient(ellipse 60% 60% at 50% 50%, transparent 50%, rgba(245, 158, 11, 0.02) 51%, transparent 52%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, transparent 60%, rgba(245, 158, 11, 0.02) 61%, transparent 62%),
+    radial-gradient(ellipse 20% 20% at 50% 50%, transparent 70%, rgba(245, 158, 11, 0.02) 71%, transparent 72%);
+  animation: magneticRotate 30s linear infinite reverse;
+}
+
+.magnetic-field-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 30%, transparent 70%);
+  animation: centerPulse 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes magneticPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes magneticRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes centerPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.7; }
+}
+
+.magnetic-field-light {
+  background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%);
+}
+
+.magnetic-field-light::before {
+  background: 
+    radial-gradient(ellipse 80% 50% at 50% 50%, rgba(245, 158, 11, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 50%, rgba(245, 158, 11, 0.08) 0%, transparent 50%);
+}
+
+.magnetic-field-accent {
+  background: var(--color-accent);
+}
+
+.magnetic-field-accent::before {
+  background: 
+    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
+}

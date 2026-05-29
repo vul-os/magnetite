@@ -1,0 +1,274 @@
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.input-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+  overflow: hidden;
+}
+
+.input-field-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.input-field {
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.input-field::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Sizes */
+.input-sm .input-field {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.input-md .input-field {
+  padding: 12px 16px;
+  font-size: 15px;
+}
+
+.input-lg .input-field {
+  padding: 14px 18px;
+  font-size: 16px;
+}
+
+/* Focus state */
+.input-focused .input-container {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+/* Error state */
+.input-error .input-container {
+  border-color: var(--color-error);
+}
+
+.input-error .input-label {
+  color: var(--color-error);
+}
+
+.input-error.input-focused .input-container {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.input-error-text {
+  font-size: 13px;
+  color: var(--color-error);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Success state */
+.input-success .input-container {
+  border-color: var(--color-success);
+}
+
+.input-success.input-focused .input-container {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+
+/* Disabled state */
+.input-disabled .input-container {
+  background: var(--color-bg-primary);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-disabled .input-field {
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+
+.input-disabled .input-label {
+  color: var(--color-text-muted);
+}
+
+/* Helper text */
+.input-helper-text {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* Addons */
+.input-with-addons .input-field {
+  padding-left: 12px;
+}
+
+.input-addon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.input-addon-left {
+  padding-left: 14px;
+}
+
+.input-addon-right {
+  padding-right: 14px;
+}
+
+.input-addon-left-text,
+.input-addon-right-text {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 12px;
+  background: var(--color-bg-card);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+}
+
+.input-addon-left-text {
+  border-right: 1px solid var(--color-border);
+}
+
+.input-addon-right-text {
+  border-left: 1px solid var(--color-border);
+}
+
+.input-focused .input-addon {
+  color: var(--color-accent);
+}
+
+.input-error .input-addon {
+  color: var(--color-error);
+}
+
+.input-success .input-addon {
+  color: var(--color-success);
+}
+
+/* Password toggle */
+.input-password-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  align-self: center;
+}
+
+.input-password-toggle:hover {
+  color: var(--color-text-secondary);
+}
+
+.input-password-toggle:focus {
+  outline: none;
+}
+
+/* Floating label */
+.input-floating {
+  position: relative;
+  padding-top: 20px;
+}
+
+.input-floating .input-container {
+  background: transparent;
+}
+
+.input-floating .input-field-wrapper {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+}
+
+.input-floating.input-focused .input-field-wrapper {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.input-floating.input-error .input-field-wrapper {
+  border-color: var(--color-error);
+}
+
+.input-floating.input-success .input-field-wrapper {
+  border-color: var(--color-success);
+}
+
+.input-floating.input-disabled .input-field-wrapper {
+  background: var(--color-bg-primary);
+  opacity: 0.6;
+}
+
+.input-floating-label {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transition: all var(--transition-normal);
+  background: transparent;
+  padding: 0 4px;
+}
+
+.input-floating-label-active,
+.input-focused .input-floating-label {
+  top: 0;
+  font-size: 12px;
+  color: var(--color-accent);
+  background: var(--color-bg-card);
+}
+
+.input-error .input-floating-label-active,
+.input-error.input-focused .input-floating-label {
+  color: var(--color-error);
+}
+
+.input-success .input-floating-label-active,
+.input-success.input-focused .input-floating-label {
+  color: var(--color-success);
+}
+
+.input-disabled .input-floating-label {
+  color: var(--color-text-muted);
+}
+
+.input-floating .input-field {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Focus ring for accessibility */
+.input-field:focus-visible ~ .input-addon,
+.input-field:focus-visible ~ .input-password-toggle {
+  outline: none;
+}

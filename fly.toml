@@ -1,0 +1,43 @@
+app = "magnetite"
+primary_region = "jnb"
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+dockerfile = "Dockerfile.fly"
+
+[deploy]
+release_command = "/app/migrate.sh up"
+
+[env]
+PORT = "8080"
+SERVER_HOST = "0.0.0.0"
+RUST_LOG = "info"
+
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1
+processes = ["app"]
+
+[health_check]
+  port = 8080
+  path = "/health"
+  interval = "10s"
+  timeout = "5s"
+  retries = 3
+
+[[vm]]
+memory = "512mb"
+cpu_kind = "shared"
+cpus = 1
+
+[metrics]
+port = 9090
+path = "/metrics"
+
+[autoscaling]
+min_machines_running = 1
+max_machines_running = 5

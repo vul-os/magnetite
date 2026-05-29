@@ -1,0 +1,39 @@
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(4px);
+  transition: opacity 0.3s ease;
+}
+
+.loading-overlay.container {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.6);
+}
+
+.loading-overlay.visible {
+  opacity: 1;
+}
+
+.loading-overlay.hidden {
+  opacity: 0;
+}
+
+.loading-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.loading-message {
+  color: var(--color-text-secondary, #a1a1aa);
+  font-size: 14px;
+  margin: 0;
+  text-align: center;
+}
