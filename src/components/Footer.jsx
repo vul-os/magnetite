@@ -1,96 +1,130 @@
 import { Link } from 'react-router-dom';
 import { GithubIcon, TwitterIcon, DiscordIcon } from '../assets/icons';
+import './Footer.css';
+
+const LINK_COLUMNS = [
+  {
+    title: 'Platform',
+    links: [
+      { label: 'Marketplace', path: '/marketplace' },
+      { label: 'Developers',  path: '/developers' },
+      { label: 'Pricing',     path: '/pricing' },
+      { label: 'FAQ',         path: '/faq' },
+    ],
+  },
+  {
+    title: 'Developers',
+    links: [
+      { label: 'SDK',           path: '/developers/sdk' },
+      { label: 'Documentation', path: '/docs' },
+      { label: 'GitHub',        path: 'https://github.com/anomalyco/magnetite', external: true },
+      { label: 'Discord',       path: 'https://discord.gg/magnetite',           external: true },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { label: 'About',    path: '/about' },
+      { label: 'Careers',  path: '/careers' },
+      { label: 'Contact',  path: '/contact' },
+      { label: 'Blog',     path: '/blog' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { label: 'Terms',   path: '/terms' },
+      { label: 'Privacy', path: '/privacy' },
+      { label: 'Cookies', path: '/cookies' },
+    ],
+  },
+];
+
+const SOCIAL_LINKS = [
+  { href: 'https://discord.gg/magnetite',          Icon: DiscordIcon, label: 'Discord' },
+  { href: 'https://twitter.com/magnetite',         Icon: TwitterIcon, label: 'Twitter / X' },
+  { href: 'https://github.com/anomalyco/magnetite', Icon: GithubIcon,  label: 'GitHub' },
+];
+
+// Inline Rust-crab-silhouette (simple ferris-style icon)
+function RustIcon({ size = 16 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="16" cy="16" r="6" />
+      <rect x="14" y="2"  width="4" height="5" rx="2" />
+      <rect x="14" y="25" width="4" height="5" rx="2" />
+      <rect x="2"  y="14" width="5" height="4" rx="2" />
+      <rect x="25" y="14" width="5" height="4" rx="2" />
+      <rect x="5"  y="5"  width="4" height="4" rx="2" transform="rotate(45 7 7)" />
+      <rect x="23" y="5"  width="4" height="4" rx="2" transform="rotate(45 25 7)" />
+      <rect x="5"  y="23" width="4" height="4" rx="2" transform="rotate(45 7 25)" />
+      <rect x="23" y="23" width="4" height="4" rx="2" transform="rotate(45 25 25)" />
+    </svg>
+  );
+}
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
-
-  const linkColumns = [
-    {
-      title: 'Platform',
-      links: [
-        { label: 'Marketplace', path: '/marketplace' },
-        { label: 'Developers', path: '/developers' },
-        { label: 'Pricing', path: '/pricing' },
-        { label: 'FAQ', path: '/faq' },
-      ],
-    },
-    {
-      title: 'Developers',
-      links: [
-        { label: 'SDK', path: '/developers/sdk' },
-        { label: 'Documentation', path: '/docs' },
-        { label: 'GitHub', path: 'https://github.com/anomalyco/magnetite', external: true },
-        { label: 'Discord', path: 'https://discord.gg/magnetite', external: true },
-      ],
-    },
-    {
-      title: 'Company',
-      links: [
-        { label: 'About', path: '/about' },
-        { label: 'Careers', path: '/careers' },
-        { label: 'Contact', path: '/contact' },
-        { label: 'Blog', path: '/blog' },
-      ],
-    },
-    {
-      title: 'Legal',
-      links: [
-        { label: 'Terms', path: '/terms' },
-        { label: 'Privacy', path: '/privacy' },
-        { label: 'Cookies', path: '/cookies' },
-      ],
-    },
-  ];
+  const year = new Date().getFullYear();
 
   return (
-    <footer className="footer">
+    <footer className="footer" role="contentinfo">
       <div className="footer-container">
+
+        {/* ── Top: brand + link columns ───────────────────────────────────── */}
         <div className="footer-top">
+
+          {/* Brand column */}
           <div className="footer-brand">
-            <Link to="/" className="footer-logo">
-              <div className="logo-icon">M</div>
+            <Link to="/" className="footer-logo" aria-label="Magnetite home">
+              <div className="logo-icon" aria-hidden="true">M</div>
               <span className="logo-text">Magnetite</span>
             </Link>
+
             <p className="footer-tagline">
-              Open source games. Real money. No middlemen.
+              The open-source platform for building,<br />
+              distributing, and monetizing Rust games<br />
+              — at any scale.
             </p>
-            <div className="footer-social">
-              <a
-                href="https://discord.gg/magnetite"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="social-link"
-                aria-label="Discord"
-              >
-                <DiscordIcon />
-              </a>
-              <a
-                href="https://twitter.com/magnetite"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="social-link"
-                aria-label="Twitter"
-              >
-                <TwitterIcon />
-              </a>
-              <a
-                href="https://github.com/anomalyco/magnetite"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="social-link"
-                aria-label="GitHub"
-              >
-                <GithubIcon />
-              </a>
+
+            {/* Rust badge */}
+            <div className="footer-rust-badge" aria-label="Built in Rust">
+              <div className="rust-lang-icon">
+                <RustIcon size={14} />
+              </div>
+              <span className="kicker-label">Built in Rust</span>
+            </div>
+
+            {/* Social */}
+            <div className="footer-social" aria-label="Social media links">
+              {SOCIAL_LINKS.map(({ href, Icon, label }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="social-link"
+                  aria-label={label}
+                >
+                  <Icon />
+                </a>
+              ))}
             </div>
           </div>
 
+          {/* Link columns */}
           <div className="footer-links">
-            {linkColumns.map((column) => (
+            {LINK_COLUMNS.map(column => (
               <div key={column.title} className="footer-column">
-                <h4 className="footer-column-title">{column.title}</h4>
+                <h3 className="footer-column-title">{column.title}</h3>
                 <ul className="footer-column-links">
-                  {column.links.map((link) => (
+                  {column.links.map(link => (
                     <li key={link.label}>
                       {link.external || link.path.startsWith('http') ? (
                         <a
@@ -114,17 +148,34 @@ export default function Footer() {
           </div>
         </div>
 
+        {/* Divider */}
+        <div className="footer-divider" role="separator" />
+
+        {/* ── Bottom bar ──────────────────────────────────────────────────── */}
         <div className="footer-bottom">
-          <div className="footer-copyright">
-            <p>&copy; {currentYear} Magnetite. All rights reserved.</p>
-          </div>
-          <div className="footer-badge">
-            <span className="badge-text">Built with</span>
-            <svg className="rust-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-              <path d="M23.9 11.2c-.4-1.2-1.9-1.5-3.1-.8l-2.9 1.7c-.2.1-.3.2-.5.1l-2.9-1.7c-.6-.3-1.3-.3-1.9 0L10.1 12l-2.8 1.7c-.2.1-.3.1-.5 0L3.9 12c-.6-.4-1.3-.4-1.9 0L.1 13.7c-1.2.7-2.7.5-3.1-.7-.4-1.2.2-2.5 1.3-3l2.9-1.7c.2-.1.3-.2.5-.1l2.9 1.7c.6.4 1.3.4 1.9 0L10.1 8l2.8-1.7c.2-.1.3-.1.5 0l2.9 1.7c.6.3 1.3.3 1.9 0l2.9-1.7c.2-.1.3 0 .5.1l2.9 1.7c1.1.5 1.7 1.8 1.3 3z"/>
-              <path d="M11.5 15.5c-.5.3-1.1.3-1.6 0l-4-2.5c-.4-.3-.5-.9-.2-1.3.3-.4.9-.5 1.3-.2l4 2.5c.4.3.5.9.2 1.3-.2.1-.4.2-.7.2z"/>
-            </svg>
-            <span className="badge-text">Rust</span>
+          <p className="footer-copyright">
+            &copy; {year} Magnetite.{' '}
+            <Link to="/terms">Terms</Link>{' · '}
+            <Link to="/privacy">Privacy</Link>
+          </p>
+
+          <div className="footer-bottom-right">
+            <span className="footer-open-source">
+              <a
+                href="https://github.com/anomalyco/magnetite"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                MIT open source
+              </a>
+            </span>
+
+            <div className="footer-badge" aria-label="Built with Rust">
+              <span className="badge-icon">
+                <RustIcon size={13} />
+              </span>
+              <span>Rust · Bevy · WASM</span>
+            </div>
           </div>
         </div>
       </div>

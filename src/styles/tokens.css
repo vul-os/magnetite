@@ -294,14 +294,51 @@
 
 .glow-amber > * { position: relative; z-index: 1; }
 
-/* ─── Reveal system ──────────────────────────────────────────────────────── */
-/* Defined in index.css (reveal + reveal-1 … reveal-8).                      */
-/* No duplicate definition here. The grain drift animation needs reduced-     */
-/* motion suppression which is handled per-section below.                     */
+/* ─── Kicker label (mono, above headings) ────────────────────────────────── */
+/* Canonical definition — do not re-define in index.css.                      */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  display: block;
+  margin-bottom: 0.5rem;
+}
 
+/* ─── Reveal system ──────────────────────────────────────────────────────── */
+/* Canonical definition — do not re-define in index.css.                      */
+/* Add .reveal to elements; add .reveal-N (1–8) for staggered entry.         */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: reveal-in var(--t-slow) var(--ease-out) forwards;
+}
+.reveal-1 { animation-delay:  60ms; }
+.reveal-2 { animation-delay: 120ms; }
+.reveal-3 { animation-delay: 200ms; }
+.reveal-4 { animation-delay: 290ms; }
+.reveal-5 { animation-delay: 390ms; }
+.reveal-6 { animation-delay: 500ms; }
+.reveal-7 { animation-delay: 620ms; }
+.reveal-8 { animation-delay: 750ms; }
+
+@keyframes reveal-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Reduced-motion overrides ───────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .bg-atmosphere::after,
   .bg-grain::after {
     animation: none;
+  }
+  .reveal,
+  .reveal-1, .reveal-2, .reveal-3, .reveal-4,
+  .reveal-5, .reveal-6, .reveal-7, .reveal-8 {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 }

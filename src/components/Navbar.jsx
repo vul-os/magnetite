@@ -8,80 +8,93 @@ import {
   SearchIcon,
   BellIcon,
   ChevronDownIcon,
-  HomeIcon,
   WalletIcon,
   SettingsIcon,
   LogoutIcon,
   TrophyIcon,
   UsersIcon,
+  HomeIcon,
 } from '../assets/icons';
 import './Navbar.css';
+
+const NAV_LINKS = [
+  { path: '/',            label: 'Marketplace', icon: HomeIcon },
+  { path: '/developers',  label: 'Developers',  icon: UsersIcon },
+  { path: '/leaderboard', label: 'Leaderboard', icon: TrophyIcon },
+  { path: '/about',       label: 'About',       icon: UsersIcon },
+];
+
+const USER_MENU_ITEMS = [
+  { path: '/profile',  label: 'Profile',  icon: UsersIcon },
+  { path: '/settings', label: 'Settings', icon: SettingsIcon },
+  { path: '/earnings', label: 'Earnings', icon: WalletIcon },
+];
+
+// Sample notifications — in production, these come from the notification API
+const SAMPLE_NOTIFICATIONS = [
+  { id: 1, type: 'achievement', title: 'Achievement Unlocked', message: 'You earned the "Top Developer" badge', time: '2h ago', unread: true },
+  { id: 2, type: 'payout',      title: 'Payout Received',      message: 'You received 50.00 USDC',             time: '5h ago', unread: true },
+  { id: 3, type: 'invite',      title: 'Game Invite',           message: 'PlayerX invited you to join a lobby', time: '1d ago', unread: false },
+];
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { balance } = useWallet();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const navigate   = useNavigate();
+  const location   = useLocation();
+
+  const [isSearchOpen,        setIsSearchOpen]        = useState(false);
+  const [isUserMenuOpen,      setIsUserMenuOpen]      = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isScrolled, setIsScrolled] = useState(false);
-  const userMenuRef = useRef(null);
-  const notificationsRef = useRef(null);
-  const searchRef = useRef(null);
+  const [isMobileMenuOpen,    setIsMobileMenuOpen]    = useState(false);
+  const [searchQuery,         setSearchQuery]         = useState('');
+  const [isScrolled,          setIsScrolled]          = useState(false);
 
-  const navLinks = [
-    { path: '/', label: 'Marketplace', icon: HomeIcon },
-    { path: '/developers', label: 'Developers', icon: UsersIcon },
-    { path: '/leaderboard', label: 'Leaderboard', icon: TrophyIcon },
-    { path: '/about', label: 'About', icon: UsersIcon },
-  ];
+  const userMenuRef       = useRef(null);
+  const notificationsRef  = useRef(null);
+  const searchRef         = useRef(null);
 
-  const notifications = [
-    { id: 1, type: 'achievement', title: 'Achievement Unlocked', message: 'You earned the "Top Developer" badge', time: '2 hours ago', unread: true },
-    { id: 2, type: 'payout', title: 'Payout Received', message: 'You received $50.00 USDC', time: '5 hours ago', unread: true },
-    { id: 3, type: 'invite', title: 'Game Invite', message: 'PlayerX invited you to play GameY', time: '1 day ago', unread: false },
-  ];
-
-  const userMenuItems = [
-    { path: '/profile', label: 'Profile', icon: UsersIcon },
-    { path: '/settings', label: 'Settings', icon: SettingsIcon },
-    { path: '/earnings', label: 'Earnings', icon: WalletIcon },
-  ];
-
+  // Scroll detection for glass-blur enhancement
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const onScroll = () => setIsScrolled(window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Click-outside to close dropdowns
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setIsUserMenuOpen(false);
-      }
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
-        setIsNotificationsOpen(false);
-      }
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setIsSearchOpen(false);
-      }
+    function onMouseDown(e) {
+      if (userMenuRef.current      && !userMenuRef.current.contains(e.target))      setIsUserMenuOpen(false);
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) setIsNotificationsOpen(false);
+      if (searchRef.current        && !searchRef.current.contains(e.target))        setIsSearchOpen(false);
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
   }, []);
 
+  // Close everything on route change
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     setIsMobileMenuOpen(false);
     setIsUserMenuOpen(false);
     setIsNotificationsOpen(false);
+    setIsSearchOpen(false);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [location.pathname]);
+
+  // Escape key
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        setIsSearchOpen(false);
+        setIsUserMenuOpen(false);
+        setIsNotificationsOpen(false);
+        setIsMobileMenuOpen(false);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -90,68 +103,64 @@ export default function Navbar() {
 
   const handleSearch = useCallback((e) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/marketplace?search=${encodeURIComponent(searchQuery)}`);
+    const q = searchQuery.trim();
+    if (q) {
+      navigate(`/marketplace?search=${encodeURIComponent(q)}`);
       setSearchQuery('');
       setIsSearchOpen(false);
     }
   }, [searchQuery, navigate]);
 
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') {
-      setIsSearchOpen(false);
-      setIsUserMenuOpen(false);
-      setIsNotificationsOpen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
-
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const unreadCount = SAMPLE_NOTIFICATIONS.filter(n => n.unread).length;
 
   return (
     <>
-      <nav className={`navbar ${isScrolled ? 'scrolled' : ''}`}>
+      {/* ── Main bar ───────────────────────────────────────────────────────── */}
+      <nav className={`navbar${isScrolled ? ' scrolled' : ''}`} role="navigation" aria-label="Main navigation">
         <div className="navbar-container">
+
+          {/* Left: logo + nav links */}
           <div className="navbar-left">
-            <Link to="/home" className="navbar-logo">
-              <div className="logo-icon">M</div>
+            <Link to="/home" className="navbar-logo" aria-label="Magnetite home">
+              <div className="logo-icon" aria-hidden="true">M</div>
               <span className="logo-text">Magnetite</span>
             </Link>
 
-            <div className="navbar-nav">
-              {navLinks.map(({ path, label, icon: Icon }) => (
+            <nav className="navbar-nav" aria-label="Site sections">
+              {NAV_LINKS.map(({ path, label }) => (
                 <Link
                   key={path}
                   to={path}
-                  className={`nav-link ${location.pathname === path ? 'active' : ''}`}
+                  className={`nav-link${location.pathname === path ? ' active' : ''}`}
+                  aria-current={location.pathname === path ? 'page' : undefined}
                 >
-                  <Icon className="nav-link-icon" />
-                  <span>{label}</span>
+                  {label}
                 </Link>
               ))}
-            </div>
+            </nav>
           </div>
 
+          {/* Right: search / wallet / notifications / user */}
           <div className="navbar-right">
-            <div ref={searchRef} className={`search-wrapper ${isSearchOpen ? 'open' : ''}`}>
+
+            {/* Search */}
+            <div ref={searchRef} className={`search-wrapper${isSearchOpen ? ' open' : ''}`}>
               <button
                 className="search-toggle"
-                onClick={() => setIsSearchOpen(!isSearchOpen)}
-                aria-label="Toggle search"
+                onClick={() => setIsSearchOpen(v => !v)}
+                aria-label="Open search"
+                aria-expanded={isSearchOpen}
               >
                 <SearchIcon />
               </button>
-              <form onSubmit={handleSearch} className="search-form">
+              <form onSubmit={handleSearch} className="search-form" role="search">
                 <input
-                  type="text"
-                  placeholder="Search games..."
+                  type="search"
+                  placeholder="Search Rust games…"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                   className="search-input"
+                  aria-label="Search games"
                   autoFocus={isSearchOpen}
                 />
               </form>
@@ -159,49 +168,53 @@ export default function Navbar() {
 
             {user ? (
               <>
-                <div className="wallet-balance">
-                  <WalletIcon className="wallet-icon" />
-                  <span className="balance-amount">${balance?.toFixed(2)}</span>
+                {/* Wallet balance */}
+                <Link to="/wallet" className="wallet-balance" aria-label={`Wallet: ${balance?.toFixed(2)} USDC`}>
+                  <WalletIcon className="wallet-icon" aria-hidden="true" />
+                  <span className="balance-amount">{balance?.toFixed(2) ?? '0.00'}</span>
                   <span className="balance-currency">USDC</span>
-                </div>
+                </Link>
 
+                {/* Notifications */}
                 <div ref={notificationsRef} className="notifications-wrapper">
                   <button
                     className="notifications-btn"
-                    onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                    aria-label="Notifications"
+                    onClick={() => setIsNotificationsOpen(v => !v)}
+                    aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
                     aria-expanded={isNotificationsOpen}
+                    aria-haspopup="true"
                   >
                     <BellIcon />
                     {unreadCount > 0 && (
-                      <span className="notification-badge">{unreadCount}</span>
+                      <span className="notification-badge" aria-hidden="true">{unreadCount}</span>
                     )}
                   </button>
 
                   {isNotificationsOpen && (
-                    <div className="notification-dropdown">
+                    <div className="notification-dropdown" role="dialog" aria-label="Notifications">
                       <div className="dropdown-header">
                         <h3>Notifications</h3>
                         {unreadCount > 0 && (
-                          <button className="mark-all-read">Mark all as read</button>
+                          <button className="mark-all-read">Mark all read</button>
                         )}
                       </div>
                       <div className="notification-list">
-                        {notifications.length > 0 ? (
-                          notifications.map((notification) => (
+                        {SAMPLE_NOTIFICATIONS.length > 0 ? (
+                          SAMPLE_NOTIFICATIONS.map(n => (
                             <div
-                              key={notification.id}
-                              className={`notification-item ${notification.unread ? 'unread' : ''}`}
+                              key={n.id}
+                              className={`notification-item${n.unread ? ' unread' : ''}`}
+                              role="article"
                             >
-                              <div className={`notification-icon ${notification.type}`}>
+                              <div className={`notification-icon ${n.type}`} aria-hidden="true">
                                 <BellIcon />
                               </div>
                               <div className="notification-content">
-                                <div className="notification-title">{notification.title}</div>
-                                <div className="notification-message">{notification.message}</div>
-                                <div className="notification-time">{notification.time}</div>
+                                <div className="notification-title">{n.title}</div>
+                                <div className="notification-message">{n.message}</div>
+                                <time className="notification-time">{n.time}</time>
                               </div>
-                              {notification.unread && <div className="unread-dot" />}
+                              {n.unread && <div className="unread-dot" aria-label="Unread" />}
                             </div>
                           ))
                         ) : (
@@ -215,44 +228,48 @@ export default function Navbar() {
                   )}
                 </div>
 
+                {/* User menu */}
                 <div ref={userMenuRef} className="user-menu-wrapper">
                   <button
                     className="user-menu-trigger"
-                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    onClick={() => setIsUserMenuOpen(v => !v)}
                     aria-expanded={isUserMenuOpen}
-                    aria-label="User menu"
+                    aria-haspopup="true"
+                    aria-label={`User menu for ${user.username ?? 'account'}`}
                   >
-                    <div className="user-avatar">
-                      {user.username?.charAt(0).toUpperCase() || 'U'}
+                    <div className="user-avatar" aria-hidden="true">
+                      {user.username?.charAt(0).toUpperCase() ?? 'U'}
                     </div>
-                    <ChevronDownIcon className={`chevron ${isUserMenuOpen ? 'open' : ''}`} />
+                    <ChevronDownIcon className={`chevron${isUserMenuOpen ? ' open' : ''}`} aria-hidden="true" />
                   </button>
 
                   {isUserMenuOpen && (
-                    <div className="user-dropdown">
+                    <div className="user-dropdown" role="menu" aria-label="User options">
                       <div className="dropdown-header">
                         <div className="dropdown-username">{user.username}</div>
                         <div className="dropdown-email">{user.email}</div>
                       </div>
-                      <div className="dropdown-divider" />
-                      {userMenuItems.map(({ path, label, icon: Icon }) => (
+                      <div className="dropdown-divider" role="separator" />
+                      {USER_MENU_ITEMS.map(({ path, label, icon: Icon }) => (
                         <Link
                           key={path}
                           to={path}
                           className="dropdown-item"
+                          role="menuitem"
                           onClick={() => setIsUserMenuOpen(false)}
                         >
-                          <Icon className="dropdown-icon" />
+                          <Icon className="dropdown-icon" aria-hidden="true" />
                           {label}
                         </Link>
                       ))}
-                      <div className="dropdown-divider" />
+                      <div className="dropdown-divider" role="separator" />
                       <button
                         onClick={handleLogout}
                         className="dropdown-item logout"
+                        role="menuitem"
                       >
-                        <LogoutIcon className="dropdown-icon" />
-                        Logout
+                        <LogoutIcon className="dropdown-icon" aria-hidden="true" />
+                        Log out
                       </button>
                     </div>
                   )}
@@ -260,16 +277,18 @@ export default function Navbar() {
               </>
             ) : (
               <div className="auth-buttons">
-                <Link to="/login" className="btn btn-secondary">Login</Link>
-                <Link to="/register" className="btn btn-primary">Register</Link>
+                <Link to="/login"    className="btn btn-secondary">Log in</Link>
+                <Link to="/register" className="btn btn-primary">Get started</Link>
               </div>
             )}
 
+            {/* Mobile drawer toggle */}
             <button
               className="mobile-menu-toggle"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              aria-label="Toggle menu"
+              onClick={() => setIsMobileMenuOpen(v => !v)}
+              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-nav-drawer"
             >
               {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
             </button>
@@ -277,6 +296,7 @@ export default function Navbar() {
         </div>
       </nav>
 
+      {/* ── Mobile backdrop ────────────────────────────────────────────────── */}
       {isMobileMenuOpen && (
         <div
           className="mobile-overlay"
@@ -285,44 +305,50 @@ export default function Navbar() {
         />
       )}
 
+      {/* ── Mobile drawer ──────────────────────────────────────────────────── */}
       <div
-        className={`mobile-menu ${isMobileMenuOpen ? 'open' : ''}`}
+        id="mobile-nav-drawer"
+        className={`mobile-menu${isMobileMenuOpen ? ' open' : ''}`}
         aria-hidden={!isMobileMenuOpen}
+        role="dialog"
+        aria-label="Mobile navigation"
       >
         <div className="mobile-menu-header">
-          <Link to="/" className="navbar-logo">
-            <div className="logo-icon">M</div>
+          <Link to="/" className="navbar-logo" onClick={() => setIsMobileMenuOpen(false)}>
+            <div className="logo-icon" aria-hidden="true">M</div>
             <span className="logo-text">Magnetite</span>
           </Link>
           <button
             className="mobile-menu-close"
             onClick={() => setIsMobileMenuOpen(false)}
-            aria-label="Close menu"
+            aria-label="Close navigation"
           >
             <CloseIcon />
           </button>
         </div>
 
         <div className="mobile-search">
-          <form onSubmit={handleSearch}>
+          <form onSubmit={handleSearch} role="search">
             <input
-              type="text"
-              placeholder="Search games..."
+              type="search"
+              placeholder="Search Rust games…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
               className="search-input"
+              aria-label="Search games"
             />
           </form>
         </div>
 
-        <nav className="mobile-nav">
-          {navLinks.map(({ path, label, icon: Icon }) => (
+        <nav className="mobile-nav" aria-label="Mobile site sections">
+          {NAV_LINKS.map(({ path, label, icon: Icon }) => (
             <Link
               key={path}
               to={path}
-              className={`mobile-nav-link ${location.pathname === path ? 'active' : ''}`}
+              className={`mobile-nav-link${location.pathname === path ? ' active' : ''}`}
+              aria-current={location.pathname === path ? 'page' : undefined}
             >
-              <Icon className="mobile-nav-icon" />
+              <Icon className="mobile-nav-icon" aria-hidden="true" />
               <span>{label}</span>
             </Link>
           ))}
@@ -332,33 +358,34 @@ export default function Navbar() {
           {user ? (
             <>
               <div className="mobile-user-info">
-                <div className="mobile-user-avatar">
-                  {user.username?.charAt(0).toUpperCase() || 'U'}
+                <div className="mobile-user-avatar" aria-hidden="true">
+                  {user.username?.charAt(0).toUpperCase() ?? 'U'}
                 </div>
                 <div className="mobile-user-details">
                   <div className="mobile-username">{user.username}</div>
-                  <div className="mobile-balance">${balance?.toFixed(2)} USDC</div>
+                  <div className="mobile-balance">{balance?.toFixed(2) ?? '0.00'} USDC</div>
                 </div>
               </div>
-              {userMenuItems.map(({ path, label, icon: Icon }) => (
+              {USER_MENU_ITEMS.map(({ path, label, icon: Icon }) => (
                 <Link
                   key={path}
                   to={path}
                   className="mobile-dropdown-item"
+                  onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <Icon className="mobile-dropdown-icon" />
+                  <Icon className="mobile-dropdown-icon" aria-hidden="true" />
                   {label}
                 </Link>
               ))}
               <button onClick={handleLogout} className="mobile-dropdown-item logout">
-                <LogoutIcon className="mobile-dropdown-icon" />
-                Logout
+                <LogoutIcon className="mobile-dropdown-icon" aria-hidden="true" />
+                Log out
               </button>
             </>
           ) : (
             <div className="mobile-auth-buttons">
-              <Link to="/login" className="btn btn-secondary">Login</Link>
-              <Link to="/register" className="btn btn-primary">Register</Link>
+              <Link to="/login"    className="btn btn-secondary">Log in</Link>
+              <Link to="/register" className="btn btn-primary">Get started</Link>
             </div>
           )}
         </div>

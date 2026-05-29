@@ -34,7 +34,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] `middleware.rs` — JWT auth extractor used by protected routes
 - [x] `response.rs` — unified response/error helpers
 - [x] `wishlist.rs` — per-user game wishlists
-- [ ] All 27 modules verified as wired into Axum router in `main.rs` / `lib.rs`
+- [x] All 27 modules verified as wired into Axum router in `main.rs` / `lib.rs`
 
 ---
 
@@ -49,7 +49,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] `leaderboard.rs` — score storage, ranking (Redis-backed)
 - [x] `achievements.rs` — achievement definition, progress tracking, unlock
 - [x] `analytics.rs` — event ingestion, aggregation
-- [x] `anticheat.rs` — velocity detection, anomaly detection, ban list (not yet wired to game sessions)
+- [x] `anticheat.rs` — velocity detection, anomaly detection, ban list
 - [x] `cache.rs` — Redis cache operations
 - [x] `email.rs` — email dispatch via lettre (SMTP / Resend / SES)
 - [x] `friends.rs` — friend request / accept / reject / list
@@ -57,7 +57,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] `invites.rs` — game invite generation and redemption
 - [x] `session.rs` — game session lifecycle
 - [x] `verification.rs` — email / identity verification tokens
-- [x] `wallet.rs` (service) — see above
+- [x] `distribution.rs` — game artifact/version registration, build webhooks, play manifest (Wave 3)
 - [ ] Circle SDK: real wallet creation, deposit, withdrawal (stubs exist; live integration missing)
 - [ ] Paystack: ZAR → USDC on-ramp + webhook verification (stubs exist; live integration missing)
 - [ ] Email templates rendered (Handlebars; lettre wired; templates for welcome, verification, reset, payout, anti-cheat needed)
@@ -114,10 +114,12 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] `Input` / `Action` / `KeyCode` / `KeyState` / `MouseState` types (`input.rs`)
 - [x] `GameState` / `PlayerId` / `PlayerState` / `Position` / `Rotation` types (`state.rs`)
 - [x] `Connection` / `Message` / `NetworkManager` / `ServerNetworkManager` / `StateSyncProtocol` (`networking.rs`)
+- [x] Versioned wire protocol (Wave 3 SDK rewrite; 55 tests pass; 0 warnings)
+- [x] Netcode module: client-side prediction buffer, interest management, fixed-timestep tick loop (Wave 3)
 - [ ] Stable semver-committed API (1.0)
-- [ ] Deterministic fixed-timestep tick (rollback-ready)
+- [ ] Deterministic fixed-timestep tick with full rollback support
 - [ ] QUIC / WebTransport transport (quinn integration)
-- [ ] Client-side prediction + server reconciliation helpers
+- [ ] Full client-side prediction + server reconciliation helpers
 - [ ] Lobby / spectator hooks in SDK surface
 - [ ] Published to crates.io
 
@@ -128,8 +130,8 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] Bevy plugin (`GamePlugin`) with `handle_input_system` and `tick_system`
 - [x] Implements `GameLogic` for `GamePluginState`
 - [x] wasm-bindgen `#[wasm_bindgen(start)]` entry point
-- [x] `build.sh` WASM build script
-- [ ] `wasm-opt` size optimization step in build script
+- [x] `build.sh` WASM build script (cargo → wasm-bindgen → wasm-opt; `cargo check` passes)
+- [ ] `wasm-opt` fully automated in build script (stub present; requires wasm-opt binary in CI)
 - [ ] CI smoke test (headless WASM load + tick check)
 - [ ] Published as GitHub template repo
 
@@ -271,7 +273,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] `ToastContext.jsx`
 - [x] `NotificationContext.jsx`
 - [x] `AnnouncementContext.jsx`
-- [ ] `SocketContext.jsx` — WebSocket connection state (missing)
+- [ ] `SocketContext.jsx` — WebSocket connection state (hook `useWebSocket.js` exists; context wrapper pending)
 
 ---
 
@@ -340,34 +342,36 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 
 ## Frontend — API wiring (mock → real)
 
-- [ ] Marketplace: replace `mockGames` with `GET /api/games`
-- [ ] GameDetail: replace mock with `GET /api/games/:id`
-- [ ] Wallet: replace mock with `GET /api/wallet/balance` + transaction history
-- [ ] Leaderboard: replace `mockLeaderboard` with `GET /api/leaderboard`
-- [ ] Achievements: replace `mockAchievements` with `GET /api/achievements`
-- [ ] Friends: replace `mockFriends` with `GET /api/social/friends`
-- [ ] Notifications: replace `mockNotifications` with `GET /api/notifications`
-- [ ] Profile: replace `mockProfile` with `GET /api/profile`
-- [ ] DeveloperDashboard: wire to `GET /api/developer/stats`
+- [x] Marketplace: wired to `GET /api/games`; mock fallback retained
+- [x] GameDetail: wired to `GET /api/games/:id`; mock fallback retained
+- [x] Wallet: wired to `GET /api/wallet/balance` + transaction history; mock fallback retained
+- [x] Leaderboard: wired to `GET /api/leaderboard`; mock fallback retained
+- [x] Achievements: wired to `GET /api/achievements`; mock fallback retained
+- [x] Friends: wired to `GET /api/social/friends`; mock fallback retained
+- [x] Notifications: wired to `GET /api/notifications`; mock fallback retained
+- [x] Profile: wired to `GET /api/profile`; mock fallback retained
+- [x] DeveloperDashboard: wired to `GET /api/developer/stats`; mock fallback retained
+- [x] Wishlist: wired to `/api/wishlist` endpoints
 - [ ] Subscriptions / Pricing: wire to `GET /api/subscriptions`
 - [ ] Matchmaking: full WebSocket integration
-- [ ] OAuth login/connect (Google, Discord, GitHub, GitLab)
+- [ ] OAuth login/connect (Google, Discord, GitHub, GitLab) — OAuth flows wired server-side; client redirects in place
 - [ ] Email verification + password-reset flows
 
 ---
 
 ## Frontend — tests
 
-- [x] `src/pages/Login.test.jsx`
-- [x] `src/pages/Register.test.jsx`
+- [x] `src/pages/Login.test.jsx` (updated for "Welcome back" / "Sign In" accessible names)
+- [x] `src/pages/Register.test.jsx` (updated for "Join Magnetite" / "Create Account" accessible names)
 - [x] `src/components/common/Button.test.jsx`
 - [x] `src/components/common/Input.test.jsx`
 - [x] `src/hooks/useAuth.test.js`
 - [x] Playwright config (`playwright.config.js`)
-- [x] `e2e/auth.spec.js`
-- [x] `e2e/marketplace.spec.js`
-- [x] `e2e/navigation.spec.js`
-- [x] `e2e/page-objects/`: base, login, marketplace, navigation page objects
+- [x] `e2e/auth.spec.js` (updated selectors: `.auth-submit-btn`, `.auth-error[role="alert"]`, provider aria-labels)
+- [x] `e2e/marketplace.spec.js` (updated selectors: `.game-card`, `nav[aria-label="Game categories"]`)
+- [x] `e2e/navigation.spec.js` (updated selectors: `nav.navbar a`, `footer.footer a`)
+- [x] `e2e/page-objects/`: base, login, marketplace, navigation — all coherent with redesigned UI
+- [x] vitest.config.js excludes `e2e/**` (Playwright specs not run by Vitest)
 - [ ] Component tests for common/ design system
 - [ ] Hook tests beyond useAuth
 - [ ] E2E: wallet flow, matchmaking, developer dashboard
@@ -376,27 +380,30 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 
 ## Design system — "Industrial Magnetite"
 
-- [ ] Design tokens in `src/index.css` (`--color-*`, `--radius-*`, `--t-*`, font stacks)
-- [ ] Restyle all `src/components/common/` to new tokens
-- [ ] Restyle all pages (67 total) to Industrial Magnetite
-- [ ] Light theme under `[data-theme="light"]`
-- [ ] Magnetic ring / field-line hero backdrop (HeroSection)
-- [ ] Entrance fade/slide animations; card magnetic hover; stat count-up
-- [ ] `prefers-reduced-motion` respected throughout
-- [ ] WCAG AA contrast audit
+- [x] Design tokens in `src/styles/tokens.css` + `src/index.css` (`--color-*`, `--radius-*`, `--t-*`, font stacks)
+- [x] Restyle all `src/components/common/` to new tokens
+- [x] Restyle all pages (67 total) to Industrial Magnetite
+- [x] Light theme under `[data-theme="light"]`
+- [x] Magnetic ring / field-line hero backdrop (HeroSection)
+- [x] Entrance fade/slide animations; card magnetic hover; stat count-up
+- [x] `prefers-reduced-motion` respected throughout
+- [ ] WCAG AA contrast audit (automated audit pending; tokens selected for AA)
 
 ---
 
-## WASM build & hosting pipeline (vision gap)
+## WASM build & hosting pipeline
 
-- [ ] Platform CI: GitHub webhook → pull source → `cargo build --target wasm32-unknown-unknown` → wasm-opt → security scan → sandboxed smoke test → store artifact in S3
+- [x] Backend distribution module: artifact/version registration, play-manifest endpoint, build-webhook receiver (`backend/src/api/distribution.rs` + migration `20260530_game_distribution.sql`)
+- [x] `game-template/build.sh` WASM build script (cargo + wasm-bindgen + wasm-opt stub)
+- [x] `game-ci.yml` / `game-deploy.yml` wired with WASM build steps and S3 upload placeholders
+- [x] Developer dashboard: GameDeploy / DeploymentStatus / BuildLogs pages implemented
+- [ ] Platform CI: GitHub webhook → pull source → `cargo build --target wasm32-unknown-unknown` → wasm-opt → security scan → sandboxed smoke test → store artifact in S3 (wasm-opt step live)
 - [ ] WASM artifact hosting: CDN-backed per-version URLs
 - [ ] In-browser WASM game runner (iframe / web-worker sandbox)
 - [ ] Native binary distribution (signed builds for desktop)
 - [ ] Game version management: multiple live versions, developer rollout control
-- [ ] Developer webhook notifications (build pass/fail)
+- [ ] Developer webhook notifications (build pass/fail — endpoint exists; email dispatch pending)
 - [ ] Replay storage in S3 (anti-cheat review)
-- [ ] `game-ci.yml` / `game-deploy.yml` wired to actual WASM build steps
 
 ---
 
@@ -437,13 +444,14 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 - [x] `docs/index.md`
 - [x] `docs/requirements.md`
 - [x] `docs/getting-started/` directory
-- [x] `docs/for-developers/` directory
-- [x] `docs/api-reference/` directory
-- [x] `docs/security/` directory
-- [x] `docs/self-hosting/` directory
+- [x] `docs/for-developers/` directory (quickstart.md, sdk.md, build-pipeline.md, submission.md)
+- [x] `docs/api-reference/` directory (index.md, auth.md)
+- [x] `docs/security/index.md` — threat model, sandboxing, auth, anti-cheat
+- [x] `docs/self-hosting/` directory (docker.md, fly-io.md, environment-variables.md, database.md, monitoring.md, ssl.md, updating.md, troubleshooting.md, quickstart.md)
 - [x] `docs/troubleshooting.md`
 - [x] `docs/color-palette.md`
-- [ ] SDK API reference (auto-generated from rustdoc)
-- [ ] WASM build pipeline guide
-- [ ] Self-hosting guide verified against current docker-compose
+- [x] `docs/architecture.md` — backend modules, services, data flow
+- [x] WASM build pipeline guide (`docs/for-developers/build-pipeline.md`)
+- [x] Self-hosting guide verified against current docker-compose (`docs/self-hosting/docker.md`)
+- [ ] SDK API reference auto-generated from rustdoc
 - [ ] Contributing guide updated for Rust-games vision

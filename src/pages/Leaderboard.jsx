@@ -1,9 +1,21 @@
 import { useState, useMemo, useEffect } from 'react';
 import Layout from '../components/Layout';
 import LeaderboardRow from '../components/LeaderboardRow';
+import LeaderboardSkeleton from '../components/skeletons/LeaderboardSkeleton';
+import EmptyState from '../components/empty/EmptyState';
 import { mockLeaderboard } from '../data/mockLeaderboard';
 import { api } from '../api/client';
 import './social.css';
+
+const TrophyIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <path d="M8 21h8" />
+    <path d="M12 17v4" />
+    <path d="M7 4H4a2 2 0 0 0-2 2v2c0 2.2 1.8 4 4 4h1" />
+    <path d="M17 4h3a2 2 0 0 1 2 2v2c0 2.2-1.8 4-4 4h-1" />
+    <path d="M7 4v8a5 5 0 0 0 10 0V4" />
+  </svg>
+);
 
 const TIME_FILTERS = [
   { key: 'daily',    label: 'Daily'    },
@@ -56,6 +68,9 @@ export default function Leaderboard() {
   const [timeFilter, setTimeFilter]     = useState('all-time');
   const [currentPage, setCurrentPage]   = useState(1);
   const [apiEntries, setApiEntries]     = useState(null);
+  const [loadedGame, setLoadedGame]     = useState(null);
+  /* loading = true until we've completed a fetch for the selectedGame */
+  const loading = loadedGame !== selectedGame;
 
   useEffect(() => {
     let cancelled = false;
@@ -76,13 +91,18 @@ export default function Leaderboard() {
     let cancelled = false;
 
     api.games.leaderboard(selectedGame).then(data => {
-      if (!cancelled && data) {
-        const entries = Array.isArray(data) ? data : (data?.entries ?? null);
-        if (entries && entries.length > 0) setApiEntries(entries);
-        else setApiEntries(null);
+      if (!cancelled) {
+        const entries = data
+          ? (Array.isArray(data) ? data : (data?.entries ?? null))
+          : null;
+        setApiEntries(entries && entries.length > 0 ? entries : null);
+        setLoadedGame(selectedGame);
       }
     }).catch(() => {
-      if (!cancelled) setApiEntries(null);
+      if (!cancelled) {
+        setApiEntries(null);
+        setLoadedGame(selectedGame);
+      }
     });
 
     return () => { cancelled = true; };
@@ -100,7 +120,7 @@ export default function Leaderboard() {
   const currentData = leaderboardData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   const userRank    = leaderboardData.findIndex(e => e.username === currentUser.username) + 1;
 
-  const handleGameChange = (id) => { setSelectedGame(Number(id)); setCurrentPage(1); setApiEntries(null); };
+  const handleGameChange = (id) => { setSelectedGame(Number(id)); setCurrentPage(1); setApiEntries(null); setLoadedGame(null); };
   const handleFilterChange = (key) => { setTimeFilter(key); setCurrentPage(1); };
 
   return (
@@ -139,13 +159,18 @@ export default function Leaderboard() {
           </div>
         </div>
 
-        {userRank > 0 && userRank > 3 && (
-          <div className="your-rank-banner reveal-3" role="status">
+        {!loading && userRank > 0 && userRank > 3 && (
+          <div className="your-rank-banner reveal-3" role="status" aria-live="polite">
             Your rank: #{userRank}
           </div>
         )}
 
-        <div className="leaderboard-container reveal-4" role="table" aria-label="Leaderboard">
+        <div
+          className="leaderboard-container reveal-4"
+          role="table"
+          aria-label="Leaderboard"
+          aria-busy={loading}
+        >
           <div className="leaderboard-header" role="row">
             <span className="col-rank" role="columnheader">Rank</span>
             <span className="col-player" role="columnheader">Player</span>
@@ -154,18 +179,32 @@ export default function Leaderboard() {
           </div>
 
           <div className="leaderboard-body">
-            {currentData.map(entry => (
-              <LeaderboardRow
-                key={entry.rank}
-                entry={entry}
-                isCurrentUser={entry.username === currentUser.username}
-                highlightTop3
-              />
-            ))}
+            {loading ? (
+              Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
+                <LeaderboardSkeleton key={i} />
+              ))
+            ) : currentData.length === 0 ? (
+              <div role="row">
+                <EmptyState
+                  icon={TrophyIcon}
+                  title="No scores yet"
+                  description="Be the first to make the leaderboard for this game."
+                />
+              </div>
+            ) : (
+              currentData.map(entry => (
+                <LeaderboardRow
+                  key={entry.rank}
+                  entry={entry}
+                  isCurrentUser={entry.username === currentUser.username}
+                  highlightTop3
+                />
+              ))
+            )}
           </div>
         </div>
 
-        {totalPages > 1 && (
+        {!loading && totalPages > 1 && (
           <nav className="pagination reveal-5" aria-label="Leaderboard pages">
             <button
               className="btn btn-secondary btn-sm"

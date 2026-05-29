@@ -24,7 +24,7 @@ html {
 }
 
 body {
-  font-family: var(--font-family);
+  font-family: var(--font-sans); /* Hanken Grotesk; --font-family is a legacy alias */
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   line-height: 1.6;
@@ -170,8 +170,8 @@ pre, samp    { font-family: var(--font-mono); }
   border-color: var(--color-error);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #e04058;
-  box-shadow: 0 0 16px rgba(255, 84, 104, 0.3);
+  background: #e04058; /* darkened var(--color-error); no direct token — intentional */
+  box-shadow: 0 0 16px rgba(255, 84, 104, 0.3); /* var(--color-error) at 0.30 alpha */
 }
 
 /* Sizes */
@@ -193,7 +193,7 @@ pre, samp    { font-family: var(--font-mono); }
   padding: 1rem 1.5rem;
   position: sticky;
   top: 0;
-  background: rgba(7, 7, 11, 0.88);
+  background: rgba(7, 7, 11, 0.88); /* --color-bg-primary (#07070b) at 88% opacity */
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: var(--z-sticky);
@@ -408,147 +408,9 @@ pre, samp    { font-family: var(--font-mono); }
 
 .rust-icon { color: var(--color-amber); }
 
-/* ─── Kicker label (mono, above headings) ────────────────────────────────── */
-.kicker {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-accent);
-  display: block;
-  margin-bottom: 0.5rem;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/* SHARED UTILITY CLASSES — Wave 4 atmosphere / reveal system                */
-/* All pages apply these; defined once here. Used by auth, onboarding,       */
-/* settings, landing, etc. Never hardcode colours below.                     */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-/* ── Atmosphere backdrop: grain + faint magnetic grid ─────────────────────── */
-.bg-atmosphere {
-  position: relative;
-  background: var(--color-bg-primary);
-}
-.bg-atmosphere::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  /* faint magnetic field-line grid */
-  background-image:
-    linear-gradient(var(--color-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
-  background-size: 72px 72px;
-  opacity: 0.10;
-}
-.bg-atmosphere::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  /* grain */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 200px 200px;
-  opacity: 0.45;
-}
-
-/* ── Standalone grain-only ────────────────────────────────────────────────── */
-.bg-grain::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 200px 200px;
-  opacity: 0.45;
-  border-radius: inherit;
-}
-
-/* ── Grid-only ────────────────────────────────────────────────────────────── */
-.bg-grid::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(var(--color-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
-  background-size: 60px 60px;
-  opacity: 0.12;
-  border-radius: inherit;
-}
-
-/* ── Accent radial glow (behind hero / CTA / focus card) ─────────────────── */
-.glow-accent {
-  position: relative;
-}
-.glow-accent::before {
-  content: '';
-  position: absolute;
-  top: -40%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 600px;
-  height: 400px;
-  background: radial-gradient(ellipse at center, var(--color-accent-soft) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ── Amber glow variant ───────────────────────────────────────────────────── */
-.glow-amber {
-  position: relative;
-}
-.glow-amber::before {
-  content: '';
-  position: absolute;
-  bottom: -20%;
-  right: -10%;
-  width: 500px;
-  height: 350px;
-  background: radial-gradient(ellipse at center, var(--color-amber-soft) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ── Staggered reveal system ──────────────────────────────────────────────── */
-/* Add .reveal to elements; add .reveal-N for different delays.               */
-/* Elements start invisible and fade+slide up on load.                        */
-.reveal {
-  opacity: 0;
-  transform: translateY(16px);
-  animation: reveal-in var(--t-slow) var(--ease-out) forwards;
-}
-.reveal-1 { animation-delay: 60ms; }
-.reveal-2 { animation-delay: 120ms; }
-.reveal-3 { animation-delay: 200ms; }
-.reveal-4 { animation-delay: 290ms; }
-.reveal-5 { animation-delay: 390ms; }
-.reveal-6 { animation-delay: 500ms; }
-.reveal-7 { animation-delay: 620ms; }
-.reveal-8 { animation-delay: 750ms; }
-
-@keyframes reveal-in {
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reveal,
-  .reveal-1, .reveal-2, .reveal-3, .reveal-4,
-  .reveal-5, .reveal-6, .reveal-7, .reveal-8 {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-  .bg-atmosphere::before,
-  .bg-atmosphere::after { display: none; }
-}
+/* NOTE: .kicker, .bg-atmosphere, .bg-grain, .bg-grid, .glow-accent,          */
+/* .glow-amber, .reveal / .reveal-1..8 are defined canonically in              */
+/* src/styles/tokens.css — do not redefine here.                               */
 
 /* ─── Form utilities ──────────────────────────────────────────────────────── */
 .form-group {
@@ -1997,7 +1859,7 @@ pre, samp    { font-family: var(--font-mono); }
 .glow-effect { box-shadow: var(--shadow-glow); }
 
 .glass-card {
-  background: rgba(20, 20, 29, 0.8);
+  background: rgba(20, 20, 29, 0.8); /* --color-bg-card (#14141d) at 80% opacity */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);

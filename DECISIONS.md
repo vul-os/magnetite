@@ -26,6 +26,27 @@ Rust games — that scale from a weekend game jam to a COD-size AAA title.**
 The previous "HTML5 games" framing is **deprecated** — all copy/marketing pivots to the
 Rust-games-at-any-scale narrative above.
 
+### 1b. Gaming Suite (expanded scope — 2026-05-30 user directive)
+
+Magnetite is not just a host/store — it is a **unified gaming suite** where every game, simple or AAA,
+is built on one SDK and plugs into shared platform services. New pillars:
+
+- **Communities & comms (Discord-class):** servers/guilds → channels (text + voice), DMs, presence,
+  roles/permissions, real-time chat, **voice ("speaking")**, and **streaming** (go live + watch).
+  The SAME comms system powers **in-game chat and voice** (a lobby/match auto-provisions a voice+text room
+  and an in-game overlay). Players can also **stream out** to external services (Twitch/YouTube via RTMP).
+- **Build any game on one system:** from a tiny 2D arcade jam game to an **advanced FPS** or a
+  **motorsport game with complex 3D graphics & physics** — all via the same `magnetite-sdk` + Bevy/rapier,
+  with graphics/engine tiers so simple games stay lightweight and advanced games scale up.
+- **Controllers:** first-class **game-controller / gamepad** input through the SDK (Gamepad API on web,
+  gilrs natively), with a unified input-mapping layer.
+- **Points & score economy:** a platform-wide **points/XP/score system** games submit to and spend from
+  (rewards, ranks, seasonal resets), built on the existing leaderboard/scores foundation.
+- **Dev-run paid marketplaces:** developers can run **in-game stores** (cosmetics, items, DLC, passes) and
+  use a shared catalog/checkout with revenue share, built on the existing USDC/Paystack payment rails.
+- **Central services games can call:** identity/wallet, comms (chat/voice), points, leaderboards,
+  achievements, matchmaking, cloud saves, the marketplace, and anti-cheat — one SDK surface.
+
 ---
 
 ## 2. Locked Decisions
@@ -146,6 +167,40 @@ Light theme: invert bg/text, keep accents, soften shadows (define under `[data-t
 5. A11y: visible focus, aria labels, contrast AA, keyboard reachable.
 6. Tokens only — zero hardcoded colors; display font on headings, mono on labels/stats.
 
+## 4b. Gaming Suite Program — Waves 6+ (expanded scope)
+
+**Architecture decisions (autonomous):**
+- **Comms transport:** text chat + presence over the existing Axum WebSocket layer (`ws/`); **voice &
+  screen/game streaming via WebRTC**, with the backend acting as the **signaling server** (SDP/ICE relay
+  over WS) + a small **SFU-ready abstraction** (start mesh for small rooms; document SFU/media-server, e.g.
+  LiveKit/mediasoup, as the scale path). External streaming = **RTMP egress** to Twitch/YouTube (config +
+  documented relay), in-platform watch via HLS/WebRTC. These are built as **working foundations** (data
+  models, signaling, UI), with heavy media infra documented as the scale path — not faked.
+- **Data model:** new migrations for communities/servers, channels, channel_members, messages, voice_rooms,
+  voice_participants, streams, points_ledger, point_rewards, dev_stores, store_items, store_purchases.
+- **SDK:** a `platform` module exposing chat/voice/points/marketplace/leaderboard/save to in-game code; an
+  `input` upgrade for gamepad/controller mapping; engine/graphics **tiers** (2d-lite / 3d-advanced).
+- **Templates:** keep the simple arcade; add **fps-starter** and **motorsport-starter** (Bevy + rapier,
+  controller-ready) — at least scaffolded and `cargo check`-clean (no slow full Bevy build in CI).
+- **Frontend:** a Discord-like Communities experience (server rail, channels, real-time chat, voice panel,
+  member list, presence), DMs, an **in-game overlay** (chat+voice while playing), streaming go-live/watch
+  UI, controller-settings UI, a points/score dashboard, and dev store-management + in-game store UI.
+- Reuse everything: identity/wallet/payments/social/notifications already exist — extend, don't duplicate.
+
+**Wave plan:**
+- **Wave 6 — Comms core (backend + SDK):** communities/channels/messages/presence + WebRTC voice
+  signaling over WS + migrations; SDK `platform::comms`. (backend + sdk crates; disjoint)
+- **Wave 7 — Comms frontend + in-game overlay + streaming UI:** Discord-like UI, DMs, voice panel,
+  presence, in-game chat/voice overlay, go-live/watch. (frontend; partitioned)
+- **Wave 8 — Game-dev capabilities + economy + marketplace:** SDK gamepad input + graphics tiers + shared
+  services; fps-starter + motorsport-starter templates; points/score economy backend; dev paid-marketplace
+  backend + management UI + in-game store UI. (sdk + templates + backend + frontend; disjoint partitions)
+- **Wave 9 — Streaming egress + integration + docs + close:** RTMP egress + HLS watch, wire comms/points/
+  store into the play flow, full docs for the suite, e2e, final verification.
+
+Each wave keeps the rule: **5 disjoint-file Sonnet agents, exactly one owns any shared global file, exactly
+one runs the frontend build.** The autonomous 30-min loop continues until this program reaches its DoD.
+
 ## 5. Definition of Done
 - `npm run build` clean; `npm run lint` clean; `npm test` green.
 - `cargo check` 0 warnings; `cargo test` green; sqlx upgraded.
@@ -153,7 +208,27 @@ Light theme: invert bg/text, keep accents, soften shadows (define under `[data-t
 - README/roadmap/TASKS accurate to code + vision.
 - No console errors on key routes.
 
+**DoD — Rebuild track (Waves 1-5): essentially met.** The Gaming Suite program (Waves 6-9, §4b) is a
+NEW track and is NOT yet done — the autonomous loop continues into it. Suite DoD = working foundations
+(data models + signaling + SDK surface + UI) for communities/voice/streaming, controller input, points
+economy, dev marketplace, and fps/motorsport starter templates; all crates 0 warnings; frontend build/
+lint(0 errors)/tests green; heavy media/netcode infra documented as the scale path (not faked).
+
 ## 6. Progress Log
+
+> Newest entries appended below; older Wave 0-4 detail above in §4 notes.
+
+- **Wave 5 (quality & close) — DONE, verified:** Consolidated the shared CSS contract into tokens.css
+  (removed the index.css duplicate). Navbar + Footer fully polished (mono nav, magnetic hover, atmospheric
+  footer). **Perf code-split** via vite manualChunks: index 344→**101kB**, DeveloperDashboard 344→**10kB**,
+  vendors (react/router/recharts) split into cached chunks (recharts only loads on /developers). Added
+  loading skeletons + empty states to Leaderboard/Achievements/Wishlist; LegalLayout sticky nav; GameGallery/
+  GameScreenshot restyled. Close-out docs (TASKS/roadmap/CHANGELOG) + e2e coherence. Build green, lint **0
+  errors**, tests **33/33**. Committed.
+- **MID-RUN SCOPE EXPANSION (user, 2026-05-30):** Magnetite → full GAMING SUITE (Discord-class chat+voice+
+  streaming incl. in-game, build-any-game-on-one-SDK from simple→advanced FPS/motorsport, controllers,
+  points/score economy, dev paid marketplaces, shared central services). Captured in §1b + §4b. Loop now
+  continues into the suite program (Waves 6-9). → launching **Wave 6 (comms core: backend + SDK)**.
 - **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline committed (`1f25602`).
 - **Wave 1 (foundation) — DONE, verified:**
   - Frontend design system: new `src/styles/tokens.css` + rewritten `src/index.css` (Industrial Magnetite tokens; legacy var names aliased so pages still compile); restyled all 17 `common/*` components + Navbar + Toast. `npm run build` green.

@@ -9,17 +9,52 @@ test.describe('Auth', () => {
     await loginPage.navigate('/login');
   });
 
-  test('login page renders', async ({ page }) => {
-    await expect(page.locator('h1')).toBeVisible();
+  // Login page — Industrial Magnetite split-panel layout
+  // h1 in the form panel reads "Welcome back"; hero panel also has an h1
+  test('login page renders with correct heading', async ({ page }) => {
+    // The form panel heading is "Welcome back" (auth-title)
+    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
   });
 
-  test('OAuth buttons exist', async ({ page: _page }) => {
+  test('OAuth buttons exist with correct providers', async ({ page }) => {
+    // OAuthButtons renders buttons with aria-label "Continue with <Provider>"
+    await expect(page.getByRole('button', { name: /continue with google/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /continue with discord/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /continue with github/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /continue with gitlab/i })).toBeVisible();
+  });
+
+  test('OAuth buttons count via page object', async ({ page: _page }) => {
     const oauthButtons = await loginPage.getOAuthButtons();
     expect(oauthButtons.length).toBeGreaterThan(0);
   });
 
-  test('form validation', async ({ page }) => {
-    await page.click('[data-testid="login-submit"]');
-    await expect(page.locator('[data-testid="error-message"]')).toBeVisible();
+  test('form validation — shows error on empty submit', async ({ page }) => {
+    // Submit button text is "Sign In"; error container has role="alert" and class auth-error
+    await page.click('button.auth-submit-btn');
+    await expect(page.locator('[role="alert"].auth-error')).toBeVisible();
+  });
+
+  test('sign-in button present', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
+  });
+});
+
+test.describe('Auth — Register', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/register');
+  });
+
+  // Register page heading is "Join Magnetite"; submit button is "Create Account"
+  test('register page renders with correct heading', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: /join magnetite/i })).toBeVisible();
+  });
+
+  test('create account button present', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /create account/i })).toBeVisible();
+  });
+
+  test('register OAuth buttons present', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /continue with google/i })).toBeVisible();
   });
 });

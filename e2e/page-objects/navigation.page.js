@@ -1,13 +1,30 @@
 import { BasePage } from './base.page.js';
 
+/**
+ * NavigationPage — Industrial Magnetite Navbar + Footer.
+ *
+ * Navbar: <nav className="navbar [scrolled]">
+ *           <div className="navbar-container">
+ *             <div className="navbar-left">
+ *               <Link className="navbar-logo">  ← logo
+ *             <div className="navbar-nav">      ← desktop links
+ *             <div className="navbar-right">    ← auth/account links
+ *
+ * Footer:  <footer className="footer">
+ *
+ * Mobile: hamburger button with aria-label="Toggle menu" (class .navbar-menu-btn).
+ */
 export class NavigationPage extends BasePage {
   constructor(page) {
     super(page);
-    // Selectors matching the redesigned Industrial Magnetite navbar/footer
+    // Primary nav links are inside nav.navbar (desktop) — use this selector so
+    // mobile menu links are not double-counted when viewport is large.
     this.navbarLinks = 'nav.navbar a';
     this.footerLinks = 'footer.footer a';
     this.logo = '.navbar-logo';
     this.mobileMenuButton = '.navbar-menu-btn, [aria-label="Toggle menu"]';
+    // Mobile menu overlay
+    this.mobileMenuOpen = '.navbar-mobile-open, .mobile-menu[aria-expanded="true"]';
   }
 
   async getNavbarLinks() {
@@ -19,11 +36,11 @@ export class NavigationPage extends BasePage {
   }
 
   async clickNavbarLink(text) {
-    await this.click(`nav a:has-text("${text}")`);
+    await this.click(`nav.navbar a:has-text("${text}")`);
   }
 
   async clickFooterLink(text) {
-    await this.click(`footer a:has-text("${text}")`);
+    await this.click(`footer.footer a:has-text("${text}")`);
   }
 
   async isLogoVisible() {
