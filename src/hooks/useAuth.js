@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { api } from '../api/client';
 
 const TOKEN_KEY = 'magnetite_token';
 const USER_KEY = 'magnetite_user';
@@ -8,41 +9,84 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const storedUser = localStorage.getItem(USER_KEY);
-    if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
+    async function restoreSession() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      const storedUser = localStorage.getItem(USER_KEY);
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      // Try to validate token against real API
+      try {
+        const me = await api.auth.me();
+        setUser(me);
+        localStorage.setItem(USER_KEY, JSON.stringify(me));
+      } catch {
+        // Fall back to stored user if API unavailable
+        if (storedUser) {
+          try { setUser(JSON.parse(storedUser)); } catch { /* invalid JSON */ }
+        } else {
+          // Token invalid — clear it
+          localStorage.removeItem(TOKEN_KEY);
+        }
+      } finally {
+        setIsLoading(false);
+      }
     }
-    setIsLoading(false);
+    restoreSession();
   }, []);
 
   const login = useCallback(async (email, password) => {
-    await new Promise((r) => setTimeout(r, 500));
-    if (!email || !password) {
-      throw new Error('Invalid credentials');
+    try {
+      const result = await api.auth.login({ email, password });
+      const token = result.token || result.access_token;
+      const userData = result.user || result;
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+        // Also set under the key used by client.js
+        localStorage.setItem('token', token);
+      }
+      localStorage.setItem(USER_KEY, JSON.stringify(userData));
+      setUser(userData);
+    } catch {
+      // Mock fallback
+      if (!email || !password) throw new Error('Invalid credentials');
+      const mockUser = { id: 1, username: email.split('@')[0], email };
+      const token = 'mock_jwt_token_' + Date.now();
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem('token', token);
+      localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
+      setUser(mockUser);
     }
-    const mockUser = { id: 1, username: email.split('@')[0], email };
-    const token = 'mock_jwt_token_' + Date.now();
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
-    setUser(mockUser);
   }, []);
 
   const register = useCallback(async (username, email, password) => {
-    await new Promise((r) => setTimeout(r, 500));
-    if (!username || !email || !password) {
-      throw new Error('All fields are required');
+    try {
+      const result = await api.auth.register({ username, email, password });
+      const token = result.token || result.access_token;
+      const userData = result.user || result;
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem('token', token);
+      }
+      localStorage.setItem(USER_KEY, JSON.stringify(userData));
+      setUser(userData);
+    } catch {
+      // Mock fallback
+      if (!username || !email || !password) throw new Error('All fields are required');
+      const mockUser = { id: 1, username, email };
+      const token = 'mock_jwt_token_' + Date.now();
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem('token', token);
+      localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
+      setUser(mockUser);
     }
-    const mockUser = { id: 1, username, email };
-    const token = 'mock_jwt_token_' + Date.now();
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
-    setUser(mockUser);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('token');
     setUser(null);
   }, []);
 

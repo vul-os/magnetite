@@ -71,4 +71,45 @@ export const api = {
     query: (q, searchType = 'all', limit = 20, offset = 0) =>
       request(`/api/search?q=${encodeURIComponent(q)}&search_type=${searchType}&limit=${limit}&offset=${offset}`),
   },
+  notifications: {
+    list: () => request('/api/notifications'),
+    unreadCount: () => request('/api/notifications/count'),
+    markAsRead: (id) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
+    markAllAsRead: () => request('/api/notifications/read-all', { method: 'PUT' }),
+    delete: (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
+  },
+  achievements: {
+    list: (userId) => request(`/api/achievements/${userId}`),
+    get: (userId, id) => request(`/api/achievements/${userId}/${id}`),
+    leaderboard: () => request('/api/achievements/leaderboard'),
+  },
+  profile: {
+    get: (username) => request(`/api/users/${username}`),
+    update: (data) => request('/api/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  },
+  social: {
+    friends: () => request('/api/friends'),
+    addFriend: (userId) => request('/api/friends', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+    removeFriend: (userId) => request(`/api/friends/${userId}`, { method: 'DELETE' }),
+    searchUsers: (q) => request(`/api/users/search?q=${encodeURIComponent(q)}`),
+    invites: () => request('/api/invites'),
+    sendInvite: (userId, gameId) => request('/api/invites', { method: 'POST', body: JSON.stringify({ user_id: userId, game_id: gameId }) }),
+    acceptInvite: (id) => request(`/api/invites/${id}/accept`, { method: 'POST' }),
+    declineInvite: (id) => request(`/api/invites/${id}/decline`, { method: 'POST' }),
+  },
+  wishlist: {
+    list: () => request('/api/wishlist'),
+    add: (gameId) => request('/api/wishlist', { method: 'POST', body: JSON.stringify({ game_id: gameId }) }),
+    remove: (gameId) => request(`/api/wishlist/${gameId}`, { method: 'DELETE' }),
+  },
+  reviews: {
+    list: (gameId) => request(`/api/games/${gameId}/reviews`),
+    create: (gameId, data) => request(`/api/games/${gameId}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+  developer: {
+    dashboard: () => request('/api/developer/dashboard'),
+    games: () => request('/api/developer/games'),
+    earnings: () => request('/api/developer/earnings'),
+    analytics: (gameId) => request(`/api/developer/analytics/${gameId}`),
+  },
 };

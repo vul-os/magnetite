@@ -20,7 +20,7 @@ export function AuthProvider({ children }) {
     validateToken();
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email, _password) => {
     const mockToken = 'mock-jwt-token-' + Date.now();
     const mockUser = { id: 1, email, name: email.split('@')[0] };
     localStorage.setItem('token', mockToken);
@@ -29,7 +29,7 @@ export function AuthProvider({ children }) {
     return { success: true };
   };
 
-  const register = async (email, password, name) => {
+  const register = async (email, _password, name) => {
     const mockToken = 'mock-jwt-token-' + Date.now();
     const mockUser = { id: 1, email, name };
     localStorage.setItem('token', mockToken);

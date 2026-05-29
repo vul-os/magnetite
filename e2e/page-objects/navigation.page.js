@@ -3,10 +3,11 @@ import { BasePage } from './base.page.js';
 export class NavigationPage extends BasePage {
   constructor(page) {
     super(page);
-    this.navbarLinks = '[data-testid="navbar"] a';
-    this.footerLinks = '[data-testid="footer"] a';
-    this.logo = '[data-testid="navbar-logo"]';
-    this.mobileMenuButton = '[data-testid="mobile-menu-button"]';
+    // Selectors matching the redesigned Industrial Magnetite navbar/footer
+    this.navbarLinks = 'nav.navbar a';
+    this.footerLinks = 'footer.footer a';
+    this.logo = '.navbar-logo';
+    this.mobileMenuButton = '.navbar-menu-btn, [aria-label="Toggle menu"]';
   }
 
   async getNavbarLinks() {

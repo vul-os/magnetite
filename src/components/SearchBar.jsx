@@ -54,6 +54,14 @@ export default function SearchBar({
     inputRef.current?.focus();
   }, []);
 
+  const handleSelect = useCallback((result) => {
+    setQuery(result.title);
+    setIsOpen(false);
+    setActiveIndex(-1);
+    onResultSelect?.(result);
+    onSearch?.(result.title, result.category);
+  }, [onResultSelect, onSearch]);
+
   const handleKeyDown = useCallback((e) => {
     if (!isOpen || allResults.length === 0) return;
 
@@ -79,15 +87,7 @@ export default function SearchBar({
         setActiveIndex(-1);
         break;
     }
-  }, [isOpen, allResults, activeIndex, query, onSearch]);
-
-  const handleSelect = useCallback((result) => {
-    setQuery(result.title);
-    setIsOpen(false);
-    setActiveIndex(-1);
-    onResultSelect?.(result);
-    onSearch?.(result.title, result.category);
-  }, [onResultSelect, onSearch]);
+  }, [isOpen, allResults, activeIndex, query, onSearch, handleSelect]);
 
   const handleCategoryChange = useCallback((cat) => {
     setSelectedCategory(cat);

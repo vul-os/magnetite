@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Layout from '../components/Layout';
 import LeaderboardRow from '../components/LeaderboardRow';
 import { mockLeaderboard } from '../data/mockLeaderboard';
+import { api } from '../api/client';
 import './social.css';
 
 const TIME_FILTERS = [
@@ -9,15 +10,6 @@ const TIME_FILTERS = [
   { key: 'weekly',   label: 'Weekly'   },
   { key: 'monthly',  label: 'Monthly'  },
   { key: 'all-time', label: 'All Time' },
-];
-
-const MOCK_GAMES = [
-  { id: 1, title: 'Cosmic Raiders'   },
-  { id: 2, title: 'Puzzle Dimension' },
-  { id: 3, title: 'Speed Legends'    },
-  { id: 4, title: 'Dungeon Depths'   },
-  { id: 5, title: 'Strategy Command' },
-  { id: 6, title: 'Retro Arcade'     },
 ];
 
 const ITEMS_PER_PAGE = 10;
@@ -28,7 +20,7 @@ function seededRand(a, b) {
   return x - Math.floor(x);
 }
 
-function buildLeaderboardData(gameId, timeFilter) {
+function buildFallbackData(gameId, timeFilter) {
   const key = String(gameId);
   const baseData = mockLeaderboard[key] || mockLeaderboard['1'];
   const tf = TIME_FILTERS.findIndex(f => f.key === timeFilter);
@@ -53,23 +45,65 @@ function buildLeaderboardData(gameId, timeFilter) {
 }
 
 export default function Leaderboard() {
-  const [selectedGame, setSelectedGame] = useState(MOCK_GAMES[0].id);
+  const [games, setGames] = useState([
+    { id: 1, title: 'Cosmic Raiders'   },
+    { id: 2, title: 'Puzzle Dimension' },
+    { id: 3, title: 'Speed Legends'    },
+    { id: 4, title: 'Dungeon Depths'   },
+    { id: 5, title: 'Strategy Command' },
+    { id: 6, title: 'Retro Arcade'     },
+  ]);
+  const [selectedGame, setSelectedGame] = useState(1);
   const [timeFilter, setTimeFilter]     = useState('all-time');
   const [currentPage, setCurrentPage]   = useState(1);
+  const [apiEntries, setApiEntries]     = useState(null);
+
+  // Load game list from API
+  useEffect(() => {
+    let cancelled = false;
+    api.games.list().then(data => {
+      if (!cancelled && data) {
+        const list = Array.isArray(data) ? data : (data?.games ?? null);
+        if (list && list.length > 0) {
+          setGames(list.map(g => ({ id: g.id, title: g.title })));
+          setSelectedGame(list[0].id);
+        }
+      }
+    }).catch(() => { /* use mock */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load leaderboard from API
+  useEffect(() => {
+    if (!selectedGame) return;
+    let cancelled = false;
+
+    api.games.leaderboard(selectedGame).then(data => {
+      if (!cancelled && data) {
+        const entries = Array.isArray(data) ? data : (data?.entries ?? null);
+        if (entries && entries.length > 0) setApiEntries(entries);
+        else setApiEntries(null);
+      }
+    }).catch(() => {
+      if (!cancelled) setApiEntries(null);
+    });
+
+    return () => { cancelled = true; };
+  }, [selectedGame]);
 
   const currentUser = { username: 'PlayerOne' };
 
-  const leaderboardData = useMemo(
-    () => buildLeaderboardData(selectedGame, timeFilter),
-    [selectedGame, timeFilter]
-  );
+  const leaderboardData = useMemo(() => {
+    if (apiEntries && apiEntries.length > 0) return apiEntries;
+    return buildFallbackData(selectedGame, timeFilter);
+  }, [apiEntries, selectedGame, timeFilter]);
 
   const totalPages  = Math.ceil(leaderboardData.length / ITEMS_PER_PAGE);
   const startIndex  = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentData = leaderboardData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   const userRank    = leaderboardData.findIndex(e => e.username === currentUser.username) + 1;
 
-  const handleGameChange = (id) => { setSelectedGame(Number(id)); setCurrentPage(1); };
+  const handleGameChange = (id) => { setSelectedGame(Number(id)); setCurrentPage(1); setApiEntries(null); };
   const handleFilterChange = (key) => { setTimeFilter(key); setCurrentPage(1); };
 
   return (
@@ -88,7 +122,7 @@ export default function Leaderboard() {
               value={selectedGame}
               onChange={(e) => handleGameChange(e.target.value)}
             >
-              {MOCK_GAMES.map(game => (
+              {games.map(game => (
                 <option key={game.id} value={game.id}>{game.title}</option>
               ))}
             </select>

@@ -1,17 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import GameCard from '../components/GameCard';
 import Button from '../components/common/Button';
 import { mockGames } from '../data/mockGames';
+import { api } from '../api/client';
 import './social.css';
 
 export default function Wishlist() {
   const [wishlistGames, setWishlistGames] = useState(mockGames.slice(0, 3));
   const [removingId, setRemovingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWishlist() {
+      try {
+        const data = await api.wishlist.list();
+        if (!cancelled && data) {
+          const list = Array.isArray(data) ? data : (data?.games ?? data?.items ?? null);
+          if (list) setWishlistGames(list);
+        }
+      } catch { /* use mock data */ } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadWishlist();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleRemove = async (gameId) => {
     setRemovingId(gameId);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    try {
+      await api.wishlist.remove(gameId);
+    } catch { /* optimistic remove */ }
     setWishlistGames(prev => prev.filter(game => game.id !== gameId));
     setRemovingId(null);
   };
@@ -26,7 +49,12 @@ export default function Wishlist() {
           </span>
         </header>
 
-        {wishlistGames.length === 0 ? (
+        {loading ? (
+          <div className="loading-state">
+            <span className="spinner" />
+            <span>Loading wishlist…</span>
+          </div>
+        ) : wishlistGames.length === 0 ? (
           <div className="empty-state" style={{ padding: '4rem 1.5rem' }}>
             <svg
               viewBox="0 0 24 24"

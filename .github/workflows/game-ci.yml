@@ -1,45 +1,314 @@
-name: Game CI/CD
+name: Game CI — Build & Deploy
+
+# =============================================================================
+# This workflow:
+#   1. Checks the Magnetite game template compiles for native + WASM targets.
+#   2. Builds the production WASM artifact and runs wasm-bindgen.
+#   3. On pushes to `main` (or manual dispatch) uploads a deployable artifact.
+#   4. Optionally deploys to the Magnetite platform via REST API.
+#
+# Required repository secrets:
+#   MAGNETITE_API_KEY  — platform API key for the deploy step
+#
+# Required repository variables:
+#   MAGNETITE_API_URL  — e.g. https://api.magnetite.gg
+# =============================================================================
 
 on:
   push:
     branches: [main]
+    paths:
+      - "game-template/**"
+      - "backend/magnetite-sdk/**"
+      - ".github/workflows/game-ci.yml"
+      - "scripts/build-game.sh"
   pull_request:
     branches: [main]
+    paths:
+      - "game-template/**"
+      - "backend/magnetite-sdk/**"
+      - ".github/workflows/game-ci.yml"
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy to platform after build?"
+        type: boolean
+        default: false
+      environment:
+        description: "Deploy target environment"
+        type: choice
+        options: [staging, production]
+        default: staging
+
+# Cancel in-progress runs on new pushes to the same branch / PR.
+concurrency:
+  group: game-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  test:
+  # ── Job 1: cargo check (fast — no default features, no Bevy render stack) ──
+  check:
+    name: cargo check (no-default-features)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game-template
+
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: game-template
+
+      # Fast check — no Bevy render plugins pulled in.
+      - name: cargo check (host, no-default-features)
+        run: cargo check --no-default-features
+
+      # Clippy on the same minimal feature set.
+      - name: cargo clippy (no-default-features)
+        run: cargo clippy --no-default-features -- -D warnings
+
+  # ── Job 2: unit tests on the host ─────────────────────────────────────────
+  test:
+    name: Unit tests (host)
+    runs-on: ubuntu-latest
+    needs: check
+    defaults:
+      run:
+        working-directory: game-template
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: game-template
+
+      # Tests are gated on `#[cfg(test)]` — they don't need wasm target.
+      - name: cargo test (no-default-features)
+        run: cargo test --no-default-features
+
+  # ── Job 3: WASM build ──────────────────────────────────────────────────────
+  build-wasm:
+    name: Build WASM artifact
+    runs-on: ubuntu-latest
+    needs: [check, test]
+    defaults:
+      run:
+        working-directory: game-template
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable + wasm32 target
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Run tests
-        run: cargo test
-      - name: Build WASM
-        run: |
-          cargo build --target wasm32-unknown-unknown --release
-          wasm-bindgen --target web --out-dir ./dist --out-name game target/wasm32-unknown-unknown/release/*.wasm
 
-  security:
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: game-template
+
+      # Derive the wasm-bindgen crate version from Cargo.toml so the CLI
+      # version always matches exactly (mismatches cause cryptic errors).
+      - name: Resolve wasm-bindgen-cli version
+        id: wbg-version
+        run: |
+          VER=$(grep 'wasm-bindgen' Cargo.toml \
+            | grep -v '^#' \
+            | grep -oE '"[0-9]+\.[0-9]+(\.[0-9]+)?"' \
+            | head -1 | tr -d '"')
+          echo "Resolved wasm-bindgen version: $VER"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      # Cache the compiled wasm-bindgen-cli binary between runs.
+      - name: Cache wasm-bindgen-cli
+        uses: actions/cache@v4
+        id: wbg-cache
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-${{ steps.wbg-version.outputs.version }}
+
+      - name: Install wasm-bindgen-cli
+        if: steps.wbg-cache.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version ${{ steps.wbg-version.outputs.version }} --locked
+
+      # Build the wasm binary with the `wasm` feature set only.
+      - name: Build wasm32 (release, --features wasm)
+        run: |
+          cargo build \
+            --target wasm32-unknown-unknown \
+            --release \
+            --no-default-features \
+            --features wasm
+
+      # Generate the JS/TS glue code.
+      - name: wasm-bindgen
+        run: |
+          mkdir -p dist
+          wasm-bindgen \
+            --target web \
+            --out-dir dist \
+            --out-name game \
+            target/wasm32-unknown-unknown/release/magnetite_game_template.wasm
+
+      # Install binaryen (provides wasm-opt) for post-processing.
+      - name: Install binaryen (wasm-opt)
+        run: |
+          BINARYEN_VERSION="117"
+          curl -sL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+            | tar xz --strip-components=1 -C /usr/local binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt
+          echo "wasm-opt version: $(wasm-opt --version)"
+
+      - name: Optimise with wasm-opt (-Oz)
+        run: |
+          BEFORE=$(du -h dist/game_bg.wasm | cut -f1)
+          wasm-opt -Oz --output dist/game_bg.wasm dist/game_bg.wasm
+          AFTER=$(du -h dist/game_bg.wasm | cut -f1)
+          echo "wasm-opt: $BEFORE → $AFTER"
+
+      # Bundle index.html with the WASM artifacts for a self-contained deploy.
+      - name: Assemble deployable package
+        run: |
+          mkdir -p deploy
+          cp index.html  deploy/
+          cp -r dist/    deploy/dist/
+          ls -lRh deploy/
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-wasm-${{ github.sha }}
+          path: game-template/deploy/
+          retention-days: 30
+
+      # Print artifact sizes for tracking binary size over time.
+      - name: Report artifact sizes
+        run: |
+          echo "| File | Size |"
+          echo "|------|------|"
+          for f in dist/*; do
+            echo "| $f | $(du -h "$f" | cut -f1) |"
+          done
+
+  # ── Job 4: Security audit ──────────────────────────────────────────────────
+  audit:
+    name: cargo audit
     runs-on: ubuntu-latest
+    # Run in parallel with other jobs — don't block the build on advisory lag.
+    needs: check
+    defaults:
+      run:
+        working-directory: game-template
+
     steps:
       - uses: actions/checkout@v4
-      - name: Run security scan
-        run: |
-          # Run cargo-audit or similar
-          cargo audit || true
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo-audit
+        uses: actions/cache@v4
+        id: audit-cache
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-latest
+
+      - name: Install cargo-audit
+        if: steps.audit-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --locked
+
+      - name: cargo audit
+        # Don't fail the workflow on audit warnings — surface them as info.
+        run: cargo audit || true
+
+  # ── Job 5: Deploy to Magnetite platform ────────────────────────────────────
   deploy:
-    needs: [test, security]
-    if: github.ref == 'refs/heads/main'
+    name: Deploy to Magnetite (${{ github.event.inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
+    needs: build-wasm
+    # Only deploy on main-branch pushes or explicit workflow_dispatch with deploy=true.
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
     steps:
-      - uses: actions/checkout@v4
-      # Deploy to staging
-      - name: Deploy to Staging
-        run: echo "Deploying to staging..."
-      # Wait for manual approval
-      - name: Deploy to Production
-        if: github.event_name == 'release'
-        run: echo "Deploying to production..."
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: game-wasm-${{ github.sha }}
+          path: deploy/
+
+      - name: Display deploy contents
+        run: ls -lRh deploy/
+
+      - name: Deploy to Magnetite platform
+        env:
+          MAGNETITE_API_URL: ${{ vars.MAGNETITE_API_URL }}
+          MAGNETITE_API_KEY: ${{ secrets.MAGNETITE_API_KEY }}
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MAGNETITE_API_URL:-}" ]]; then
+            echo "MAGNETITE_API_URL not set — skipping platform deploy."
+            exit 0
+          fi
+
+          echo "Deploying to $ENVIRONMENT ($MAGNETITE_API_URL)…"
+
+          # Upload the wasm binary
+          UPLOAD_RESP=$(curl -sf \
+            -X POST "${MAGNETITE_API_URL}/games/upload" \
+            -H "Authorization: Bearer ${MAGNETITE_API_KEY}" \
+            -F "wasm=@deploy/dist/game_bg.wasm;type=application/wasm" \
+            -F "js=@deploy/dist/game.js;type=application/javascript" \
+            -F "html=@deploy/index.html;type=text/html" \
+            -F "sha=${SHA}" \
+            -F "environment=${ENVIRONMENT}")
+
+          GAME_VERSION=$(echo "$UPLOAD_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','unknown'))" 2>/dev/null || echo "unknown")
+          echo "Uploaded version: $GAME_VERSION"
+
+      - name: Notify on completion
+        if: always()
+        env:
+          DEPLOYMENT_WEBHOOK_URL: ${{ vars.DEPLOYMENT_WEBHOOK_URL }}
+          STATUS: ${{ job.status }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+        run: |
+          if [[ -z "${DEPLOYMENT_WEBHOOK_URL:-}" ]]; then
+            echo "No webhook URL configured — skipping notification."
+            exit 0
+          fi
+          curl -sf -X POST "${DEPLOYMENT_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"event\":       \"game_deployment\",
+              \"environment\": \"${ENVIRONMENT}\",
+              \"status\":      \"${STATUS}\",
+              \"sha\":         \"${SHA}\",
+              \"actor\":       \"${ACTOR}\",
+              \"run_id\":      ${RUN_ID}
+            }"

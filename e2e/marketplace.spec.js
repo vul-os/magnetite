@@ -13,7 +13,7 @@ test.describe('Marketplace', () => {
     await expect(page.locator('h1')).toBeVisible();
   });
 
-  test('game cards display', async ({ page }) => {
+  test('game cards display', async ({ page: _page }) => {
     await marketplacePage.waitForLoading();
     const cardCount = await marketplacePage.getGameCardCount();
     expect(cardCount).toBeGreaterThan(0);

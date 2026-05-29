@@ -1,20 +1,48 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import ProfileCard from '../components/ProfileCard';
 import { mockProfileUser, mockRecentGames, mockProfileAchievements, mockProfileFriends } from '../data/mockProfile';
+import { api } from '../api/client';
 import './social.css';
 
 export default function Profile() {
+  const { username } = useParams();
   const [isFollowing, setIsFollowing] = useState(false);
-  const [user] = useState(mockProfileUser);
+  const [user, setUser] = useState(mockProfileUser);
+  const [recentGames, setRecentGames] = useState(mockRecentGames);
+  const [achievements, setAchievements] = useState(mockProfileAchievements);
+  const [friends, setFriends] = useState(mockProfileFriends);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      try {
+        const target = username || (await api.auth.me().then(me => me?.username).catch(() => null));
+        if (!target) return;
+
+        const data = await api.profile.get(target);
+        if (!cancelled && data) {
+          const userData = data.user || data;
+          setUser(userData);
+          if (data.recent_games) setRecentGames(data.recent_games);
+          if (data.achievements) setAchievements(data.achievements.slice(0, 3));
+          if (data.friends) setFriends(data.friends.slice(0, 4));
+        }
+      } catch { /* use mock data */ }
+    }
+
+    loadProfile();
+    return () => { cancelled = true; };
+  }, [username]);
 
   return (
     <Layout>
       <div className="profile-page">
         <ProfileCard
           user={user}
-          isOwnProfile={true}
+          isOwnProfile={!username}
           isFollowing={isFollowing}
           onEdit={() => window.location.href = '/edit-profile'}
           onFollow={() => setIsFollowing(true)}
@@ -28,7 +56,7 @@ export default function Profile() {
               <Link to="/leaderboard" className="view-all">View All</Link>
             </div>
             <div className="recent-games-grid">
-              {mockRecentGames.map(game => (
+              {recentGames.map(game => (
                 <div key={game.id} className="recent-game-card">
                   <img src={game.thumbnail} alt={game.title} loading="lazy" />
                   <div className="recent-game-info">
@@ -50,7 +78,7 @@ export default function Profile() {
               <Link to="/achievements" className="view-all">View All</Link>
             </div>
             <div className="achievements-preview">
-              {mockProfileAchievements.map(achievement => (
+              {achievements.map(achievement => (
                 <div key={achievement.id} className="achievement-preview-item">
                   <span className="achievement-icon">{achievement.icon}</span>
                   <span className="achievement-name">{achievement.name}</span>
@@ -65,7 +93,7 @@ export default function Profile() {
               <Link to="/friends" className="view-all">View All</Link>
             </div>
             <div className="friends-preview">
-              {mockProfileFriends.map(friend => (
+              {friends.map(friend => (
                 <Link
                   key={friend.id}
                   to={`/profile/${friend.username}`}

@@ -1,42 +1,62 @@
 # Magnetite Documentation
 
-Welcome to Magnetite, the platform for competitive mini-games with real stakes.
+**Magnetite** is the open-source platform for building, distributing, and monetizing Rust games —
+that scale from a weekend game jam to a COD-size AAA title.
+
+Game logic is authored in Rust. Clients compile Bevy to WASM (browser) and to native. The platform
+is server-authoritative and sandboxed, providing hosting, matchmaking, real-time netcode, persistence,
+and payment rails — so developers only write game logic.
+
+---
 
 ## Quick Links
 
 | Section | Description |
 |---------|-------------|
-| [Getting Started](/getting-started/) | Start your journey with Magnetite |
-| [For Developers](/for-developers/) | Build and submit your own games |
-| [API Reference](/api-reference/) | REST API documentation |
-| [Self-Hosting](/self-hosting/) | Deploy your own Magnetite instance |
-| [Security](/security/) | Security best practices |
+| [Developer Quickstart](./for-developers/quickstart.md) | Clone template → implement → build WASM → publish |
+| [SDK Reference](./for-developers/sdk.md) | `magnetite-sdk` crate reference |
+| [Build & Distribution Pipeline](./for-developers/build-pipeline.md) | How games go from source to players |
+| [Architecture Overview](./architecture.md) | Backend modules, services, and data flow |
+| [Self-Hosting Guide](./self-hosting/index.md) | Docker Compose and Fly.io deployments |
+| [Security & Sandboxing](./security/index.md) | Auth, anti-cheat, and deployment hardening |
+| [API Reference](./api-reference/index.md) | REST API endpoints |
 
-## Platform Overview
+---
 
-Magnetite is a competitive gaming platform where developers can create mini-games that players compete in for real rewards. The platform handles:
+## What Magnetite Provides
 
-- **Matchmaking** - Automatic pairing of players
-- **Wallet System** - Secure fund management
-- **Game Hosting** - Scalable game execution
-- **Tournament Management** - Organized competitive events
+| Concern | What the platform handles |
+|---------|--------------------------|
+| **Distribution** | Storefront/marketplace; players discover, play (browser WASM or native), and pay |
+| **Hosting** | Server-authoritative Rust game servers; WASM artifacts served to browsers |
+| **Matchmaking** | Queue join/leave/status; player pairing |
+| **Real-time netcode** | WebSocket state-sync; client SDK connection types |
+| **Persistence** | Leaderboards, achievements, session history, replays |
+| **Payments** | USDC via Circle; Paystack fiat on-ramp; 15% platform fee; playtime-based developer payouts |
+| **Social** | Friends, invites, notifications |
+| **Analytics** | Developer dashboard, revenue breakdown, session stats |
 
-## Key Features
+---
 
-- Rust-based game SDK for high-performance game logic
-- WebSocket-based real-time communication
-- Built-in anti-cheat mechanisms
-- Automated CI/CD pipeline for game submission
-- Multi-currency wallet support
+## Repository Structure
 
-## Get Started
+```
+magnetite/
+├── backend/                  # Rust platform backend (Axum 0.7, SQLx 0.8)
+│   ├── src/api/              # HTTP route modules (auth, games, wallet, developer, …)
+│   ├── src/services/         # Business-logic layer
+│   ├── src/middleware/       # CORS, rate limiting, request logging
+│   ├── src/jobs/             # Background jobs (session cleanup, notification GC, backup)
+│   ├── src/ws/               # WebSocket game handler
+│   ├── magnetite-sdk/        # Rust SDK — GameLogic trait, Input, State, Networking
+│   ├── migrations/           # SQL migration files
+│   └── tests/                # Integration tests
+├── game-template/            # Bevy + magnetite-sdk starter (compiles to WASM)
+├── src/                      # React 19 frontend
+├── e2e/                      # Playwright end-to-end tests
+└── docs/                     # This documentation tree
+```
 
-1. [Create an account](/getting-started/#account-creation)
-2. [Set up your development environment](/for-developers/)
-3. [Build your first game](/for-developers/#your-first-game)
-4. [Submit and earn](/for-developers/submission/)
+## License
 
-## Support
-
-- GitHub Issues: Report bugs and feature requests
-- Discord: Community discussion
+Platform and SDK are MIT licensed. Documentation is CC0.

@@ -1,41 +1,357 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magnetite Game</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dot Collector — Magnetite Game Template</title>
+  <style>
+    /* ── Magnetite Industrial design tokens ────────────────────────── */
+    :root {
+      --color-bg-primary:    #07070b;
+      --color-bg-secondary:  #0f0f16;
+      --color-bg-card:       #14141d;
+      --color-text-primary:  #f4f4f6;
+      --color-text-secondary:#a8a8b3;
+      --color-text-muted:    #6b6b78;
+      --color-border:        #23232e;
+      --color-accent:        #38e1c8;
+      --color-amber:         #f5a524;
+      --color-error:         #ff5468;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      font-family: ui-monospace, "JetBrains Mono", "Cascadia Code", monospace;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-rows: 40px 1fr 120px;
+      height: 100vh;
+    }
+
+    /* ── Top bar ───────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+    }
+    header .brand {
+      color: var(--color-accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    header .sep { color: var(--color-border); }
+    header .title { color: var(--color-text-secondary); }
+    #status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--color-text-muted);
+      margin-left: auto;
+      transition: background 0.3s;
+    }
+    #status-dot.ready { background: var(--color-accent); }
+    #status-dot.error { background: var(--color-error); }
+    #status-text { color: var(--color-text-muted); font-size: 11px; }
+
+    /* ── Canvas area ────────────────────────────────────────────────── */
+    #canvas-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--color-bg-primary);
+    }
+
+    canvas {
+      display: block;
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      image-rendering: pixelated;
+    }
+
+    /* ── HUD overlay ────────────────────────────────────────────────── */
+    #hud {
+      position: absolute;
+      top: 8px; left: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      pointer-events: none;
+    }
+    .hud-row { display: flex; gap: 8px; }
+    .hud-label {
+      color: var(--color-text-muted);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .hud-value { color: var(--color-accent); min-width: 32px; }
+    .hud-amber  { color: var(--color-amber); }
+
+    /* ── Controls panel ─────────────────────────────────────────────── */
+    #controls {
+      border-top: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      overflow-x: auto;
+    }
+    .ctrl-group { display: flex; gap: 6px; align-items: center; }
+    kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 4px;
+      border: 1px solid var(--color-border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      background: var(--color-bg-card);
+      font-size: 10px;
+      color: var(--color-text-primary);
+    }
+    .ctrl-desc { color: var(--color-text-muted); font-size: 11px; }
+    #tick-counter {
+      margin-left: auto;
+      color: var(--color-text-muted);
+      font-size: 11px;
+    }
+    #tick-counter span { color: var(--color-text-secondary); }
+  </style>
 </head>
 <body>
-    <script type="module">
-        import init from './pkg/magnetite_game_template.js';
+<div id="app">
+  <header>
+    <span class="brand">Magnetite</span>
+    <span class="sep">//</span>
+    <span class="title">Dot Collector</span>
+    <div id="status-dot"></div>
+    <span id="status-text">Loading WASM…</span>
+  </header>
 
-        async function run() {
-            const wasm = await init();
+  <div id="canvas-wrap">
+    <canvas id="game-canvas" width="600" height="400"></canvas>
+    <div id="hud">
+      <div class="hud-row">
+        <span class="hud-label">Score</span>
+        <span class="hud-value" id="hud-score">0</span>
+      </div>
+      <div class="hud-row">
+        <span class="hud-label">HP</span>
+        <span class="hud-value hud-amber" id="hud-hp">100</span>
+      </div>
+    </div>
+  </div>
 
-            window.magnetite = {
-                get_state: () => wasm.get_state(),
-                handle_input: (player_id, input_json) => wasm.handle_input(player_id, input_json),
-            };
-        }
+  <div id="controls">
+    <div class="ctrl-group">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
+      <span class="ctrl-desc">Move</span>
+    </div>
+    <div class="ctrl-group">
+      <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
+      <span class="ctrl-desc">Also move</span>
+    </div>
+    <div class="ctrl-group">
+      <kbd>Space</kbd>
+      <span class="ctrl-desc">Jump</span>
+    </div>
+    <div class="ctrl-group">
+      <kbd>Shift</kbd>
+      <span class="ctrl-desc">Crouch</span>
+    </div>
+    <div id="tick-counter">tick <span id="tick-val">0</span></div>
+  </div>
+</div>
 
-        run();
-    </script>
+<script type="module">
+  // ── Load the wasm-bindgen module ─────────────────────────────────────────
+  // After `wasm-bindgen --target web`, the output is:
+  //   dist/game.js        (ES module glue)
+  //   dist/game_bg.wasm   (the Wasm binary)
+  import init, { GameHandle } from './dist/game.js';
+
+  const statusDot  = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const canvas     = document.getElementById('game-canvas');
+  const ctx        = canvas.getContext('2d');
+  const hudScore   = document.getElementById('hud-score');
+  const hudHp      = document.getElementById('hud-hp');
+  const tickVal    = document.getElementById('tick-val');
+
+  // ── Initialise Wasm ───────────────────────────────────────────────────────
+  let game;
+  try {
+    await init();
+    game = new GameHandle();
+    statusDot.className  = 'ready';
+    statusText.textContent = 'Running';
+  } catch (err) {
+    statusDot.className  = 'error';
+    statusText.textContent = 'Failed to load Wasm: ' + err.message;
+    console.error(err);
+  }
+
+  // ── Input state ───────────────────────────────────────────────────────────
+  const keys = {};
+  window.addEventListener('keydown', e => { keys[e.code] = true;  e.preventDefault(); });
+  window.addEventListener('keyup',   e => { keys[e.code] = false; e.preventDefault(); });
+
+  function buildInput(timestamp) {
+    return JSON.stringify({
+      keys: {
+        forward:  !!(keys['KeyW']      || keys['ArrowUp']),
+        backward: !!(keys['KeyS']      || keys['ArrowDown']),
+        left:     !!(keys['KeyA']      || keys['ArrowLeft']),
+        right:    !!(keys['KeyD']      || keys['ArrowRight']),
+        jump:     !!keys['Space'],
+        crouch:   !!(keys['ShiftLeft'] || keys['ShiftRight']),
+        attack:   false,
+      },
+      mouse: {
+        x: 0, y: 0, delta_x: 0, delta_y: 0,
+        left_button: false, right_button: false, middle_button: false, scroll: 0,
+      },
+      sequence: Math.round(timestamp),   // monotonically increasing frame counter
+      timestamp_ms: Math.round(timestamp),
+    });
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+  const W = canvas.width;
+  const H = canvas.height;
+  const ARENA = 9.5;       // ±9.5 world units → maps to canvas
+  const SCALE = Math.min(W, H) / (ARENA * 2);
+
+  function worldToCanvas(x, z) {
+    return [
+      W / 2 + x * SCALE,
+      H / 2 + z * SCALE,
+    ];
+  }
+
+  // Colour palette (matching CSS tokens, but opaque for canvas)
+  const C = {
+    bg:     '#14141d',
+    grid:   '#23232e',
+    player: '#38e1c8',
+    coin:   '#f5a524',
+    text:   '#f4f4f6',
+    muted:  '#6b6b78',
+  };
+
+  function render(state, scores) {
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth   = 1;
+    for (let i = -ARENA; i <= ARENA; i += 1) {
+      const [x0] = worldToCanvas(i, -ARENA);
+      const [x1] = worldToCanvas(i,  ARENA);
+      const [, y0] = worldToCanvas(0, -ARENA);
+      const [, y1] = worldToCanvas(0,  ARENA);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
+    }
+
+    // Coins
+    if (state.coins) {
+      ctx.fillStyle = C.coin;
+      for (const coin of state.coins) {
+        const [cx, cy] = worldToCanvas(coin.x, coin.z);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Players
+    for (const player of (state.players || [])) {
+      const [px, py] = worldToCanvas(player.position.x, player.position.z);
+      const score    = (scores && scores[String(player.id)]) ?? 0;
+
+      // Body
+      ctx.fillStyle = C.player;
+      ctx.beginPath();
+      ctx.arc(px, py, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Look-direction indicator
+      const angle = player.rotation.yaw;
+      ctx.strokeStyle = C.text;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + Math.sin(angle) * 12, py - Math.cos(angle) * 12);
+      ctx.stroke();
+
+      // Label
+      ctx.fillStyle  = C.text;
+      ctx.font       = '10px ui-monospace, monospace';
+      ctx.textAlign  = 'center';
+      ctx.fillText(`P${player.id} [${score}]`, px, py - 14);
+    }
+  }
+
+  // ── Game loop ─────────────────────────────────────────────────────────────
+  const PLAYER_ID = 0; // local player
+  const TARGET_TPS = 60;
+  let lastTick = performance.now();
+
+  function loop(now) {
+    if (!game) { requestAnimationFrame(loop); return; }
+
+    const elapsed = now - lastTick;
+    if (elapsed >= 1000 / TARGET_TPS) {
+      lastTick = now;
+
+      // Send input and advance simulation
+      game.handle_input(PLAYER_ID, buildInput(now));
+      game.tick();
+
+      // Parse state + scores
+      let state  = {};
+      let scores = {};
+      try { state  = JSON.parse(game.get_state());  } catch(_) {}
+      try { scores = JSON.parse(game.get_scores()); } catch(_) {}
+
+      // Render
+      render(state, scores);
+
+      // Update HUD
+      const me = (state.players || []).find(p => p.id === PLAYER_ID);
+      if (me) {
+        hudHp.textContent    = Math.round(me.health);
+        hudScore.textContent = scores[String(PLAYER_ID)] ?? 0;
+      }
+      tickVal.textContent = game.tick_count();
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+</script>
 </body>
 </html>

@@ -2,6 +2,10 @@
 name = "magnetite-sdk"
 version = "0.1.0"
 edition = "2021"
+description = "Rust SDK for building multiplayer games on the Magnetite platform — from game-jam to AAA scale."
+license = "MIT"
+keywords = ["game", "multiplayer", "netcode", "wasm", "magnetite"]
+categories = ["game-engines", "network-programming"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -20,6 +20,7 @@ use crate::api::admin;
 use crate::api::auth;
 use crate::api::categories;
 use crate::api::developer;
+use crate::api::distribution;
 use crate::api::games;
 use crate::api::github;
 use crate::api::health;
@@ -61,6 +62,7 @@ async fn main() {
         .nest("/auth", auth::router(pool.clone()))
         .nest("/wallet", wallet::router(pool.clone()))
         .nest("/games", games::router(pool.clone()))
+        .nest("/distribution", distribution::router(pool.clone()))
         .nest("/categories", categories::router(pool.clone()))
         .nest("/leaderboard", leaderboard::router(pool.clone()))
         .nest("/matchmaking", matchmaking::router(pool.clone()))

@@ -47,7 +47,7 @@ class ErrorBoundary extends Component {
                 Go Home
               </Link>
             </div>
-            {process.env.NODE_ENV === 'development' && error && (
+            {import.meta.env.DEV && error && (
               <details className="error-boundary-details">
                 <summary>Error Details</summary>
                 <pre>{error.toString()}</pre>

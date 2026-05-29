@@ -2,6 +2,7 @@ pub mod achievements;
 pub mod analytics;
 pub mod anticheat;
 pub mod auth;
+pub mod distribution;
 pub mod email;
 pub mod games;
 pub mod health;

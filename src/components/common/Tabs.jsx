@@ -12,7 +12,7 @@ export default function Tabs({
 }) {
   const tabsListRef = useRef(null);
   const [indicatorStyle, setIndicatorStyle] = useState({});
-  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [_focusedIndex, setFocusedIndex] = useState(-1);
 
   useEffect(() => {
     updateIndicator();
@@ -38,7 +38,7 @@ export default function Tabs({
 
   const handleKeyDown = (e) => {
     const currentIndex = tabs.findIndex((t) => t.id === activeTab);
-    let newIndex = currentIndex;
+    let newIndex;
 
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();

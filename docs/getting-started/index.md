@@ -1,6 +1,10 @@
 # Getting Started
 
-Get up and running with Magnetite in under 5 minutes.
+> This page is a brief orientation. The full step-by-step guide is at
+> [Developer Quickstart](../for-developers/quickstart.md).
+
+Get up and running with Magnetite — the open-source platform for building, distributing,
+and monetizing Rust games at any scale.
 
 ## Prerequisites
 

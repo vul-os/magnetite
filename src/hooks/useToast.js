@@ -1,5 +1,1 @@
-import { useToast } from '../context/ToastContext';
-
-export default function useToast() {
-  return useToast();
-}
+export { useToast as default } from '../context/ToastContext';

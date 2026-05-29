@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import Button from './common/Button';
 
 const StarRatingDisplay = memo(function StarRatingDisplay({ rating, size = 'md' }) {
   const starSize = size === 'sm' ? 14 : size === 'lg' ? 24 : 18;

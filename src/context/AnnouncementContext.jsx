@@ -28,7 +28,7 @@ export function AnnouncementProvider({ children, announcement = null }) {
     setIsVisible(false);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(true));
-    } catch {}
+    } catch { /* storage unavailable */ }
   }, []);
 
   const show = useCallback(() => {
@@ -36,7 +36,7 @@ export function AnnouncementProvider({ children, announcement = null }) {
     setIsVisible(true);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch { /* storage unavailable */ }
   }, []);
 
   return (

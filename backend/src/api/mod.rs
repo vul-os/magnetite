@@ -3,6 +3,7 @@ pub mod admin;
 pub mod auth;
 pub mod categories;
 pub mod developer;
+pub mod distribution;
 pub mod games;
 pub mod github;
 pub mod health;

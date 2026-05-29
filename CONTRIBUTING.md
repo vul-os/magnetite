@@ -1,6 +1,16 @@
 # Contributing to Magnetite
 
-Thank you for your interest in contributing to Magnetite! This guide covers everything you need to know to get started, from setting up your development environment to understanding our release process.
+Thank you for your interest in contributing to Magnetite — the open-source platform for
+building, distributing, and monetizing Rust games at any scale. This guide covers
+everything you need to know to get started.
+
+For platform documentation see the [`docs/`](docs/) directory:
+
+- [Developer Quickstart](docs/for-developers/quickstart.md) — clone template → build WASM → publish
+- [Architecture Overview](docs/architecture.md) — backend modules and data flow
+- [API Reference](docs/api-reference/index.md) — all REST endpoints
+- [Self-Hosting Guide](docs/self-hosting/index.md) — Docker Compose + Fly.io
+
 
 ## Table of Contents
 

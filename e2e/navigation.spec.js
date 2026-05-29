@@ -9,12 +9,12 @@ test.describe('Navigation', () => {
     await navigationPage.navigate('/');
   });
 
-  test('navbar links work', async ({ page }) => {
+  test('navbar links work', async ({ page: _page }) => {
     const links = await navigationPage.getNavbarLinks();
     expect(links.length).toBeGreaterThan(0);
   });
 
-  test('footer links', async ({ page }) => {
+  test('footer links', async ({ page: _page }) => {
     const footerLinks = await navigationPage.getFooterLinks();
     expect(footerLinks.length).toBeGreaterThan(0);
   });

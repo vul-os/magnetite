@@ -13,7 +13,7 @@ test.describe('Auth', () => {
     await expect(page.locator('h1')).toBeVisible();
   });
 
-  test('OAuth buttons exist', async ({ page }) => {
+  test('OAuth buttons exist', async ({ page: _page }) => {
     const oauthButtons = await loginPage.getOAuthButtons();
     expect(oauthButtons.length).toBeGreaterThan(0);
   });

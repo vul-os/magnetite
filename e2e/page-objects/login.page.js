@@ -3,11 +3,12 @@ import { BasePage } from './base.page.js';
 export class LoginPage extends BasePage {
   constructor(page) {
     super(page);
-    this.emailInput = '[data-testid="email-input"]';
-    this.passwordInput = '[data-testid="password-input"]';
-    this.submitButton = '[data-testid="login-submit"]';
-    this.oauthButtons = '[data-testid*="oauth-"]';
-    this.errorMessage = '[data-testid="error-message"]';
+    // Selectors matching the redesigned Industrial Magnetite login page
+    this.emailInput = 'input[type="email"], input[name="email"], input[placeholder*="mail" i]';
+    this.passwordInput = 'input[type="password"], input[name="password"]';
+    this.submitButton = 'button[type="submit"], .auth-submit-btn';
+    this.oauthButtons = '.oauth-btn, [class*="oauth"], a[href*="/api/auth/"]';
+    this.errorMessage = '.auth-error, .error-message, [role="alert"]';
     this.pageTitle = 'h1';
   }
 
@@ -26,6 +27,6 @@ export class LoginPage extends BasePage {
   }
 
   async isOAuthButtonVisible(provider) {
-    return this.isVisible(`[data-testid="oauth-${provider}"]`);
+    return this.isVisible(`a[href*="/api/auth/${provider}"], .oauth-btn:has-text("${provider}")`);
   }
 }

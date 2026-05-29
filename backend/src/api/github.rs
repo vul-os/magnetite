@@ -490,6 +490,13 @@ async fn handle_push_event(
     let git_ref = event.git_ref.as_deref().unwrap_or("refs/heads/main");
     let is_main_branch = git_ref == "refs/heads/main" || git_ref == "refs/heads/master";
 
+    // Extract a semver tag if the push is a tag push (refs/tags/v*).
+    let version_tag: Option<String> = if git_ref.starts_with("refs/tags/") {
+        Some(git_ref.trim_start_matches("refs/tags/").to_string())
+    } else {
+        None
+    };
+
     let pipeline_id = Uuid::new_v4();
     let commit_sha = event
         .commits
@@ -514,17 +521,47 @@ async fn handle_push_event(
         git_ref
     );
 
-    if is_main_branch {
+    if is_main_branch || version_tag.is_some() {
         let build_id = Uuid::new_v4();
+
+        // Look up the game_id linked to this repository (if any).
+        let game_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM games WHERE github_repo = $1 AND active = true LIMIT 1",
+        )
+        .bind(&repo.full_name)
+        .fetch_optional(pool)
+        .await?;
+
         sqlx::query(
-            "INSERT INTO build_status (id, repository, commit_sha, status, created_at, updated_at)
-             VALUES ($1, $2, $3, 'pending', NOW(), NOW())",
+            "INSERT INTO build_status (id, repository, commit_sha, status, game_id, created_at, updated_at)
+             VALUES ($1, $2, $3, 'pending', $4, NOW(), NOW())",
         )
         .bind(build_id)
         .bind(&repo.full_name)
         .bind(&commit_sha)
+        .bind(game_id)
         .execute(pool)
         .await?;
+
+        // Create a pending artifact record so the developer can track build
+        // progress immediately, before the CI worker reports back.
+        if let Some(gid) = game_id {
+            crate::services::distribution::create_build_artifact_from_push(
+                pool,
+                gid,
+                build_id,
+                &commit_sha,
+                version_tag.as_deref(),
+            )
+            .await?;
+
+            tracing::info!(
+                "Artifact record created for game {} build {} (ref={})",
+                gid,
+                build_id,
+                git_ref
+            );
+        }
 
         trigger_wasm_build(pool, repo, &commit_sha, build_id).await?;
         run_security_scan(pool, repo, &commit_sha, build_id).await?;

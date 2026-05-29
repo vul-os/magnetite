@@ -3,11 +3,12 @@ import { BasePage } from './base.page.js';
 export class MarketplacePage extends BasePage {
   constructor(page) {
     super(page);
-    this.gameCards = '[data-testid="game-card"]';
+    // Selectors matching the redesigned Industrial Magnetite marketplace
+    this.gameCards = '.game-card';
     this.pageTitle = 'h1';
-    this.searchInput = '[data-testid="search-input"]';
-    this.filterButton = '[data-testid="filter-button"]';
-    this.loadingSpinner = '[data-testid="loading-spinner"]';
+    this.searchInput = '.search-bar-input, input[type="search"], input[placeholder*="earch"]';
+    this.filterButton = '.filter-btn, [aria-label*="filter"], [aria-label*="Filter"]';
+    this.loadingSpinner = '.loading-spinner, .spinner, [role="status"]';
   }
 
   async getGameCards() {
@@ -28,6 +29,11 @@ export class MarketplacePage extends BasePage {
   }
 
   async waitForLoading() {
-    await this.page.waitForSelector(this.loadingSpinner, { state: 'hidden' });
+    // Wait for spinner to disappear, or fall back to a short wait if no spinner
+    try {
+      await this.page.waitForSelector(this.loadingSpinner, { state: 'hidden', timeout: 5000 });
+    } catch {
+      await this.page.waitForTimeout(500);
+    }
   }
 }

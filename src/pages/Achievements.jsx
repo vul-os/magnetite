@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import AchievementCard from '../components/AchievementCard';
 import { mockAchievements, recentUnlocks } from '../data/mockAchievements';
+import { api } from '../api/client';
 import './social.css';
 
 const CATEGORIES = [
@@ -14,15 +15,46 @@ const CATEGORIES = [
 export default function Achievements() {
   const [category, setCategory] = useState('all');
   const [showUnlocked, setShowUnlocked] = useState(true);
+  const [achievements, setAchievements] = useState(mockAchievements);
+  const [recent, setRecent] = useState(recentUnlocks);
 
-  const filteredAchievements = mockAchievements.filter(achievement => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAchievements() {
+      try {
+        // Try to get user info first for the userId param
+        const me = await api.auth.me();
+        const userId = me?.id || me?.user_id;
+        if (!userId) return;
+
+        const data = await api.achievements.list(userId);
+        if (!cancelled && data) {
+          const list = Array.isArray(data) ? data : (data?.achievements ?? null);
+          if (list && list.length > 0) {
+            setAchievements(list);
+            const recentList = list
+              .filter(a => a.unlockedAt)
+              .sort((a, b) => new Date(b.unlockedAt) - new Date(a.unlockedAt))
+              .slice(0, 3);
+            if (recentList.length > 0) setRecent(recentList);
+          }
+        }
+      } catch { /* use mock data */ }
+    }
+
+    loadAchievements();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredAchievements = achievements.filter(achievement => {
     const matchesCategory = category === 'all' || achievement.category === category;
     const matchesUnlocked = showUnlocked || achievement.unlockedAt === null;
     return matchesCategory && matchesUnlocked;
   });
 
-  const unlockedCount = mockAchievements.filter(a => a.unlockedAt !== null).length;
-  const totalCount = mockAchievements.length;
+  const unlockedCount = achievements.filter(a => a.unlockedAt !== null).length;
+  const totalCount = achievements.length;
 
   return (
     <Layout>
@@ -37,7 +69,7 @@ export default function Achievements() {
         <div className="recent-unlocks">
           <h3>// RECENT UNLOCKS</h3>
           <div className="recent-grid">
-            {recentUnlocks.map(unlock => (
+            {recent.map(unlock => (
               <div key={unlock.id} className="recent-item">
                 <span className="recent-icon" aria-hidden="true">{unlock.icon}</span>
                 <span className="recent-name">{unlock.name}</span>

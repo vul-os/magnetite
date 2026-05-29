@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import Modal from './Modal';
-import Button from './common/Button';
 import './Modal.css';
 
 export default function SelectModal({

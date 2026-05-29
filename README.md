@@ -223,6 +223,21 @@ See [`backend/magnetite-sdk/`](backend/magnetite-sdk/) and
 
 ---
 
+## Documentation
+
+| Guide | File |
+|-------|------|
+| Developer Quickstart (clone → implement → build WASM → publish) | [`docs/for-developers/quickstart.md`](docs/for-developers/quickstart.md) |
+| SDK Reference (`GameLogic`, `Input`, `GameState`, `Snapshot`) | [`docs/for-developers/sdk.md`](docs/for-developers/sdk.md) |
+| Build & Distribution Pipeline | [`docs/for-developers/build-pipeline.md`](docs/for-developers/build-pipeline.md) |
+| Architecture Overview (backend modules, services, data flow) | [`docs/architecture.md`](docs/architecture.md) |
+| REST API Reference (all real endpoints) | [`docs/api-reference/index.md`](docs/api-reference/index.md) |
+| Self-Hosting Guide (Docker Compose + Fly.io) | [`docs/self-hosting/index.md`](docs/self-hosting/index.md) |
+| Environment Variables | [`docs/self-hosting/environment-variables.md`](docs/self-hosting/environment-variables.md) |
+| Security & Sandboxing | [`docs/security/index.md`](docs/security/index.md) |
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

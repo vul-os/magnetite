@@ -24,6 +24,20 @@ pub struct Game {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// Rich game metadata returned to the frontend play page, including the
+/// current live version and artifact availability.
+#[derive(Debug, Serialize)]
+pub struct GamePlayMetadata {
+    pub id: Uuid,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub github_repo: String,
+    pub live_version: Option<String>,
+    pub has_playable_artifact: bool,
+    pub artifact_type: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateGameRequest {
     pub github_repo: String,
@@ -179,6 +193,59 @@ pub async fn get_leaderboard(
     ))
 }
 
+pub async fn get_game_play_metadata(
+    State(pool): State<PgPool>,
+    Path(game_id): Path<Uuid>,
+) -> Result<Json<crate::api::response::ApiResponse<GamePlayMetadata>>> {
+    let game = sqlx::query_as::<_, Game>(
+        "SELECT id, developer_id, github_repo, title, description, status, active, created_at
+         FROM games WHERE id = $1 AND active = true",
+    )
+    .bind(game_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+
+    // Fetch the live version string if one exists.
+    let live_version: Option<String> = sqlx::query_scalar(
+        "SELECT version FROM game_versions WHERE game_id = $1 AND is_live = true
+         ORDER BY updated_at DESC LIMIT 1",
+    )
+    .bind(game_id)
+    .fetch_optional(&pool)
+    .await?;
+
+    // Check whether a playable (successful) artifact exists for the live version.
+    let artifact_info: Option<(String,)> = if live_version.is_some() {
+        sqlx::query_as(
+            "SELECT ga.artifact_type
+             FROM game_artifacts ga
+             JOIN game_versions gv ON ga.version_id = gv.id
+             WHERE gv.game_id = $1 AND gv.is_live = true AND ga.build_status = 'success'
+             ORDER BY ga.created_at DESC LIMIT 1",
+        )
+        .bind(game_id)
+        .fetch_optional(&pool)
+        .await?
+    } else {
+        None
+    };
+
+    let has_playable_artifact = artifact_info.is_some();
+    let artifact_type = artifact_info.map(|(t,)| t);
+
+    Ok(response::success_response(GamePlayMetadata {
+        id: game.id,
+        title: game.title,
+        description: game.description,
+        status: game.status,
+        github_repo: game.github_repo,
+        live_version,
+        has_playable_artifact,
+        artifact_type,
+    }))
+}
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(list_games))
@@ -205,5 +272,6 @@ pub fn router(pool: PgPool) -> Router {
             )),
         )
         .route("/:id/leaderboard", get(get_leaderboard))
+        .route("/:id/play-metadata", get(get_game_play_metadata))
         .with_state(pool)
 }

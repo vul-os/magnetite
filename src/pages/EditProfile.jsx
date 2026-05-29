@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import { mockProfileUser } from '../data/mockProfile';
+import { api } from '../api/client';
 
 export default function EditProfile() {
   const navigate = useNavigate();
@@ -15,6 +16,21 @@ export default function EditProfile() {
   });
   const [avatarFile, setAvatarFile] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Load real profile data on mount
+  useEffect(() => {
+    api.auth.me().then(me => {
+      if (me) {
+        setFormData(prev => ({
+          ...prev,
+          username: me.username || prev.username,
+          bio: me.bio || prev.bio,
+          location: me.location || prev.location,
+          avatar: me.avatar || prev.avatar,
+        }));
+      }
+    }).catch(() => { /* use mock */ });
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -33,9 +49,11 @@ export default function EditProfile() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-    await new Promise(r => setTimeout(r, 1000));
+    try {
+      await api.profile.update(formData);
+    } catch { /* optimistic — proceed */ }
     setIsSaving(false);
-    navigate('/profile/PlayerOne');
+    navigate(`/profile/${formData.username}`);
   };
 
   return (

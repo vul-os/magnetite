@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
 import { mockFriends, mockPendingRequests, mockBlockedUsers, mockSearchUsers } from '../data/mockFriends';
+import { api } from '../api/client';
 import './social.css';
 
 export default function Friends() {
@@ -12,45 +13,75 @@ export default function Friends() {
   const [searchResults, setSearchResults] = useState([]);
   const [activeTab, setActiveTab] = useState('friends');
 
-  const handleSearch = (query) => {
+  // Load friends from real API on mount
+  useEffect(() => {
+    let cancelled = false;
+    api.social.friends().then(data => {
+      if (!cancelled && data) {
+        const list = Array.isArray(data) ? data : (data?.friends ?? null);
+        if (list) setFriends(list);
+      }
+    }).catch(() => { /* use mock */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSearch = useCallback((query) => {
     setSearchQuery(query);
     if (query.trim()) {
-      const filtered = mockSearchUsers.filter(u =>
-        u.username.toLowerCase().includes(query.toLowerCase())
-      );
-      setSearchResults(filtered);
+      // Try real API first, fall back to mock
+      api.social.searchUsers(query).then(data => {
+        const list = Array.isArray(data) ? data : (data?.users ?? null);
+        if (list) {
+          setSearchResults(list);
+        } else {
+          throw new Error('no results');
+        }
+      }).catch(() => {
+        const filtered = mockSearchUsers.filter(u =>
+          u.username.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(filtered);
+      });
     } else {
       setSearchResults([]);
     }
-  };
+  }, []);
 
-  const handleAddFriend = (user) => {
+  const handleAddFriend = useCallback(async (user) => {
+    try {
+      await api.social.addFriend(user.id);
+    } catch { /* optimistic */ }
     setSearchResults(prev => prev.filter(u => u.id !== user.id));
     setSearchQuery('');
-    alert(`Friend request sent to ${user.username}`);
-  };
+  }, []);
 
-  const handleInvite = (friend) => {
+  const handleInvite = useCallback((friend) => {
     alert(`Invite sent to ${friend.username}`);
-  };
+  }, []);
 
-  const handleBlock = (friend) => {
+  const handleBlock = useCallback((friend) => {
     setFriends(prev => prev.filter(f => f.id !== friend.id));
     setBlockedUsers(prev => [...prev, { ...friend, blockedAt: new Date().toISOString() }]);
-  };
+  }, []);
 
-  const handleAcceptRequest = (request) => {
+  const handleAcceptRequest = useCallback(async (request) => {
+    try {
+      await api.social.acceptInvite(request.id);
+    } catch { /* optimistic */ }
     setPendingRequests(prev => prev.filter(r => r.id !== request.id));
     setFriends(prev => [...prev, { ...request, status: 'offline' }]);
-  };
+  }, []);
 
-  const handleDeclineRequest = (request) => {
+  const handleDeclineRequest = useCallback(async (request) => {
+    try {
+      await api.social.declineInvite(request.id);
+    } catch { /* optimistic */ }
     setPendingRequests(prev => prev.filter(r => r.id !== request.id));
-  };
+  }, []);
 
-  const handleUnblock = (user) => {
+  const handleUnblock = useCallback((user) => {
     setBlockedUsers(prev => prev.filter(u => u.id !== user.id));
-  };
+  }, []);
 
   return (
     <Layout>
