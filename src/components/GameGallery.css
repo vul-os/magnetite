@@ -1,0 +1,232 @@
+/*
+ * GameGallery — Industrial Magnetite
+ * Screenshot thumbnail grid + fullscreen modal with keyboard navigation.
+ */
+
+/* ─── Thumbnail grid ───────────────────────────────────────────────────────── */
+.game-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.game-gallery.single {
+  grid-template-columns: 1fr;
+}
+
+.gallery-thumbnails {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+/* first screenshot spans both columns as featured */
+.gallery-thumbnails .game-screenshot-thumbnail:first-child {
+  grid-column: span 2;
+}
+
+/* ─── Modal main image ─────────────────────────────────────────────────────── */
+.gallery-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 90vh;
+}
+
+.gallery-modal-content.fullscreen-mode {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: var(--z-modal);
+  max-height: 100vh;
+  gap: 0;
+}
+
+.gallery-main {
+  position: relative;
+  flex: 1;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  min-height: 320px;
+}
+
+.gallery-main.fullscreen {
+  border-radius: 0;
+  border: none;
+}
+
+.gallery-image-container {
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.gallery-image-container.zoomed {
+  cursor: zoom-out;
+}
+
+.gallery-main-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform var(--t-slow) var(--ease-out);
+}
+
+.gallery-image-container.zoomed .gallery-main-image {
+  transform: scale(1.6);
+}
+
+/* ─── Nav controls ─────────────────────────────────────────────────────────── */
+.gallery-controls {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(7, 7, 11, 0.8);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.75rem;
+  backdrop-filter: blur(8px);
+}
+
+.gallery-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.gallery-nav-btn:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.gallery-nav-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.gallery-counter {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  min-width: 3rem;
+  text-align: center;
+  user-select: none;
+}
+
+/* ─── Action buttons ───────────────────────────────────────────────────────── */
+.gallery-actions {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  gap: 0.375rem;
+}
+
+.gallery-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: rgba(7, 7, 11, 0.7);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.gallery-action-btn:hover {
+  color: var(--color-accent);
+  border-color: rgba(56, 225, 200, 0.35);
+}
+
+.gallery-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─── Thumbnail strip ──────────────────────────────────────────────────────── */
+.gallery-thumbnail-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+
+.thumbnail-strip-item {
+  flex-shrink: 0;
+  width: 80px;
+  height: 52px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  background: none;
+}
+
+.thumbnail-strip-item:hover,
+.thumbnail-strip-item.active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.thumbnail-strip-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ─── Single-image modal ───────────────────────────────────────────────────── */
+.gallery-single-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.gallery-single-image {
+  width: 100%;
+  height: auto;
+  max-height: 80vh;
+  object-fit: contain;
+  display: block;
+}
+
+/* ─── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .game-gallery,
+  .gallery-thumbnails {
+    grid-template-columns: 1fr;
+  }
+
+  .gallery-thumbnails .game-screenshot-thumbnail:first-child {
+    grid-column: span 1;
+  }
+
+  .gallery-main { min-height: 200px; }
+}

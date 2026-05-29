@@ -43,7 +43,7 @@ export default function Settings() {
         if (userData.user) {
           setProfile(prev => ({ ...prev, ...userData.user }));
         }
-      } catch (err) {
+      } catch {
         console.log('Using mock profile data');
       } finally {
         setLoading(false);
@@ -59,7 +59,7 @@ export default function Settings() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (err) {
+    } catch {
       console.error('Failed to save settings');
     } finally {
       setSaving(false);

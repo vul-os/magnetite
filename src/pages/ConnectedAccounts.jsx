@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
 const ProviderInfo = {
@@ -15,11 +15,7 @@ export default function ConnectedAccounts() {
   const [showConfirm, setShowConfirm] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadAccounts();
-  }, []);
-
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     try {
       const data = await api.auth.linkedAccounts();
       setAccounts(data);
@@ -28,7 +24,11 @@ export default function ConnectedAccounts() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
 
   const handleDisconnect = async (accountId) => {
     setUnlinking(accountId);

@@ -1,10 +1,11 @@
 import './SubscriptionCard.css';
 
-const TIER_COLORS = {
-  free: '#6b7280',
-  basic: '#3b82f6',
-  pro: '#8b5cf6',
-  unlimited: '#f59e0b',
+/* Map tier names to CSS variable names for token-based colouring */
+const TIER_CLASS = {
+  free:      'tier-free',
+  basic:     'tier-basic',
+  pro:       'tier-pro',
+  unlimited: 'tier-unlimited',
 };
 
 export default function SubscriptionCard({ tier, isCurrent, onSubscribe }) {
@@ -16,15 +17,25 @@ export default function SubscriptionCard({ tier, isCurrent, onSubscribe }) {
     recommended = false
   } = tier;
 
-  const tierKey = name.toLowerCase();
-  const accentColor = TIER_COLORS[tierKey] || TIER_COLORS.free;
+  const tierKey  = name.toLowerCase();
+  const tierClass = TIER_CLASS[tierKey] || TIER_CLASS.free;
+
+  function getButtonLabel(tierName) {
+    const tierOrder = ['Free', 'Basic', 'Pro', 'Unlimited'];
+    const targetIndex = tierOrder.indexOf(tierName);
+    const currentIndex = tierOrder.indexOf('Free');
+    if (targetIndex > currentIndex) {
+      return `Upgrade to ${tierName}`;
+    }
+    return `Subscribe to ${tierName}`;
+  }
 
   return (
-    <div className={`subscription-card ${isCurrent ? 'current' : ''} ${recommended ? 'recommended' : ''}`}>
+    <div className={`subscription-card ${tierClass} ${isCurrent ? 'current' : ''} ${recommended ? 'recommended' : ''}`}>
       {recommended && <div className="subscription-card-badge">Recommended</div>}
-      
-      <div className="subscription-card-header" style={{ borderColor: accentColor }}>
-        <div className="subscription-tier-indicator" style={{ backgroundColor: accentColor }} />
+
+      <div className="subscription-card-header">
+        <div className="subscription-tier-indicator" />
         <h3 className="subscription-tier-name">{name}</h3>
         <div className="subscription-price">
           <span className="price-amount">{price}</span>
@@ -35,7 +46,7 @@ export default function SubscriptionCard({ tier, isCurrent, onSubscribe }) {
       <ul className="subscription-features">
         {features.map((feature, index) => (
           <li key={index} className="subscription-feature">
-            <span className="feature-check">✓</span>
+            <span className="feature-check" aria-hidden="true">✓</span>
             <span>{feature}</span>
           </li>
         ))}
@@ -43,12 +54,12 @@ export default function SubscriptionCard({ tier, isCurrent, onSubscribe }) {
 
       <div className="subscription-card-footer">
         {isCurrent ? (
-          <button className="btn btn-secondary subscription-btn" disabled>
+          <button className="btn btn-secondary subscription-btn" disabled aria-label="Current plan">
             Current Plan
           </button>
         ) : (
-          <button 
-            className={`btn ${recommended ? 'btn-primary' : 'btn-outline'} subscription-btn`}
+          <button
+            className={`btn ${recommended ? 'btn-primary' : 'btn-secondary'} subscription-btn`}
             onClick={() => onSubscribe(tier)}
           >
             {getButtonLabel(name)}
@@ -57,15 +68,4 @@ export default function SubscriptionCard({ tier, isCurrent, onSubscribe }) {
       </div>
     </div>
   );
-
-  function getButtonLabel(tierName) {
-    const tierOrder = ['Free', 'Basic', 'Pro', 'Unlimited'];
-    const currentIndex = tierOrder.indexOf('Free');
-    const targetIndex = tierOrder.indexOf(tierName);
-    
-    if (targetIndex > currentIndex) {
-      return `Upgrade to ${tierName}`;
-    }
-    return `Subscribe to ${tierName}`;
-  }
 }

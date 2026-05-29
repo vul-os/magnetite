@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
 import { mockFriends, mockPendingRequests, mockBlockedUsers, mockSearchUsers } from '../data/mockFriends';
+import './social.css';
 
 export default function Friends() {
   const [friends, setFriends] = useState(mockFriends);
@@ -10,7 +11,6 @@ export default function Friends() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [activeTab, setActiveTab] = useState('friends');
-  const [showBlocked, setShowBlocked] = useState(false);
 
   const handleSearch = (query) => {
     setSearchQuery(query);
@@ -25,7 +25,7 @@ export default function Friends() {
   };
 
   const handleAddFriend = (user) => {
-    setSearchResults(searchResults.filter(u => u.id !== user.id));
+    setSearchResults(prev => prev.filter(u => u.id !== user.id));
     setSearchQuery('');
     alert(`Friend request sent to ${user.username}`);
   };
@@ -35,25 +35,21 @@ export default function Friends() {
   };
 
   const handleBlock = (friend) => {
-    setFriends(friends.filter(f => f.id !== friend.id));
-    setBlockedUsers([...blockedUsers, { ...friend, blockedAt: new Date().toISOString() }]);
-    alert(`${friend.username} has been blocked`);
+    setFriends(prev => prev.filter(f => f.id !== friend.id));
+    setBlockedUsers(prev => [...prev, { ...friend, blockedAt: new Date().toISOString() }]);
   };
 
   const handleAcceptRequest = (request) => {
-    setPendingRequests(pendingRequests.filter(r => r.id !== request.id));
-    setFriends([...friends, { ...request, status: 'offline' }]);
-    alert(`You are now friends with ${request.username}`);
+    setPendingRequests(prev => prev.filter(r => r.id !== request.id));
+    setFriends(prev => [...prev, { ...request, status: 'offline' }]);
   };
 
   const handleDeclineRequest = (request) => {
-    setPendingRequests(pendingRequests.filter(r => r.id !== request.id));
-    alert(`Declined friend request from ${request.username}`);
+    setPendingRequests(prev => prev.filter(r => r.id !== request.id));
   };
 
   const handleUnblock = (user) => {
-    setBlockedUsers(blockedUsers.filter(u => u.id !== user.id));
-    alert(`${user.username} has been unblocked`);
+    setBlockedUsers(prev => prev.filter(u => u.id !== user.id));
   };
 
   return (
@@ -61,43 +57,53 @@ export default function Friends() {
       <div className="friends-page">
         <header className="page-header">
           <h1>Friends</h1>
-          <div className="search-box">
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-            />
-            {searchResults.length > 0 && (
-              <div className="search-results">
-                {searchResults.map(user => (
-                  <div key={user.id} className="search-result-item">
-                    <img src={user.avatar} alt={user.username} loading="lazy" />
-                    <span>{user.username}</span>
-                    <button onClick={() => handleAddFriend(user)} className="btn btn-primary btn-sm">
-                      Add
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <p>// SOCIAL NETWORK</p>
         </header>
 
-        <div className="tabs">
+        <div className="search-box">
+          <input
+            type="text"
+            placeholder="Search players by username..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            aria-label="Search users"
+            aria-autocomplete="list"
+          />
+          {searchResults.length > 0 && (
+            <div className="search-results" role="listbox" aria-label="Search results">
+              {searchResults.map(user => (
+                <div key={user.id} className="search-result-item" role="option">
+                  <img src={user.avatar} alt="" loading="lazy" />
+                  <span>{user.username}</span>
+                  <button onClick={() => handleAddFriend(user)} className="btn btn-primary btn-sm">
+                    Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="tabs" role="tablist">
           <button
+            role="tab"
+            aria-selected={activeTab === 'friends'}
             className={`tab ${activeTab === 'friends' ? 'active' : ''}`}
             onClick={() => setActiveTab('friends')}
           >
             Friends ({friends.length})
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'requests'}
             className={`tab ${activeTab === 'requests' ? 'active' : ''}`}
             onClick={() => setActiveTab('requests')}
           >
             Requests ({pendingRequests.length})
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'blocked'}
             className={`tab ${activeTab === 'blocked' ? 'active' : ''}`}
             onClick={() => setActiveTab('blocked')}
           >
@@ -107,9 +113,9 @@ export default function Friends() {
 
         <div className="tab-content">
           {activeTab === 'friends' && (
-            <div className="friends-list">
+            <div className="friends-list" role="tabpanel">
               {friends.length === 0 ? (
-                <p className="empty-state">No friends yet. Search for users to add friends!</p>
+                <p className="empty-state-inline">No friends yet. Search for users to add friends!</p>
               ) : (
                 friends.map(friend => (
                   <FriendCard
@@ -124,9 +130,9 @@ export default function Friends() {
           )}
 
           {activeTab === 'requests' && (
-            <div className="requests-list">
+            <div className="requests-list" role="tabpanel">
               {pendingRequests.length === 0 ? (
-                <p className="empty-state">No pending requests</p>
+                <p className="empty-state-inline">No pending requests</p>
               ) : (
                 pendingRequests.map(request => (
                   <div key={request.id} className="request-card">
@@ -150,9 +156,9 @@ export default function Friends() {
           )}
 
           {activeTab === 'blocked' && (
-            <div className="blocked-list">
+            <div className="blocked-list" role="tabpanel">
               {blockedUsers.length === 0 ? (
-                <p className="empty-state">No blocked users</p>
+                <p className="empty-state-inline">No blocked users</p>
               ) : (
                 blockedUsers.map(user => (
                   <div key={user.id} className="blocked-card">

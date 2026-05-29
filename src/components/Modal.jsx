@@ -27,13 +27,15 @@ export default function Modal({
   useEffect(() => {
     if (isOpen) {
       previousActiveElement.current = document.activeElement;
-      setIsVisible(true);
-      requestAnimationFrame(() => {
-        setIsAnimating(true);
-      });
       document.body.style.overflow = 'hidden';
+      requestAnimationFrame(() => {
+        setIsVisible(true);
+        requestAnimationFrame(() => {
+          setIsAnimating(true);
+        });
+      });
     } else {
-      setIsAnimating(false);
+      const rAF = requestAnimationFrame(() => setIsAnimating(false));
       const timer = setTimeout(() => {
         setIsVisible(false);
         document.body.style.overflow = '';
@@ -41,7 +43,7 @@ export default function Modal({
           previousActiveElement.current.focus();
         }
       }, 300);
-      return () => clearTimeout(timer);
+      return () => { cancelAnimationFrame(rAF); clearTimeout(timer); };
     }
   }, [isOpen]);
 

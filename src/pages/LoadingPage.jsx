@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import './loading.css';
 
@@ -8,13 +7,7 @@ export default function LoadingPage({
   showProgressBar = false,
   animationType = 'pulse'
 }) {
-  const [fadeOut, setFadeOut] = useState(false);
-
-  useEffect(() => {
-    if (progress >= 100) {
-      setFadeOut(true);
-    }
-  }, [progress]);
+  const fadeOut = progress >= 100;
 
   return (
     <div className={`loading-page ${fadeOut ? 'loading-page-exit' : ''}`}>

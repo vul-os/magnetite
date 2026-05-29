@@ -1,0 +1,88 @@
+/*
+ * StartGameButton — Industrial Magnetite
+ * Countdown then launch: pulse animation, accent glow.
+ */
+
+.start-game-wrapper {
+  width: 100%;
+}
+
+.start-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  height: 56px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+/* Can-start state */
+.start-button.can-start {
+  background: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+  color: #000 !important;
+  box-shadow: 0 0 24px var(--color-accent-glow);
+}
+
+.start-button.can-start:hover {
+  background: var(--color-accent-hover) !important;
+  border-color: var(--color-accent-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 0 36px var(--color-accent-glow);
+}
+
+/* Cannot-start / disabled */
+.start-button:not(.can-start):not(.countdown-active) {
+  background: var(--color-bg-secondary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+}
+
+.start-disabled-text {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Countdown */
+.start-button.countdown-active {
+  background: var(--color-error) !important;
+  border-color: var(--color-error) !important;
+  color: #fff !important;
+  animation: sgb-pulse 1s ease-in-out infinite;
+}
+
+@keyframes sgb-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 84, 104, 0.3); }
+  50%       { box-shadow: 0 0 20px 6px rgba(255, 84, 104, 0.15); }
+}
+
+.countdown-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.countdown-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.countdown-text {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+}

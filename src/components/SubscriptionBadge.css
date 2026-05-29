@@ -1,28 +1,58 @@
+/* ── SubscriptionBadge ───────────────────────────────────────────────────── */
+
 .subscription-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 20px;
+  gap: 5px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   border: 1px solid transparent;
 }
 
+/* ── Tier variants (use design tokens only) ── */
+
+.subscription-badge.tier-free {
+  background: rgba(107, 107, 120, 0.12);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+.subscription-badge.tier-basic {
+  background: rgba(91, 157, 255, 0.12);
+  color: var(--color-info);
+  border-color: rgba(91, 157, 255, 0.25);
+}
+
+.subscription-badge.tier-pro {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: rgba(56, 225, 200, 0.25);
+}
+
+.subscription-badge.tier-unlimited {
+  background: var(--color-amber-soft);
+  color: var(--color-amber);
+  border-color: rgba(245, 165, 36, 0.25);
+}
+
+/* ── Sizes ── */
+
 .badge-sm {
-  font-size: 10px;
-  padding: 2px 8px;
+  font-size: var(--text-2xs);
+  padding: 2px 7px;
 }
 
 .badge-md {
-  font-size: 11px;
-  padding: 4px 12px;
+  font-size: var(--text-xs);
+  padding: 3px 10px;
 }
 
 .badge-lg {
-  font-size: 13px;
-  padding: 6px 16px;
+  font-size: var(--text-sm);
+  padding: 5px 14px;
 }
 
 .badge-icon {

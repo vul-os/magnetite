@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 const colors = {
-  primary: '#f59e0b',
-  secondary: '#3b82f6',
-  tertiary: '#22c55e',
-  quaternary: '#8b5cf6',
-  grid: '#27272a',
-  text: '#a1a1aa',
-  background: '#1a1a25',
-  border: '#3f3f46',
+  primary:    '#f5a524',   /* --color-amber */
+  secondary:  '#5b9dff',   /* --color-info */
+  tertiary:   '#3ddc84',   /* --color-success */
+  quaternary: '#a78bfa',   /* violet */
+  grid:       '#23232e',   /* --color-border */
+  text:       '#6b6b78',   /* --color-text-muted */
+  background: '#14141d',   /* --color-bg-card */
+  border:     '#23232e',   /* --color-border */
 };
 
 function CustomTooltip({ active, payload, label }) {
@@ -183,7 +183,7 @@ export default function PlayersChart({
 
       {view === 'retention' && (
         <ResponsiveContainer width="100%" height={height}>
-          <AreaChart data={retentionData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
+          <RechartsAreaChart data={retentionData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
             <defs>
               <linearGradient id="retentionGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={colors.tertiary} stopOpacity={0.4} />
@@ -211,7 +211,7 @@ export default function PlayersChart({
               strokeWidth={2}
               fill="url(#retentionGradient)"
             />
-          </AreaChart>
+          </RechartsAreaChart>
         </ResponsiveContainer>
       )}
     </div>

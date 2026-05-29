@@ -3,13 +3,11 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import ProfileCard from '../components/ProfileCard';
 import { mockProfileUser, mockRecentGames, mockProfileAchievements, mockProfileFriends } from '../data/mockProfile';
+import './social.css';
 
 export default function Profile() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [user] = useState(mockProfileUser);
-
-  const handleFollow = () => setIsFollowing(true);
-  const handleUnfollow = () => setIsFollowing(false);
 
   return (
     <Layout>
@@ -19,8 +17,8 @@ export default function Profile() {
           isOwnProfile={true}
           isFollowing={isFollowing}
           onEdit={() => window.location.href = '/edit-profile'}
-          onFollow={handleFollow}
-          onUnfollow={handleUnfollow}
+          onFollow={() => setIsFollowing(true)}
+          onUnfollow={() => setIsFollowing(false)}
         />
 
         <div className="profile-sections">
@@ -75,7 +73,7 @@ export default function Profile() {
                 >
                   <img src={friend.avatar} alt={friend.username} loading="lazy" />
                   <span className="friend-name">{friend.username}</span>
-                  <span className={`friend-status ${friend.status}`}></span>
+                  <span className={`friend-status ${friend.status}`} aria-hidden="true" />
                 </Link>
               ))}
             </div>

@@ -13,7 +13,7 @@ const TIERS = [
     period: 'month',
     features: [
       '10 hours per month',
-      'Basic game access',
+      'Basic Rust game access',
       'Community support',
       'Standard matchmaking',
     ],
@@ -39,7 +39,7 @@ const TIERS = [
     recommended: true,
     features: [
       '100 hours per month',
-      'Full game access',
+      'Full Rust game access',
       '24/7 priority support',
       'Instant matchmaking',
       'Exclusive tournaments',
@@ -53,7 +53,7 @@ const TIERS = [
     period: 'month',
     features: [
       'Unlimited hours',
-      'Full game access',
+      'Full Rust game access',
       'VIP support',
       'Instant matchmaking',
       'Exclusive tournaments',
@@ -102,8 +102,9 @@ export default function Subscription() {
     <Layout>
       <div className="subscription-page">
         <header className="subscription-header">
+          <span className="kicker">// BILLING & PLANS</span>
           <h1>Subscription</h1>
-          <p>Manage your subscription plan and billing</p>
+          <p>Manage your subscription plan and billing for Rust game access</p>
         </header>
 
         <div className="subscription-content">
@@ -125,8 +126,8 @@ export default function Subscription() {
                     <span className="detail-value">Monthly</span>
                   </div>
                 </div>
-                <UsageMeter 
-                  used={currentSubscription.hoursUsed} 
+                <UsageMeter
+                  used={currentSubscription.hoursUsed}
                   limit={currentSubscription.hoursTotal}
                 />
               </div>
@@ -164,7 +165,7 @@ export default function Subscription() {
                   </div>
                 ))}
               </div>
-              <button className="btn btn-text view-all-btn">View All Transactions</button>
+              <button className="view-all-btn">View All Transactions</button>
             </section>
 
             <section className="danger-zone-section">
@@ -176,7 +177,7 @@ export default function Subscription() {
                     You will lose access to Pro features at the end of your billing period.
                   </span>
                 </div>
-                <button 
+                <button
                   className="btn btn-danger"
                   onClick={handleCancelSubscription}
                 >

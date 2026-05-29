@@ -49,6 +49,12 @@ const MOCK_ACTIVITIES = [
   { id: 5, type: 'review', message: 'New 4-star review on Cosmic Raiders', time: '12 hours ago' },
 ];
 
+/* Design-token colours for recharts (must match CSS vars) */
+const CHART_AMBER = '#f5a524';
+const CHART_GRID  = '#23232e';
+const CHART_TEXT  = '#6b6b78';
+const CHART_BG    = '#14141d';
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
@@ -63,20 +69,20 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 const getStatusClass = (status) => {
   switch (status.toLowerCase()) {
-    case 'active': return 'status-active';
-    case 'pending': return 'status-pending';
+    case 'active':   return 'status-active';
+    case 'pending':  return 'status-pending';
     case 'approved': return 'status-approved';
-    case 'draft': return 'status-draft';
-    default: return '';
+    case 'draft':    return 'status-draft';
+    default:         return '';
   }
 };
 
 const getActivityIcon = (type) => {
   switch (type) {
-    case 'player': return '👥';
-    case 'review': return '⭐';
+    case 'player':   return '👥';
+    case 'review':   return '⭐';
     case 'earnings': return '💰';
-    default: return '📌';
+    default:         return '📌';
   }
 };
 
@@ -100,7 +106,7 @@ export default function DeveloperDashboard() {
           setStats(prev => ({ ...prev, totalEarnings: walletData.value.balance || prev.totalEarnings }));
         }
       } catch {
-        console.log('Using mock data');
+        /* use mock data */
       }
     }
     loadData();
@@ -117,15 +123,16 @@ export default function DeveloperDashboard() {
       <div className="developer-dashboard">
         <header className="dashboard-header">
           <div className="header-content">
+            <span className="kicker">// RUST GAME DEVELOPER</span>
             <h1>Developer Dashboard</h1>
-            <p>Welcome back! Here's what's happening with your games.</p>
+            <p>Track performance, manage Rust games, and withdraw earnings.</p>
           </div>
           <div className="header-actions">
             <Link to="/docs" className="btn btn-secondary">
-              <span>📚</span> View Documentation
+              <span aria-hidden="true">📚</span> Documentation
             </Link>
             <Link to="/game-studio" className="btn btn-primary">
-              <span>+</span> Create New Game
+              <span aria-hidden="true">+</span> New Game
             </Link>
           </div>
         </header>
@@ -133,7 +140,7 @@ export default function DeveloperDashboard() {
         <section className="stats-section">
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-icon-wrapper games-icon">
+              <div className="stat-icon-wrapper games-icon" aria-hidden="true">
                 <span>🎮</span>
               </div>
               <div className="stat-content">
@@ -142,7 +149,7 @@ export default function DeveloperDashboard() {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon-wrapper players-icon">
+              <div className="stat-icon-wrapper players-icon" aria-hidden="true">
                 <span>👥</span>
               </div>
               <div className="stat-content">
@@ -151,21 +158,21 @@ export default function DeveloperDashboard() {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon-wrapper earnings-icon">
+              <div className="stat-icon-wrapper earnings-icon" aria-hidden="true">
                 <span>💰</span>
               </div>
               <div className="stat-content">
                 <span className="stat-label">Total Earnings (USDC)</span>
-                <span className="stat-value">${stats.totalEarnings.toLocaleString()}</span>
+                <span className="stat-value amber-value">${stats.totalEarnings.toLocaleString()}</span>
               </div>
             </div>
             <div className="stat-card highlight">
-              <div className="stat-icon-wrapper revenue-icon">
+              <div className="stat-icon-wrapper revenue-icon" aria-hidden="true">
                 <span>📈</span>
               </div>
               <div className="stat-content">
                 <span className="stat-label">This Month Revenue</span>
-                <span className="stat-value">${stats.thisMonthRevenue.toLocaleString()}</span>
+                <span className="stat-value amber-value">${stats.thisMonthRevenue.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -175,39 +182,44 @@ export default function DeveloperDashboard() {
           <div className="left-column">
             <div className="card revenue-chart-card">
               <div className="card-header">
-                <h2>Revenue Overview</h2>
-                <span className="card-subtitle">30-day view</span>
+                <div>
+                  <span className="kicker" style={{ marginBottom: '0.25rem' }}>// 30-DAY VIEW</span>
+                  <h2>Revenue Overview</h2>
+                </div>
               </div>
               <div className="chart-container">
                 <ResponsiveContainer width="100%" height={280}>
                   <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                        <stop offset="5%"  stopColor={CHART_AMBER} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={CHART_AMBER} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
                     <XAxis
                       dataKey="date"
-                      stroke="#71717a"
-                      fontSize={12}
+                      stroke={CHART_TEXT}
+                      tick={{ fill: CHART_TEXT, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                       tickLine={false}
                       axisLine={false}
                       interval="preserveStartEnd"
                     />
                     <YAxis
-                      stroke="#71717a"
-                      fontSize={12}
+                      stroke={CHART_TEXT}
+                      tick={{ fill: CHART_TEXT, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => `$${value}`}
                     />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip
+                      content={<CustomTooltip />}
+                      contentStyle={{ background: CHART_BG }}
+                    />
                     <Area
                       type="monotone"
                       dataKey="revenue"
-                      stroke="#f59e0b"
+                      stroke={CHART_AMBER}
                       strokeWidth={2}
                       fill="url(#revenueGradient)"
                     />
@@ -218,7 +230,7 @@ export default function DeveloperDashboard() {
 
             <div className="card games-table-card">
               <div className="card-header">
-                <h2>My Games</h2>
+                <h2>My Rust Games</h2>
                 <Link to="/game-studio" className="view-all-link">View All</Link>
               </div>
               <table className="games-table">
@@ -249,15 +261,16 @@ export default function DeveloperDashboard() {
                       <td className="earnings-cell">${game.earnings.toLocaleString()}</td>
                       <td>
                         <div className="actions-cell">
-                          <button className="action-btn edit" title="Edit">
+                          <button className="action-btn edit" title="Edit" aria-label={`Edit ${game.title}`}>
                             ✏️
                           </button>
-                          <button className="action-btn analytics" title="View Analytics">
+                          <button className="action-btn analytics" title="View Analytics" aria-label={`Analytics for ${game.title}`}>
                             📊
                           </button>
                           <button
                             className="action-btn delete"
                             title="Delete"
+                            aria-label={`Delete ${game.title}`}
                             onClick={() => handleDeleteGame(game.id)}
                           >
                             🗑️
@@ -276,31 +289,31 @@ export default function DeveloperDashboard() {
               <h2>Quick Actions</h2>
               <div className="quick-actions">
                 <Link to="/game-studio" className="quick-action-btn primary">
-                  <span className="action-icon">🎮</span>
+                  <span className="action-icon" aria-hidden="true">🎮</span>
                   <span className="action-text">
                     <strong>Create New Game</strong>
-                    <small>Build and deploy your next hit</small>
+                    <small>Build and deploy in Rust</small>
                   </span>
                 </Link>
                 <Link to="/docs" className="quick-action-btn">
-                  <span className="action-icon">📚</span>
+                  <span className="action-icon" aria-hidden="true">📚</span>
                   <span className="action-text">
                     <strong>View Documentation</strong>
-                    <small>API refs and tutorials</small>
+                    <small>SDK, API refs &amp; tutorials</small>
                   </span>
                 </Link>
                 <Link to="/analytics" className="quick-action-btn">
-                  <span className="action-icon">📈</span>
+                  <span className="action-icon" aria-hidden="true">📈</span>
                   <span className="action-text">
                     <strong>View Analytics</strong>
                     <small>Deep dive into your stats</small>
                   </span>
                 </Link>
                 <Link to="/wallet" className="quick-action-btn">
-                  <span className="action-icon">💳</span>
+                  <span className="action-icon" aria-hidden="true">💳</span>
                   <span className="action-text">
                     <strong>Manage Wallet</strong>
-                    <small>Withdraw or deposit funds</small>
+                    <small>Withdraw or deposit USDC</small>
                   </span>
                 </Link>
               </div>
@@ -311,7 +324,7 @@ export default function DeveloperDashboard() {
               <div className="activity-feed">
                 {activities.map(activity => (
                   <div key={activity.id} className="activity-item">
-                    <div className="activity-icon">
+                    <div className="activity-icon" aria-hidden="true">
                       {getActivityIcon(activity.type)}
                     </div>
                     <div className="activity-content">

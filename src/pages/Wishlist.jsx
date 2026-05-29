@@ -3,16 +3,17 @@ import Layout from '../components/Layout';
 import GameCard from '../components/GameCard';
 import Button from '../components/common/Button';
 import { mockGames } from '../data/mockGames';
+import './social.css';
 
 export default function Wishlist() {
   const [wishlistGames, setWishlistGames] = useState(mockGames.slice(0, 3));
-  const [loading, setLoading] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
 
   const handleRemove = async (gameId) => {
-    setLoading(true);
+    setRemovingId(gameId);
     await new Promise(resolve => setTimeout(resolve, 300));
-    setWishlistGames(wishlistGames.filter(game => game.id !== gameId));
-    setLoading(false);
+    setWishlistGames(prev => prev.filter(game => game.id !== gameId));
+    setRemovingId(null);
   };
 
   return (
@@ -26,21 +27,24 @@ export default function Wishlist() {
         </header>
 
         {wishlistGames.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" style={{ padding: '4rem 1.5rem' }}>
             <svg
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.5"
               className="empty-icon"
+              aria-hidden="true"
             >
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
-            <h2>Your wishlist is empty</h2>
-            <p>Start adding games to your wishlist to save them for later</p>
-            <Button onClick={() => window.location.href = '/marketplace'}>
-              Browse Marketplace
-            </Button>
+            <h2 className="empty-title">Your wishlist is empty</h2>
+            <p className="empty-description">Save Rust games to your wishlist to revisit them later</p>
+            <div className="empty-action">
+              <Button onClick={() => window.location.href = '/marketplace'}>
+                Browse Marketplace
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="wishlist-grid">
@@ -51,7 +55,7 @@ export default function Wishlist() {
                   variant="danger"
                   size="sm"
                   onClick={() => handleRemove(game.id)}
-                  loading={loading}
+                  loading={removingId === game.id}
                   className="remove-button"
                 >
                   Remove from Wishlist

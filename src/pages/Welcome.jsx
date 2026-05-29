@@ -7,28 +7,28 @@ const RELEASE_NOTES = [
     version: 'v1.2.0',
     date: 'May 2026',
     changes: [
-      'New multiplayer matchmaking system',
-      'Reduced transaction fees by 50%',
-      'Added achievement system',
-      'Improved game loading times'
+      'New server-authoritative multiplayer matchmaking',
+      'Reduced platform fee from 20% to 15%',
+      'Achievement system with on-chain attestation',
+      'WASM compile time down 40% via incremental builds',
     ]
   },
   {
     version: 'v1.1.0',
     date: 'April 2026',
     changes: [
-      'Launched developer dashboard',
-      'Added USDC wallet integration',
-      'Introduced leaderboard rankings'
+      'Developer Dashboard with real-time session analytics',
+      'USDC wallet integration via Circle',
+      'Leaderboard rankings with anti-cheat validation',
     ]
   }
 ];
 
 const QUICK_ACTIONS = [
-  { icon: '🎮', label: 'Browse Games', link: '/', description: 'Find your next game' },
-  { icon: '💼', label: 'Developer Studio', link: '/developers/studio', description: 'Host your game' },
-  { icon: '👥', label: 'Friends', link: '/friends', description: 'Connect with players' },
-  { icon: '🏆', label: 'Leaderboard', link: '/leaderboard', description: 'View rankings' },
+  { icon: '⬡', label: 'Marketplace', link: '/', description: 'Browse Rust games' },
+  { icon: '⌘', label: 'Dev Studio', link: '/developers/studio', description: 'Ship your game' },
+  { icon: '◈', label: 'Friends', link: '/friends', description: 'Find teammates' },
+  { icon: '◉', label: 'Leaderboard', link: '/leaderboard', description: 'View rankings' },
 ];
 
 export default function Welcome() {
@@ -36,12 +36,16 @@ export default function Welcome() {
     <Layout>
       <div className="welcome-page">
         <header className="welcome-header">
-          <h1>Welcome to Magnetite</h1>
-          <p>You're all set! Here's what's new.</p>
+          <span className="welcome-header-kicker">// WELCOME TO MAGNETITE</span>
+          <h1>You&apos;re all set.</h1>
+          <p>Build, ship, and monetize Rust games — from game jam to AAA scale.</p>
         </header>
 
         <section className="whats-new">
-          <h2>What's New</h2>
+          <div className="section-heading">
+            <h2>What&apos;s New</h2>
+            <span className="section-heading-kicker">changelog</span>
+          </div>
           <div className="release-notes">
             {RELEASE_NOTES.map((release, index) => (
               <div key={index} className="release-card">
@@ -60,7 +64,10 @@ export default function Welcome() {
         </section>
 
         <section className="quick-actions">
-          <h2>Quick Actions</h2>
+          <div className="section-heading">
+            <h2>Quick Actions</h2>
+            <span className="section-heading-kicker">navigate</span>
+          </div>
           <div className="actions-grid">
             {QUICK_ACTIONS.map((action, index) => (
               <Link key={index} to={action.link} className="action-card">
@@ -73,8 +80,8 @@ export default function Welcome() {
         </section>
 
         <section className="welcome-cta">
-          <h3>Ready to play?</h3>
-          <p>Start browsing thousands of open source games.</p>
+          <h3>Ready to build?</h3>
+          <p>Deploy your first Rust game to the Magnetite platform in minutes.</p>
           <Link to="/" className="btn btn-primary btn-lg">
             Browse Marketplace
           </Link>

@@ -4,42 +4,58 @@ import './Landing.css';
 const steps = [
   {
     number: '01',
-    title: 'Connect Your Repo',
-    description: 'Link your GitHub repository containing your HTML5 game. We support any framework or vanilla JavaScript.',
-    icon: GithubIcon,
+    kicker: '// CONNECT',
+    title: 'Link your Rust Repo',
+    description:
+      'Connect your GitHub repository containing your Bevy game. Magnetite detects Cargo.toml and sets up the build pipeline automatically.',
+    Icon: GithubIcon,
   },
   {
     number: '02',
-    title: 'Configure & Deploy',
-    description: 'Set your pricing per session, game parameters, and player limits. One-click deployment to our edge network.',
-    icon: UploadIcon,
+    kicker: '// CONFIGURE',
+    title: 'Set Pricing & Deploy',
+    description:
+      'Define your per-session USDC price, player limits, and server region. One push to GitHub triggers a full WASM + native build and deploys to the edge.',
+    Icon: UploadIcon,
   },
   {
     number: '03',
-    title: 'Track & Earn',
-    description: 'Monitor live analytics, player sessions, and earnings in real-time. Withdraw your USDC anytime.',
-    icon: ChartIcon,
+    kicker: '// EARN',
+    title: 'Track Sessions & Collect',
+    description:
+      'Monitor live sessions, player counts, and USDC earnings in real-time from your developer dashboard. Weekly payouts, zero friction.',
+    Icon: ChartIcon,
   },
 ];
 
 export default function HowItWorksSection() {
   return (
-    <section className="how-it-works-section">
+    <section className="how-it-works-section" aria-labelledby="how-heading">
       <div className="container">
-        <h2 className="section-title">
-          How It <span className="gradient-text">Works</span>
-        </h2>
+        <div className="section-header-centered">
+          <span className="kicker">// WORKFLOW</span>
+          <h2 id="how-heading" className="section-heading">
+            From code to{' '}
+            <span className="gradient-text">live game</span>
+          </h2>
+          <p className="section-lead">
+            Three steps from your Rust codebase to a globally hosted, monetized game
+            with real players.
+          </p>
+        </div>
+
         <div className="steps-container">
-          {steps.map((step, index) => (
+          {steps.map(({ number, kicker, title, description, Icon }, index) => (
             <div key={index} className="step-item">
-              <div className="step-number">{step.number}</div>
-              <div className="step-icon-wrapper">
-                <step.icon className="step-icon" />
+              <div className="step-number">{number}</div>
+              <span className="step-kicker">{kicker}</span>
+              <div className="step-icon-wrapper" aria-hidden="true">
+                <Icon className="step-icon" />
               </div>
-              <h3>{step.title}</h3>
-              <p>{step.description}</p>
+              <h3 className="step-title">{title}</h3>
+              <p className="step-desc">{description}</p>
               {index < steps.length - 1 && (
-                <div className="step-connector">
+                <div className="step-connector" aria-hidden="true">
                   <ChevronRightIcon className="connector-arrow" />
                 </div>
               )}

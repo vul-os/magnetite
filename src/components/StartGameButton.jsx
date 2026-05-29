@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Button from './common/Button';
+import './StartGameButton.css';
 
 export default function StartGameButton({
   allPlayersReady,
@@ -8,39 +9,37 @@ export default function StartGameButton({
   onStartGame,
   disabled = false,
 }) {
-  const [countdown, setCountdown] = useState(null);
+  const [countdown, setCountdown]   = useState(null);
   const [isStarting, setIsStarting] = useState(false);
+
+  // Stable ref so the effect doesn't re-register when onStartGame identity changes
+  const onStartGameRef = useRef(onStartGame);
+  useEffect(() => { onStartGameRef.current = onStartGame; }, [onStartGame]);
 
   const canStart = allPlayersReady && playerCount >= minPlayers && !disabled;
 
   useEffect(() => {
     if (countdown === null) return;
-
-    if (countdown > 0) {
-      const timer = setTimeout(() => {
-        setCountdown(countdown - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else {
-      setCountdown(null);
-      setIsStarting(true);
-      onStartGame?.();
+    if (countdown <= 0) {
+      // Use a timeout to avoid calling setState synchronously inside the effect body
+      const t = setTimeout(() => {
+        setCountdown(null);
+        setIsStarting(true);
+        onStartGameRef.current?.();
+      }, 0);
+      return () => clearTimeout(t);
     }
-  }, [countdown, onStartGame]);
+    const t = setTimeout(() => setCountdown(prev => (prev !== null ? prev - 1 : null)), 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
 
   const handleClick = () => {
     if (!canStart) return;
-
     if (countdown !== null) {
-      setCountdown(null);
+      setCountdown(null); // cancel
       return;
     }
-
     setCountdown(3);
-  };
-
-  const handleCancelCountdown = () => {
-    setCountdown(null);
   };
 
   if (countdown !== null) {
@@ -49,53 +48,16 @@ export default function StartGameButton({
         <Button
           variant="danger"
           size="lg"
-          onClick={handleCancelCountdown}
+          onClick={handleClick}
           className="start-button countdown-active"
+          aria-label={`Starting in ${countdown} seconds. Click to cancel.`}
+          aria-live="polite"
         >
           <div className="countdown-display">
             <span className="countdown-number">{countdown}</span>
             <span className="countdown-text">Cancel</span>
           </div>
         </Button>
-
-        <style>{`
-          .start-game-wrapper {
-            width: 100%;
-          }
-          .start-button {
-            width: 100%;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .countdown-active {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
-            border-color: #ef4444;
-            animation: pulse 1s ease-in-out infinite;
-          }
-          @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.2); }
-          }
-          .countdown-display {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.25rem;
-          }
-          .countdown-number {
-            font-size: 1.5rem;
-            font-weight: 700;
-            line-height: 1;
-          }
-          .countdown-text {
-            font-size: 0.625rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            opacity: 0.8;
-          }
-        `}</style>
       </div>
     );
   }
@@ -106,21 +68,13 @@ export default function StartGameButton({
         <Button
           variant="primary"
           size="lg"
-          disabled
-          loading
+          isDisabled
+          isLoading
           className="start-button"
+          aria-label="Starting game…"
         >
-          Starting Game...
+          Launching…
         </Button>
-
-        <style>{`
-          .start-game-wrapper {
-            width: 100%;
-          }
-          .start-button {
-            width: 100%;
-          }
-        `}</style>
       </div>
     );
   }
@@ -131,8 +85,10 @@ export default function StartGameButton({
         variant="primary"
         size="lg"
         onClick={handleClick}
-        disabled={!canStart}
+        isDisabled={!canStart}
         className={`start-button ${canStart ? 'can-start' : ''}`}
+        aria-disabled={!canStart}
+        aria-label={canStart ? 'Start game' : !allPlayersReady ? 'Waiting for all players' : `Need at least ${minPlayers} players`}
       >
         {!canStart ? (
           <span className="start-disabled-text">
@@ -144,45 +100,13 @@ export default function StartGameButton({
           </span>
         ) : (
           <>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M6 4l10 6-10 6V4z" fill="currentColor" />
             </svg>
             Start Game
           </>
         )}
       </Button>
-
-      <style>{`
-        .start-game-wrapper {
-          width: 100%;
-        }
-        .start-button {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          height: 56px;
-          transition: all 0.2s ease;
-        }
-        .start-button.can-start {
-          background: linear-gradient(135deg, var(--color-accent, #8b5cf6), #6366f1);
-          border-color: var(--color-accent, #8b5cf6);
-          box-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
-        }
-        .start-button.can-start:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 0 40px rgba(139, 92, 246, 0.5);
-        }
-        .start-button:not(.can-start) {
-          background: rgba(255, 255, 255, 0.05);
-          border-color: rgba(255, 255, 255, 0.1);
-          color: var(--color-text-muted, #666);
-        }
-        .start-disabled-text {
-          font-size: 0.875rem;
-        }
-      `}</style>
     </div>
   );
 }

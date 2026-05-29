@@ -40,6 +40,22 @@ const Badge = memo(function Badge({ type }) {
   return <span className={`card-badge ${type.toLowerCase()}`}>{type}</span>;
 });
 
+const GameCardSkeleton = memo(function GameCardSkeleton() {
+  return (
+    <div className="game-card skeleton">
+      <div className="card-image" />
+      <div className="card-content">
+        <div className="skeleton-title" />
+        <div className="skeleton-developer" />
+        <div className="skeleton-footer">
+          <div className="skeleton-price" />
+          <div className="skeleton-rating" />
+        </div>
+      </div>
+    </div>
+  );
+});
+
 const ErrorState = memo(function ErrorState() {
   return (
     <div className="card-image error">

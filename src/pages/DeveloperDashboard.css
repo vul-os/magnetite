@@ -295,8 +295,13 @@
 }
 
 .earnings-cell {
-  font-weight: 600;
-  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--color-amber);
+}
+
+.amber-value {
+  color: var(--color-amber);
 }
 
 .actions-cell {

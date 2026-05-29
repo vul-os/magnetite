@@ -1,16 +1,16 @@
 import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const colors = {
-  primary: '#f59e0b',
-  secondary: '#f97316',
-  tertiary: '#3b82f6',
-  quaternary: '#22c55e',
-  grid: '#27272a',
-  text: '#a1a1aa',
-  background: '#1a1a25',
+  primary:    '#f5a524',   /* --color-amber */
+  secondary:  '#5b9dff',   /* --color-info */
+  tertiary:   '#38e1c8',   /* --color-accent */
+  quaternary: '#3ddc84',   /* --color-success */
+  grid:       '#23232e',   /* --color-border */
+  text:       '#6b6b78',   /* --color-text-muted */
+  background: '#14141d',   /* --color-bg-card */
 };
 
-const SERIES_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, '#8b5cf6', '#ec4899'];
+const SERIES_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, '#a78bfa', '#f472b6'];
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;

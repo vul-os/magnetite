@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { HomeIcon, ChevronRightIcon } from '../assets/icons';
+import './Breadcrumb.css';
 
 export default function Breadcrumb({ items }) {
   if (!items || items.length === 0) return null;

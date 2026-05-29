@@ -1,11 +1,11 @@
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const colors = {
-  primary: '#f59e0b',
-  secondary: '#f97316',
-  grid: '#27272a',
-  text: '#a1a1aa',
-  background: '#1a1a25',
+  primary:    '#f5a524',   /* --color-amber */
+  secondary:  '#38e1c8',   /* --color-accent */
+  grid:       '#23232e',   /* --color-border */
+  text:       '#6b6b78',   /* --color-text-muted */
+  background: '#14141d',   /* --color-bg-card */
 };
 
 export default function BarChart({ data, xKey, yKey, title, horizontal = false }) {

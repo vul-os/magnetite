@@ -80,6 +80,7 @@ export default function TourStep({
   };
 
   let tooltipStyle = { top: 0, left: 0 };
+  const margin = 12;
 
   switch (finalPosition) {
     case 'top':
@@ -113,8 +114,6 @@ export default function TourStep({
     : finalPosition === 'left' || finalPosition === 'right'
       ? 'translateY(-50%)'
       : 'none';
-
-  const margin = 12;
 
   const tooltip = (
     <div

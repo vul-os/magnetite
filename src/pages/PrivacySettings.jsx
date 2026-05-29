@@ -26,7 +26,7 @@ export default function Privacy() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (err) {
+    } catch {
       console.error('Failed to save privacy settings');
     } finally {
       setSaving(false);
@@ -42,7 +42,7 @@ export default function Privacy() {
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
       alert('Data export has been initiated. You will receive an email when your data is ready for download.');
-    } catch (err) {
+    } catch {
       console.error('Failed to export data');
     } finally {
       setExporting(false);

@@ -9,16 +9,18 @@ export default function WidgetWrapper({ children, icon, label }) {
 
   useEffect(() => {
     if (isOpen) {
-      setIsVisible(true);
       requestAnimationFrame(() => {
-        setIsAnimating(true);
+        setIsVisible(true);
+        requestAnimationFrame(() => {
+          setIsAnimating(true);
+        });
       });
     } else {
-      setIsAnimating(false);
+      const rAF = requestAnimationFrame(() => setIsAnimating(false));
       const timer = setTimeout(() => {
         setIsVisible(false);
       }, 300);
-      return () => clearTimeout(timer);
+      return () => { cancelAnimationFrame(rAF); clearTimeout(timer); };
     }
   }, [isOpen]);
 

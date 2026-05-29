@@ -1,0 +1,176 @@
+/*
+ * GameLobby — Industrial Magnetite
+ * Premium game-client lobby: dark, technical, real-time feel.
+ */
+
+/* ─── Page shell ───────────────────────────────────────────────────────────── */
+.game-lobby {
+  min-height: 100vh;
+  background: var(--color-bg-primary);
+  padding: 2rem 1.5rem;
+}
+
+.lobby-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.lobby-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  animation: fade-in-up var(--t-slow) var(--ease-out);
+}
+
+/* ─── Header ───────────────────────────────────────────────────────────────── */
+.lobby-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.375rem 1.75rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.lobby-info-group { display: flex; flex-direction: column; gap: 0.25rem; }
+
+.lobby-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+}
+
+.lobby-title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.lobby-game-name {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.lobby-code-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.lobby-code-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+
+.lobby-code-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-accent);
+  letter-spacing: 0.15em;
+}
+
+/* ─── Content grid ─────────────────────────────────────────────────────────── */
+.lobby-content {
+  display: grid;
+  grid-template-columns: 300px 1fr 320px;
+  gap: 1.5rem;
+  min-height: calc(100vh - 260px);
+}
+
+.lobby-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.lobby-center {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lobby-chat-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+/* ─── Section cards ────────────────────────────────────────────────────────── */
+.lobby-section-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.375rem;
+  transition: border-color var(--transition-fast);
+}
+
+.lobby-section-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.lobby-section-card h3 {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  margin: 0 0 1.25rem;
+}
+
+/* ─── Waiting state ────────────────────────────────────────────────────────── */
+.waiting-state {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.375rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.waiting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ─── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .lobby-content {
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .lobby-chat-col {
+    grid-column: span 2;
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 768px) {
+  .game-lobby { padding: 1rem; }
+  .lobby-content { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .lobby-chat-col { grid-column: span 1; }
+  .lobby-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .lobby-code-block { align-items: flex-start; }
+}

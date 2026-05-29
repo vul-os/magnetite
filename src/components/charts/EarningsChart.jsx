@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 
 const colors = {
-  primary: '#f59e0b',
-  secondary: '#f97316',
-  tertiary: '#3b82f6',
-  quaternary: '#22c55e',
-  quinary: '#8b5cf6',
-  grid: '#27272a',
-  text: '#a1a1aa',
-  background: '#1a1a25',
-  border: '#3f3f46',
+  primary:    '#f5a524',   /* --color-amber */
+  secondary:  '#38e1c8',   /* --color-accent */
+  tertiary:   '#5b9dff',   /* --color-info */
+  quaternary: '#3ddc84',   /* --color-success */
+  quinary:    '#a78bfa',   /* violet */
+  grid:       '#23232e',   /* --color-border */
+  text:       '#6b6b78',   /* --color-text-muted */
+  background: '#14141d',   /* --color-bg-card */
+  border:     '#23232e',   /* --color-border */
 };
 
-const GAME_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, colors.quinary, '#ec4899'];
+const GAME_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, colors.quinary, '#f472b6'];
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
@@ -185,7 +185,7 @@ export default function EarningsChart({
           <Tooltip content={<CustomTooltip />} cursor={{ fill: `${colors.primary}20` }} />
           <Bar dataKey="totalEarnings" name="Total Earnings" radius={[0, 4, 4, 0]}>
             {gameTotals.map((entry, index) => (
-              <Bar key={entry.gameId} dataKey="totalEarnings" fill={GAME_COLORS[index % GAME_COLORS.length]} />
+              <Cell key={entry.gameId} fill={GAME_COLORS[index % GAME_COLORS.length]} />
             ))}
           </Bar>
         </BarChart>

@@ -6,7 +6,8 @@ export default function PageTransition({ children, isLoading = false, duration =
 
   useEffect(() => {
     if (isLoading) {
-      setIsVisible(false);
+      const timer = setTimeout(() => setIsVisible(false), 0);
+      return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(() => setIsVisible(true), 50);
       return () => clearTimeout(timer);

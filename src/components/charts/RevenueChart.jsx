@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const colors = {
-  primary: '#f59e0b',
-  secondary: '#22c55e',
-  tertiary: '#3b82f6',
-  grid: '#27272a',
-  text: '#a1a1aa',
-  background: '#1a1a25',
-  border: '#3f3f46',
+  primary:    '#f5a524',   /* --color-amber */
+  secondary:  '#3ddc84',   /* --color-success */
+  tertiary:   '#5b9dff',   /* --color-info */
+  grid:       '#23232e',   /* --color-border */
+  text:       '#6b6b78',   /* --color-text-muted */
+  background: '#14141d',   /* --color-bg-card */
+  border:     '#23232e',   /* --color-border */
 };
 
 function CustomTooltip({ active, payload, label }) {

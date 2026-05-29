@@ -1,87 +1,89 @@
+/* ── UsageMeter ──────────────────────────────────────────────────────────── */
+
 .usage-meter {
-  background: var(--color-bg-card);
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--radius-sm);
+  padding: 1rem;
 }
 
 .usage-meter-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 
 .usage-label {
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
 }
 
 .usage-remaining {
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
-.usage-remaining.normal {
-  color: var(--color-text-primary);
-}
-
-.usage-remaining.warning {
-  color: #f59e0b;
-}
-
-.usage-remaining.critical {
-  color: #ef4444;
-}
+.usage-remaining.normal   { color: var(--color-text-secondary); }
+.usage-remaining.warning  { color: var(--color-warning); }
+.usage-remaining.critical { color: var(--color-error); }
 
 .usage-progress {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.375rem;
 }
 
 .usage-bar {
-  height: 8px;
-  background: var(--color-bg-secondary);
-  border-radius: 4px;
+  height: 5px;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-full);
   overflow: hidden;
 }
 
 .usage-fill {
   height: 100%;
-  background: linear-gradient(90deg, #22c55e 0%, #22c55e 100%);
-  border-radius: 4px;
-  transition: width 0.3s ease;
+  background: var(--gradient-primary);
+  border-radius: var(--radius-full);
+  transition: width var(--t-slow) var(--ease-out);
 }
 
 .usage-meter.warning .usage-fill {
-  background: linear-gradient(90deg, #f59e0b 0%, #f59e0b 100%);
+  background: linear-gradient(90deg, var(--color-warning) 0%, #f97316 100%);
 }
 
 .usage-meter.critical .usage-fill {
-  background: linear-gradient(90deg, #ef4444 0%, #ef4444 100%);
+  background: linear-gradient(90deg, var(--color-error) 0%, #c02034 100%);
 }
 
 .usage-text {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
   color: var(--color-text-muted);
 }
 
 .usage-warning {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 12px;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
 .usage-warning.warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: var(--color-amber-soft);
+  color: var(--color-amber);
+  border: 1px solid rgba(245, 165, 36, 0.2);
 }
 
 .usage-warning.critical {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: rgba(255, 84, 104, 0.1);
+  color: var(--color-error);
+  border: 1px solid rgba(255, 84, 104, 0.2);
 }

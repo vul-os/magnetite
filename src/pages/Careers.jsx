@@ -6,53 +6,82 @@ const openPositions = [
     department: 'Engineering',
     location: 'Remote',
     tech: 'Rust',
-    description: 'Build and maintain our core platform infrastructure. Work on distributed systems, payment processing, and real-time matchmaking.'
+    description:
+      'Build and maintain our core platform — distributed systems, game-server netcode, payment processing, and real-time matchmaking. Rust required.',
   },
   {
     title: 'Game Engineer',
     department: 'Engineering',
     location: 'Remote',
-    tech: 'Bevy',
-    description: 'Create amazing multiplayer game experiences using Bevy ECS. Collaborate with game designers to bring concepts to life.'
+    tech: 'Bevy / Rust',
+    description:
+      'Create compelling multiplayer game experiences using Bevy ECS. Collaborate with designers to bring concepts from prototype to production-quality Rust.',
   },
   {
     title: 'Frontend Engineer',
     department: 'Engineering',
     location: 'Remote',
     tech: 'React',
-    description: 'Build beautiful, performant user interfaces for our gaming platform. Work on player dashboards, game storefronts, and developer tools.'
+    description:
+      'Build high-craft, performant interfaces for our gaming platform — player dashboards, game storefronts, and developer tooling.',
   },
   {
     title: 'Security Engineer',
     department: 'Security',
     location: 'Remote',
     tech: 'Security',
-    description: 'Ensure platform security end-to-end. Conduct audits, implement security best practices, and protect player assets and data.'
+    description:
+      'Own platform security end-to-end: audits, sandbox hardening, WASM security model, payment security, and protecting player data and assets.',
+  },
+];
+
+const benefits = [
+  {
+    kicker: '// REMOTE',
+    title: 'Remote-First',
+    desc: 'Work from anywhere in the world. No office required, asynchronous by default.',
+  },
+  {
+    kicker: '// PAY',
+    title: 'Competitive Pay',
+    desc: 'Market-leading salaries with optional USDC payments.',
+  },
+  {
+    kicker: '// CULTURE',
+    title: 'Rust & Gaming',
+    desc: 'Play and build Rust games as part of your job. You ship what you enjoy.',
+  },
+  {
+    kicker: '// IMPACT',
+    title: 'Shape an Industry',
+    desc: 'Join early and define how Rust games are distributed and monetized at scale.',
   },
 ];
 
 export default function Careers() {
   return (
     <div className="careers-page">
-      <section className="careers-hero">
-        <div className="magnetic-field">
-          <div className="field-line field-line-1"></div>
-          <div className="field-line field-line-2"></div>
-          <div className="field-line field-line-3"></div>
-          <div className="field-line field-line-4"></div>
-          <div className="field-line field-line-5"></div>
+      {/* ── Hero ───────────────────────────────────────────────────────────── */}
+      <section className="careers-hero" aria-labelledby="careers-heading">
+        <div className="magnetic-field" aria-hidden="true">
+          <div className="field-line field-line-1" />
+          <div className="field-line field-line-2" />
+          <div className="field-line field-line-3" />
+          <div className="field-line field-line-4" />
+          <div className="field-line field-line-5" />
         </div>
         <div className="hero-content">
-          <div className="hiring-badge">
-            <span className="pulse"></span>
-            We're Hiring
+          <div className="hiring-badge" role="status">
+            <span className="pulse" aria-hidden="true" />
+            We&apos;re Hiring
           </div>
-          <h1 className="hero-title">
+          <span className="kicker">// OPEN POSITIONS</span>
+          <h1 id="careers-heading" className="hero-title">
             Join the <span className="gradient-text">Magnetite</span> Team
           </h1>
           <p className="hero-subtitle">
-            Help us build the future of decentralized gaming. We're looking for passionate
-            gamers and engineers who want to reshape how games are played and monetized.
+            Help us build the platform for Rust games at any scale.
+            We&apos;re looking for engineers who care deeply about developer experience and open source.
           </p>
           <div className="hero-stats">
             <div className="stat">
@@ -71,39 +100,30 @@ export default function Careers() {
         </div>
       </section>
 
+      {/* ── Benefits ───────────────────────────────────────────────────────── */}
       <section className="benefits-section">
         <div className="container">
-          <h2 className="section-title">Why Work With Us</h2>
-          <p className="section-subtitle">Great perks for a great team</p>
+          <span className="kicker">// PERKS</span>
+          <h2 className="section-title">Why work with us</h2>
+          <p className="section-subtitle">We take care of the people who build Magnetite</p>
           <div className="benefits-grid">
-            <div className="benefit-card">
-              <div className="benefit-icon">🌍</div>
-              <h3>Remote-First</h3>
-              <p>Work from anywhere in the world. No office required.</p>
-            </div>
-            <div className="benefit-card">
-              <div className="benefit-icon">💰</div>
-              <h3>Competitive Pay</h3>
-              <p>Market-leading salaries with USDC payments.</p>
-            </div>
-            <div className="benefit-card">
-              <div className="benefit-icon">🎮</div>
-              <h3>Gaming Culture</h3>
-              <p>Play games at work. It's literally your job.</p>
-            </div>
-            <div className="benefit-card">
-              <div className="benefit-icon">📈</div>
-              <h3>Growth</h3>
-              <p>Shape the future of an emerging industry.</p>
-            </div>
+            {benefits.map((b, i) => (
+              <div className="benefit-card" key={i}>
+                <span className="benefit-kicker">{b.kicker}</span>
+                <h3>{b.title}</h3>
+                <p>{b.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
+      {/* ── Positions ──────────────────────────────────────────────────────── */}
       <section className="positions-section">
         <div className="container">
-          <h2 className="section-title">Open Positions</h2>
-          <p className="section-subtitle">Find your role in building the future of gaming</p>
+          <span className="kicker">// JOIN THE TEAM</span>
+          <h2 className="section-title">Open positions</h2>
+          <p className="section-subtitle">Find your role in building the future of Rust gaming</p>
           <div className="positions-list">
             {openPositions.map((position, i) => (
               <div className="position-card" key={i}>
@@ -114,18 +134,24 @@ export default function Careers() {
                   </div>
                   <div className="position-meta">
                     <span className="meta-item">
-                      <span className="meta-icon">📍</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <circle cx="12" cy="10" r="3" />
+                        <path d="M12 2a8 8 0 0 1 8 8c0 5.4-7 12-8 12S4 15.4 4 10a8 8 0 0 1 8-8z" />
+                      </svg>
                       {position.location}
                     </span>
                     <span className="meta-item">
-                      <span className="meta-icon">🏢</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <rect x="2" y="7" width="20" height="14" rx="2" />
+                        <path d="M16 7V5a2 2 0 0 0-4 0v2M8 7V5a2 2 0 0 0-4 0v2" />
+                      </svg>
                       {position.department}
                     </span>
                   </div>
                 </div>
                 <p className="position-description">{position.description}</p>
                 <a
-                  href="mailto:careers@magnetite.gg?subject=Application: {position.title}"
+                  href={`mailto:careers@magnetite.gg?subject=Application: ${position.title}`}
                   className="btn btn-primary apply-btn"
                 >
                   Apply Now
@@ -136,13 +162,15 @@ export default function Careers() {
         </div>
       </section>
 
+      {/* ── Open CTA ───────────────────────────────────────────────────────── */}
       <section className="open-source-section">
         <div className="container">
           <div className="opensource-content">
-            <h2>Don't see a fit?</h2>
+            <span className="kicker">// DON&apos;T SEE A FIT?</span>
+            <h2>Send an open application</h2>
             <p>
-              We're always looking for talented people. If you're passionate about gaming,
-              decentralization, or building tools that empower developers, we'd love to hear from you.
+              If you&apos;re passionate about Rust, gaming, or building developer tools that empower
+              indie studios, we&apos;d still love to hear from you.
             </p>
             <a
               href="mailto:careers@magnetite.gg?subject=General Application"
@@ -154,22 +182,23 @@ export default function Careers() {
         </div>
       </section>
 
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="careers-footer">
         <div className="container">
           <div className="footer-content">
             <div className="footer-brand">
               <div className="logo">
-                <div className="logo-icon">M</div>
+                <div className="logo-icon" aria-hidden="true">M</div>
                 <span>Magnetite</span>
               </div>
-              <p>Decentralized gaming. No middlemen.</p>
+              <p>Open-source Rust gaming. No middlemen.</p>
             </div>
-            <div className="footer-links">
+            <nav className="footer-links" aria-label="Footer navigation">
               <a href="/marketplace">Marketplace</a>
               <a href="/about">About</a>
               <a href="/contact">Contact</a>
               <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
-            </div>
+            </nav>
           </div>
           <div className="footer-bottom">
             <p>© 2026 Magnetite. Open source under MIT License.</p>

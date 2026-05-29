@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getOAuthUrl, api } from '../api/client';
 
@@ -11,6 +11,11 @@ const OAuthProviders = [
 
 const USER_KEY = 'magnetite_user';
 
+function navigateToProvider(provider) {
+  const destination = encodeURIComponent('/settings/connected-accounts');
+  window.location.assign(getOAuthUrl(provider) + `?action=link&destination=${destination}`);
+}
+
 export default function LinkAccount() {
   const navigate = useNavigate();
   const [linkedAccounts, setLinkedAccounts] = useState([]);
@@ -20,16 +25,7 @@ export default function LinkAccount() {
   const [showConfirm, setShowConfirm] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const userData = localStorage.getItem(USER_KEY);
-    if (!userData) {
-      navigate('/login', { replace: true });
-      return;
-    }
-    loadLinkedAccounts();
-  }, [navigate]);
-
-  const loadLinkedAccounts = async () => {
+  const loadLinkedAccounts = useCallback(async () => {
     try {
       const accounts = await api.auth.linkedAccounts();
       setLinkedAccounts(accounts);
@@ -38,12 +34,20 @@ export default function LinkAccount() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const userData = localStorage.getItem(USER_KEY);
+    if (!userData) {
+      navigate('/login', { replace: true });
+      return;
+    }
+    loadLinkedAccounts();
+  }, [navigate, loadLinkedAccounts]);
 
   const handleLinkAccount = (provider) => {
     setLinking(provider);
-    const destination = encodeURIComponent('/settings/connected-accounts');
-    window.location.href = getOAuthUrl(provider) + `?action=link&destination=${destination}`;
+    navigateToProvider(provider);
   };
 
   const handleUnlinkAccount = async (providerId, accountId) => {

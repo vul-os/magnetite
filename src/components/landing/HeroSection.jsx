@@ -1,74 +1,133 @@
+import { useMemo } from 'react';
 import { Button, Badge } from '../common';
 import './Landing.css';
 
-export default function HeroSection() {
+// Pre-compute particle positions outside the component to keep renders pure
+const PARTICLES = Array.from({ length: 20 }, (_, i) => ({
+  id: i,
+  left: `${(i * 5.1 + 2.3) % 100}%`,
+  delay: `${((i * 0.73) % 5).toFixed(2)}s`,
+  duration: `${(3 + (i * 0.41) % 4).toFixed(2)}s`,
+}));
+
+function StatCountUp({ value, label }) {
   return (
-    <section className="hero-section">
-      <div className="hero-particles">
-        {[...Array(20)].map((_, i) => (
+    <div className="hero-stat">
+      <span className="hero-stat-value">{value}</span>
+      <span className="hero-stat-label">{label}</span>
+    </div>
+  );
+}
+
+export default function HeroSection() {
+  const particles = useMemo(() => PARTICLES, []);
+
+  return (
+    <section className="hero-section" aria-labelledby="hero-heading">
+      {/* Ambient particles */}
+      <div className="hero-particles" aria-hidden="true">
+        {particles.map((p) => (
           <div
-            key={i}
+            key={p.id}
             className="particle"
             style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${3 + Math.random() * 4}s`,
+              left: p.left,
+              animationDelay: p.delay,
+              animationDuration: p.duration,
             }}
           />
         ))}
       </div>
 
-      <div className="hero-field">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className={`field-line field-line-${i + 1}`} />
-        ))}
+      {/* Magnetic field lines */}
+      <div className="hero-field" aria-hidden="true">
+        <div className="field-line field-line-1" />
+        <div className="field-line field-line-2" />
+        <div className="field-line field-line-3" />
+        <div className="field-line field-line-4" />
+        <div className="field-line field-line-5" />
       </div>
 
       <div className="container">
         <div className="hero-grid">
           <div className="hero-content">
-            <Badge variant="subtle" color="green" size="md" dot>Now in Beta</Badge>
-            <h1 className="hero-title">
-              The Future of <span className="gradient-text">Gaming Infrastructure</span>
+            <span className="kicker">// BUILT IN RUST</span>
+            <Badge variant="subtle" color="green" size="md" dot>
+              Open Beta — Rust Games at Any Scale
+            </Badge>
+
+            <h1 id="hero-heading" className="hero-title">
+              The Infrastructure Layer for{' '}
+              <span className="gradient-text">Rust Games</span>
             </h1>
+
             <p className="hero-subtitle">
-              Host your HTML5 games globally, earn crypto, and scale effortlessly.
-              Magnetite powers the next generation of decentralized gaming.
+              From a weekend game-jam prototype to COD-scale AAA — Magnetite
+              handles hosting, matchmaking, netcode, and monetization so you
+              only write game logic in Rust.
             </p>
+
             <div className="hero-ctas">
-              <Button size="lg" onClick={() => window.location.href = '/register'}>
-                Get Started
+              <Button
+                size="lg"
+                onClick={() => { window.location.href = '/register'; }}
+              >
+                Start Building
               </Button>
-              <Button size="lg" variant="secondary" onClick={() => window.location.href = '/marketplace'}>
+              <Button
+                size="lg"
+                variant="secondary"
+                onClick={() => { window.location.href = '/marketplace'; }}
+              >
                 Explore Games
               </Button>
             </div>
+
             <div className="hero-stats">
-              <div className="stat">
-                <span className="stat-value">50K+</span>
-                <span className="stat-label">Active Players</span>
-              </div>
-              <div className="stat">
-                <span className="stat-value">200+</span>
-                <span className="stat-label">Games Hosted</span>
-              </div>
-              <div className="stat">
-                <span className="stat-value">$2M+</span>
-                <span className="stat-label">Earnings Paid</span>
-              </div>
+              <StatCountUp value="2,847" label="Developers" />
+              <div className="hero-stat-divider" aria-hidden="true" />
+              <StatCountUp value="156+" label="Games Shipped" />
+              <div className="hero-stat-divider" aria-hidden="true" />
+              <StatCountUp value="$2.4M" label="USDC Paid Out" />
             </div>
           </div>
 
-          <div className="hero-visual">
+          <div className="hero-visual" aria-hidden="true">
             <div className="controller-float">
               <div className="magnet-ring ring-1" />
               <div className="magnet-ring ring-2" />
               <div className="magnet-ring ring-3" />
               <div className="controller-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="80" height="80">
-                  <path d="M21 6H3a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm9.5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5-1.5-.67-1.5-1.5zM15 16h2v-2h-2v2z"/>
+                {/* Rust crab icon */}
+                <svg viewBox="0 0 120 120" fill="none" width="96" height="96">
+                  <circle cx="60" cy="60" r="56" stroke="currentColor" strokeWidth="2" opacity="0.2" />
+                  <text x="50%" y="54%" dominantBaseline="middle" textAnchor="middle" fontSize="60" fill="currentColor">
+                    🦀
+                  </text>
                 </svg>
               </div>
+            </div>
+
+            {/* Terminal snippet */}
+            <div className="hero-terminal">
+              <div className="terminal-bar">
+                <span className="t-dot t-red" />
+                <span className="t-dot t-yellow" />
+                <span className="t-dot t-green" />
+                <span className="terminal-filename">Cargo.toml</span>
+              </div>
+              <pre className="terminal-body">
+                <span className="t-comment"># Add Magnetite SDK</span>{'\n'}
+                <span className="t-bracket">[dependencies]</span>{'\n'}
+                <span className="t-key">magnetite-sdk</span>
+                {' = '}
+                <span className="t-string">&quot;0.8&quot;</span>{'\n'}
+                <span className="t-key">bevy</span>
+                {' = '}
+                <span className="t-string">&quot;0.14&quot;</span>{'\n'}
+                {'\n'}
+                <span className="t-comment"># cargo run --target wasm32-unknown-unknown</span>
+              </pre>
             </div>
           </div>
         </div>

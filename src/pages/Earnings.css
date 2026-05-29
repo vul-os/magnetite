@@ -1,0 +1,281 @@
+/* ── Earnings Page ───────────────────────────────────────────────────────── */
+
+.earnings-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  animation: fadeInUp var(--t-slow) var(--ease-out) both;
+}
+
+.earnings-header {
+  margin-bottom: 2rem;
+}
+
+.earnings-header h1 {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0.25rem 0 0.375rem;
+}
+
+.earnings-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+/* ── Summary cards ───────────────────────────────────────────────────────── */
+
+.earnings-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.summary-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t) var(--ease-out);
+}
+
+.summary-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+.summary-card.primary {
+  border-color: rgba(245, 165, 36, 0.25);
+  background: linear-gradient(135deg, rgba(245, 165, 36, 0.08) 0%, var(--color-bg-card) 100%);
+}
+
+.summary-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.summary-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.summary-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.summary-value.amber {
+  color: var(--color-amber);
+}
+
+/* ── Withdraw section ────────────────────────────────────────────────────── */
+
+.withdraw-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.withdraw-section h3 {
+  margin: 0.25rem 0 1rem;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.withdraw-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.withdraw-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+}
+
+.withdraw-input-group input {
+  width: 100%;
+  padding: 0.75rem 4rem 0.75rem 1rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+}
+
+.withdraw-input-group input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-glow-focus);
+}
+
+.withdraw-input-group input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.withdraw-input-group input:disabled {
+  opacity: 0.5;
+}
+
+.currency-label {
+  position: absolute;
+  right: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.withdraw-btn {
+  white-space: nowrap;
+}
+
+.withdraw-note {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0.75rem 0 0;
+  line-height: 1.5;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+
+.earnings-tabs {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+
+.transactions-section,
+.payouts-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.transactions-table,
+.payouts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.transactions-table th,
+.payouts-table th {
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.transactions-table td,
+.payouts-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.transactions-table tr:last-child td,
+.payouts-table tr:last-child td {
+  border-bottom: none;
+}
+
+.transactions-table tr:hover td,
+.payouts-table tr:hover td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.date-cell {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.tx-description {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tx-type-icon {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tx-type-icon.deposit  { background: var(--color-success); }
+.tx-type-icon.game     { background: var(--color-accent); }
+.tx-type-icon.payout   { background: var(--color-amber); }
+
+.amount-cell {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.amount-cell.positive { color: var(--color-success); }
+.amount-cell.negative { color: var(--color-error); }
+
+.balance-cell {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .earnings-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .withdraw-form {
+    flex-direction: column;
+  }
+
+  .withdraw-input-group {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .transactions-table,
+  .payouts-table {
+    display: block;
+    overflow-x: auto;
+  }
+}

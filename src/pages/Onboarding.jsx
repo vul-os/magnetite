@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import OnboardingProgress from '../components/OnboardingProgress';
 import GameCard from '../components/GameCard';
-import Layout from '../components/Layout';
 import './Onboarding.css';
 
 const ONBOARDING_STORAGE_KEY = 'magnetite_onboarding_completed';
@@ -53,7 +52,7 @@ function WelcomeStep({ onNext }) {
 
 function WalletStep({ onNext, onSkip }) {
   const [walletAddress, setWalletAddress] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [_isGenerating, setIsGenerating] = useState(false);
   const [showAddress, setShowAddress] = useState(false);
 
   const generateWallet = () => {
@@ -116,7 +115,7 @@ function WalletStep({ onNext, onSkip }) {
 function FundsStep({ onNext, onSkip }) {
   const [selectedAmount, setSelectedAmount] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [_isProcessing, setIsProcessing] = useState(false);
 
   const handlePaystackDeposit = () => {
     if (!selectedAmount && !customAmount) return;

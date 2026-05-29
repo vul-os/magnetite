@@ -1,58 +1,77 @@
 import { WalletIcon, UsersIcon, TrophyIcon, ZapIcon, GlobeIcon, CodeIcon } from '../../assets/icons';
-import { Card, CardBody } from '../common';
 import './Landing.css';
 
 const features = [
   {
-    icon: WalletIcon,
-    title: 'Earn Crypto',
-    description: 'Host games and earn USDC for every session played. Withdraw earnings instantly to your wallet.',
+    Icon: CodeIcon,
+    kicker: '// RUST-FIRST',
+    title: 'Author in Rust, Ship Everywhere',
+    description:
+      'Write game logic in Rust once. Magnetite compiles your Bevy project to WASM for browsers and native for desktop — zero config.',
   },
   {
-    icon: GlobeIcon,
-    title: 'Global Edge Network',
-    description: 'Your games run on decentralized infrastructure across 50+ edge locations worldwide.',
+    Icon: GlobeIcon,
+    kicker: '// EDGE NETWORK',
+    title: 'Global Low-Latency Hosting',
+    description:
+      'Server-authoritative Rust processes run across 50+ edge regions. Sub-20 ms RTT for players worldwide, sandboxed and scalable.',
   },
   {
-    icon: ZapIcon,
-    title: 'Zero Configuration',
-    description: 'Connect your GitHub repo and deploy in seconds. No servers to manage, no infrastructure to maintain.',
+    Icon: ZapIcon,
+    kicker: '// ONE COMMAND',
+    title: 'Deploy from GitHub in Seconds',
+    description:
+      'Connect your repository, set pricing, push. Magnetite builds, tests, and deploys your game automatically on every push.',
   },
   {
-    icon: UsersIcon,
-    title: 'Built-in Matchmaking',
-    description: 'Automatic player matching with skill-based grouping. Fill your games with players effortlessly.',
+    Icon: UsersIcon,
+    kicker: '// NETCODE BUILT-IN',
+    title: 'Real-Time Multiplayer & Matchmaking',
+    description:
+      'Integrated game-server netcode, lobby management, and skill-based matchmaking — ready to use from your SDK call.',
   },
   {
-    icon: TrophyIcon,
+    Icon: TrophyIcon,
+    kicker: '// ENGAGEMENT',
     title: 'Leaderboards & Achievements',
-    description: 'Leaderboards and achievements keep players engaged and coming back for more.',
+    description:
+      'Platform-wide persistence: leaderboards, achievements, and player stats work the same from a jam game to a AAA title.',
   },
   {
-    icon: CodeIcon,
-    title: 'Developer First',
-    description: 'Simple REST API, comprehensive SDKs, and detailed analytics dashboard for game developers.',
+    Icon: WalletIcon,
+    kicker: '// MONETIZATION',
+    title: 'Real Money, No Middlemen',
+    description:
+      'Playtime-based USDC earnings paid weekly. 85% to developers. Paystack fiat on-ramp included. No payment plumbing required.',
   },
 ];
 
 export default function FeaturesSection() {
   return (
-    <section className="features-section">
+    <section className="features-section" aria-labelledby="features-heading">
       <div className="container">
-        <h2 className="section-title">
-          Everything You Need to <span className="gradient-text">Scale</span>
-        </h2>
+        <div className="section-header-centered">
+          <span className="kicker">// PLATFORM CAPABILITIES</span>
+          <h2 id="features-heading" className="section-heading">
+            Everything you need to{' '}
+            <span className="gradient-text">scale</span>
+          </h2>
+          <p className="section-lead">
+            Magnetite provides the full stack — infrastructure, SDK, storefront, and payments.
+            You provide the Rust game logic.
+          </p>
+        </div>
+
         <div className="features-grid">
-          {features.map((feature, index) => (
-            <Card key={index} variant="interactive" padding="lg">
-              <CardBody>
-                <div className="feature-icon-wrapper">
-                  <feature.icon className="feature-icon" />
-                </div>
-                <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
-              </CardBody>
-            </Card>
+          {features.map(({ Icon, kicker, title, description }, index) => (
+            <div key={index} className="feature-card">
+              <span className="feature-kicker">{kicker}</span>
+              <div className="feature-icon-wrapper" aria-hidden="true">
+                <Icon className="feature-icon" />
+              </div>
+              <h3 className="feature-title">{title}</h3>
+              <p className="feature-desc">{description}</p>
+            </div>
           ))}
         </div>
       </div>

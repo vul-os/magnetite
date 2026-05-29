@@ -11,7 +11,7 @@ function getStrength(password) {
   const passed = requirements.filter((r) => r.test(password)).length;
   if (passed === 0) return { level: 0, label: '', color: '' };
   if (passed <= 1) return { level: 1, label: 'Weak', color: 'var(--color-error)' };
-  if (passed <= 2) return { level: 2, label: 'Medium', color: '#f59e0b' };
+  if (passed <= 3) return { level: 2, label: 'Medium', color: 'var(--color-warning)' };
   return { level: 3, label: 'Strong', color: 'var(--color-success)' };
 }
 

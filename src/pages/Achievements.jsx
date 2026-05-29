@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 import AchievementCard from '../components/AchievementCard';
 import { mockAchievements, recentUnlocks } from '../data/mockAchievements';
+import './social.css';
 
 const CATEGORIES = [
   { key: 'all', label: 'All' },
@@ -29,16 +30,16 @@ export default function Achievements() {
         <header className="page-header">
           <h1>Achievements</h1>
           <p className="achievement-summary">
-            {unlockedCount} of {totalCount} achievements unlocked
+            {unlockedCount}/{totalCount} unlocked
           </p>
         </header>
 
         <div className="recent-unlocks">
-          <h3>Recent Unlocks</h3>
+          <h3>// RECENT UNLOCKS</h3>
           <div className="recent-grid">
             {recentUnlocks.map(unlock => (
               <div key={unlock.id} className="recent-item">
-                <span className="recent-icon">{unlock.icon}</span>
+                <span className="recent-icon" aria-hidden="true">{unlock.icon}</span>
                 <span className="recent-name">{unlock.name}</span>
                 <span className="recent-date">{new Date(unlock.unlockedAt).toLocaleDateString()}</span>
               </div>
@@ -47,12 +48,13 @@ export default function Achievements() {
         </div>
 
         <div className="achievements-controls">
-          <div className="category-filters">
+          <div className="category-filters" role="group" aria-label="Category filter">
             {CATEGORIES.map(cat => (
               <button
                 key={cat.key}
                 className={`filter-btn ${category === cat.key ? 'active' : ''}`}
                 onClick={() => setCategory(cat.key)}
+                aria-pressed={category === cat.key}
               >
                 {cat.label}
               </button>
@@ -71,12 +73,14 @@ export default function Achievements() {
           </div>
         </div>
 
-        <div className="achievements-grid">
+        <div className="achievements-grid" role="list" aria-label="Achievements">
           {filteredAchievements.length === 0 ? (
-            <p className="empty-state">No achievements found</p>
+            <p className="empty-state-inline">No achievements found</p>
           ) : (
             filteredAchievements.map(achievement => (
-              <AchievementCard key={achievement.id} achievement={achievement} />
+              <div key={achievement.id} role="listitem">
+                <AchievementCard achievement={achievement} />
+              </div>
             ))
           )}
         </div>

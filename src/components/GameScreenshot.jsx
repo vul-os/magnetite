@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, memo } from 'react';
+import './GameScreenshot.css';
 
 export default memo(function GameScreenshot({ src, alt, onClick, index }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(false);
-  const imgRef = useRef(null);
+  const imgRef                  = useRef(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -16,9 +17,7 @@ export default memo(function GameScreenshot({ src, alt, onClick, index }) {
       { rootMargin: '100px' }
     );
 
-    if (imgRef.current) {
-      observer.observe(imgRef.current);
-    }
+    if (imgRef.current) observer.observe(imgRef.current);
 
     return () => observer.disconnect();
   }, []);
@@ -31,10 +30,9 @@ export default memo(function GameScreenshot({ src, alt, onClick, index }) {
       aria-label={`View screenshot ${index + 1}`}
     >
       <div className="thumbnail-placeholder">
-        {!isLoaded && (
-          <div className="thumbnail-loading" />
-        )}
+        {!isLoaded && <div className="thumbnail-loading" aria-hidden="true" />}
       </div>
+
       {isInView && (
         <img
           src={src}
@@ -44,11 +42,11 @@ export default memo(function GameScreenshot({ src, alt, onClick, index }) {
           loading="lazy"
         />
       )}
-      <div className="thumbnail-overlay">
+
+      <div className="thumbnail-overlay" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-          <path d="M11 8v6M8 11h6" />
+          <path d="m21 21-4.35-4.35M11 8v6M8 11h6" />
         </svg>
       </div>
     </button>
