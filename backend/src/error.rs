@@ -14,6 +14,7 @@ pub enum AppError {
     #[error("Authentication failed: {0}")]
     Authentication(String),
 
+    #[allow(dead_code)] // Platform error surface — variant kept for future authorization checks.
     #[error("Authorization failed: {0}")]
     Authorization(String),
 

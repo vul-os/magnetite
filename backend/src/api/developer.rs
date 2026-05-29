@@ -11,7 +11,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::api::middleware;
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeveloperRequest {
@@ -132,7 +132,9 @@ pub async fn register_developer(
     Json(payload): Json<RegisterDeveloperRequest>,
 ) -> Result<Json<DeveloperInfo>> {
     if !payload.accept_terms {
-        return Err(AppError::Validation("Developer terms must be accepted".to_string()));
+        return Err(AppError::Validation(
+            "Developer terms must be accepted".to_string(),
+        ));
     }
 
     let result = sqlx::query_as::<_, (bool, Option<DateTime<Utc>>)>(
@@ -234,7 +236,14 @@ pub async fn update_game_status(
     Path(game_id): Path<Uuid>,
     Json(payload): Json<UpdateGameStatusRequest>,
 ) -> Result<Json<DeveloperGame>> {
-    let valid_statuses = ["draft", "pending", "approved", "active", "suspended", "archived"];
+    let valid_statuses = [
+        "draft",
+        "pending",
+        "approved",
+        "active",
+        "suspended",
+        "archived",
+    ];
     if !valid_statuses.contains(&payload.status.as_str()) {
         return Err(AppError::Validation("Invalid status value".to_string()));
     }
@@ -364,20 +373,23 @@ pub async fn request_payout(
 
     let balance = available - pending - payout_total;
     if payload.amount > balance {
-        return Err(AppError::InsufficientFunds("Insufficient earnings balance".to_string()));
+        return Err(AppError::InsufficientFunds(
+            "Insufficient earnings balance".to_string(),
+        ));
     }
 
     let payout_id = Uuid::new_v4();
-    let payout = sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
-        "INSERT INTO payouts (id, user_id, amount, status, requested_at)
+    let payout =
+        sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
+            "INSERT INTO payouts (id, user_id, amount, status, requested_at)
          VALUES ($1, $2, $3, 'pending', NOW())
          RETURNING id, amount, status, requested_at, processed_at",
-    )
-    .bind(payout_id)
-    .bind(user_id)
-    .bind(payload.amount)
-    .fetch_one(&pool)
-    .await?;
+        )
+        .bind(payout_id)
+        .bind(user_id)
+        .bind(payload.amount)
+        .fetch_one(&pool)
+        .await?;
 
     Ok(Json(PayoutRequest {
         id: payout.0,
@@ -392,24 +404,27 @@ pub async fn get_payout_history(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<PayoutHistory>> {
-    let payouts = sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
-        "SELECT id, amount, status, requested_at, processed_at
+    let payouts =
+        sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
+            "SELECT id, amount, status, requested_at, processed_at
          FROM payouts WHERE user_id = $1
          ORDER BY requested_at DESC",
-    )
-    .bind(user_id)
-    .fetch_all(&pool)
-    .await?;
+        )
+        .bind(user_id)
+        .fetch_all(&pool)
+        .await?;
 
     let payout_list: Vec<PayoutRequest> = payouts
         .into_iter()
-        .map(|(id, amount, status, requested_at, processed_at)| PayoutRequest {
-            id,
-            amount,
-            status,
-            requested_at,
-            processed_at,
-        })
+        .map(
+            |(id, amount, status, requested_at, processed_at)| PayoutRequest {
+                id,
+                amount,
+                status,
+                requested_at,
+                processed_at,
+            },
+        )
         .collect();
 
     let total_paid: Decimal = sqlx::query_scalar(
@@ -480,12 +495,11 @@ pub async fn get_game_analytics(
     .fetch_one(&pool)
     .await?;
 
-    let session_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM game_sessions WHERE game_id = $1",
-    )
-    .bind(game_id)
-    .fetch_one(&pool)
-    .await?;
+    let session_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM game_sessions WHERE game_id = $1")
+            .bind(game_id)
+            .fetch_one(&pool)
+            .await?;
 
     let platform_fee = total_revenue * Decimal::from_str_exact("0.30").unwrap_or(Decimal::ZERO);
     let developer_earnings = total_revenue - platform_fee;
@@ -509,14 +523,68 @@ pub async fn get_game_analytics(
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
-        .route("/register", post(register_developer).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/dashboard", get(get_dashboard).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games", get(list_developer_games).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games/:id/status", put(update_game_status).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games/:id", delete(delete_game).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/earnings", get(get_earnings_summary).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/payouts", get(get_payout_history).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/payouts", post(request_payout).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games/:id/players", get(get_game_analytics).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/register",
+            post(register_developer).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/dashboard",
+            get(get_dashboard).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games",
+            get(list_developer_games).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/status",
+            put(update_game_status).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id",
+            delete(delete_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/earnings",
+            get(get_earnings_summary).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/payouts",
+            get(get_payout_history).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/payouts",
+            post(request_payout).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/players",
+            get(get_game_analytics).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

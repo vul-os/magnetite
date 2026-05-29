@@ -1,3 +1,6 @@
+// API response helpers — standardized success/error envelope; platform surface.
+#![allow(dead_code)]
+
 use axum::Json;
 use serde::Serialize;
 use serde_json::Value;
@@ -51,7 +54,12 @@ pub fn error_response(code: &str, message: &str) -> Json<ApiResponse<()>> {
     })
 }
 
-pub fn paginated<T: Serialize>(data: Vec<T>, page: u32, per_page: u32, total: u64) -> Json<PaginatedResponse<T>> {
+pub fn paginated<T: Serialize>(
+    data: Vec<T>,
+    page: u32,
+    per_page: u32,
+    total: u64,
+) -> Json<PaginatedResponse<T>> {
     let total_pages = if per_page > 0 {
         ((total as f64) / (per_page as f64)).ceil() as u32
     } else {

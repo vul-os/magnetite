@@ -1,5 +1,8 @@
+// Social API — friends, invites, user search; platform surface, partially wired.
+#![allow(dead_code)]
+
 use axum::{
-    extract::{Path, Query, State, Extension},
+    extract::{Extension, Path, Query, State},
     middleware::from_fn_with_state,
     routing::{delete, get, post},
     Json, Router,
@@ -11,7 +14,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::api::notifications::NotificationService;
 use crate::api::response;
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct User {
@@ -124,7 +127,9 @@ pub async fn send_friend_request(
     Json(payload): Json<SendFriendRequestRequest>,
 ) -> Result<Json<response::ApiResponse<FriendRequest>>> {
     if user_id == payload.to_user_id {
-        return Err(AppError::BadRequest("Cannot send friend request to yourself".to_string()));
+        return Err(AppError::BadRequest(
+            "Cannot send friend request to yourself".to_string(),
+        ));
     }
 
     let existing = sqlx::query_as::<_, (Uuid,)>(
@@ -148,7 +153,9 @@ pub async fn send_friend_request(
     .await?;
 
     if existing_request.is_some() {
-        return Err(AppError::BadRequest("Friend request already exists".to_string()));
+        return Err(AppError::BadRequest(
+            "Friend request already exists".to_string(),
+        ));
     }
 
     let blocked = sqlx::query_as::<_, (Uuid,)>(
@@ -160,7 +167,9 @@ pub async fn send_friend_request(
     .await?;
 
     if blocked.is_some() {
-        return Err(AppError::Forbidden("Cannot send friend request to blocked user".to_string()));
+        return Err(AppError::Forbidden(
+            "Cannot send friend request to blocked user".to_string(),
+        ));
     }
 
     let request_id = Uuid::new_v4();
@@ -175,16 +184,16 @@ pub async fn send_friend_request(
     .fetch_one(&pool)
     .await?;
 
-    let from_user = sqlx::query_as::<_, (String,)>(
-        "SELECT username FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    let from_user = sqlx::query_as::<_, (String,)>("SELECT username FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
     let notif_service = NotificationService::new(pool.clone());
-    let _ = notif_service.create_friend_request_notification(payload.to_user_id, &from_user.0).await;
+    let _ = notif_service
+        .create_friend_request_notification(payload.to_user_id, &from_user.0)
+        .await;
 
     Ok(response::success_response(request))
 }
@@ -203,12 +212,10 @@ pub async fn accept_friend_request(
     .await?
     .ok_or_else(|| AppError::NotFound("Friend request not found".to_string()))?;
 
-    sqlx::query(
-        "UPDATE friend_requests SET status = 'accepted' WHERE id = $1",
-    )
-    .bind(request_id)
-    .execute(&pool)
-    .await?;
+    sqlx::query("UPDATE friend_requests SET status = 'accepted' WHERE id = $1")
+        .bind(request_id)
+        .execute(&pool)
+        .await?;
 
     sqlx::query(
         "INSERT INTO friendships (id, user_id, friend_id, created_at) VALUES ($1, $2, $3, NOW())",
@@ -221,19 +228,20 @@ pub async fn accept_friend_request(
 
     let notif_service = NotificationService::new(pool.clone());
 
-    let to_user_username = sqlx::query_as::<_, (String,)>(
-        "SELECT username FROM users WHERE id = $1",
-    )
-    .bind(request.to_user_id)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    let to_user_username =
+        sqlx::query_as::<_, (String,)>("SELECT username FROM users WHERE id = $1")
+            .bind(request.to_user_id)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
 
-    let _ = notif_service.create_system_notification(
-        request.from_user_id,
-        "Friend Request Accepted",
-        &format!("{} accepted your friend request", to_user_username.0),
-    ).await;
+    let _ = notif_service
+        .create_system_notification(
+            request.from_user_id,
+            "Friend Request Accepted",
+            &format!("{} accepted your friend request", to_user_username.0),
+        )
+        .await;
 
     Ok(response::success_response(()))
 }
@@ -333,7 +341,9 @@ pub async fn invite_to_game(
     Json(payload): Json<GameInviteRequest>,
 ) -> Result<Json<response::ApiResponse<GameInvite>>> {
     if user_id == payload.to_user_id {
-        return Err(AppError::BadRequest("Cannot invite yourself to game".to_string()));
+        return Err(AppError::BadRequest(
+            "Cannot invite yourself to game".to_string(),
+        ));
     }
 
     let friendship = sqlx::query_as::<_, (Uuid,)>(
@@ -345,15 +355,15 @@ pub async fn invite_to_game(
     .await?;
 
     if friendship.is_none() {
-        return Err(AppError::Forbidden("Can only invite friends to games".to_string()));
+        return Err(AppError::Forbidden(
+            "Can only invite friends to games".to_string(),
+        ));
     }
 
-    let game = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM games WHERE id = $1 AND active = true",
-    )
-    .bind(payload.game_id)
-    .fetch_optional(&pool)
-    .await?;
+    let game = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM games WHERE id = $1 AND active = true")
+        .bind(payload.game_id)
+        .fetch_optional(&pool)
+        .await?;
 
     if game.is_none() {
         return Err(AppError::NotFound("Game not found".to_string()));
@@ -368,7 +378,9 @@ pub async fn invite_to_game(
     .await?;
 
     if blocked.is_some() {
-        return Err(AppError::Forbidden("Cannot invite blocked user".to_string()));
+        return Err(AppError::Forbidden(
+            "Cannot invite blocked user".to_string(),
+        ));
     }
 
     let invite_id = Uuid::new_v4();
@@ -391,7 +403,22 @@ pub async fn list_invites(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<response::PaginatedResponse<GameInviteWithDetails>>> {
-    let invites = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, Uuid, String, Option<String>, Uuid, String, String, chrono::DateTime<chrono::Utc>)>(
+    let invites = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            Option<String>,
+            Uuid,
+            String,
+            Option<String>,
+            Uuid,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"
         SELECT
             gi.id, gi.from_user_id, fu.username as from_username, fu.avatar_url as from_avatar_url,
@@ -411,8 +438,8 @@ pub async fn list_invites(
 
     let invite_list: Vec<GameInviteWithDetails> = invites
         .into_iter()
-        .map(|(id, from_user_id, from_username, from_avatar_url, to_user_id, to_username, to_avatar_url, game_id, game_title, status, created_at)| {
-            GameInviteWithDetails {
+        .map(
+            |(
                 id,
                 from_user_id,
                 from_username,
@@ -424,8 +451,22 @@ pub async fn list_invites(
                 game_title,
                 status,
                 created_at,
-            }
-        })
+            )| {
+                GameInviteWithDetails {
+                    id,
+                    from_user_id,
+                    from_username,
+                    from_avatar_url,
+                    to_user_id,
+                    to_username,
+                    to_avatar_url,
+                    game_id,
+                    game_title,
+                    status,
+                    created_at,
+                }
+            },
+        )
         .collect();
 
     let total = invite_list.len() as u64;
@@ -508,20 +549,74 @@ pub async fn get_user_profile(
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
-        .route("/", get(list_friends).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/request", post(send_friend_request).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/accept/:id", post(accept_friend_request).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/reject/:id", post(reject_friend_request).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id", delete(remove_friend).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/block/:id", post(block_user).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/",
+            get(list_friends).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/request",
+            post(send_friend_request).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/accept/:id",
+            post(accept_friend_request).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/reject/:id",
+            post(reject_friend_request).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id",
+            delete(remove_friend).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/block/:id",
+            post(block_user).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }
 
 pub fn invites_router(pool: PgPool) -> Router {
     Router::new()
-        .route("/", get(list_invites).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id/accept", post(accept_invite).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id/decline", post(decline_invite).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/",
+            get(list_invites).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id/accept",
+            post(accept_invite).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id/decline",
+            post(decline_invite).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }
 

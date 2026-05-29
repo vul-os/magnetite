@@ -1,3 +1,6 @@
+// Notification API — real-time WS push and REST inbox; platform surface, partially wired.
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use axum::{
@@ -125,7 +128,8 @@ pub struct UnreadCountResponse {
     pub unread_count: i64,
 }
 
-static NOTIFICATION_BROADCASTER: RwLock<Option<Arc<NotificationBroadcaster>>> = RwLock::const_new(None);
+static NOTIFICATION_BROADCASTER: RwLock<Option<Arc<NotificationBroadcaster>>> =
+    RwLock::const_new(None);
 
 pub struct NotificationBroadcaster {
     hubs: Mutex<std::collections::HashMap<Uuid, broadcast::Sender<NotificationBroadcast>>>,
@@ -185,7 +189,9 @@ pub async fn get_notification_broadcaster() -> Option<Arc<NotificationBroadcaste
 
 pub async fn broadcast_notification(notification: Notification) {
     if let Some(broadcaster) = get_notification_broadcaster().await {
-        broadcaster.broadcast(notification.user_id, notification).await;
+        broadcaster
+            .broadcast(notification.user_id, notification)
+            .await;
     }
 }
 
@@ -198,7 +204,10 @@ impl NotificationService {
         Self { pool }
     }
 
-    pub async fn create_notification(&self, req: &CreateNotificationRequest) -> Result<Notification> {
+    pub async fn create_notification(
+        &self,
+        req: &CreateNotificationRequest,
+    ) -> Result<Notification> {
         let notification = sqlx::query_as::<_, Notification>(
             "INSERT INTO notifications (id, user_id, type, title, body, data, read, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, false, NOW())
@@ -225,9 +234,7 @@ impl NotificationService {
         achievement_name: &str,
         achievement_icon: Option<&str>,
     ) -> Result<Notification> {
-        let data = achievement_icon.map(|icon| {
-            serde_json::json!({ "achievement_icon": icon })
-        });
+        let data = achievement_icon.map(|icon| serde_json::json!({ "achievement_icon": icon }));
 
         self.create_notification(&CreateNotificationRequest {
             user_id,
@@ -235,7 +242,8 @@ impl NotificationService {
             title: format!("Achievement Unlocked: {}", achievement_name),
             body: Some("Congratulations on unlocking this achievement!".to_string()),
             data,
-        }).await
+        })
+        .await
     }
 
     pub async fn create_friend_request_notification(
@@ -249,7 +257,8 @@ impl NotificationService {
             title: "New Friend Request".to_string(),
             body: Some(format!("{} sent you a friend request", from_username)),
             data: None,
-        }).await
+        })
+        .await
     }
 
     pub async fn create_game_invite_notification(
@@ -263,9 +272,13 @@ impl NotificationService {
             user_id,
             notification_type: NotificationType::GameInvite.as_str().to_string(),
             title: "Game Invite".to_string(),
-            body: Some(format!("{} invited you to play {}", from_username, game_title)),
+            body: Some(format!(
+                "{} invited you to play {}",
+                from_username, game_title
+            )),
             data: Some(serde_json::json!({ "game_id": game_id })),
-        }).await
+        })
+        .await
     }
 
     pub async fn create_payout_notification(
@@ -279,7 +292,8 @@ impl NotificationService {
             title: "Payout Complete".to_string(),
             body: Some(format!("Your payout of {} USDC has been processed", amount)),
             data: None,
-        }).await
+        })
+        .await
     }
 
     pub async fn create_subscription_renewal_notification(
@@ -293,7 +307,8 @@ impl NotificationService {
             title: "Subscription Renewed".to_string(),
             body: Some(format!("Your {} subscription has been renewed", tier_name)),
             data: None,
-        }).await
+        })
+        .await
     }
 
     pub async fn create_system_notification(
@@ -308,7 +323,8 @@ impl NotificationService {
             title: title.to_string(),
             body: Some(body.to_string()),
             data: None,
-        }).await
+        })
+        .await
     }
 }
 
@@ -327,7 +343,10 @@ impl NotificationWsHandler {
             .with_state(self)
     }
 
-    async fn get_or_create_hub(&self, user_id: &Uuid) -> broadcast::Receiver<NotificationBroadcast> {
+    async fn get_or_create_hub(
+        &self,
+        user_id: &Uuid,
+    ) -> broadcast::Receiver<NotificationBroadcast> {
         self.broadcaster.subscribe(user_id).await
     }
 
@@ -344,7 +363,7 @@ async fn handle_notification_connection(
     let receiver = handler.get_or_create_hub(&user_id).await;
 
     ws.on_upgrade(move |socket| async move {
-        let (mut write, mut read) = socket.split();
+        let (write, mut read) = socket.split();
         let write = Arc::new(Mutex::new(write));
 
         let user_id_clone = user_id;
@@ -359,17 +378,22 @@ async fn handle_notification_connection(
                             let mut write_guard = write_clone.lock().await;
                             match action {
                                 "ping" => {
-                                    let _ = write_guard.send(axum::extract::ws::Message::Text(
-                                        serde_json::json!({ "type": "pong" }).to_string()
-                                    )).await;
+                                    let _ = write_guard
+                                        .send(axum::extract::ws::Message::Text(
+                                            serde_json::json!({ "type": "pong" }).to_string(),
+                                        ))
+                                        .await;
                                 }
                                 "subscribe" => {
-                                    let _ = write_guard.send(axum::extract::ws::Message::Text(
-                                        serde_json::json!({
-                                            "type": "subscribed",
-                                            "user_id": user_id_clone
-                                        }).to_string()
-                                    )).await;
+                                    let _ = write_guard
+                                        .send(axum::extract::ws::Message::Text(
+                                            serde_json::json!({
+                                                "type": "subscribed",
+                                                "user_id": user_id_clone
+                                            })
+                                            .to_string(),
+                                        ))
+                                        .await;
                                 }
                                 _ => {}
                             }
@@ -386,7 +410,9 @@ async fn handle_notification_connection(
                 if msg.user_id == user_id {
                     if let Ok(json) = serde_json::to_string(&msg) {
                         let mut write_guard = write.lock().await;
-                        let _ = write_guard.send(axum::extract::ws::Message::Text(json)).await;
+                        let _ = write_guard
+                            .send(axum::extract::ws::Message::Text(json))
+                            .await;
                     }
                 }
             }
@@ -467,13 +493,12 @@ pub async fn list_notifications(
 
         (total.0, notifications)
     } else {
-        let total = sqlx::query_as::<_, (i64,)>(
-            "SELECT COUNT(*) FROM notifications WHERE user_id = $1",
-        )
-        .bind(user_id)
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        let total =
+            sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM notifications WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&pool)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
 
         let notifications = sqlx::query_as::<_, Notification>(
             "SELECT id, user_id, type, title, body, data, read, created_at
@@ -520,14 +545,12 @@ pub async fn mark_as_read(
     Extension(user_id): Extension<Uuid>,
     Path(notification_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let result = sqlx::query(
-        "UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2",
-    )
-    .bind(notification_id)
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    let result = sqlx::query("UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2")
+        .bind(notification_id)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Notification not found".to_string()));
@@ -540,13 +563,11 @@ pub async fn mark_all_as_read(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<StatusCode> {
-    sqlx::query(
-        "UPDATE notifications SET read = true WHERE user_id = $1 AND read = false",
-    )
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    sqlx::query("UPDATE notifications SET read = true WHERE user_id = $1 AND read = false")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -556,14 +577,12 @@ pub async fn delete_notification(
     Extension(user_id): Extension<Uuid>,
     Path(notification_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let result = sqlx::query(
-        "DELETE FROM notifications WHERE id = $1 AND user_id = $2",
-    )
-    .bind(notification_id)
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    let result = sqlx::query("DELETE FROM notifications WHERE id = $1 AND user_id = $2")
+        .bind(notification_id)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Notification not found".to_string()));

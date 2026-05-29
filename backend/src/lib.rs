@@ -6,5 +6,5 @@ pub mod middleware;
 pub mod services;
 pub mod ws;
 
-pub use error::{AppError, Result};
 pub use config::Config;
+pub use error::{AppError, Result};

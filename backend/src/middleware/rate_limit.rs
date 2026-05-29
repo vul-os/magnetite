@@ -1,6 +1,10 @@
+// Rate limiter middleware — Redis primary, in-memory fallback; config fields intentionally kept
+// for future tuning even when not all are read by the current impl.
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 
 use axum::{
     extract::{Request, State},
@@ -43,9 +47,12 @@ impl RedisRateLimiter {
 
     pub async fn check_rate_limit(&self, key: &str, limit: u32) -> bool {
         if let Some(mut conn) = self.client.get_multiplexed_async_connection().await.ok() {
-            let now = Instant::now();
+            let _now = Instant::now();
             let window_ms = self.window.as_millis() as u64;
-            let now_ms = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+            let now_ms = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
             let window_start = now_ms.saturating_sub(window_ms);
 
             let redis_key = format!("ratelimit:{}", key);
@@ -92,9 +99,12 @@ impl RedisRateLimiter {
 
     pub async fn get_remaining(&self, key: &str, limit: u32) -> u32 {
         if let Some(mut conn) = self.client.get_multiplexed_async_connection().await.ok() {
-            let now = Instant::now();
+            let _now = Instant::now();
             let window_ms = self.window.as_millis() as u64;
-            let now_ms = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+            let now_ms = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
             let window_start = now_ms.saturating_sub(window_ms);
 
             let redis_key = format!("ratelimit:{}", key);
@@ -154,9 +164,10 @@ impl RateLimiter {
         let now = Instant::now();
         let window_start = now - self.window;
 
-        let timestamps = requests.get(key).map(|v| {
-            v.iter().filter(|&&t| t > window_start).count()
-        }).unwrap_or(0);
+        let timestamps = requests
+            .get(key)
+            .map(|v| v.iter().filter(|&&t| t > window_start).count())
+            .unwrap_or(0);
 
         limit.saturating_sub(timestamps as u32)
     }
@@ -188,7 +199,11 @@ impl Default for RateLimitConfig {
 pub type SharedRateLimiter = Arc<RedisRateLimiter>;
 
 pub fn create_rate_limiter(redis_url: &str, config: RateLimitConfig) -> SharedRateLimiter {
-    Arc::new(RedisRateLimiter::new(redis_url, config.default.0, config.default.1))
+    Arc::new(RedisRateLimiter::new(
+        redis_url,
+        config.default.0,
+        config.default.1,
+    ))
 }
 
 pub fn get_rate_limit_config(path: &str) -> (u32, Duration) {
@@ -222,7 +237,10 @@ pub async fn rate_limit_middleware(
 
     let allowed = limiter.check_rate_limit(&rate_key, limit).await;
     let remaining = limiter.get_remaining(&rate_key, limit).await;
-    let reset_time = (SystemTime::now() + window).duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32;
+    let reset_time = (SystemTime::now() + window)
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u32;
 
     let mut response = if allowed {
         next.run(req).await

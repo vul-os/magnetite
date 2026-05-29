@@ -1,6 +1,9 @@
+// Webhooks API — Stripe, Circle, GitHub, Paystack event handlers; platform surface.
+#![allow(dead_code)]
+
 use axum::{
-    extract::{Extension, Path, State},
     body::Bytes,
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
     Json, Router,
@@ -21,8 +24,8 @@ const PAYSTACK_HEADER: &str = "x-paystack-signature";
 const CIRCLE_HEADER: &str = "circle-signature";
 
 fn compute_hmac_sha256(secret: &str, payload: &[u8]) -> String {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC can take key of any size");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(payload);
     hex::encode(mac.finalize().into_bytes())
 }
@@ -91,7 +94,9 @@ pub async fn handle_paystack(
         .ok_or_else(|| AppError::Unauthorized("Missing Paystack signature".to_string()))?;
 
     if !verify_paystack_signature(&secret_key, signature, &payload) {
-        return Err(AppError::Unauthorized("Invalid Paystack signature".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid Paystack signature".to_string(),
+        ));
     }
 
     let event: PaystackWebhook = serde_json::from_slice(&payload)
@@ -101,7 +106,10 @@ pub async fn handle_paystack(
 
     match event.event.as_str() {
         "charge.success" => {
-            let user_id = event.data.metadata.as_ref()
+            let user_id = event
+                .data
+                .metadata
+                .as_ref()
                 .and_then(|m| m.user_id)
                 .ok_or_else(|| AppError::BadRequest("Missing user_id in metadata".to_string()))?;
 
@@ -132,11 +140,13 @@ pub async fn handle_paystack(
             .map_err(|e| AppError::Database(e.to_string()))?;
 
             let notif_service = NotificationService::new(pool.clone());
-            let _ = notif_service.create_system_notification(
-                user_id,
-                "Deposit Received",
-                &format!("Your wallet has been credited with {} USDC", amount),
-            ).await;
+            let _ = notif_service
+                .create_system_notification(
+                    user_id,
+                    "Deposit Received",
+                    &format!("Your wallet has been credited with {} USDC", amount),
+                )
+                .await;
 
             tracing::info!(
                 "Credited user {} wallet with {} USDC from Paystack",
@@ -145,7 +155,10 @@ pub async fn handle_paystack(
             );
         }
         "transfer.success" => {
-            let user_id = event.data.metadata.as_ref()
+            let _user_id = event
+                .data
+                .metadata
+                .as_ref()
                 .and_then(|m| m.user_id)
                 .ok_or_else(|| AppError::BadRequest("Missing user_id in metadata".to_string()))?;
 
@@ -221,7 +234,9 @@ pub async fn handle_circle(
         .ok_or_else(|| AppError::Unauthorized("Missing Circle signature".to_string()))?;
 
     if !verify_circle_signature(&api_key, signature, &payload) {
-        return Err(AppError::Unauthorized("Invalid Circle signature".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid Circle signature".to_string(),
+        ));
     }
 
     let event: CircleWebhook = serde_json::from_slice(&payload)
@@ -234,8 +249,7 @@ pub async fn handle_circle(
             if let Some(ref data) = event.data.metadata {
                 if let Some(user_id) = data.user_id {
                     if let Some(ref amount) = event.data.amount {
-                        let amount_dec = amount.amount.parse::<Decimal>()
-                            .unwrap_or(Decimal::ZERO);
+                        let amount_dec = amount.amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
 
                         if event.data.state == "confirmed" || event.data.state == "complete" {
                             sqlx::query(
@@ -283,14 +297,12 @@ pub async fn handle_circle(
                         _ => "pending",
                     };
 
-                    sqlx::query(
-                        "UPDATE users SET kyc_status = $1 WHERE id = $2",
-                    )
-                    .bind(kyc_status)
-                    .bind(user_id)
-                    .execute(&pool)
-                    .await
-                    .map_err(|e| AppError::Database(e.to_string()))?;
+                    sqlx::query("UPDATE users SET kyc_status = $1 WHERE id = $2")
+                        .bind(kyc_status)
+                        .bind(user_id)
+                        .execute(&pool)
+                        .await
+                        .map_err(|e| AppError::Database(e.to_string()))?;
 
                     tracing::info!("KYC update for user {}: {}", user_id, kyc_status);
                 }
@@ -515,13 +527,18 @@ pub async fn register_endpoint(
     }
 
     if payload.events.is_empty() {
-        return Err(AppError::Validation("At least one event must be selected".to_string()));
+        return Err(AppError::Validation(
+            "At least one event must be selected".to_string(),
+        ));
     }
 
     let valid_events = ["payment.*", "kyc.*", "session.*", "score.*", "anticheat.*"];
     for event in &payload.events {
         if !valid_events.contains(&event.as_str()) {
-            return Err(AppError::Validation(format!("Invalid event type: {}", event)));
+            return Err(AppError::Validation(format!(
+                "Invalid event type: {}",
+                event
+            )));
         }
     }
 
@@ -584,14 +601,12 @@ pub async fn delete_endpoint(
     Extension(user_id): Extension<Uuid>,
     Path(endpoint_id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let result = sqlx::query(
-        "DELETE FROM webhook_endpoints WHERE id = $1 AND user_id = $2",
-    )
-    .bind(endpoint_id)
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    let result = sqlx::query("DELETE FROM webhook_endpoints WHERE id = $1 AND user_id = $2")
+        .bind(endpoint_id)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Webhook endpoint not found".to_string()));

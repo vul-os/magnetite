@@ -1,3 +1,6 @@
+// Session cleanup job — expires stale auth sessions; platform surface, not yet scheduled.
+#![allow(dead_code)]
+
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::interval;
@@ -10,11 +13,10 @@ pub async fn cleanup_expired_sessions(pool: &PgPool) -> Result<u64, sqlx::Error>
 }
 
 pub async fn cleanup_old_matchmaking_entries(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "DELETE FROM matchmaking_queue WHERE created_at < NOW() - INTERVAL '1 hour'"
-    )
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM matchmaking_queue WHERE created_at < NOW() - INTERVAL '1 hour'")
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected())
 }
 
@@ -27,7 +29,7 @@ pub async fn cleanup_expired_password_reset_tokens(pool: &PgPool) -> Result<u64,
 
 pub async fn cleanup_unverified_accounts(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
-        "DELETE FROM users WHERE verified = false AND created_at < NOW() - INTERVAL '7 days'"
+        "DELETE FROM users WHERE verified = false AND created_at < NOW() - INTERVAL '7 days'",
     )
     .execute(pool)
     .await?;

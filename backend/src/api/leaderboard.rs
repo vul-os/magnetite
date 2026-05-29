@@ -1,3 +1,6 @@
+// Leaderboard API — global and per-game rankings; platform surface, partially wired.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -73,10 +76,7 @@ fn get_timeframe_filter(timeframe: &str) -> (String, String) {
             "recorded_at >= NOW() - INTERVAL '30 days'".to_string(),
             "monthly".to_string(),
         ),
-        _ => (
-            "1=1".to_string(),
-            "alltime".to_string(),
-        ),
+        _ => ("1=1".to_string(), "alltime".to_string()),
     }
 }
 
@@ -90,29 +90,25 @@ pub async fn get_leaderboard(
     let timeframe = query.timeframe.as_deref().unwrap_or("alltime");
     let (timeframe_cond, _timeframe_name) = get_timeframe_filter(timeframe);
 
-    let entries = sqlx::query_as::<_, (Uuid, String, i64)>(
-        &format!(
-            "SELECT u.id, u.username, ghs.score
+    let entries = sqlx::query_as::<_, (Uuid, String, i64)>(&format!(
+        "SELECT u.id, u.username, ghs.score
              FROM game_high_scores ghs
              JOIN users u ON ghs.user_id = u.id
              WHERE ghs.game_id = $1 AND {}
              ORDER BY ghs.score DESC
              LIMIT $2 OFFSET $3",
-            timeframe_cond
-        ),
-    )
+        timeframe_cond
+    ))
     .bind(game_id)
     .bind(limit)
     .bind(offset)
     .fetch_all(&pool)
     .await?;
 
-    let total_count: i64 = sqlx::query_as::<_, (i64,)>(
-        &format!(
-            "SELECT COUNT(*) FROM game_high_scores ghs WHERE ghs.game_id = $1 AND {}",
-            timeframe_cond
-        ),
-    )
+    let total_count: i64 = sqlx::query_as::<_, (i64,)>(&format!(
+        "SELECT COUNT(*) FROM game_high_scores ghs WHERE ghs.game_id = $1 AND {}",
+        timeframe_cond
+    ))
     .bind(game_id)
     .fetch_one(&pool)
     .await?
@@ -130,7 +126,12 @@ pub async fn get_leaderboard(
         .collect();
 
     let page = ((offset as u32) / (limit as u32)).max(1);
-    Ok(response::paginated(leaderboard_entries, page, limit as u32, total_count as u64))
+    Ok(response::paginated(
+        leaderboard_entries,
+        page,
+        limit as u32,
+        total_count as u64,
+    ))
 }
 
 pub async fn submit_score(
@@ -237,13 +238,12 @@ pub async fn get_friends_scores(
     let user_id = Uuid::parse_str(&claims.sub)
         .map_err(|_| AppError::Unauthorized("Invalid user ID".to_string()))?;
 
-    let friends = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT friend_id FROM friendships WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    let friends =
+        sqlx::query_as::<_, (Uuid,)>("SELECT friend_id FROM friendships WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap_or_default();
 
     let friend_ids: Vec<Uuid> = friends.into_iter().map(|(id,)| id).collect();
 
@@ -281,8 +281,26 @@ pub async fn get_friends_scores(
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/:game_id", get(get_leaderboard))
-        .route("/:game_id/scores", post(submit_score).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:game_id/me", get(get_my_rank).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:game_id/friends", get(get_friends_scores).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/:game_id/scores",
+            post(submit_score).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:game_id/me",
+            get(get_my_rank).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:game_id/friends",
+            get(get_friends_scores).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

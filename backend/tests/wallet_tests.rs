@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use rust_decimal::Decimal;
+
     use rust_decimal_macros::dec;
-    use serde::{Deserialize, Serialize};
+
     use uuid::Uuid;
 
     mod wallet_models_tests {
@@ -15,6 +15,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 balance: dec!(100.50),
                 currency: "USDC".to_string(),
+                subscription_tier: None,
             };
 
             let json = serde_json::to_string(&balance).unwrap();
@@ -29,9 +30,9 @@ mod tests {
                 "payment_id": "pi_123456789"
             }"#;
 
-            let request: magnetite_backend::api::wallet::DepositRequest = 
+            let request: magnetite_backend::api::wallet::DepositRequest =
                 serde_json::from_str(json).unwrap();
-            
+
             assert_eq!(request.amount, dec!(50.25));
             assert_eq!(request.payment_id, "pi_123456789");
         }
@@ -43,9 +44,9 @@ mod tests {
                 "destination": "0x1234567890abcdef"
             }"#;
 
-            let request: magnetite_backend::api::wallet::WithdrawRequest = 
+            let request: magnetite_backend::api::wallet::WithdrawRequest =
                 serde_json::from_str(json).unwrap();
-            
+
             assert_eq!(request.amount, dec!(25.00));
             assert_eq!(request.destination, "0x1234567890abcdef");
         }
@@ -196,7 +197,7 @@ mod tests {
     }
 
     mod error_handling_tests {
-        use super::*;
+
         use axum::response::IntoResponse;
         use magnetite_backend::error::AppError;
 
@@ -210,7 +211,7 @@ mod tests {
         fn test_error_status_code_insufficient_funds() {
             let error = AppError::InsufficientFunds("Insufficient balance".to_string());
             let response = error.into_response();
-            
+
             assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
         }
 
@@ -218,15 +219,18 @@ mod tests {
         fn test_error_status_code_database() {
             let error = AppError::Database("Connection failed".to_string());
             let response = error.into_response();
-            
-            assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+
+            assert_eq!(
+                response.status(),
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            );
         }
 
         #[test]
         fn test_error_status_code_unauthorized() {
             let error = AppError::Unauthorized("Invalid token".to_string());
             let response = error.into_response();
-            
+
             assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
         }
 
@@ -234,7 +238,7 @@ mod tests {
         fn test_error_status_code_not_found() {
             let error = AppError::NotFound("User not found".to_string());
             let response = error.into_response();
-            
+
             assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
         }
 

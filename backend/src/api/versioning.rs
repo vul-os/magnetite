@@ -81,12 +81,11 @@ pub async fn versioning_middleware(
         .get("Accept")
         .and_then(|v| v.to_str().ok());
 
-    let query_version = request.uri().query()
-        .and_then(|q| {
-            q.split('&')
-                .find(|p| p.starts_with("version="))
-                .map(|p| p.trim_start_matches("version="))
-        });
+    let query_version = request.uri().query().and_then(|q| {
+        q.split('&')
+            .find(|p| p.starts_with("version="))
+            .map(|p| p.trim_start_matches("version="))
+    });
 
     let api_version = parse_version(accept_header, query_version);
     request.extensions_mut().insert(api_version.clone());
@@ -94,7 +93,11 @@ pub async fn versioning_middleware(
     let mut response = next.run(request).await;
 
     let headers = response.headers_mut();
-    headers.insert(HEADER_API_VERSION, HeaderValue::try_from(api_version.version.as_str()).unwrap_or_else(|_| HeaderValue::from_static("1")));
+    headers.insert(
+        HEADER_API_VERSION,
+        HeaderValue::try_from(api_version.version.as_str())
+            .unwrap_or_else(|_| HeaderValue::from_static("1")),
+    );
 
     if api_version.deprecated {
         headers.insert(HEADER_API_DEPRECATED, HeaderValue::from_static("true"));

@@ -1,6 +1,6 @@
-use std::time::Duration;
-use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
 use axum::http::Method;
+use std::time::Duration;
+use tower_http::cors::{AllowHeaders, AllowOrigin, Any, CorsLayer};
 
 pub fn cors_layer() -> CorsLayer {
     let allowed_origins = get_allowed_origins();

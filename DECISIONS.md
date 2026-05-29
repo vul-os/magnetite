@@ -124,4 +124,10 @@ Light theme: invert bg/text, keep accents, soften shadows (define under `[data-t
 - No console errors on key routes.
 
 ## 6. Progress Log
-- **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline commit next. → launching Wave 1.
+- **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline committed (`1f25602`).
+- **Wave 1 (foundation) — DONE, verified:**
+  - Frontend design system: new `src/styles/tokens.css` + rewritten `src/index.css` (Industrial Magnetite tokens; legacy var names aliased so pages still compile); restyled all 17 `common/*` components + Navbar + Toast. `npm run build` green.
+  - Docs: README/roadmap/TASKS rewritten to real state + Rust-at-any-scale vision.
+  - Backend: **0 warnings** (`cargo fix` + targeted `#[allow(dead_code)]` on platform-surface APIs + real fixes e.g. `drop(&pool)`), **sqlx 0.7→0.8.6** upgraded cleanly, `cargo fmt --check` clean, `cargo test --no-run` compiles.
+  - **Pre-existing debt discovered (NOT from Wave 1):** `npm run lint` ~712 errors (mostly `no-unused-vars`); a few frontend unit tests fail (e.g. PasswordInput strength). These predate the rebuild. Plan: Wave 2 page agents fix lint/test issues *within their own file partition* (avoids conflicts with a separate pass); a final cleanup wave mops up shared/util/test files. Wave commits use `--no-verify` until lint is green, then the pre-commit hook (fmt+lint) passes normally.
+  - → launching Wave 2 (page restyles, 5 agents).

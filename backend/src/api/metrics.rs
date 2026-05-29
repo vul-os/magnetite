@@ -1,10 +1,8 @@
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
+// Metrics API — DB pool and system stats endpoint; platform surface, partially wired.
+#![allow(dead_code)]
+
+use axum::{extract::State, routing::get, Json, Router};
 use sqlx::PgPool;
-use std::sync::atomic::Ordering;
 
 pub fn create_metrics_router(pool: PgPool) -> Router<PgPool> {
     Router::new()

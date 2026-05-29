@@ -3,13 +3,11 @@ mod tests {
     use axum::{
         body::Body,
         http::{Request, StatusCode},
-        middleware,
         routing::get,
         Router,
     };
     use chrono::Utc;
     use jsonwebtoken::{encode, EncodingKey, Header};
-    use tower::ServiceExt;
 
     fn get_test_jwt_secret() -> String {
         "test_jwt_secret_key_for_testing_only".to_string()
@@ -46,11 +44,15 @@ mod tests {
 
         #[tokio::test]
         async fn test_health_check_returns_ok() {
-            let app = Router::new()
-                .route("/health", get(|| async { "OK" }));
+            let app = Router::new().route("/health", get(|| async { "OK" }));
 
             let response = app
-                .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+                .oneshot(
+                    Request::builder()
+                        .uri("/health")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
                 .await
                 .unwrap();
 
@@ -60,8 +62,8 @@ mod tests {
 
     mod middleware_tests {
         use super::*;
-        use magnetite_backend::api::middleware::{auth_middleware, extract_token_from_header, Claims};
         use axum::http::HeaderMap;
+        use magnetite_backend::api::middleware::extract_token_from_header;
 
         #[test]
         fn test_extract_token_from_header_valid() {
@@ -107,7 +109,10 @@ mod tests {
             let token = create_test_token(&user_id, "test@example.com", false);
 
             let mut headers = HeaderMap::new();
-            headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", token).parse().unwrap(),
+            );
 
             let user_id_result = magnetite_backend::api::middleware::auth_guard(headers).await;
             assert!(user_id_result.is_ok());
@@ -119,7 +124,10 @@ mod tests {
             std::env::set_var("JWT_SECRET", get_test_jwt_secret());
 
             let mut headers = HeaderMap::new();
-            headers.insert("Authorization", "Bearer invalid.token.here".parse().unwrap());
+            headers.insert(
+                "Authorization",
+                "Bearer invalid.token.here".parse().unwrap(),
+            );
 
             let result = magnetite_backend::api::middleware::auth_guard(headers).await;
             assert!(result.is_err());
@@ -133,7 +141,10 @@ mod tests {
             let token = create_test_token(&user_id, "test@example.com", true);
 
             let mut headers = HeaderMap::new();
-            headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", token).parse().unwrap(),
+            );
 
             let result = magnetite_backend::api::middleware::auth_guard(headers).await;
             assert!(result.is_err());
@@ -170,8 +181,7 @@ mod tests {
     }
 
     mod claims_tests {
-        use super::*;
-        use magnetite_backend::api::middleware::Claims;
+
         use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize)]
@@ -220,7 +230,7 @@ mod tests {
         #[test]
         fn test_token_with_malformed_header() {
             std::env::set_var("JWT_SECRET", get_test_jwt_secret());
-            
+
             let result = magnetite_backend::api::middleware::validate_token("notavalidjwt");
             assert!(result.is_err());
         }
@@ -229,8 +239,8 @@ mod tests {
         fn test_token_with_wrong_algorithm() {
             std::env::set_var("JWT_SECRET", get_test_jwt_secret());
 
-            use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
-            
+            use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+
             let mut header = Header::default();
             header.alg = Algorithm::HS512;
 
@@ -246,7 +256,8 @@ mod tests {
                 &header,
                 &payload,
                 &EncodingKey::from_secret(get_test_jwt_secret().as_bytes()),
-            ).unwrap();
+            )
+            .unwrap();
 
             let result = magnetite_backend::api::middleware::validate_token(&token);
             assert!(result.is_err());
@@ -264,9 +275,9 @@ mod tests {
                 "password": "SecurePassword123!"
             }"#;
 
-            let request: magnetite_backend::api::auth::RegisterRequest = 
+            let request: magnetite_backend::api::auth::RegisterRequest =
                 serde_json::from_str(json).unwrap();
-            
+
             assert_eq!(request.username, "testuser");
             assert_eq!(request.email, "test@example.com");
             assert_eq!(request.password, "SecurePassword123!");
@@ -279,9 +290,9 @@ mod tests {
                 "password": "SecurePassword123!"
             }"#;
 
-            let request: magnetite_backend::api::auth::LoginRequest = 
+            let request: magnetite_backend::api::auth::LoginRequest =
                 serde_json::from_str(json).unwrap();
-            
+
             assert_eq!(request.username, "testuser");
             assert_eq!(request.password, "SecurePassword123!");
         }
@@ -304,9 +315,9 @@ mod tests {
         fn test_refresh_request_deserialization() {
             let json = r#"{"refresh_token": "refresh_token_123"}"#;
 
-            let request: magnetite_backend::api::auth::RefreshRequest = 
+            let request: magnetite_backend::api::auth::RefreshRequest =
                 serde_json::from_str(json).unwrap();
-            
+
             assert_eq!(request.refresh_token, "refresh_token_123");
         }
     }

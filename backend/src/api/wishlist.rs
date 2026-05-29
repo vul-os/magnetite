@@ -1,9 +1,15 @@
-use axum::{extract::{Path, State}, Extension, Json};
+// Wishlist API — game wishlist for players; platform surface, not yet wired.
+#![allow(dead_code)]
+
+use axum::{
+    extract::{Path, State},
+    Extension, Json,
+};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct WishlistEntry {
@@ -31,7 +37,16 @@ pub async fn list_wishlist(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<Vec<WishlistItem>>> {
-    let items = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, chrono::DateTime<chrono::Utc>)>(
+    let items = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            Option<String>,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         "SELECT w.id, w.game_id, g.title, g.description, w.created_at
          FROM wishlists w
          JOIN games g ON w.game_id = g.id
@@ -44,13 +59,15 @@ pub async fn list_wishlist(
 
     let wishlist = items
         .into_iter()
-        .map(|(id, game_id, title, description, created_at)| WishlistItem {
-            id,
-            game_id,
-            title,
-            description,
-            created_at,
-        })
+        .map(
+            |(id, game_id, title, description, created_at)| WishlistItem {
+                id,
+                game_id,
+                title,
+                description,
+                created_at,
+            },
+        )
         .collect();
 
     Ok(Json(wishlist))
@@ -73,12 +90,11 @@ pub async fn add_to_wishlist(
         return Err(AppError::BadRequest("Game already in wishlist".to_string()));
     }
 
-    let game_exists = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM games WHERE id = $1 AND active = true",
-    )
-    .bind(game_id)
-    .fetch_optional(&pool)
-    .await?;
+    let game_exists =
+        sqlx::query_as::<_, (Uuid,)>("SELECT id FROM games WHERE id = $1 AND active = true")
+            .bind(game_id)
+            .fetch_optional(&pool)
+            .await?;
 
     if game_exists.is_none() {
         return Err(AppError::NotFound("Game not found".to_string()));
@@ -102,13 +118,11 @@ pub async fn remove_from_wishlist(
     Extension(user_id): Extension<Uuid>,
     Path(game_id): Path<Uuid>,
 ) -> Result<Json<()>> {
-    let result = sqlx::query(
-        "DELETE FROM wishlists WHERE user_id = $1 AND game_id = $2",
-    )
-    .bind(user_id)
-    .bind(game_id)
-    .execute(&pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM wishlists WHERE user_id = $1 AND game_id = $2")
+        .bind(user_id)
+        .bind(game_id)
+        .execute(&pool)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Wishlist entry not found".to_string()));

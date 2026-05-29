@@ -3,17 +3,16 @@ use std::time::Duration;
 use tokio::time::interval;
 
 pub async fn cleanup_old_notifications(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '30 days'"
-    )
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '30 days'")
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected())
 }
 
 pub async fn cleanup_read_notifications(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
-        "DELETE FROM notifications WHERE read = true AND created_at < NOW() - INTERVAL '7 days'"
+        "DELETE FROM notifications WHERE read = true AND created_at < NOW() - INTERVAL '7 days'",
     )
     .execute(pool)
     .await?;

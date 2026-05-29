@@ -1,3 +1,6 @@
+// Auth service — Argon2 password hashing, JWT signing; platform surface, partially wired.
+#![allow(dead_code)]
+
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
@@ -23,7 +26,9 @@ pub struct User {
 pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
-    Ok(argon2.hash_password(password.as_bytes(), &salt)?.to_string())
+    Ok(argon2
+        .hash_password(password.as_bytes(), &salt)?
+        .to_string())
 }
 
 pub fn verify_password(password: &str, hash: &str) -> bool {
@@ -36,30 +41,20 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
         .is_ok()
 }
 
-pub async fn get_user_by_email(
-    db: &sqlx::PgPool,
-    email: &str,
-) -> Result<Option<User>, AppError> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE email = $1",
-    )
-    .bind(email)
-    .fetch_optional(db)
-    .await?;
+pub async fn get_user_by_email(db: &sqlx::PgPool, email: &str) -> Result<Option<User>, AppError> {
+    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_optional(db)
+        .await?;
 
     Ok(user)
 }
 
-pub async fn get_user_by_id(
-    db: &sqlx::PgPool,
-    id: Uuid,
-) -> Result<Option<User>, AppError> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(db)
-    .await?;
+pub async fn get_user_by_id(db: &sqlx::PgPool, id: Uuid) -> Result<Option<User>, AppError> {
+    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_optional(db)
+        .await?;
 
     Ok(user)
 }

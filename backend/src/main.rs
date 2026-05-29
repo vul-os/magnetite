@@ -16,6 +16,7 @@ use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::api::achievements;
+use crate::api::admin;
 use crate::api::auth;
 use crate::api::categories;
 use crate::api::developer;
@@ -24,7 +25,6 @@ use crate::api::github;
 use crate::api::health;
 use crate::api::leaderboard;
 use crate::api::matchmaking;
-use crate::api::admin;
 use crate::api::metrics;
 use crate::api::notifications;
 use crate::api::oauth;
@@ -34,11 +34,9 @@ use crate::api::versioning;
 use crate::api::wallet;
 use crate::api::webhooks;
 use crate::jobs::notification_cleanup;
-use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
 use crate::middleware::cors_layer;
 use crate::middleware::logging::log_request;
-use crate::ws::game::router as game_router;
-use sqlx::PgPool;
+use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
 
 #[tokio::main]
 async fn main() {
@@ -91,14 +89,19 @@ async fn main() {
 
     notifications::init_notification_broadcaster().await;
     let notification_broadcaster = Arc::new(notifications::NotificationBroadcaster::new());
-    let notification_ws_handler = Arc::new(notifications::NotificationWsHandler::new(notification_broadcaster));
+    let notification_ws_handler = Arc::new(notifications::NotificationWsHandler::new(
+        notification_broadcaster,
+    ));
 
     let app = Router::new()
         .nest("/api/v1", api_v1)
         .merge(health_metrics)
         .merge(notification_ws_handler.router())
         .layer(cors_layer())
-        .layer(from_fn_with_state(rate_limiter.clone(), rate_limit_middleware))
+        .layer(from_fn_with_state(
+            rate_limiter.clone(),
+            rate_limit_middleware,
+        ))
         .layer(from_fn(log_request));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();

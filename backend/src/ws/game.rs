@@ -1,13 +1,17 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
-use tokio::sync::broadcast;
-use tokio::sync::Mutex;
+// Game WebSocket handler and server-authoritative game loop — platform surface for real-time
+// multiplayer; not yet wired to main router (see GameWsHandler::router for the integration point).
+#![allow(dead_code)]
+
 use axum::extract::{Path, State, WebSocketUpgrade};
 use axum::routing::get;
 use axum::Router;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use futures_util::{StreamExt, SinkExt};
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tokio::time::interval;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -127,12 +131,15 @@ impl GameSession {
             interpolated: false,
         };
         self.state.players.insert(player_id.clone(), player_state);
-        self.players.insert(player_id.clone(), PlayerInfo {
-            player_id,
-            sender,
-            last_pong: Instant::now(),
-            confirmed_input_seq: 0,
-        });
+        self.players.insert(
+            player_id.clone(),
+            PlayerInfo {
+                player_id,
+                sender,
+                last_pong: Instant::now(),
+                confirmed_input_seq: 0,
+            },
+        );
     }
 
     pub fn handle_input(&mut self, player_id: String, input: InputData) {
@@ -155,69 +162,84 @@ impl GameSession {
 
     pub fn tick(&mut self) {
         self.state.tick += 1;
-        
+
         for player in self.state.players.values_mut() {
             update_player_physics(player);
         }
-        
+
         self.state_history.push_back(ClientSnapshot {
             tick: self.state.tick,
             state: self.state.clone(),
             timestamp: now_as_f64(),
         });
-        
+
         while self.state_history.len() > 120 {
             self.state_history.pop_front();
         }
     }
 
-    pub fn get_interpolated_state(&self, player_id: &str, interpolation_time: f64) -> Option<GameState> {
-        let delayed_tick = self.state.tick.saturating_sub(self.interpolation_delay_ticks);
-        
+    pub fn get_interpolated_state(
+        &self,
+        _player_id: &str,
+        interpolation_time: f64,
+    ) -> Option<GameState> {
+        let delayed_tick = self
+            .state
+            .tick
+            .saturating_sub(self.interpolation_delay_ticks);
+
         let (before, after) = self.find_snapshot_bounds(delayed_tick)?;
-        
+
         let t = (interpolation_time - before.timestamp) / (after.timestamp - before.timestamp);
         let t = t.clamp(0.0, 1.0);
-        
+
         let mut interpolated = GameState {
             players: HashMap::new(),
             entities: HashMap::new(),
             tick: delayed_tick,
         };
-        
+
         for (id, before_player) in &before.state.players {
             if let Some(after_player) = after.state.players.get(id) {
                 let interp_x = lerp(before_player.x, after_player.x, t as f32);
                 let interp_y = lerp(before_player.y, after_player.y, t as f32);
-                let interp_rot = lerp_angle(before_player.rotation, after_player.rotation, t as f32);
-                
-                interpolated.players.insert(id.clone(), PlayerState {
-                    x: interp_x,
-                    y: interp_y,
-                    rotation: interp_rot,
-                    velocity_x: after_player.velocity_x,
-                    velocity_y: after_player.velocity_y,
-                    last_input_seq: after_player.last_input_seq,
-                    interpolated: true,
-                });
+                let interp_rot =
+                    lerp_angle(before_player.rotation, after_player.rotation, t as f32);
+
+                interpolated.players.insert(
+                    id.clone(),
+                    PlayerState {
+                        x: interp_x,
+                        y: interp_y,
+                        rotation: interp_rot,
+                        velocity_x: after_player.velocity_x,
+                        velocity_y: after_player.velocity_y,
+                        last_input_seq: after_player.last_input_seq,
+                        interpolated: true,
+                    },
+                );
             }
         }
-        
+
         for (id, before_entity) in &before.state.entities {
             if let Some(after_entity) = after.state.entities.get(id) {
                 let interp_x = lerp(before_entity.x, after_entity.x, t as f32);
                 let interp_y = lerp(before_entity.y, after_entity.y, t as f32);
-                let interp_rot = lerp_angle(before_entity.rotation, after_entity.rotation, t as f32);
-                
-                interpolated.entities.insert(id.clone(), EntityState {
-                    x: interp_x,
-                    y: interp_y,
-                    rotation: interp_rot,
-                    snapshot_time: t,
-                });
+                let interp_rot =
+                    lerp_angle(before_entity.rotation, after_entity.rotation, t as f32);
+
+                interpolated.entities.insert(
+                    id.clone(),
+                    EntityState {
+                        x: interp_x,
+                        y: interp_y,
+                        rotation: interp_rot,
+                        snapshot_time: t,
+                    },
+                );
             }
         }
-        
+
         Some(interpolated)
     }
 
@@ -225,7 +247,7 @@ impl GameSession {
         if self.state_history.len() < 2 {
             return None;
         }
-        
+
         let mut before_idx = 0;
         for (i, snapshot) in self.state_history.iter().enumerate() {
             if snapshot.tick <= target_tick {
@@ -238,7 +260,7 @@ impl GameSession {
                 ));
             }
         }
-        
+
         let last = self.state_history.len() - 1;
         Some((
             self.state_history[before_idx].clone(),
@@ -264,7 +286,7 @@ impl GameSession {
 
 fn process_player_input(player: &mut PlayerState, input: &InputData) {
     const SPEED: f32 = 5.0;
-    
+
     for key in &input.keys {
         match key.as_str() {
             "w" | "ArrowUp" => player.velocity_y = -SPEED,
@@ -274,7 +296,7 @@ fn process_player_input(player: &mut PlayerState, input: &InputData) {
             _ => {}
         }
     }
-    
+
     if let Some(mouse) = &input.mouse {
         player.rotation = mouse.y.atan2(mouse.x);
     }
@@ -283,14 +305,14 @@ fn process_player_input(player: &mut PlayerState, input: &InputData) {
 fn update_player_physics(player: &mut PlayerState) {
     const FRICTION: f32 = 0.9;
     const GRAVITY: f32 = 0.5;
-    
+
     player.x += player.velocity_x;
     player.y += player.velocity_y;
-    
+
     player.velocity_x *= FRICTION;
     player.velocity_y *= FRICTION;
     player.velocity_y += GRAVITY;
-    
+
     player.x = player.x.max(0.0).min(1000.0);
     player.y = player.y.max(0.0).min(1000.0);
 }
@@ -301,8 +323,8 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
     let diff = b - a;
-    let diff = ((diff + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) 
-               - std::f32::consts::PI;
+    let diff =
+        ((diff + std::f32::consts::PI) % (2.0 * std::f32::consts::PI)) - std::f32::consts::PI;
     a + diff * t
 }
 
@@ -352,17 +374,17 @@ impl GameManager {
             let mut ticker = interval(Duration::from_millis(16));
             loop {
                 ticker.tick().await;
-                
+
                 let session = {
                     let sessions = sessions.lock().await;
                     sessions.get(&game_id).map(Arc::clone)
                 };
-                
+
                 if let Some(session) = session {
                     let mut session = session.lock().await;
                     session.process_inputs();
                     session.tick();
-                    
+
                     let state = session.state.clone();
                     let msg = GameMessage::StateUpdate { state };
                     session.broadcast_state(msg);
@@ -375,7 +397,8 @@ impl GameManager {
 
     pub async fn cleanup_empty_sessions(&self) {
         let mut sessions = self.sessions.lock().await;
-        let to_remove: Vec<String> = sessions.iter()
+        let to_remove: Vec<String> = sessions
+            .iter()
             .filter_map(|(id, session)| {
                 if session.try_lock().map(|s| s.is_empty()).unwrap_or(false) {
                     Some(id.clone())
@@ -384,7 +407,7 @@ impl GameManager {
                 }
             })
             .collect();
-        
+
         for id in to_remove {
             tracing::info!("Cleaning up empty game session: {}", id);
             sessions.remove(&id);
@@ -437,15 +460,15 @@ async fn handle_game_connection(
     Path(game_id): Path<String>,
 ) -> axum::response::Response {
     let manager = handler.get_manager();
-    
+
     ws.on_upgrade(move |socket| async move {
         let (mut write, mut read) = socket.split();
         let (tx, mut rx) = broadcast::channel::<GameMessage>(100);
-        
-        let game_id_clone = game_id.clone();
+
+        let _game_id_clone = game_id.clone();
         let manager_clone = Arc::clone(&manager);
         let tx_ping = tx.clone();
-        
+
         tokio::spawn(async move {
             let mut ticker = interval(Duration::from_secs(30));
             loop {
@@ -455,37 +478,50 @@ async fn handle_game_connection(
                 }
             }
         });
-        
+
         tokio::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 if let Ok(json) = serde_json::to_string(&msg) {
-                    if write.send(axum::extract::ws::Message::Text(json)).await.is_err() {
+                    if write
+                        .send(axum::extract::ws::Message::Text(json))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
             }
         });
-        
+
         let session = manager_clone.get_or_create_session(&game_id).await;
-        
-        let player_id = format!("player_{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap());
-        
+
+        let player_id = format!(
+            "player_{}",
+            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+        );
+
         {
             let mut session_lock = session.lock().await;
             session_lock.register_player(player_id.clone(), tx.clone());
-            
-            let join_msg = GameMessage::PlayerJoin { player_id: player_id.clone() };
-            let msg = GameMessage::StateUpdate { state: session_lock.state.clone() };
+
+            let join_msg = GameMessage::PlayerJoin {
+                player_id: player_id.clone(),
+            };
+            let msg = GameMessage::StateUpdate {
+                state: session_lock.state.clone(),
+            };
             let _ = tx.send(msg);
             session_lock.broadcast_state(join_msg);
         }
-        
-        let join_msg = GameMessage::PlayerJoin { player_id: player_id.clone() };
+
+        let join_msg = GameMessage::PlayerJoin {
+            player_id: player_id.clone(),
+        };
         let _ = tx.send(join_msg);
-        
-        let manager_for_read = Arc::clone(&manager_clone);
+
+        let _manager_for_read = Arc::clone(&manager_clone);
         let player_id_clone = player_id.clone();
-        
+
         tokio::spawn(async move {
             {
                 let mut session_lock = session.lock().await;
@@ -497,7 +533,7 @@ async fn handle_game_connection(
                     }
                 }));
             }
-            
+
             while let Some(result) = read.next().await {
                 if let Ok(axum::extract::ws::Message::Text(text)) = result {
                     if let Ok(msg) = serde_json::from_str::<GameMessage>(&text) {
@@ -513,7 +549,8 @@ async fn handle_game_connection(
                                 });
                             }
                             GameMessage::Pong => {
-                                if let Some(player) = session_lock.players.get_mut(&player_id_clone) {
+                                if let Some(player) = session_lock.players.get_mut(&player_id_clone)
+                                {
                                     player.last_pong = Instant::now();
                                 }
                             }
@@ -522,10 +559,12 @@ async fn handle_game_connection(
                     }
                 }
             }
-            
+
             let mut session_lock = session.lock().await;
             session_lock.remove_player(&player_id_clone);
-            let leave_msg = GameMessage::PlayerLeave { player_id: player_id_clone };
+            let leave_msg = GameMessage::PlayerLeave {
+                player_id: player_id_clone,
+            };
             session_lock.broadcast_state(leave_msg);
         });
     })
@@ -551,9 +590,9 @@ mod tests {
             last_input_seq: 0,
             interpolated: false,
         };
-        
+
         update_player_physics(&mut player);
-        
+
         assert!(player.x > 100.0);
         assert!(player.velocity_x < 5.0);
     }
@@ -569,16 +608,16 @@ mod tests {
             last_input_seq: 0,
             interpolated: false,
         };
-        
+
         let input = InputData {
             keys: vec!["w".to_string()],
             mouse: None,
             timestamp: 0,
             seq: 1,
         };
-        
+
         process_player_input(&mut player, &input);
-        
+
         assert_eq!(player.velocity_y, -5.0);
     }
 
@@ -586,9 +625,9 @@ mod tests {
     fn test_game_session_registration() {
         let mut session = GameSession::new("test".to_string());
         let (tx, _) = broadcast::channel(100);
-        
+
         session.register_player("player1".to_string(), tx);
-        
+
         assert!(session.state.players.contains_key("player1"));
         assert!(session.is_empty() == false);
     }
@@ -597,10 +636,10 @@ mod tests {
     fn test_game_session_removal() {
         let mut session = GameSession::new("test".to_string());
         let (tx, _) = broadcast::channel(100);
-        
+
         session.register_player("player1".to_string(), tx);
         session.remove_player("player1");
-        
+
         assert!(!session.state.players.contains_key("player1"));
     }
 
@@ -614,12 +653,12 @@ mod tests {
     #[tokio::test]
     async fn test_game_manager_sessions() {
         let manager = GameManager::new();
-        
+
         let session1 = manager.get_or_create_session("game1").await;
         let session2 = manager.get_or_create_session("game1").await;
-        
+
         assert!(Arc::ptr_eq(&session1, &session2));
-        
+
         let session3 = manager.get_or_create_session("game2").await;
         assert!(!Arc::ptr_eq(&session1, &session3));
     }

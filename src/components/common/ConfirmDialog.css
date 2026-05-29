@@ -1,3 +1,7 @@
+/*
+ * ConfirmDialog — Industrial Magnetite
+ */
+
 .confirm-dialog-body {
   display: flex;
   flex-direction: column;
@@ -11,30 +15,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
 }
 
-.confirm-dialog-danger .confirm-dialog-icon {
-  color: var(--color-error);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.confirm-dialog-warning .confirm-dialog-icon {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
-}
-
-.confirm-dialog-info .confirm-dialog-icon {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
-}
+.confirm-dialog-danger .confirm-dialog-icon  { color: var(--color-error);   background: rgba(255, 84, 104, 0.10); border-color: rgba(255, 84, 104, 0.2); }
+.confirm-dialog-warning .confirm-dialog-icon { color: var(--color-warning); background: var(--color-amber-soft); border-color: rgba(245, 165, 36, 0.2); }
+.confirm-dialog-info .confirm-dialog-icon    { color: var(--color-info);    background: rgba(91, 157, 255, 0.10); border-color: rgba(91, 157, 255, 0.2); }
 
 .confirm-dialog-message {
-  font-size: 0.9375rem;
-  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
   line-height: 1.6;
   max-width: 320px;
   margin: 0;

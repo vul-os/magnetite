@@ -1,3 +1,6 @@
+// OAuth API — Google, GitHub, Discord, GitLab flows; platform surface, partially wired.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, HeaderValue},
@@ -371,16 +374,14 @@ pub async fn google_callback(
         .get("cookie")
         .and_then(|v| v.to_str().ok())
         .and_then(|cookie_str| {
-            cookie_str
-                .split(';')
-                .find_map(|c| {
-                    let mut parts = c.trim().splitn(2, '=');
-                    if parts.next() == Some("oauth_state") {
-                        parts.next().map(|s| s.to_string())
-                    } else {
-                        None
-                    }
-                })
+            cookie_str.split(';').find_map(|c| {
+                let mut parts = c.trim().splitn(2, '=');
+                if parts.next() == Some("oauth_state") {
+                    parts.next().map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
         });
 
     let state_valid = cookie_state
@@ -403,8 +404,8 @@ pub async fn google_callback(
 
     match handle_google_callback(&config, &pool, &query.code).await {
         Ok(tokens) => {
-            let frontend_url =
-                std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+            let frontend_url = std::env::var("FRONTEND_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string());
             let redirect_url = format!(
                 "{}/auth/callback?access_token={}&refresh_token={}&expires_at={}",
                 frontend_url,
@@ -414,9 +415,9 @@ pub async fn google_callback(
             );
             Redirect::to(&redirect_url).into_response()
         }
-        Err(e) => {
-            let frontend_url =
-                std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        Err(_e) => {
+            let frontend_url = std::env::var("FRONTEND_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string());
             let redirect_url = format!("{}/auth/error?reason=callback_error", frontend_url);
             Redirect::to(&redirect_url).into_response()
         }
@@ -648,7 +649,10 @@ pub async fn get_github_user(access_token: &str) -> Result<(String, String)> {
     fetch_user_info(OAuthProvider::GitHub, access_token).await
 }
 
-pub async fn handle_github_callback(pool: &PgPool, code: &str) -> Result<crate::services::session::AuthTokens> {
+pub async fn handle_github_callback(
+    pool: &PgPool,
+    code: &str,
+) -> Result<crate::services::session::AuthTokens> {
     let config = OAuthConfig {
         client_id: std::env::var("GITHUB_CLIENT_ID").unwrap_or_default(),
         client_secret: std::env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),

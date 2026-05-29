@@ -1,131 +1,235 @@
 # Magnetite
 
-**Magnetite (Fe₃O₄)** - Iron oxide, magnetic, grounded. The foundation upon which things are built.
+**Magnetite (Fe₃O₄)** — Iron oxide, magnetic, grounded. The foundation upon which things are built.
 
-*Open source games. Real money. No middlemen.*
+*Build, distribute, and monetize Rust games — from a weekend jam to a COD-scale AAA title.*
 
-## Overview
+---
 
-Magnetite is a platform where developers host open-source games via GitHub, players pay with USDC, and Magnetite provides the hosting, real-time infrastructure, and payment rails.
+## Vision
 
-**Core principle:** Developers own their code, Magnetite provides the platform layer, players pay for access.
+Magnetite is the open-source platform for Rust game development at any scale. Game logic is authored in Rust; clients compile Bevy → WASM for the browser and to native binaries. The platform is server-authoritative and sandboxed, providing hosting, matchmaking, real-time netcode, persistence, and payment rails — so developers only write game logic.
+
+- **Rust-first.** Not HTML5. Not Unity. Bevy → WASM (browser) + native. Servers are sandboxed Rust.
+- **Scales with the game.** A tiny arcade game and a large multiplayer title share the same SDK and platform.
+- **Distribution built in.** Storefront/marketplace: players discover, play (in-browser via WASM or native), and pay.
+- **Open source.** Platform MIT, SDK MIT, game template MIT.
+- **Real money, no middlemen.** USDC payments (Circle), Paystack fiat on-ramp, 15% platform fee, playtime-based developer payouts.
+
+---
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Platform Backend | Rust (Axum) |
-| Game Engine | Bevy (MIT) |
-| Database | PostgreSQL (SQLx) |
-| Cache/State | Redis |
-| Payments | USDC (Circle SDK) |
-| Fiat On-Ramp | Paystack |
-| Client | React + Vite |
-| Infrastructure | Fly.io |
+| Platform backend | Rust — Axum 0.7, SQLx 0.7, Tokio |
+| Database | PostgreSQL 16 |
+| Cache / state | Redis 7 |
+| Real-time | WebSocket (Axum WS), QUIC (planned) |
+| Game engine (client) | Bevy → WASM (wasm-bindgen) |
+| Payments | USDC via Circle; Paystack fiat on-ramp |
+| Email | Resend / AWS SES (lettre) |
+| Storage | AWS S3 (game artifacts, replays) |
+| Frontend | React 19 + Vite, React Router 7, Recharts |
+| Infrastructure | Fly.io (Firecracker VMs), Docker Compose (local) |
+
+---
 
 ## Project Structure
 
 ```
 magnetite/
-├── backend/              # Rust backend
+├── backend/                  # Rust platform backend
 │   ├── src/
-│   │   ├── api/        # HTTP API handlers
-│   │   ├── db/         # Database pool
-│   │   ├── services/   # Business logic
-│   │   └── ws/         # WebSocket handlers
-│   ├── migrations/     # SQL migrations
-│   └── tools/          # Dev tools (migrate.sh)
-├── src/                 # React frontend
-│   ├── api/            # API client
-│   ├── components/     # UI components
-│   ├── context/        # React contexts
-│   ├── data/           # Mock data
-│   ├── hooks/          # Custom hooks
-│   └── pages/          # Page components
-└── ...
+│   │   ├── api/              # 27 HTTP route modules (Axum handlers)
+│   │   ├── services/         # 18 business-logic modules
+│   │   ├── middleware/       # CORS, rate limiting, request logging
+│   │   ├── jobs/             # Background jobs (sessions, notifications, backups)
+│   │   ├── db/               # Database pool
+│   │   ├── ws/               # WebSocket game handler
+│   │   ├── config.rs         # App configuration
+│   │   └── error.rs          # Unified error type
+│   ├── magnetite-sdk/        # Rust SDK for game developers
+│   │   └── src/              # GameLogic trait, Input, State, Networking types
+│   ├── migrations/           # 20 SQL migration files
+│   ├── tests/                # Integration tests (auth, API, wallet)
+│   └── tools/                # migrate.sh, backup.sh
+├── game-template/            # Bevy + magnetite-sdk starter (WASM-ready)
+│   └── src/lib.rs
+├── src/                      # React frontend
+│   ├── api/                  # API client (axios wrapper)
+│   ├── components/           # 118 UI components
+│   │   ├── common/           # Design-system primitives (Button, Input, Card, …)
+│   │   ├── landing/          # HeroSection, FeaturesSection, Testimonials, …
+│   │   ├── auth/             # AuthForm, OAuthButtons, PasswordInput, …
+│   │   ├── admin/            # AdminRoute, AdminSidebar
+│   │   ├── charts/           # Recharts wrappers (Line, Bar, Area, Pie, …)
+│   │   ├── skeletons/        # Loading skeletons per entity type
+│   │   └── empty/            # Empty-state illustrations
+│   ├── context/              # AuthContext, WalletContext, GameContext,
+│   │                         # ThemeContext, ToastContext, NotificationContext
+│   ├── hooks/                # 30+ custom hooks (useAuth, useGames, useWallet, …)
+│   ├── pages/                # 59 page components + admin/ + developers/ subdirs
+│   ├── data/                 # Mock fallback data (used when API is unavailable)
+│   ├── utils/                # Formatters, validation, feature flags, storage
+│   └── styles/               # Supplemental CSS (animations, typography, layout)
+├── e2e/                      # Playwright end-to-end tests
+├── docs/                     # Platform documentation (getting-started, API ref, …)
+├── .github/workflows/        # CI (ci.yml), deploy (deploy.yml), game-ci, release
+├── docker-compose.yml        # Local dev: postgres + redis + backend + frontend
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── nginx.conf
+└── fly.toml
 ```
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust 1.75+
-- Node.js 18+
-- PostgreSQL 15+
+| Tool | Minimum version |
+|------|----------------|
+| Rust | 1.75 |
+| Node.js | 18 |
+| PostgreSQL | 15 |
+| Redis | 7 |
 
-### Backend Setup
+### Option A — Docker Compose (recommended)
 
 ```bash
-cd backend
-cargo build
-
-# Set environment variables
-export DATABASE_URL="postgres://postgres:postgres@localhost:54322/postgres"
-export JWT_SECRET="your-secret-key"
-
-cargo run
+cp .env.example .env.docker   # edit credentials
+docker compose up -d
 ```
 
-### Frontend Setup
+Services: `postgres:5432`, `redis:6379`, `backend:8080`, `frontend:5173`.
+
+### Option B — Local development
+
+**Frontend:**
 
 ```bash
 npm install
-npm run dev
+npm run dev         # http://localhost:5173
 ```
 
-### Running Migrations
+**Backend:**
+
+```bash
+cp .env.example backend/.env    # fill DATABASE_URL, JWT_SECRET, etc.
+cd backend
+cargo run                       # http://localhost:8080
+```
+
+**Run migrations:**
 
 ```bash
 cd backend/tools
-./migrate.sh up      # Run pending migrations
-./migrate.sh status  # Check migration status
-./migrate.sh reset   # Reset database (WARNING: drops all tables)
+./migrate.sh up        # apply pending migrations
+./migrate.sh status    # list applied / pending
+./migrate.sh reset     # drop + re-create (dev only)
 ```
 
-## Features
+### Environment variables (minimum for local dev)
 
-- **Marketplace**: Browse and play open-source games
-- **Developer Dashboard**: Host your games, track earnings
-- **USDC Wallet**: Deposit, withdraw, play sessions
-- **Matchmaking**: Find opponents automatically
-- **Real-time**: WebSocket game connections
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/magnetite
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=change-me
+FRONTEND_URL=http://localhost:5173
+```
+
+Full list: see [`.env.example`](.env.example).
+
+---
 
 ## API Routes
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/auth/register` | Register new user |
-| `POST /api/auth/login` | Login and get JWT |
-| `GET /api/auth/me` | Get current user |
-| `GET /api/wallet/balance` | Get USDC balance |
-| `GET /api/games` | List all games |
-| `POST /api/games` | Create new game |
-| `GET /api/games/:id/leaderboard` | Get game leaderboard |
-| `POST /api/matchmaking/join` | Join matchmaking queue |
+The backend exposes all routes under `/api`. Key modules:
+
+| Module | Prefix | Notable endpoints |
+|--------|--------|-------------------|
+| Auth | `/api/auth` | `POST /register`, `POST /login`, `GET /me`, `POST /logout`, `POST /refresh` |
+| OAuth | `/api/auth/{provider}` | Google, Discord, GitHub, GitLab; `/callback` |
+| Games | `/api/games` | CRUD, search, categories, reviews, screenshots, versions |
+| Developer | `/api/developer` | Dashboard stats, game management, build triggers |
+| Marketplace | `/api/games` (public) | Browse, filter, wishlist, ratings |
+| Wallet | `/api/wallet` | Balance, deposit (USDC/Paystack), withdraw, transaction history |
+| Subscriptions | `/api/subscriptions` | Tiers (Free / Basic / Pro / Unlimited), activation |
+| Matchmaking | `/api/matchmaking` | Join queue, leave queue, status |
+| Leaderboard | `/api/leaderboard` | Global and per-game score boards |
+| Achievements | `/api/achievements` | Definitions, progress, unlock |
+| Social | `/api/social` | Friends, invites, activity feed |
+| Notifications | `/api/notifications` | List, mark read, preferences |
+| Profile | `/api/profile` | View/edit, avatar, public stats |
+| Tournaments | `/api/tournaments` | Create, join, bracket |
+| Admin | `/api/admin` | User management, game moderation, finance, settings |
+| Health | `/api/health` | Liveness + readiness |
+| Webhooks | `/api/webhooks` | GitHub push, payment events |
+| WebSocket | `/ws/game/{id}` | Real-time game state, player input |
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     MAGNETITE PLATFORM                      │
-├─────────────────────────────────────────────────────────────┤
-│  HTTP/WebSocket Gateway (Rust/Axum)                        │
-│  ├── /api/auth  /api/wallet  /api/games  /api/matchmaking  │
-│  └── /ws/game/{id}                                         │
-├─────────────────────────────────────────────────────────────┤
-│  Shared Services: Leaderboards, Achievements, Matchmaking  │
-├─────────────────────────────────────────────────────────────┤
-│  Game Instances (Developer Code) - Rust/WASM (Bevy)        │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       MAGNETITE PLATFORM                        │
+├─────────────────────────────────────────────────────────────────┤
+│  HTTP/WebSocket Gateway  (Rust / Axum)                          │
+│  27 API modules · CORS · Rate limiting · JWT auth middleware    │
+├─────────────────────────────────────────────────────────────────┤
+│  Business Services (18 modules)                                 │
+│  Auth · Games · Wallet · Payment · Payout · Matchmaking         │
+│  Leaderboard · Achievements · Social · Anti-cheat · Email       │
+│  Analytics · Cache · Friends · Invites · Verification           │
+├─────────────────────────────────────────────────────────────────┤
+│  Persistence                                                    │
+│  PostgreSQL (20 migrations) · Redis (sessions, cache, queues)   │
+│  AWS S3 (game builds, replays, assets)                          │
+├─────────────────────────────────────────────────────────────────┤
+│  Game Instances (Developer Code)                                │
+│  Client: Rust + Bevy → WASM (browser) or native binary         │
+│  Server: Rust, server-authoritative, sandboxed (planned gVisor) │
+├─────────────────────────────────────────────────────────────────┤
+│  magnetite-sdk (MIT)                                            │
+│  GameLogic trait · Input/State types · Networking protocol      │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## SDK Quick-Start
+
+```rust
+use magnetite_sdk::*;
+
+struct MyGame { players: HashMap<PlayerId, PlayerState> }
+
+impl GameLogic for MyGame {
+    fn new() -> Self { ... }
+    fn handle_input(&mut self, player: PlayerId, input: Input) { ... }
+    fn tick(&mut self) { ... }
+    fn state(&self) -> GameState { ... }
+    fn players(&self) -> Vec<PlayerId> { ... }
+}
+
+// wasm-bindgen entry point generated by game-template
+```
+
+See [`backend/magnetite-sdk/`](backend/magnetite-sdk/) and
+[`game-template/`](game-template/) for the full starter.
+
+---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

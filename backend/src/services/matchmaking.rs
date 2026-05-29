@@ -1,3 +1,6 @@
+// Matchmaking service — ELO, party matching, and session creation; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -173,7 +176,7 @@ pub async fn find_match(
         }
 
         let avg_skill = (user_skill + candidate_skill) / 2.0;
-        let match_range = SkillRange {
+        let _match_range = SkillRange {
             min: avg_skill - 50.0,
             max: avg_skill + 50.0,
         };
@@ -187,12 +190,18 @@ pub async fn find_match(
         let match_id = Uuid::new_v4();
         let skill_ratings: Vec<f64> = matched_players.iter().map(|p| p.skill_rating).collect();
         let min_skill = skill_ratings.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max_skill = skill_ratings.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let max_skill = skill_ratings
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
 
         Ok(Some(MatchResult {
             match_id,
             player_ids: matched_players.into_iter().map(|p| p.user_id).collect(),
-            skill_range: SkillRange { min: min_skill, max: max_skill },
+            skill_range: SkillRange {
+                min: min_skill,
+                max: max_skill,
+            },
             region: user_region,
             created_at: Utc::now(),
         }))
@@ -251,7 +260,7 @@ pub async fn create_party(
 
 pub async fn match_parties(
     db: &sqlx::PgPool,
-    queue: &MatchmakingQueue,
+    _queue: &MatchmakingQueue,
 ) -> Result<Vec<PartyMatch>> {
     let parties = sqlx::query_as::<_, Party>(
         r#"
@@ -350,7 +359,10 @@ pub async fn match_parties(
                     .chain(matching_parties.iter().map(|p| p.id))
                     .collect(),
                 combined_players: all_players,
-                skill_range: SkillRange { min: min_skill, max: max_skill },
+                skill_range: SkillRange {
+                    min: min_skill,
+                    max: max_skill,
+                },
                 region,
             });
         }
@@ -360,20 +372,15 @@ pub async fn match_parties(
 }
 
 pub async fn get_user_region(db: &sqlx::PgPool, user_id: Uuid) -> Result<String> {
-    let region = sqlx::query_scalar::<_, String>(
-        "SELECT region FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(db)
-    .await?;
+    let region = sqlx::query_scalar::<_, String>("SELECT region FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(db)
+        .await?;
 
     region.ok_or_else(|| AppError::NotFound("User not found".to_string()))
 }
 
-pub fn filter_by_region(
-    players: Vec<QueuedPlayer>,
-    region: String,
-) -> Vec<QueuedPlayer> {
+pub fn filter_by_region(players: Vec<QueuedPlayer>, _region: String) -> Vec<QueuedPlayer> {
     players
 }
 
@@ -465,12 +472,11 @@ pub async fn start_game_session(db: &sqlx::PgPool, r#match: &Match) -> Result<Se
     .execute(db)
     .await?;
 
-    let player_ids: Vec<Uuid> = sqlx::query_scalar::<_, Uuid>(
-        "SELECT user_id FROM match_players WHERE match_id = $1",
-    )
-    .bind(r#match.id)
-    .fetch_all(db)
-    .await?;
+    let player_ids: Vec<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT user_id FROM match_players WHERE match_id = $1")
+            .bind(r#match.id)
+            .fetch_all(db)
+            .await?;
 
     Ok(SessionInfo {
         session_id,
@@ -482,11 +488,7 @@ pub async fn start_game_session(db: &sqlx::PgPool, r#match: &Match) -> Result<Se
     })
 }
 
-pub async fn join_queue(
-    db: &sqlx::PgPool,
-    user_id: Uuid,
-    game_id: Uuid,
-) -> Result<QueueEntry> {
+pub async fn join_queue(db: &sqlx::PgPool, user_id: Uuid, game_id: Uuid) -> Result<QueueEntry> {
     let already_queued = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM matchmaking_queue WHERE user_id = $1 AND game_id = $2 AND ready = false)",
     )
@@ -537,12 +539,10 @@ pub async fn join_queue(
 }
 
 pub async fn leave_queue(db: &sqlx::PgPool, user_id: Uuid) -> Result<bool> {
-    let result = sqlx::query(
-        "DELETE FROM matchmaking_queue WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .execute(db)
-    .await?;
+    let result = sqlx::query("DELETE FROM matchmaking_queue WHERE user_id = $1")
+        .bind(user_id)
+        .execute(db)
+        .await?;
 
     Ok(result.rows_affected() > 0)
 }
@@ -569,7 +569,8 @@ pub async fn get_queue_position(db: &sqlx::PgPool, user_id: Uuid) -> Result<Opti
             )
             .bind(e.joined_at)
             .fetch_one(db)
-            .await? + 1;
+            .await?
+                + 1;
 
             let estimated_wait = Duration::seconds((position as i64) * 30);
 

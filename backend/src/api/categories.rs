@@ -1,15 +1,15 @@
 use axum::{
     extract::{Path, State},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::api::response;
-use crate::error::{Result, AppError};
 use crate::api::games::Game;
+use crate::api::response;
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Category {
@@ -30,8 +30,21 @@ pub struct CategoryWithGameCount {
     pub game_count: i64,
 }
 
-pub async fn list_categories(State(pool): State<PgPool>) -> Result<Json<response::PaginatedResponse<CategoryWithGameCount>>> {
-    let categories: Vec<CategoryWithGameCount> = sqlx::query_as::<_, (Uuid, String, String, Option<String>, Option<String>, i32, i64)>(
+pub async fn list_categories(
+    State(pool): State<PgPool>,
+) -> Result<Json<response::PaginatedResponse<CategoryWithGameCount>>> {
+    let categories: Vec<CategoryWithGameCount> = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            i32,
+            i64,
+        ),
+    >(
         "SELECT c.id, c.name, c.slug, c.icon, c.description, c.sort_order,
                 COUNT(g.id) as game_count
          FROM categories c
@@ -42,13 +55,15 @@ pub async fn list_categories(State(pool): State<PgPool>) -> Result<Json<response
     .fetch_all(&pool)
     .await?
     .into_iter()
-    .map(|(id, name, slug, icon, description, sort_order, game_count)| CategoryWithGameCount {
-        id,
-        name,
-        slug,
-        icon,
-        game_count,
-    })
+    .map(
+        |(id, name, slug, icon, _description, _sort_order, game_count)| CategoryWithGameCount {
+            id,
+            name,
+            slug,
+            icon,
+            game_count,
+        },
+    )
     .collect();
 
     let total = categories.len() as u64;

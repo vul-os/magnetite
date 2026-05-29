@@ -1,3 +1,6 @@
+// Admin API — game approval, user management, platform moderation; platform surface.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
@@ -146,13 +149,11 @@ pub struct MetricsResponse {
 }
 
 async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<()> {
-    let is_admin = sqlx::query_scalar::<_, bool>(
-        "SELECT is_admin FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let is_admin = sqlx::query_scalar::<_, bool>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     if !is_admin {
         return Err(AppError::Forbidden("Admin access required".to_string()));
@@ -344,7 +345,11 @@ pub async fn approve_game(
 ) -> Result<Json<AdminGame>> {
     require_admin(&pool, user_id).await?;
 
-    let new_status = if payload.approved { "approved" } else { "rejected" };
+    let new_status = if payload.approved {
+        "approved"
+    } else {
+        "rejected"
+    };
 
     let game = sqlx::query_as::<_, AdminGame>(
         "UPDATE games SET status = $1, reviewed_at = NOW(), reviewed_by = $2, updated_at = NOW()
@@ -429,21 +434,19 @@ pub async fn revenue_dashboard(
     .fetch_one(&pool)
     .await?;
 
-    let active_users = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM users WHERE banned_at IS NULL",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let active_users =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE banned_at IS NULL")
+            .fetch_one(&pool)
+            .await?;
 
     let total_games = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM games")
         .fetch_one(&pool)
         .await?;
 
-    let pending_payouts = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM payouts WHERE status = 'pending'",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let pending_payouts =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payouts WHERE status = 'pending'")
+            .fetch_one(&pool)
+            .await?;
 
     Ok(Json(RevenueDashboard {
         total_platform_revenue,
@@ -512,7 +515,9 @@ pub async fn process_payout(
     .unwrap_or(Decimal::ZERO);
 
     if user_balance < payload.amount {
-        return Err(AppError::InsufficientFunds("Insufficient balance for payout".to_string()));
+        return Err(AppError::InsufficientFunds(
+            "Insufficient balance for payout".to_string(),
+        ));
     }
 
     sqlx::query(
@@ -607,11 +612,10 @@ pub async fn get_metrics(
     .fetch_one(&pool)
     .await?;
 
-    let pending_payouts = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM payouts WHERE status = 'pending'",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let pending_payouts =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payouts WHERE status = 'pending'")
+            .fetch_one(&pool)
+            .await?;
 
     Ok(Json(MetricsResponse {
         total_users,
@@ -761,11 +765,10 @@ pub async fn analytics_overview(
     .fetch_one(&pool)
     .await?;
 
-    let new_users_today = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM users WHERE created_at > CURRENT_DATE",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let new_users_today =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE created_at > CURRENT_DATE")
+            .fetch_one(&pool)
+            .await?;
 
     Ok(Json(AnalyticsOverview {
         total_users,
@@ -971,17 +974,15 @@ pub async fn analytics_games(
     .fetch_all(&pool)
     .await?;
 
-    let total_approved = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM games WHERE status = 'approved'",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let total_approved =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM games WHERE status = 'approved'")
+            .fetch_one(&pool)
+            .await?;
 
-    let total_pending = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM games WHERE status = 'pending'",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let total_pending =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM games WHERE status = 'pending'")
+            .fetch_one(&pool)
+            .await?;
 
     Ok(Json(GameAnalytics {
         games_by_status,
@@ -1107,30 +1108,153 @@ pub async fn seed_test_data(
     .await?;
 
     let status = StatusCode::CREATED;
-    Ok((status, Json(serde_json::json!({ "message": "Test data seeded successfully" }))))
+    Ok((
+        status,
+        Json(serde_json::json!({ "message": "Test data seeded successfully" })),
+    ))
 }
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
-        .route("/users", get(list_users).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/users/:id", get(get_user).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/users/:id/role", put(update_user_role).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/users/:id/ban", put(ban_user).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games", get(list_games).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games/:id/review", put(review_game).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games/:id/approve", put(approve_game).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/games/:id/feature", put(feature_game).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/revenue", get(revenue_dashboard).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/transactions", get(list_transactions).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/payouts/process", post(process_payout).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/payouts/:id/cancel", post(cancel_payout).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/health", get(health_check).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/metrics", get(get_metrics).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/seed", post(seed_test_data).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/analytics/overview", get(analytics_overview).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/analytics/revenue", get(analytics_revenue).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/analytics/users", get(analytics_users).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/analytics/games", get(analytics_games).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/analytics/performance", get(analytics_performance).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/users",
+            get(list_users).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/users/:id",
+            get(get_user).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/users/:id/role",
+            put(update_user_role).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/users/:id/ban",
+            put(ban_user).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games",
+            get(list_games).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/review",
+            put(review_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/approve",
+            put(approve_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/feature",
+            put(feature_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/revenue",
+            get(revenue_dashboard).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/transactions",
+            get(list_transactions).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/payouts/process",
+            post(process_payout).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/payouts/:id/cancel",
+            post(cancel_payout).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/health",
+            get(health_check).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/metrics",
+            get(get_metrics).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/seed",
+            post(seed_test_data).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/analytics/overview",
+            get(analytics_overview).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/analytics/revenue",
+            get(analytics_revenue).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/analytics/users",
+            get(analytics_users).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/analytics/games",
+            get(analytics_games).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/analytics/performance",
+            get(analytics_performance).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

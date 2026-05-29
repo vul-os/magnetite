@@ -1,3 +1,6 @@
+// Analytics service — platform surface area for developer dashboards, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -212,10 +215,7 @@ pub async fn get_game_analytics(
     })
 }
 
-pub async fn get_revenue_breakdown(
-    db: &sqlx::PgPool,
-    game_id: Uuid,
-) -> Result<RevenueBreakdown> {
+pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<RevenueBreakdown> {
     let total_revenue = sqlx::query_as::<_, TransactionSum>(
         r#"
         SELECT COALESCE(SUM(amount), 0) as total
@@ -313,10 +313,7 @@ pub async fn get_player_retention(
     game_id: Uuid,
     cohort_date: NaiveDate,
 ) -> Result<RetentionData> {
-    let cohort_start = cohort_date
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_utc();
+    let cohort_start = cohort_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
     let cohort_end = (cohort_date + chrono::Duration::days(1))
         .and_hms_opt(0, 0, 0)
         .unwrap()
@@ -401,19 +398,15 @@ pub async fn get_dashboard_summary(
     db: &sqlx::PgPool,
     developer_id: Uuid,
 ) -> Result<DashboardSummary> {
-    let games = sqlx::query_scalar::<_, i32>(
-        "SELECT COUNT(*) FROM games WHERE developer_id = $1",
-    )
-    .bind(developer_id)
-    .fetch_one(db)
-    .await?;
+    let games = sqlx::query_scalar::<_, i32>("SELECT COUNT(*) FROM games WHERE developer_id = $1")
+        .bind(developer_id)
+        .fetch_one(db)
+        .await?;
 
-    let game_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM games WHERE developer_id = $1",
-    )
-    .bind(developer_id)
-    .fetch_all(db)
-    .await?;
+    let game_ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM games WHERE developer_id = $1")
+        .bind(developer_id)
+        .fetch_all(db)
+        .await?;
 
     if game_ids.is_empty() {
         return Ok(DashboardSummary {
@@ -464,7 +457,10 @@ pub async fn get_dashboard_summary(
     .total
     .unwrap_or(Decimal::ZERO);
 
-    let top_game = get_top_performing_games(db, developer_id, 1).await?.into_iter().next();
+    let top_game = get_top_performing_games(db, developer_id, 1)
+        .await?
+        .into_iter()
+        .next();
 
     Ok(DashboardSummary {
         developer_id,

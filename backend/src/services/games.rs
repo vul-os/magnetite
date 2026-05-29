@@ -1,3 +1,6 @@
+// Games service — game metadata, categories, play sessions; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -64,13 +67,11 @@ pub struct PlatformSettings {
 }
 
 async fn get_setting(pool: &sqlx::PgPool, key: &str) -> Result<String, crate::error::AppError> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT value FROM platform_settings WHERE key = $1",
-    )
-    .bind(key)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| crate::error::AppError::NotFound(format!("Setting {} not found", key)))
+    sqlx::query_scalar::<_, String>("SELECT value FROM platform_settings WHERE key = $1")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| crate::error::AppError::NotFound(format!("Setting {} not found", key)))
 }
 
 pub async fn get_platform_settings(
@@ -79,7 +80,9 @@ pub async fn get_platform_settings(
     let platform_fee_percentage = get_setting(db, "platform_fee_percentage")
         .await?
         .parse::<Decimal>()
-        .map_err(|_| crate::error::AppError::BadRequest("Invalid platform_fee_percentage".to_string()))?;
+        .map_err(|_| {
+            crate::error::AppError::BadRequest("Invalid platform_fee_percentage".to_string())
+        })?;
 
     let min_payout_amount = get_setting(db, "min_payout_amount")
         .await?
@@ -89,12 +92,16 @@ pub async fn get_platform_settings(
     let max_deposit_amount = get_setting(db, "max_deposit_amount")
         .await?
         .parse::<Decimal>()
-        .map_err(|_| crate::error::AppError::BadRequest("Invalid max_deposit_amount".to_string()))?;
+        .map_err(|_| {
+            crate::error::AppError::BadRequest("Invalid max_deposit_amount".to_string())
+        })?;
 
     let max_withdraw_amount = get_setting(db, "max_withdraw_amount")
         .await?
         .parse::<Decimal>()
-        .map_err(|_| crate::error::AppError::BadRequest("Invalid max_withdraw_amount".to_string()))?;
+        .map_err(|_| {
+            crate::error::AppError::BadRequest("Invalid max_withdraw_amount".to_string())
+        })?;
 
     let maintenance_mode = get_setting(db, "maintenance_mode")
         .await?
@@ -104,7 +111,9 @@ pub async fn get_platform_settings(
     let registration_enabled = get_setting(db, "registration_enabled")
         .await?
         .parse::<bool>()
-        .map_err(|_| crate::error::AppError::BadRequest("Invalid registration_enabled".to_string()))?;
+        .map_err(|_| {
+            crate::error::AppError::BadRequest("Invalid registration_enabled".to_string())
+        })?;
 
     Ok(PlatformSettings {
         platform_fee_percentage,
@@ -116,9 +125,7 @@ pub async fn get_platform_settings(
     })
 }
 
-pub async fn get_all_games(
-    _db: &sqlx::PgPool,
-) -> Result<Vec<Game>, crate::error::AppError> {
+pub async fn get_all_games(_db: &sqlx::PgPool) -> Result<Vec<Game>, crate::error::AppError> {
     todo!()
 }
 

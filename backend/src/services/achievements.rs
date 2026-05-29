@@ -1,3 +1,6 @@
+// Achievement service — unlock tracking and leaderboard integration; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -72,17 +75,24 @@ impl AchievementService {
         Self
     }
 
-    pub async fn get_user_achievements(&self, pool: &PgPool, user_id: Uuid) -> Result<Vec<AchievementWithProgress>> {
-        let achievements = sqlx::query_as::<_, (
-            Uuid,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            i32,
-            i32,
-            Option<DateTime<Utc>>,
-        )>(
+    pub async fn get_user_achievements(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<AchievementWithProgress>> {
+        let achievements = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                i32,
+                i32,
+                Option<DateTime<Utc>>,
+            ),
+        >(
             r#"
             SELECT
                 a.id, a.name, a.description, a.icon, a.category, a.threshold,
@@ -184,13 +194,21 @@ impl AchievementService {
         }
     }
 
-    pub async fn check_achievements(&self, pool: &PgPool, user_id: Uuid, event: &AchievementEvent) -> Result<Vec<Achievement>> {
+    pub async fn check_achievements(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        event: &AchievementEvent,
+    ) -> Result<Vec<Achievement>> {
         let mut unlocked_achievements = Vec::new();
 
         match event {
             AchievementEvent::GamePlayed { game_id: _ } => {
                 if let Some(achievement) = self.get_achievement_by_slug(pool, "first-game").await? {
-                    if let Some(unlocked) = self.update_progress(pool, user_id, achievement.id, 1).await? {
+                    if let Some(unlocked) = self
+                        .update_progress(pool, user_id, achievement.id, 1)
+                        .await?
+                    {
                         unlocked_achievements.push(Achievement {
                             id: unlocked.id,
                             name: unlocked.name,
@@ -203,8 +221,13 @@ impl AchievementService {
                     }
                 }
                 if let Some(achievement) = self.get_achievement_by_slug(pool, "century").await? {
-                    let current = self.get_user_progress(pool, user_id, achievement.id).await?;
-                    if let Some(unlocked) = self.update_progress(pool, user_id, achievement.id, current + 1).await? {
+                    let current = self
+                        .get_user_progress(pool, user_id, achievement.id)
+                        .await?;
+                    if let Some(unlocked) = self
+                        .update_progress(pool, user_id, achievement.id, current + 1)
+                        .await?
+                    {
                         unlocked_achievements.push(Achievement {
                             id: unlocked.id,
                             name: unlocked.name,
@@ -217,9 +240,16 @@ impl AchievementService {
                     }
                 }
             }
-            AchievementEvent::ScoreSubmitted { game_id: _, score: _ } => {
-                if let Some(achievement) = self.get_achievement_by_slug(pool, "high-roller").await? {
-                    if let Some(unlocked) = self.update_progress(pool, user_id, achievement.id, 1).await? {
+            AchievementEvent::ScoreSubmitted {
+                game_id: _,
+                score: _,
+            } => {
+                if let Some(achievement) = self.get_achievement_by_slug(pool, "high-roller").await?
+                {
+                    if let Some(unlocked) = self
+                        .update_progress(pool, user_id, achievement.id, 1)
+                        .await?
+                    {
                         unlocked_achievements.push(Achievement {
                             id: unlocked.id,
                             name: unlocked.name,
@@ -233,9 +263,17 @@ impl AchievementService {
                 }
             }
             AchievementEvent::FriendAdded => {
-                if let Some(achievement) = self.get_achievement_by_slug(pool, "social-butterfly").await? {
-                    let current = self.get_user_progress(pool, user_id, achievement.id).await?;
-                    if let Some(unlocked) = self.update_progress(pool, user_id, achievement.id, current + 1).await? {
+                if let Some(achievement) = self
+                    .get_achievement_by_slug(pool, "social-butterfly")
+                    .await?
+                {
+                    let current = self
+                        .get_user_progress(pool, user_id, achievement.id)
+                        .await?;
+                    if let Some(unlocked) = self
+                        .update_progress(pool, user_id, achievement.id, current + 1)
+                        .await?
+                    {
                         unlocked_achievements.push(Achievement {
                             id: unlocked.id,
                             name: unlocked.name,
@@ -262,7 +300,12 @@ impl AchievementService {
             .bind(NotificationType::AchievementUnlocked.as_str())
             .bind(format!("Achievement Unlocked: {}", achievement.name))
             .bind("Congratulations on unlocking this achievement!")
-            .bind(achievement.icon.as_ref().map(|icon| serde_json::json!({ "achievement_icon": icon })))
+            .bind(
+                achievement
+                    .icon
+                    .as_ref()
+                    .map(|icon| serde_json::json!({ "achievement_icon": icon })),
+            )
             .fetch_one(pool)
             .await
             .map_err(|e| AppError::Database(e.to_string()))?;
@@ -273,7 +316,11 @@ impl AchievementService {
         Ok(unlocked_achievements)
     }
 
-    pub async fn get_leaderboard(&self, pool: &PgPool, limit: usize) -> Result<Vec<AchievementLeaderboardEntry>> {
+    pub async fn get_leaderboard(
+        &self,
+        pool: &PgPool,
+        limit: usize,
+    ) -> Result<Vec<AchievementLeaderboardEntry>> {
         let entries = sqlx::query_as::<_, (Uuid, String, i64)>(
             r#"
             SELECT u.id, u.username, COUNT(ua.id) as achievement_count
@@ -291,18 +338,24 @@ impl AchievementService {
         let leaderboard = entries
             .into_iter()
             .enumerate()
-            .map(|(i, (user_id, username, achievement_count))| AchievementLeaderboardEntry {
-                rank: (i + 1) as i32,
-                user_id,
-                username,
-                achievement_count,
-            })
+            .map(
+                |(i, (user_id, username, achievement_count))| AchievementLeaderboardEntry {
+                    rank: (i + 1) as i32,
+                    user_id,
+                    username,
+                    achievement_count,
+                },
+            )
             .collect();
 
         Ok(leaderboard)
     }
 
-    async fn get_achievement_by_slug(&self, pool: &PgPool, slug: &str) -> Result<Option<Achievement>> {
+    async fn get_achievement_by_slug(
+        &self,
+        pool: &PgPool,
+        slug: &str,
+    ) -> Result<Option<Achievement>> {
         let achievement = sqlx::query_as::<_, Achievement>(
             "SELECT id, name, description, icon, category, threshold, created_at FROM achievements WHERE LOWER(REPLACE(name, ' ', '-')) = $1",
         )
@@ -313,7 +366,12 @@ impl AchievementService {
         Ok(achievement)
     }
 
-    async fn get_user_progress(&self, pool: &PgPool, user_id: Uuid, achievement_id: Uuid) -> Result<i32> {
+    async fn get_user_progress(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        achievement_id: Uuid,
+    ) -> Result<i32> {
         let result = sqlx::query_scalar::<_, i32>(
             "SELECT progress FROM user_achievements WHERE user_id = $1 AND achievement_id = $2",
         )
@@ -334,19 +392,41 @@ impl Default for AchievementService {
 
 pub async fn seed_default_achievements(pool: &PgPool) -> Result<()> {
     let achievements = vec![
-        ("First Game", "Play your first game", Some("trophy"), Some("games"), 1),
-        ("Century", "Play 100 games", Some("medal"), Some("games"), 100),
-        ("High Roller", "Get top 10 on any leaderboard", Some("crown"), Some("leaderboard"), 1),
-        ("Social Butterfly", "Add 10 friends", Some("users"), Some("social"), 10),
+        (
+            "First Game",
+            "Play your first game",
+            Some("trophy"),
+            Some("games"),
+            1,
+        ),
+        (
+            "Century",
+            "Play 100 games",
+            Some("medal"),
+            Some("games"),
+            100,
+        ),
+        (
+            "High Roller",
+            "Get top 10 on any leaderboard",
+            Some("crown"),
+            Some("leaderboard"),
+            1,
+        ),
+        (
+            "Social Butterfly",
+            "Add 10 friends",
+            Some("users"),
+            Some("social"),
+            10,
+        ),
     ];
 
     for (name, description, icon, category, threshold) in achievements {
-        let existing = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM achievements WHERE name = $1",
-        )
-        .bind(name)
-        .fetch_optional(pool)
-        .await?;
+        let existing = sqlx::query_scalar::<_, Uuid>("SELECT id FROM achievements WHERE name = $1")
+            .bind(name)
+            .fetch_optional(pool)
+            .await?;
 
         if existing.is_none() {
             sqlx::query(

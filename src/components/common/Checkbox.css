@@ -1,115 +1,67 @@
-.checkbox-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-}
+/*
+ * Checkbox — Industrial Magnetite
+ */
 
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  user-select: none;
-}
+.checkbox-wrapper  { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 
-.checkbox-input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
+.checkbox-label    { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.checkbox-input    { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
 
 .checkbox-custom {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   background: var(--color-bg-secondary);
-  border: 2px solid var(--color-border);
-  border-radius: 4px;
-  transition: all var(--transition-fast);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
   flex-shrink: 0;
 }
 
 .checkbox-checkmark {
   opacity: 0;
-  color: var(--color-white);
+  color: #000;
   transform: scale(0.5);
-  transition: all var(--transition-fast);
+  transition: opacity var(--transition-fast), transform var(--transition-fast) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .checkbox-text {
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-primary);
   transition: color var(--transition-fast);
 }
 
-/* Checked state */
+/* Checked */
 .checkbox-input:checked + .checkbox-custom {
   background: var(--color-accent);
   border-color: var(--color-accent);
 }
-
 .checkbox-input:checked + .checkbox-custom .checkbox-checkmark {
   opacity: 1;
   transform: scale(1);
 }
 
-/* Focus state */
+/* Focus */
 .checkbox-input:focus-visible + .checkbox-custom {
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+  box-shadow: var(--shadow-glow-focus);
   border-color: var(--color-accent);
 }
 
-/* Hover state */
-.checkbox-label:hover .checkbox-custom {
-  border-color: var(--color-accent);
-}
+/* Hover */
+.checkbox-label:hover .checkbox-custom           { border-color: var(--color-accent); }
+.checkbox-input:checked + .checkbox-custom       { border-color: var(--color-accent); }
 
-.checkbox-input:checked + .checkbox-custom {
-  border-color: var(--color-accent);
-}
+/* Error */
+.checkbox-error .checkbox-custom { border-color: var(--color-error); }
+.checkbox-error .checkbox-text   { color: var(--color-error); }
+.checkbox-error .checkbox-input:focus-visible + .checkbox-custom { box-shadow: 0 0 0 3px rgba(255, 84, 104, 0.15); }
+.checkbox-error-text { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-error); display: flex; align-items: center; gap: 4px; }
 
-/* Error state */
-.checkbox-error .checkbox-custom {
-  border-color: var(--color-error);
-}
-
-.checkbox-error .checkbox-text {
-  color: var(--color-error);
-}
-
-.checkbox-error .checkbox-input:focus-visible + .checkbox-custom {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-}
-
-.checkbox-error-text {
-  font-size: 13px;
-  color: var(--color-error);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Disabled state */
-.checkbox-disabled .checkbox-label {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.checkbox-disabled .checkbox-custom {
-  background: var(--color-bg-primary);
-  border-color: var(--color-border);
-}
-
-.checkbox-disabled .checkbox-text {
-  color: var(--color-text-muted);
-}
-
-.checkbox-disabled .checkbox-label:hover .checkbox-custom {
-  border-color: var(--color-border);
-}
+/* Disabled */
+.checkbox-disabled .checkbox-label         { cursor: not-allowed; opacity: 0.55; }
+.checkbox-disabled .checkbox-custom        { background: var(--color-bg-primary); border-color: var(--color-border); }
+.checkbox-disabled .checkbox-text          { color: var(--color-text-muted); }
+.checkbox-disabled .checkbox-label:hover .checkbox-custom { border-color: var(--color-border); }

@@ -1,3 +1,6 @@
+// Invite service — game session invites; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -74,44 +77,37 @@ impl InviteService {
     }
 
     async fn get_user_email(db: &sqlx::PgPool, user_id: Uuid) -> Result<String> {
-        sqlx::query_scalar::<_, String>(
-            "SELECT email FROM users WHERE id = $1",
-        )
-        .bind(user_id)
-        .fetch_optional(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))
+        sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
 
     async fn get_user_username(db: &sqlx::PgPool, user_id: Uuid) -> Result<String> {
-        sqlx::query_scalar::<_, String>(
-            "SELECT username FROM users WHERE id = $1",
-        )
-        .bind(user_id)
-        .fetch_optional(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))
+        sqlx::query_scalar::<_, String>("SELECT username FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
 
     async fn game_exists(db: &sqlx::PgPool, game_id: Uuid) -> Result<bool> {
-        let game = sqlx::query_as::<_, (Uuid,)>(
-            "SELECT id FROM games WHERE id = $1 AND active = true",
-        )
-        .bind(game_id)
-        .fetch_optional(db)
-        .await?;
+        let game =
+            sqlx::query_as::<_, (Uuid,)>("SELECT id FROM games WHERE id = $1 AND active = true")
+                .bind(game_id)
+                .fetch_optional(db)
+                .await?;
 
         Ok(game.is_some())
     }
 
     async fn get_game_title(db: &sqlx::PgPool, game_id: Uuid) -> Result<String> {
-        sqlx::query_scalar::<_, String>(
-            "SELECT title FROM games WHERE id = $1",
-        )
-        .bind(game_id)
-        .fetch_optional(db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Game not found".to_string()))
+        sqlx::query_scalar::<_, String>("SELECT title FROM games WHERE id = $1")
+            .bind(game_id)
+            .fetch_optional(db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Game not found".to_string()))
     }
 
     pub async fn create_invite(
@@ -123,15 +119,21 @@ impl InviteService {
         game_id: Uuid,
     ) -> Result<GameInvite> {
         if from_user_id == to_user_id {
-            return Err(AppError::BadRequest("Cannot invite yourself to game".to_string()));
+            return Err(AppError::BadRequest(
+                "Cannot invite yourself to game".to_string(),
+            ));
         }
 
         if !Self::are_friends(db, from_user_id, to_user_id).await? {
-            return Err(AppError::Forbidden("Can only invite friends to games".to_string()));
+            return Err(AppError::Forbidden(
+                "Can only invite friends to games".to_string(),
+            ));
         }
 
         if Self::is_blocked(db, from_user_id, to_user_id).await? {
-            return Err(AppError::Forbidden("Cannot invite blocked user".to_string()));
+            return Err(AppError::Forbidden(
+                "Cannot invite blocked user".to_string(),
+            ));
         }
 
         if !Self::game_exists(db, game_id).await? {
@@ -178,7 +180,10 @@ impl InviteService {
             from_username, game_title
         );
 
-        if let Err(e) = email_service.send_email(&to_email, &subject, &text, &html).await {
+        if let Err(e) = email_service
+            .send_email(&to_email, &subject, &text, &html)
+            .await
+        {
             tracing::warn!("Failed to send invite email: {}", e);
         }
 
@@ -191,7 +196,10 @@ impl InviteService {
         .bind(to_user_id)
         .bind(NotificationType::GameInvite.as_str())
         .bind("Game Invite")
-        .bind(format!("{} invited you to play {}", from_username, game_title))
+        .bind(format!(
+            "{} invited you to play {}",
+            from_username, game_title
+        ))
         .bind(serde_json::json!({ "game_id": game_id, "invite_id": invite_id }))
         .fetch_one(db)
         .await
@@ -219,12 +227,10 @@ impl InviteService {
         .await?
         .ok_or_else(|| AppError::NotFound("Invite not found".to_string()))?;
 
-        sqlx::query(
-            "UPDATE game_invites SET status = 'accepted' WHERE id = $1",
-        )
-        .bind(invite_id)
-        .execute(db)
-        .await?;
+        sqlx::query("UPDATE game_invites SET status = 'accepted' WHERE id = $1")
+            .bind(invite_id)
+            .execute(db)
+            .await?;
 
         let session_id = Uuid::new_v4();
         let now = Utc::now();
@@ -320,8 +326,8 @@ impl InviteService {
 
         let invite_list: Vec<GameInviteWithDetails> = invites
             .into_iter()
-            .map(|(id, from_user_id, from_username, from_avatar_url, to_user_id, to_username, to_avatar_url, game_id, game_title, status, created_at)| {
-                GameInviteWithDetails {
+            .map(
+                |(
                     id,
                     from_user_id,
                     from_username,
@@ -333,8 +339,22 @@ impl InviteService {
                     game_title,
                     status,
                     created_at,
-                }
-            })
+                )| {
+                    GameInviteWithDetails {
+                        id,
+                        from_user_id,
+                        from_username,
+                        from_avatar_url,
+                        to_user_id,
+                        to_username,
+                        to_avatar_url,
+                        game_id,
+                        game_title,
+                        status,
+                        created_at,
+                    }
+                },
+            )
             .collect();
 
         Ok(invite_list)
@@ -365,8 +385,8 @@ impl InviteService {
 
         let invite_list: Vec<GameInviteWithDetails> = invites
             .into_iter()
-            .map(|(id, from_user_id, from_username, from_avatar_url, to_user_id, to_username, to_avatar_url, game_id, game_title, status, created_at)| {
-                GameInviteWithDetails {
+            .map(
+                |(
                     id,
                     from_user_id,
                     from_username,
@@ -378,8 +398,22 @@ impl InviteService {
                     game_title,
                     status,
                     created_at,
-                }
-            })
+                )| {
+                    GameInviteWithDetails {
+                        id,
+                        from_user_id,
+                        from_username,
+                        from_avatar_url,
+                        to_user_id,
+                        to_username,
+                        to_avatar_url,
+                        game_id,
+                        game_title,
+                        status,
+                        created_at,
+                    }
+                },
+            )
             .collect();
 
         Ok(invite_list)

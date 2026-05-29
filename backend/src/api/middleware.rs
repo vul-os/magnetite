@@ -1,3 +1,6 @@
+// Auth/admin middleware helpers — optional_auth and guard functions; platform surface.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Request, State},
     http::HeaderMap,
@@ -5,7 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -31,7 +34,9 @@ pub fn extract_token_from_header(headers: &HeaderMap) -> Result<String> {
         .map_err(|_| AppError::Unauthorized("Invalid Authorization header".to_string()))?;
 
     if !auth_header.starts_with(BEARER_PREFIX) {
-        return Err(AppError::Unauthorized("Invalid Authorization header format".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid Authorization header format".to_string(),
+        ));
     }
 
     Ok(auth_header[BEARER_PREFIX.len()..].to_string())
@@ -72,7 +77,7 @@ pub async fn optional_auth(headers: HeaderMap) -> Option<Uuid> {
     Uuid::parse_str(&claims.sub).ok()
 }
 
-pub async fn admin_guard(user_id: Uuid) -> Result<()> {
+pub async fn admin_guard(_user_id: Uuid) -> Result<()> {
     Err(AppError::Forbidden("Admin access required".to_string()))
 }
 

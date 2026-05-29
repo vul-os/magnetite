@@ -1,3 +1,6 @@
+// Tournament API — bracket management, match results, registration; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Extension, Path, Query, State},
     middleware::from_fn_with_state,
@@ -159,12 +162,10 @@ pub async fn list_tournaments(
         .fetch_all(&pool)
         .await?;
 
-        let total: i64 = sqlx::query_scalar(
-            &format!(
-                "SELECT COUNT(*) FROM tournaments WHERE game_id = $1 {}",
-                status_filter
-            ),
-        )
+        let total: i64 = sqlx::query_scalar(&format!(
+            "SELECT COUNT(*) FROM tournaments WHERE game_id = $1 {}",
+            status_filter
+        ))
         .bind(game_id)
         .fetch_one(&pool)
         .await?;
@@ -189,9 +190,10 @@ pub async fn list_tournaments(
         .fetch_all(&pool)
         .await?;
 
-        let total: i64 = sqlx::query_scalar(
-            &format!("SELECT COUNT(*) FROM tournaments WHERE 1=1 {}", status_filter),
-        )
+        let total: i64 = sqlx::query_scalar(&format!(
+            "SELECT COUNT(*) FROM tournaments WHERE 1=1 {}",
+            status_filter
+        ))
         .fetch_one(&pool)
         .await?;
 
@@ -243,11 +245,12 @@ pub async fn create_tournament(
     Extension(_user_id): Extension<Uuid>,
     Json(payload): Json<CreateTournamentRequest>,
 ) -> Result<Json<crate::api::response::ApiResponse<Tournament>>> {
-    let _game = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM games WHERE id = $1 AND active = true")
-        .bind(payload.game_id)
-        .fetch_optional(&pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+    let _game =
+        sqlx::query_as::<_, (Uuid,)>("SELECT id FROM games WHERE id = $1 AND active = true")
+            .bind(payload.game_id)
+            .fetch_optional(&pool)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
 
     let tournament_id = Uuid::new_v4();
     let tournament = sqlx::query_as::<_, Tournament>(
@@ -284,11 +287,19 @@ pub async fn update_tournament(
     .ok_or_else(|| AppError::NotFound("Tournament not found".to_string()))?;
 
     if existing.status != "Draft" && existing.status != "Registration" {
-        return Err(AppError::BadRequest("Tournament cannot be updated in current state".to_string()));
+        return Err(AppError::BadRequest(
+            "Tournament cannot be updated in current state".to_string(),
+        ));
     }
 
     if let Some(ref status) = payload.status {
-        let valid_statuses = ["Draft", "Registration", "InProgress", "Completed", "Cancelled"];
+        let valid_statuses = [
+            "Draft",
+            "Registration",
+            "InProgress",
+            "Completed",
+            "Cancelled",
+        ];
         if !valid_statuses.contains(&status.as_str()) {
             return Err(AppError::Validation("Invalid status value".to_string()));
         }
@@ -334,7 +345,9 @@ pub async fn register_for_tournament(
     .ok_or_else(|| AppError::NotFound("Tournament not found".to_string()))?;
 
     if tournament.status != "Registration" {
-        return Err(AppError::BadRequest("Tournament is not open for registration".to_string()));
+        return Err(AppError::BadRequest(
+            "Tournament is not open for registration".to_string(),
+        ));
     }
 
     let current_count: i64 = sqlx::query_scalar(
@@ -379,7 +392,9 @@ pub async fn start_tournament(
     .ok_or_else(|| AppError::NotFound("Tournament not found".to_string()))?;
 
     if tournament.status != "Registration" {
-        return Err(AppError::BadRequest("Tournament must be in Registration status to start".to_string()));
+        return Err(AppError::BadRequest(
+            "Tournament must be in Registration status to start".to_string(),
+        ));
     }
 
     let participants: Vec<(Uuid,)> = sqlx::query_as(
@@ -390,7 +405,9 @@ pub async fn start_tournament(
     .await?;
 
     if participants.len() < 2 {
-        return Err(AppError::BadRequest("Tournament needs at least 2 participants to start".to_string()));
+        return Err(AppError::BadRequest(
+            "Tournament needs at least 2 participants to start".to_string(),
+        ));
     }
 
     let num_players = participants.len() as i32;
@@ -441,7 +458,9 @@ pub async fn submit_match_result(
     .ok_or_else(|| AppError::NotFound("Tournament not found".to_string()))?;
 
     if tournament.status != "InProgress" {
-        return Err(AppError::BadRequest("Tournament is not in progress".to_string()));
+        return Err(AppError::BadRequest(
+            "Tournament is not in progress".to_string(),
+        ));
     }
 
     let tournament_match = sqlx::query_as::<_, TournamentMatch>(
@@ -462,7 +481,9 @@ pub async fn submit_match_result(
     let valid_player = (tournament_match.player1_id == Some(user_id))
         || (tournament_match.player2_id == Some(user_id));
     if !valid_player {
-        return Err(AppError::Forbidden("You are not a participant in this match".to_string()));
+        return Err(AppError::Forbidden(
+            "You are not a participant in this match".to_string(),
+        ));
     }
 
     let updated_match = sqlx::query_as::<_, TournamentMatch>(
@@ -489,11 +510,41 @@ pub async fn submit_match_result(
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(list_tournaments))
-        .route("/", post(create_tournament).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/",
+            post(create_tournament).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .route("/:id", get(get_tournament))
-        .route("/:id", put(update_tournament).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id/register", post(register_for_tournament).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id/start", post(start_tournament).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id/match/:match_id/result", post(submit_match_result).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/:id",
+            put(update_tournament).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id/register",
+            post(register_for_tournament).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id/start",
+            post(start_tournament).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id/match/:match_id/result",
+            post(submit_match_result).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

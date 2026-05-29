@@ -1,3 +1,6 @@
+// Email service — transactional emails via Resend or SMTP; platform surface, not yet wired.
+#![allow(dead_code)]
+
 pub struct EmailService {
     from_address: String,
     from_name: String,
@@ -8,7 +11,14 @@ pub struct EmailService {
 }
 
 impl EmailService {
-    pub fn new(from_address: String, from_name: String, smtp_host: String, smtp_port: u16, username: String, password: String) -> Self {
+    pub fn new(
+        from_address: String,
+        from_name: String,
+        smtp_host: String,
+        smtp_port: u16,
+        username: String,
+        password: String,
+    ) -> Self {
         Self {
             from_address,
             from_name,
@@ -30,7 +40,13 @@ impl EmailService {
         }
     }
 
-    pub async fn send_email(&self, to: &str, subject: &str, text: &str, html: &str) -> Result<(), crate::error::AppError> {
+    pub async fn send_email(
+        &self,
+        to: &str,
+        subject: &str,
+        _text: &str,
+        _html: &str,
+    ) -> Result<(), crate::error::AppError> {
         tracing::info!("Email would be sent to {} with subject: {}", to, subject);
         tracing::debug!("From: {} <{}>", self.from_name, self.from_address);
         Ok(())

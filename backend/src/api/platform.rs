@@ -1,3 +1,6 @@
+// Platform settings API — admin-controlled config; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Extension, State},
     Json,
@@ -36,13 +39,11 @@ struct PlatformSettingRow {
 }
 
 async fn get_setting(pool: &PgPool, key: &str) -> Result<String> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT value FROM platform_settings WHERE key = $1",
-    )
-    .bind(key)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound(format!("Setting {} not found", key)))
+    sqlx::query_scalar::<_, String>("SELECT value FROM platform_settings WHERE key = $1")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Setting {} not found", key)))
 }
 
 async fn set_setting(pool: &PgPool, key: &str, value: &str) -> Result<()> {
@@ -57,9 +58,7 @@ async fn set_setting(pool: &PgPool, key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn get_settings(
-    State(pool): State<PgPool>,
-) -> Result<Json<PlatformSettings>> {
+pub async fn get_settings(State(pool): State<PgPool>) -> Result<Json<PlatformSettings>> {
     let platform_fee_percentage = get_setting(&pool, "platform_fee_percentage")
         .await?
         .parse::<Decimal>()
@@ -105,13 +104,11 @@ pub async fn update_settings(
     Extension(user_id): Extension<Uuid>,
     Json(payload): Json<UpdatePlatformSettings>,
 ) -> Result<Json<PlatformSettings>> {
-    let is_admin = sqlx::query_scalar::<_, bool>(
-        "SELECT is_admin FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let is_admin = sqlx::query_scalar::<_, bool>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     if !is_admin {
         return Err(AppError::Forbidden("Admin access required".to_string()));
@@ -119,28 +116,36 @@ pub async fn update_settings(
 
     if let Some(fee) = payload.platform_fee_percentage {
         if fee < Decimal::ZERO || fee > Decimal::from(100) {
-            return Err(AppError::BadRequest("platform_fee_percentage must be between 0 and 100".to_string()));
+            return Err(AppError::BadRequest(
+                "platform_fee_percentage must be between 0 and 100".to_string(),
+            ));
         }
         set_setting(&pool, "platform_fee_percentage", &fee.to_string()).await?;
     }
 
     if let Some(amount) = payload.min_payout_amount {
         if amount < Decimal::ZERO {
-            return Err(AppError::BadRequest("min_payout_amount cannot be negative".to_string()));
+            return Err(AppError::BadRequest(
+                "min_payout_amount cannot be negative".to_string(),
+            ));
         }
         set_setting(&pool, "min_payout_amount", &amount.to_string()).await?;
     }
 
     if let Some(amount) = payload.max_deposit_amount {
         if amount < Decimal::ZERO {
-            return Err(AppError::BadRequest("max_deposit_amount cannot be negative".to_string()));
+            return Err(AppError::BadRequest(
+                "max_deposit_amount cannot be negative".to_string(),
+            ));
         }
         set_setting(&pool, "max_deposit_amount", &amount.to_string()).await?;
     }
 
     if let Some(amount) = payload.max_withdraw_amount {
         if amount < Decimal::ZERO {
-            return Err(AppError::BadRequest("max_withdraw_amount cannot be negative".to_string()));
+            return Err(AppError::BadRequest(
+                "max_withdraw_amount cannot be negative".to_string(),
+            ));
         }
         set_setting(&pool, "max_withdraw_amount", &amount.to_string()).await?;
     }

@@ -1,6 +1,9 @@
+// GitHub API — app installation, CI check runs, deploy triggers; platform surface.
+#![allow(dead_code)]
+
 use axum::{
-    extract::{Path, State},
     body::Bytes,
+    extract::{Path, State},
     http::HeaderMap,
     routing::{get, post},
     Json, Router,
@@ -60,10 +63,7 @@ pub fn generate_jwt(app_id: &str, private_key: &str) -> Result<String> {
         .map_err(|e| AppError::Internal(format!("Failed to generate JWT: {}", e)))
 }
 
-pub async fn get_installation_access_token(
-    jwt: &str,
-    installation_id: &str,
-) -> Result<String> {
+pub async fn get_installation_access_token(jwt: &str, installation_id: &str) -> Result<String> {
     let client = reqwest::Client::new();
     let resp = client
         .post(format!(
@@ -127,10 +127,10 @@ struct InstallationsResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct InstallationData {
-    id: i64,
-    account: Owner,
-    repository_selection: Option<String>,
+pub struct InstallationData {
+    pub id: i64,
+    pub account: Owner,
+    pub repository_selection: Option<String>,
 }
 
 pub async fn list_installations_api(jwt: &str) -> Result<Vec<InstallationData>> {
@@ -185,11 +185,7 @@ pub async fn list_installation_repos(access_token: &str) -> Result<Vec<GitHubRep
     Ok(repos_resp.repositories)
 }
 
-pub async fn verify_repo_access(
-    access_token: &str,
-    owner: &str,
-    repo: &str,
-) -> Result<bool> {
+pub async fn verify_repo_access(access_token: &str, owner: &str, repo: &str) -> Result<bool> {
     let client = reqwest::Client::new();
     let resp = client
         .get(format!("https://api.github.com/repos/{}/{}", owner, repo))
@@ -344,8 +340,8 @@ pub async fn update_check_run(
 }
 
 fn compute_hmac_sha256(secret: &str, payload: &[u8]) -> String {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC can take key of any size");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(payload);
     let result = mac.finalize();
     hex::encode(result.into_bytes())
@@ -486,12 +482,18 @@ pub async fn handle_webhook(
     }))
 }
 
-async fn handle_push_event(pool: &PgPool, repo: &GitHubRepository, event: &WebhookEvent) -> Result<()> {
+async fn handle_push_event(
+    pool: &PgPool,
+    repo: &GitHubRepository,
+    event: &WebhookEvent,
+) -> Result<()> {
     let git_ref = event.git_ref.as_deref().unwrap_or("refs/heads/main");
     let is_main_branch = git_ref == "refs/heads/main" || git_ref == "refs/heads/master";
 
     let pipeline_id = Uuid::new_v4();
-    let commit_sha = event.commits.as_ref()
+    let commit_sha = event
+        .commits
+        .as_ref()
         .and_then(|c| c.last())
         .map(|c| c.id.clone())
         .unwrap_or_else(|| "unknown".to_string());
@@ -506,7 +508,11 @@ async fn handle_push_event(pool: &PgPool, repo: &GitHubRepository, event: &Webho
     .execute(pool)
     .await?;
 
-    tracing::info!("CI/CD pipeline triggered for {} on {}", repo.full_name, git_ref);
+    tracing::info!(
+        "CI/CD pipeline triggered for {} on {}",
+        repo.full_name,
+        git_ref
+    );
 
     if is_main_branch {
         let build_id = Uuid::new_v4();
@@ -527,13 +533,16 @@ async fn handle_push_event(pool: &PgPool, repo: &GitHubRepository, event: &Webho
     Ok(())
 }
 
-async fn trigger_wasm_build(pool: &PgPool, repo: &GitHubRepository, commit_sha: &str, build_id: Uuid) -> Result<()> {
-    sqlx::query(
-        "UPDATE build_status SET status = 'building', updated_at = NOW() WHERE id = $1",
-    )
-    .bind(build_id)
-    .execute(pool)
-    .await?;
+async fn trigger_wasm_build(
+    pool: &PgPool,
+    repo: &GitHubRepository,
+    commit_sha: &str,
+    build_id: Uuid,
+) -> Result<()> {
+    sqlx::query("UPDATE build_status SET status = 'building', updated_at = NOW() WHERE id = $1")
+        .bind(build_id)
+        .execute(pool)
+        .await?;
 
     sqlx::query(
         "INSERT INTO build_logs (id, build_id, step, output, created_at)
@@ -544,11 +553,20 @@ async fn trigger_wasm_build(pool: &PgPool, repo: &GitHubRepository, commit_sha: 
     .execute(pool)
     .await?;
 
-    tracing::info!("WASM build triggered for {} at {}", repo.full_name, commit_sha);
+    tracing::info!(
+        "WASM build triggered for {} at {}",
+        repo.full_name,
+        commit_sha
+    );
     Ok(())
 }
 
-async fn run_security_scan(pool: &PgPool, repo: &GitHubRepository, commit_sha: &str, build_id: Uuid) -> Result<()> {
+async fn run_security_scan(
+    pool: &PgPool,
+    repo: &GitHubRepository,
+    commit_sha: &str,
+    build_id: Uuid,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO build_logs (id, build_id, step, output, created_at)
          VALUES ($1, $2, 'security_scan', 'Running security scan...', NOW())",
@@ -558,18 +576,28 @@ async fn run_security_scan(pool: &PgPool, repo: &GitHubRepository, commit_sha: &
     .execute(pool)
     .await?;
 
-    tracing::info!("Security scan started for {} at {}", repo.full_name, commit_sha);
+    tracing::info!(
+        "Security scan started for {} at {}",
+        repo.full_name,
+        commit_sha
+    );
     Ok(())
 }
 
-async fn handle_pull_request_event(pool: &PgPool, event: &WebhookEvent, pr: &PullRequest) -> Result<()> {
+async fn handle_pull_request_event(
+    pool: &PgPool,
+    event: &WebhookEvent,
+    pr: &PullRequest,
+) -> Result<()> {
     let action = event.action.as_deref().unwrap_or("");
 
     if !["opened", "synchronize", "reopened"].contains(&action) {
         return Ok(());
     }
 
-    let repo = event.repository.as_ref()
+    let repo = event
+        .repository
+        .as_ref()
         .ok_or_else(|| AppError::BadRequest("Missing repository".to_string()))?;
 
     let test_id = Uuid::new_v4();
@@ -624,12 +652,10 @@ async fn handle_installation_event(
             tracing::info!("GitHub App installation created: {}", installation.id);
         }
         Some("deleted") | Some("unsuspend") => {
-            sqlx::query(
-                "DELETE FROM github_installations WHERE installation_id = $1",
-            )
-            .bind(installation.id)
-            .execute(pool)
-            .await?;
+            sqlx::query("DELETE FROM github_installations WHERE installation_id = $1")
+                .bind(installation.id)
+                .execute(pool)
+                .await?;
 
             tracing::info!("GitHub App installation removed: {}", installation.id);
         }
@@ -641,12 +667,11 @@ async fn handle_installation_event(
     Ok(())
 }
 
-async fn handle_installation_repositories_event(
-    pool: &PgPool,
-    event: &WebhookEvent,
-) -> Result<()> {
+async fn handle_installation_repositories_event(pool: &PgPool, event: &WebhookEvent) -> Result<()> {
     let action = event.action.as_deref().unwrap_or("");
-    let installation = event.installation.as_ref()
+    let installation = event
+        .installation
+        .as_ref()
         .ok_or_else(|| AppError::BadRequest("Missing installation".to_string()))?;
 
     if let Some(repos_added) = &event.repositories_added {
@@ -663,7 +688,11 @@ async fn handle_installation_repositories_event(
                 .execute(pool)
                 .await?;
 
-                tracing::info!("Repository {} added to installation {}", repo.full_name, installation.id);
+                tracing::info!(
+                    "Repository {} added to installation {}",
+                    repo.full_name,
+                    installation.id
+                );
             }
         }
     }
@@ -671,14 +700,16 @@ async fn handle_installation_repositories_event(
     if let Some(repos_removed) = &event.repositories_removed {
         for repo in repos_removed {
             if action == "removed" || action == "repository_removed" {
-                sqlx::query(
-                    "DELETE FROM registered_games WHERE repo_full_name = $1",
-                )
-                .bind(&repo.full_name)
-                .execute(pool)
-                .await?;
+                sqlx::query("DELETE FROM registered_games WHERE repo_full_name = $1")
+                    .bind(&repo.full_name)
+                    .execute(pool)
+                    .await?;
 
-                tracing::info!("Repository {} removed from installation {}", repo.full_name, installation.id);
+                tracing::info!(
+                    "Repository {} removed from installation {}",
+                    repo.full_name,
+                    installation.id
+                );
             }
         }
     }
@@ -686,7 +717,11 @@ async fn handle_installation_repositories_event(
     Ok(())
 }
 
-async fn deploy_if_checks_pass(pool: &PgPool, repo_full_name: &str, commit_sha: &str) -> Result<()> {
+async fn deploy_if_checks_pass(
+    pool: &PgPool,
+    repo_full_name: &str,
+    commit_sha: &str,
+) -> Result<()> {
     #[derive(sqlx::FromRow)]
     struct BuildCheck {
         id: Uuid,
@@ -703,7 +738,11 @@ async fn deploy_if_checks_pass(pool: &PgPool, repo_full_name: &str, commit_sha: 
 
     if let Some(build) = builds {
         if build.status == "success" {
-            tracing::info!("All checks passed, deploying {} at {}", repo_full_name, commit_sha);
+            tracing::info!(
+                "All checks passed, deploying {} at {}",
+                repo_full_name,
+                commit_sha
+            );
 
             sqlx::query(
                 "INSERT INTO deployments (id, repository, commit_sha, status, deployed_at)
@@ -820,13 +859,17 @@ pub async fn register_repository(
     let installation_id = if let Some((_, inst_id)) = installations {
         inst_id.to_string()
     } else {
-        return Err(AppError::BadRequest("No GitHub App installation found".to_string()));
+        return Err(AppError::BadRequest(
+            "No GitHub App installation found".to_string(),
+        ));
     };
 
     let access_token = get_installation_access_token(&jwt, &installation_id).await?;
 
     if !verify_repo_access(&access_token, owner, repo_name).await? {
-        return Err(AppError::Validation("Repository not found or not accessible".to_string()));
+        return Err(AppError::Validation(
+            "Repository not found or not accessible".to_string(),
+        ));
     }
 
     let game_id = Uuid::new_v4();
@@ -911,7 +954,17 @@ pub async fn get_build_status(
 ) -> Result<Json<BuildStatusResponse>> {
     let repo_full_name = format!("{}/{}", owner, repo);
 
-    let build = sqlx::query_as::<_, (String, String, String, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
+    let build = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            Option<String>,
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         "SELECT repository, commit_sha, status, conclusion, created_at, updated_at
          FROM build_status WHERE repository = $1 ORDER BY created_at DESC LIMIT 1",
     )

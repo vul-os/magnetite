@@ -1,3 +1,6 @@
+// Verification service — email/password-reset tokens, platform surface, not yet wired to auth flow.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Duration, Utc};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -103,17 +106,11 @@ pub async fn create_verification_token(
     Ok(token)
 }
 
-pub async fn generate_email_verification_token(
-    db: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<String> {
+pub async fn generate_email_verification_token(db: &sqlx::PgPool, user_id: Uuid) -> Result<String> {
     create_verification_token(db, user_id, VerificationTokenType::EmailVerification).await
 }
 
-pub async fn generate_password_reset_token(
-    db: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<String> {
+pub async fn generate_password_reset_token(db: &sqlx::PgPool, user_id: Uuid) -> Result<String> {
     create_verification_token(db, user_id, VerificationTokenType::PasswordReset).await
 }
 
@@ -200,11 +197,10 @@ pub async fn get_user_verification_level(
 }
 
 pub async fn cleanup_expired_tokens(db: &sqlx::PgPool) -> Result<u64> {
-    let result = sqlx::query(
-        "DELETE FROM verification_tokens WHERE expires_at < NOW() AND used_at IS NULL",
-    )
-    .execute(db)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM verification_tokens WHERE expires_at < NOW() AND used_at IS NULL")
+            .execute(db)
+            .await?;
 
     Ok(result.rows_affected())
 }
@@ -277,10 +273,7 @@ mod tests {
             VerificationLevel::PhoneVerified.to_string(),
             "phone_verified"
         );
-        assert_eq!(
-            VerificationLevel::KYCVerified.to_string(),
-            "kyc_verified"
-        );
+        assert_eq!(VerificationLevel::KYCVerified.to_string(), "kyc_verified");
     }
 
     #[test]
@@ -309,9 +302,6 @@ mod tests {
             get_transaction_limit(VerificationLevel::EmailVerified),
             Some((10_000_000, "cents".to_string()))
         );
-        assert_eq!(
-            get_transaction_limit(VerificationLevel::KYCVerified),
-            None
-        );
+        assert_eq!(get_transaction_limit(VerificationLevel::KYCVerified), None);
     }
 }

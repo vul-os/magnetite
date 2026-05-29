@@ -13,7 +13,11 @@ pub async fn log_request(mut req: Request<Body>, next: Next) -> Response {
         .headers()
         .get("x-forwarded-for")
         .and_then(|h: &axum::http::HeaderValue| h.to_str().ok())
-        .or_else(|| req.headers().get("x-real-ip").and_then(|h: &axum::http::HeaderValue| h.to_str().ok()))
+        .or_else(|| {
+            req.headers()
+                .get("x-real-ip")
+                .and_then(|h: &axum::http::HeaderValue| h.to_str().ok())
+        })
         .map(|s: &str| s.to_string());
     let user_agent = req
         .headers()
@@ -31,7 +35,8 @@ pub async fn log_request(mut req: Request<Body>, next: Next) -> Response {
     let headers = response.headers_mut();
     headers.insert(
         "x-request-id",
-        axum::http::HeaderValue::from_str(&request_id.to_string()).unwrap_or_else(|_| axum::http::HeaderValue::from_static("")),
+        axum::http::HeaderValue::from_str(&request_id.to_string())
+            .unwrap_or_else(|_| axum::http::HeaderValue::from_static("")),
     );
 
     let log_level = if status_u16 >= 500 {

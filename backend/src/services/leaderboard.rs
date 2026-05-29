@@ -1,3 +1,6 @@
+// Leaderboard service — Redis-backed score tracking; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::Utc;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -53,7 +56,9 @@ impl LeaderboardService {
         let prev_score = existing.unwrap_or(0.0);
 
         if !is_new && score <= prev_score as i64 {
-            let rank = self.get_rank_internal(&mut conn, &key, &user_id_str).await?;
+            let rank = self
+                .get_rank_internal(&mut conn, &key, &user_id_str)
+                .await?;
             return Ok(RankResult {
                 rank,
                 score: prev_score as i64,
@@ -66,7 +71,9 @@ impl LeaderboardService {
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let rank = self.get_rank_internal(&mut conn, &key, &user_id_str).await?;
+        let rank = self
+            .get_rank_internal(&mut conn, &key, &user_id_str)
+            .await?;
 
         Ok(RankResult {
             rank,
@@ -134,7 +141,9 @@ impl LeaderboardService {
 
         match score {
             Some(s) => {
-                let rank = self.get_rank_internal(&mut conn, &key, &user_id_str).await?;
+                let rank = self
+                    .get_rank_internal(&mut conn, &key, &user_id_str)
+                    .await?;
                 Ok(Some(RankResult {
                     rank,
                     score: s as i64,

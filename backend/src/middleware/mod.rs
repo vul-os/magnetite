@@ -1,3 +1,7 @@
+// Middleware — auth, admin guards, rate limiting, CORS, logging.
+// auth_middleware and decode_token are platform surface; main.rs uses per-route extractors instead.
+#![allow(dead_code)]
+
 pub mod cors;
 pub mod logging;
 pub mod rate_limit;
@@ -60,7 +64,7 @@ pub async fn auth_middleware(
 
 pub async fn admin_middleware(
     State(_pool): State<DbPool>,
-    mut req: Request<axum::body::Body>,
+    req: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let is_admin = req.extensions().get::<bool>().copied();

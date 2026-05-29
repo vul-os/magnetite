@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Extension},
+    extract::{Extension, State},
     middleware::from_fn_with_state,
     routing::{get, post},
     Json, Router,
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::api::middleware;
 use crate::api::response;
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize)]
 pub struct WalletBalance {
@@ -144,7 +144,9 @@ pub async fn withdraw(
     let current_balance = current.map(|b| b.0).unwrap_or(Decimal::ZERO);
 
     if current_balance < payload.amount {
-        return Err(AppError::InsufficientFunds("Insufficient balance".to_string()));
+        return Err(AppError::InsufficientFunds(
+            "Insufficient balance".to_string(),
+        ));
     }
 
     sqlx::query(
@@ -203,9 +205,33 @@ pub async fn get_transactions(
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
-        .route("/balance", get(get_balance).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/deposit", post(deposit).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/withdraw", post(withdraw).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/transactions", get(get_transactions).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/balance",
+            get(get_balance).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/deposit",
+            post(deposit).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/withdraw",
+            post(withdraw).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/transactions",
+            get(get_transactions).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

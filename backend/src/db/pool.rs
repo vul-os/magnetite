@@ -4,8 +4,7 @@ use sqlx::PgPool;
 pub type DbPool = PgPool;
 
 pub async fn get_db_pool() -> DbPool {
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     PgPoolOptions::new()
         .max_connections(10)

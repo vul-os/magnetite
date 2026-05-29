@@ -1,14 +1,15 @@
+// User profile API — avatar, stats, public profiles; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use axum::{
-    extract::{Path, State, Extension},
+    extract::{Extension, Path, State},
     Json,
-    Router,
-    routing::{get, put, post},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct UserProfile {
@@ -112,13 +113,12 @@ pub async fn update_me(
             return Err(AppError::Validation("Invalid username".to_string()));
         }
 
-        let existing = sqlx::query_as::<_, (Uuid,)>(
-            "SELECT id FROM users WHERE username = $1 AND id != $2",
-        )
-        .bind(username)
-        .bind(user_id)
-        .fetch_optional(&pool)
-        .await?;
+        let existing =
+            sqlx::query_as::<_, (Uuid,)>("SELECT id FROM users WHERE username = $1 AND id != $2")
+                .bind(username)
+                .bind(user_id)
+                .fetch_optional(&pool)
+                .await?;
 
         if existing.is_some() {
             return Err(AppError::BadRequest("Username already taken".to_string()));
@@ -188,13 +188,11 @@ pub async fn get_user_stats(
     State(pool): State<PgPool>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserStats>> {
-    let _user_exists = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let _user_exists = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let stats = get_user_stats_internal(&pool, user_id).await?;
 
@@ -248,22 +246,30 @@ pub async fn upload_avatar(
     Extension(user_id): Extension<Uuid>,
     mut payload: axum::extract::Multipart,
 ) -> Result<Json<AvatarUploadResponse>> {
-    let field = payload.next_field().await
+    let field = payload
+        .next_field()
+        .await
         .map_err(|e| AppError::BadRequest(format!("Invalid multipart: {}", e)))?
         .ok_or_else(|| AppError::BadRequest("No file provided".to_string()))?;
 
-    let filename = field.file_name()
+    let filename = field
+        .file_name()
         .ok_or_else(|| AppError::BadRequest("Invalid filename".to_string()))?
         .to_string();
 
-    let content_type = field.content_type()
+    let content_type = field
+        .content_type()
         .ok_or_else(|| AppError::BadRequest("Invalid content type".to_string()))?;
 
     if !content_type.starts_with("image/") {
-        return Err(AppError::BadRequest("Only image files are allowed".to_string()));
+        return Err(AppError::BadRequest(
+            "Only image files are allowed".to_string(),
+        ));
     }
 
-    let extension = filename.rsplit('.').next()
+    let extension = filename
+        .rsplit('.')
+        .next()
         .ok_or_else(|| AppError::BadRequest("Invalid file extension".to_string()))?;
 
     let allowed_extensions = ["jpg", "jpeg", "png", "gif", "webp"];
@@ -271,7 +277,9 @@ pub async fn upload_avatar(
         return Err(AppError::BadRequest("Invalid file extension".to_string()));
     }
 
-    let data: Vec<u8> = field.bytes().await
+    let data: Vec<u8> = field
+        .bytes()
+        .await
         .map_err(|e| AppError::BadRequest(format!("Failed to read file: {}", e)))?
         .to_vec();
 
@@ -286,22 +294,22 @@ pub async fn upload_avatar(
     let uploads_dir = std::env::var("UPLOADS_DIR").unwrap_or_else(|_| "./uploads".to_string());
     let avatars_dir = format!("{}/avatars", uploads_dir);
 
-    tokio::fs::create_dir_all(&avatars_dir).await
+    tokio::fs::create_dir_all(&avatars_dir)
+        .await
         .map_err(|e| AppError::Internal(format!("Failed to create directory: {}", e)))?;
 
     let avatar_path = format!("{}/{}", avatars_dir, avatar_filename);
-    tokio::fs::write(&avatar_path, &data).await
+    tokio::fs::write(&avatar_path, &data)
+        .await
         .map_err(|e| AppError::Internal(format!("Failed to save file: {}", e)))?;
 
     let full_avatar_url = format!("/api/users/me/avatar/{}", avatar_filename);
 
-    sqlx::query(
-        "UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(&full_avatar_url)
-    .bind(user_id)
-    .execute(&pool)
-    .await?;
+    sqlx::query("UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&full_avatar_url)
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
 
     Ok(Json(AvatarUploadResponse {
         avatar_url: full_avatar_url,
@@ -314,7 +322,8 @@ pub async fn serve_avatar(
     let uploads_dir = std::env::var("UPLOADS_DIR").unwrap_or_else(|_| "./uploads".to_string());
     let avatar_path = format!("{}/avatars/{}", uploads_dir, filename);
 
-    let data = tokio::fs::read(&avatar_path).await
+    let data = tokio::fs::read(&avatar_path)
+        .await
         .map_err(|_| AppError::NotFound("Avatar not found".to_string()))?;
 
     let extension = filename.rsplit('.').next().unwrap_or("png").to_lowercase();
@@ -333,4 +342,3 @@ pub async fn serve_avatar(
         .body(axum::body::Body::from(data))
         .unwrap())
 }
-

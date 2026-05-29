@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::api::middleware;
 use crate::api::response::{self, PaginatedResponse};
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Game {
@@ -153,13 +153,12 @@ pub async fn get_leaderboard(
     .fetch_all(&pool)
     .await?;
 
-    let total: i64 = sqlx::query_as::<_, (i64,)>(
-        "SELECT COUNT(*) FROM game_high_scores WHERE game_id = $1",
-    )
-    .bind(game_id)
-    .fetch_one(&pool)
-    .await?
-    .0;
+    let total: i64 =
+        sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM game_high_scores WHERE game_id = $1")
+            .bind(game_id)
+            .fetch_one(&pool)
+            .await?
+            .0;
 
     let leaderboard: Vec<LeaderboardEntry> = entries
         .into_iter()
@@ -172,16 +171,39 @@ pub async fn get_leaderboard(
         })
         .collect();
 
-    Ok(response::paginated(leaderboard, 1, limit as u32, total as u64))
+    Ok(response::paginated(
+        leaderboard,
+        1,
+        limit as u32,
+        total as u64,
+    ))
 }
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(list_games))
-        .route("/", post(create_game).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/",
+            post(create_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .route("/:id", get(get_game))
-        .route("/:id", put(update_game).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/:id", delete(delete_game).layer(from_fn_with_state(pool.clone(), middleware::admin_middleware)))
+        .route(
+            "/:id",
+            put(update_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:id",
+            delete(delete_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::admin_middleware,
+            )),
+        )
         .route("/:id/leaderboard", get(get_leaderboard))
         .with_state(pool)
 }

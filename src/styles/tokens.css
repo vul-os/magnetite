@@ -1,0 +1,151 @@
+/*
+ * Industrial Magnetite — Design Tokens
+ * Single source of truth for all design primitives.
+ * All values flow from here into index.css and component stylesheets.
+ */
+
+/* ─── Google Fonts import ─────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ─── Root (dark, default) ────────────────────────────────────────────────── */
+:root {
+  /* Background layers */
+  --color-bg-primary:    #07070b;
+  --color-bg-secondary:  #0f0f16;
+  --color-bg-card:       #14141d;
+  --color-bg-elevated:   #1b1b27;
+
+  /* Text */
+  --color-text-primary:  #f4f4f6;
+  --color-text-secondary:#a8a8b3;
+  --color-text-muted:    #6b6b78;
+
+  /* Borders */
+  --color-border:        #23232e;
+  --color-border-strong: #33333f;
+
+  /* ── Accent: electric teal primary + amber secondary ── */
+  --color-accent:        #38e1c8;
+  --color-accent-hover:  #19c7ad;
+  --color-accent-soft:   rgba(56, 225, 200, 0.12);
+  --color-accent-glow:   rgba(56, 225, 200, 0.18);
+
+  --color-amber:         #f5a524;
+  --color-amber-hover:   #d98c18;
+  --color-amber-soft:    rgba(245, 165, 36, 0.12);
+
+  /* ── Legacy aliases (kept for backward-compat with page-level code) ── */
+  --color-primary:       var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-primary-light: #5ef0da;
+  --color-secondary:     var(--color-amber);
+
+  /* ── Status ── */
+  --color-success: #3ddc84;
+  --color-warning: #f5a524;
+  --color-error:   #ff5468;
+  --color-info:    #5b9dff;
+
+  /* ── Gradients ── */
+  --gradient-primary: linear-gradient(135deg, #38e1c8 0%, #5b9dff 100%);
+  --gradient-energy:  linear-gradient(135deg, #f5a524 0%, #ff5468 100%);
+  --gradient-hero:    radial-gradient(ellipse at 50% 0%, #16161f 0%, #07070b 60%);
+
+  /* ── Typography ── */
+  --font-family:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:        'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Consolas, monospace;
+
+  /* Type scale: 12/13/14/16/18/22/28/36/48/64 */
+  --text-2xs:  12px;
+  --text-xs:   13px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   18px;
+  --text-xl:   22px;
+  --text-2xl:  28px;
+  --text-3xl:  36px;
+  --text-4xl:  48px;
+  --text-5xl:  64px;
+
+  /* ── Shape (radius) ── */
+  --radius-xs:  4px;
+  --radius-sm:  6px;
+  --radius:     10px;
+  --radius-lg:  16px;
+  --radius-xl:  24px;
+  --radius-full: 9999px;
+
+  /* ── Legacy radius aliases ── */
+  --border-radius:    var(--radius-sm);
+  --border-radius-lg: var(--radius-lg);
+
+  /* ── Shadows ── */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg:  0 12px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-xl:  0 24px 48px rgba(0, 0, 0, 0.7);
+  --shadow-glow:        0 0 24px var(--color-accent-glow);
+  --shadow-glow-amber:  0 0 24px rgba(245, 165, 36, 0.18);
+  --shadow-glow-focus:  0 0 0 3px rgba(56, 225, 200, 0.22);
+
+  /* ── Motion ── */
+  --ease-out:      cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in:       cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+
+  --t-fast:   140ms;
+  --t:        240ms;
+  --t-slow:   420ms;
+
+  /* Legacy transition aliases */
+  --transition-fast:   var(--t-fast) var(--ease-out);
+  --transition-normal: var(--t) var(--ease-out);
+  --transition-slow:   var(--t-slow) var(--ease-out);
+
+  /* ── Z-index ladder ── */
+  --z-base:     0;
+  --z-elevated: 10;
+  --z-dropdown: 100;
+  --z-sticky:   200;
+  --z-modal:    1000;
+  --z-toast:    9999;
+}
+
+/* ─── Light theme overrides ───────────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg-primary:    #f7f7fa;
+  --color-bg-secondary:  #ededf2;
+  --color-bg-card:       #ffffff;
+  --color-bg-elevated:   #e8e8f0;
+
+  --color-text-primary:  #131318;
+  --color-text-secondary:#4b4b58;
+  --color-text-muted:    #8b8b98;
+
+  --color-border:        #d5d5e0;
+  --color-border-strong: #b8b8c8;
+
+  /* accents stay the same (just adjust soft/glow for light bg) */
+  --color-accent-soft:   rgba(56, 225, 200, 0.10);
+  --color-accent-glow:   rgba(56, 225, 200, 0.12);
+  --color-amber-soft:    rgba(245, 165, 36, 0.10);
+
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-lg:  0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-xl:  0 24px 48px rgba(0, 0, 0, 0.15);
+
+  --gradient-hero: radial-gradient(ellipse at 50% 0%, #e8e8f0 0%, #f7f7fa 60%);
+}
+
+/* ─── Reduced-motion ──────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast:  0ms;
+    --t:       0ms;
+    --t-slow:  0ms;
+    --transition-fast:   0ms linear;
+    --transition-normal: 0ms linear;
+    --transition-slow:   0ms linear;
+  }
+}

@@ -1,3 +1,6 @@
+// Auth API — registration, login, token refresh, logout; platform surface.
+#![allow(dead_code)]
+
 use axum::{
     extract::{Extension, Query, State},
     middleware::from_fn_with_state,
@@ -10,8 +13,11 @@ use uuid::Uuid;
 
 use crate::api::middleware;
 use crate::api::response;
-use crate::error::{Result, AppError};
-use crate::services::session::{self, SessionInfo, AccessToken, RefreshToken, TokenPair, ACCESS_TOKEN_EXPIRY_SECS, REFRESH_TOKEN_EXPIRY_SECS};
+use crate::error::{AppError, Result};
+use crate::services::session::{
+    self, AccessToken, RefreshToken, SessionInfo, TokenPair, ACCESS_TOKEN_EXPIRY_SECS,
+    REFRESH_TOKEN_EXPIRY_SECS,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
@@ -92,7 +98,8 @@ pub async fn register(
     .await?;
 
     let (user_agent, ip_address) = get_client_info(&headers);
-    let tokens = session::create_session(&pool, user_id, &payload.email, user_agent, ip_address).await?;
+    let tokens =
+        session::create_session(&pool, user_id, &payload.email, user_agent, ip_address).await?;
 
     Ok(response::success_response(AuthResponse {
         access_token: tokens.access_token,
@@ -136,13 +143,11 @@ pub async fn refresh(
 ) -> Result<Json<response::ApiResponse<TokenPair>>> {
     let session = session::validate_refresh_token(&pool, &payload.refresh_token).await?;
 
-    let user = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, email FROM users WHERE id = $1",
-    )
-    .bind(session.user_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let user = sqlx::query_as::<_, (Uuid, String)>("SELECT id, email FROM users WHERE id = $1")
+        .bind(session.user_id)
+        .fetch_optional(&pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let new_refresh_token = session::generate_refresh_token();
     let new_refresh_token_hash = session::hash_refresh_token(&new_refresh_token)
@@ -182,7 +187,9 @@ pub async fn logout(
     Json(payload): Json<LogoutRequest>,
 ) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
     session::revoke_token(&pool, &payload.refresh_token).await?;
-    Ok(response::success_response(serde_json::json!({ "message": "Session revoked" })))
+    Ok(response::success_response(
+        serde_json::json!({ "message": "Session revoked" }),
+    ))
 }
 
 pub async fn logout_all(
@@ -190,7 +197,9 @@ pub async fn logout_all(
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
     let count = session::revoke_all_user_sessions(&pool, user_id).await?;
-    Ok(response::success_response(serde_json::json!({ "message": format!("{} sessions revoked", count) })))
+    Ok(response::success_response(
+        serde_json::json!({ "message": format!("{} sessions revoked", count) }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,9 +241,33 @@ pub fn router(pool: PgPool) -> Router {
         .route("/login", post(login))
         .route("/register", post(register))
         .route("/refresh", post(refresh))
-        .route("/logout", delete(logout).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/logout-all", delete(logout_all).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/sessions", get(list_sessions).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/me", get(me).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/logout",
+            delete(logout).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/logout-all",
+            delete(logout_all).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/sessions",
+            get(list_sessions).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/me",
+            get(me).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

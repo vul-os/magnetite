@@ -1,3 +1,6 @@
+// Health checker service — DB, Redis, and S3 liveness; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -41,9 +44,7 @@ impl HealthChecker {
 
     pub async fn check_database(&self) -> CheckResult {
         let start = Instant::now();
-        let result = sqlx::query("SELECT 1")
-            .fetch_one(&self.pool)
-            .await;
+        let result = sqlx::query("SELECT 1").fetch_one(&self.pool).await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
 

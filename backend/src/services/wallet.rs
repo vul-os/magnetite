@@ -1,3 +1,6 @@
+// Wallet service — USDC balance, AML velocity limits, deposits; platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -68,12 +71,11 @@ impl WalletService {
     }
 
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>> {
-        let result = sqlx::query_as::<_, (String,)>(
-            "SELECT value FROM platform_settings WHERE key = $1",
-        )
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
+        let result =
+            sqlx::query_as::<_, (String,)>("SELECT value FROM platform_settings WHERE key = $1")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await?;
 
         Ok(result.map(|r| r.0))
     }
@@ -99,7 +101,9 @@ impl WalletService {
     async fn get_aml_velocity_limits(&self) -> Result<AMLVelocityLimits> {
         let daily_str = self.get_platform_setting("aml_daily_limit").await?;
         let monthly_str = self.get_platform_setting("aml_monthly_limit").await?;
-        let count_str = self.get_platform_setting("aml_transaction_count_limit").await?;
+        let count_str = self
+            .get_platform_setting("aml_transaction_count_limit")
+            .await?;
 
         let daily_limit = daily_str
             .and_then(|s| s.parse::<Decimal>().ok())
@@ -109,9 +113,7 @@ impl WalletService {
             .and_then(|s| s.parse::<Decimal>().ok())
             .unwrap_or(Decimal::new(100_000_00, 2));
 
-        let transaction_count_limit = count_str
-            .and_then(|s| s.parse::<i32>().ok())
-            .unwrap_or(100);
+        let transaction_count_limit = count_str.and_then(|s| s.parse::<i32>().ok()).unwrap_or(100);
 
         Ok(AMLVelocityLimits {
             daily_limit,
@@ -251,7 +253,9 @@ impl WalletService {
         idempotency_key: Option<&str>,
     ) -> Result<Transaction> {
         if amount <= Decimal::ZERO {
-            return Err(AppError::Validation("Deposit amount must be positive".to_string()));
+            return Err(AppError::Validation(
+                "Deposit amount must be positive".to_string(),
+            ));
         }
 
         let limits = self.get_deposit_limits().await?;
@@ -283,7 +287,10 @@ impl WalletService {
 
         if let Some(key) = idempotency_key {
             if let Some(existing) = self.check_idempotency(key).await? {
-                tracing::info!("Returning existing transaction for idempotency key: {}", key);
+                tracing::info!(
+                    "Returning existing transaction for idempotency key: {}",
+                    key
+                );
                 return Ok(existing);
             }
         }
@@ -350,7 +357,9 @@ impl WalletService {
         idempotency_key: Option<&str>,
     ) -> Result<Transaction> {
         if amount <= Decimal::ZERO {
-            return Err(AppError::Validation("Withdrawal amount must be positive".to_string()));
+            return Err(AppError::Validation(
+                "Withdrawal amount must be positive".to_string(),
+            ));
         }
 
         let limits = self.get_deposit_limits().await?;
@@ -368,7 +377,8 @@ impl WalletService {
         }
 
         let verification_level = get_user_verification_level(&self.pool, user_id).await?;
-        if !crate::services::verification::can_perform_transaction(verification_level, "withdrawal") {
+        if !crate::services::verification::can_perform_transaction(verification_level, "withdrawal")
+        {
             return Err(AppError::Forbidden(
                 "Insufficient verification level for withdrawals".to_string(),
             ));
@@ -385,7 +395,10 @@ impl WalletService {
 
         if let Some(key) = idempotency_key {
             if let Some(existing) = self.check_idempotency(key).await? {
-                tracing::info!("Returning existing transaction for idempotency key: {}", key);
+                tracing::info!(
+                    "Returning existing transaction for idempotency key: {}",
+                    key
+                );
                 return Ok(existing);
             }
         }
@@ -456,7 +469,9 @@ impl WalletService {
         idempotency_key: Option<&str>,
     ) -> Result<(Transaction, Transaction)> {
         if amount <= Decimal::ZERO {
-            return Err(AppError::Validation("Transfer amount must be positive".to_string()));
+            return Err(AppError::Validation(
+                "Transfer amount must be positive".to_string(),
+            ));
         }
         if from_user_id == to_user_id {
             return Err(AppError::Validation("Cannot transfer to self".to_string()));
@@ -469,13 +484,16 @@ impl WalletService {
             ));
         }
 
-        self.check_aml_velocity(from_user_id, currency, amount).await?;
+        self.check_aml_velocity(from_user_id, currency, amount)
+            .await?;
 
         if let Some(key) = idempotency_key {
             if let Some(existing) = self.check_idempotency(key).await? {
                 if existing.user_id == from_user_id && existing.tx_type == "transfer_out" {
                     tracing::info!("Returning existing transfer for idempotency key: {}", key);
-                    let counterparty_tx = self.get_counterparty_transfer(&existing.id, to_user_id).await?;
+                    let counterparty_tx = self
+                        .get_counterparty_transfer(&existing.id, to_user_id)
+                        .await?;
                     return Ok((existing, counterparty_tx));
                 }
             }
@@ -582,7 +600,11 @@ impl WalletService {
         Ok((from_tx, to_tx))
     }
 
-    async fn get_counterparty_transfer(&self, related_id: &Uuid, counterparty_user_id: Uuid) -> Result<Transaction> {
+    async fn get_counterparty_transfer(
+        &self,
+        related_id: &Uuid,
+        counterparty_user_id: Uuid,
+    ) -> Result<Transaction> {
         let tx = sqlx::query_as::<_, Transaction>(
             r#"
             SELECT id, user_id, tx_type, amount, reference_id, status, created_at

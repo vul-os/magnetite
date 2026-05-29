@@ -1,3 +1,6 @@
+// Payout service — developer earnings distribution, platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -73,7 +76,11 @@ impl PayoutService {
         Self { pool }
     }
 
-    pub async fn calculate_earnings(&self, user_id: Uuid, period: &Period) -> Result<EarningsSummary> {
+    pub async fn calculate_earnings(
+        &self,
+        user_id: Uuid,
+        period: &Period,
+    ) -> Result<EarningsSummary> {
         let period_start = match period {
             Period::Weekly => Utc::now() - chrono::Duration::days(7),
             Period::Monthly => Utc::now() - chrono::Duration::days(30),
@@ -195,13 +202,11 @@ impl PayoutService {
         .execute(&self.pool)
         .await?;
 
-        sqlx::query(
-            "UPDATE developer_balances SET balance = balance - $1 WHERE user_id = $2",
-        )
-        .bind(amount)
-        .bind(user_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE developer_balances SET balance = balance - $1 WHERE user_id = $2")
+            .bind(amount)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(PayoutRequest {
             id: payout_id,
@@ -239,7 +244,11 @@ impl PayoutService {
     }
 
     async fn process_single_payout(&self, payout: &Payout) -> Result<()> {
-        tracing::info!("Processing payout {} for user {}", payout.id, payout.user_id);
+        tracing::info!(
+            "Processing payout {} for user {}",
+            payout.id,
+            payout.user_id
+        );
 
         sqlx::query(
             r#"
@@ -261,7 +270,10 @@ impl PayoutService {
         .bind(payout.user_id)
         .bind(NotificationType::PayoutComplete.as_str())
         .bind("Payout Complete")
-        .bind(format!("Your payout of {} USDC has been processed", payout.amount))
+        .bind(format!(
+            "Your payout of {} USDC has been processed",
+            payout.amount
+        ))
         .bind(serde_json::json!({ "payout_id": payout.id }))
         .fetch_one(&self.pool)
         .await
@@ -328,13 +340,11 @@ impl PayoutService {
 
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
-            "UPDATE developer_balances SET balance = balance + $1 WHERE user_id = $2",
-        )
-        .bind(payout.amount)
-        .bind(payout.user_id)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("UPDATE developer_balances SET balance = balance + $1 WHERE user_id = $2")
+            .bind(payout.amount)
+            .bind(payout.user_id)
+            .execute(&mut *tx)
+            .await?;
 
         sqlx::query(
             r#"

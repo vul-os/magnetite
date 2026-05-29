@@ -1,22 +1,23 @@
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
+
     use uuid::Uuid;
 
     fn get_test_jwt_secret() -> String {
         "test_jwt_secret_key_for_testing_only".to_string()
     }
 
+    #[allow(dead_code)]
     fn set_test_jwt_secret() {
         std::env::set_var("JWT_SECRET", get_test_jwt_secret());
     }
 
+    #[allow(dead_code)]
     fn clear_jwt_secret() {
         std::env::remove_var("JWT_SECRET");
     }
 
     mod password_tests {
-        use super::*;
 
         #[test]
         fn test_hash_password_success() {
@@ -40,7 +41,9 @@ mod tests {
         fn test_verify_password_correct() {
             let password = "SecurePassword123!";
             let hash = magnetite_backend::services::auth::hash_password(password).unwrap();
-            assert!(magnetite_backend::services::auth::verify_password(password, &hash));
+            assert!(magnetite_backend::services::auth::verify_password(
+                password, &hash
+            ));
         }
 
         #[test]
@@ -48,31 +51,41 @@ mod tests {
             let password = "SecurePassword123!";
             let wrong_password = "WrongPassword456!";
             let hash = magnetite_backend::services::auth::hash_password(password).unwrap();
-            assert!(!magnetite_backend::services::auth::verify_password(wrong_password, &hash));
+            assert!(!magnetite_backend::services::auth::verify_password(
+                wrong_password,
+                &hash
+            ));
         }
 
         #[test]
         fn test_verify_password_invalid_hash() {
-            assert!(!magnetite_backend::services::auth::verify_password("password", "invalid_hash"));
+            assert!(!magnetite_backend::services::auth::verify_password(
+                "password",
+                "invalid_hash"
+            ));
         }
 
         #[test]
         fn test_verify_password_empty_password() {
             let hash = magnetite_backend::services::auth::hash_password("password").unwrap();
-            assert!(!magnetite_backend::services::auth::verify_password("", &hash));
+            assert!(!magnetite_backend::services::auth::verify_password(
+                "", &hash
+            ));
         }
 
         #[test]
         fn test_verify_password_empty_hash() {
-            assert!(!magnetite_backend::services::auth::verify_password("password", ""));
+            assert!(!magnetite_backend::services::auth::verify_password(
+                "password", ""
+            ));
         }
     }
 
     mod jwt_tests {
         use super::*;
         use magnetite_backend::services::session::{
-            generate_access_token, decode_access_token, generate_refresh_token,
-            generate_tokens, ACCESS_TOKEN_EXPIRY_SECS, REFRESH_TOKEN_EXPIRY_SECS,
+            decode_access_token, generate_access_token, generate_tokens, ACCESS_TOKEN_EXPIRY_SECS,
+            REFRESH_TOKEN_EXPIRY_SECS,
         };
 
         #[test]
@@ -151,9 +164,9 @@ mod tests {
 
     mod token_expiry_tests {
         use super::*;
-        use magnetite_backend::services::session::{generate_access_token, decode_access_token};
-        use jsonwebtoken::{encode, EncodingKey, Header};
         use chrono::Utc;
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use magnetite_backend::services::session::decode_access_token;
 
         #[test]
         fn test_expired_token_rejected() {
@@ -175,7 +188,8 @@ mod tests {
                     &Header::default(),
                     &payload,
                     &EncodingKey::from_secret(get_test_jwt_secret().as_bytes()),
-                ).unwrap();
+                )
+                .unwrap();
 
                 let result = decode_access_token(&expired_token);
                 assert!(result.is_err());
@@ -202,7 +216,8 @@ mod tests {
                     &Header::default(),
                     &payload,
                     &EncodingKey::from_secret(get_test_jwt_secret().as_bytes()),
-                ).unwrap();
+                )
+                .unwrap();
 
                 let result = decode_access_token(&future_token);
                 assert!(result.is_ok());
@@ -211,7 +226,7 @@ mod tests {
     }
 
     mod refresh_token_tests {
-        use super::*;
+
         use magnetite_backend::services::session::{
             generate_refresh_token, hash_refresh_token, verify_refresh_token,
         };

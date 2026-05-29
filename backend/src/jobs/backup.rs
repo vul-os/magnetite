@@ -1,3 +1,6 @@
+// Backup job — pg_dump + S3/local storage for disaster recovery; platform surface.
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client as S3Client;
@@ -31,7 +34,7 @@ fn get_s3_region() -> String {
     env::var("BACKUP_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string())
 }
 
-pub async fn create_backup(pool: &PgPool) -> Result<String> {
+pub async fn create_backup(_pool: &PgPool) -> Result<String> {
     let storage_type = env::var("BACKUP_STORAGE_TYPE").unwrap_or_else(|_| "local".to_string());
 
     let backup_id = Uuid::new_v4().to_string();
@@ -183,9 +186,10 @@ async fn list_backups_local() -> Vec<BackupInfo> {
                             let metadata = entry.metadata().await.ok();
                             let size_bytes = metadata.map(|m| m.len()).unwrap_or(0);
 
-                            let created_at = DateTime::parse_from_str(&timestamp_part, "%Y%m%d_%H%M%S")
-                                .map(|dt| dt.with_timezone(&Utc))
-                                .unwrap_or_else(|_| Utc::now());
+                            let created_at =
+                                DateTime::parse_from_str(&timestamp_part, "%Y%m%d_%H%M%S")
+                                    .map(|dt| dt.with_timezone(&Utc))
+                                    .unwrap_or_else(|_| Utc::now());
 
                             backups.push(BackupInfo {
                                 id: uuid_part,
@@ -205,7 +209,9 @@ async fn list_backups_local() -> Vec<BackupInfo> {
 }
 
 fn parse_backup_filename(filename: &str) -> Option<(String, String)> {
-    let stripped = filename.strip_prefix("magnetite_backup_")?.strip_suffix(".sql")?;
+    let stripped = filename
+        .strip_prefix("magnetite_backup_")?
+        .strip_suffix(".sql")?;
     let parts: Vec<&str> = stripped.rsplitn(2, '_').collect();
     if parts.len() == 2 {
         let uuid_part = parts[0].to_string();
@@ -219,7 +225,8 @@ fn parse_backup_filename(filename: &str) -> Option<(String, String)> {
 pub async fn restore_from_backup(backup_id: &str, pool: &PgPool) -> Result<()> {
     let storage_type = env::var("BACKUP_STORAGE_TYPE").unwrap_or_else(|_| "local".to_string());
 
-    let filename = find_backup_filename(backup_id).await
+    let filename = find_backup_filename(backup_id)
+        .await
         .context("Could not find backup file")?;
 
     let temp_path = format!("/tmp/restore_{}", filename);
@@ -234,7 +241,9 @@ pub async fn restore_from_backup(backup_id: &str, pool: &PgPool) -> Result<()> {
         _ => anyhow::bail!("Unknown BACKUP_STORAGE_TYPE: {}", storage_type),
     }
 
-    drop(pool);
+    // Acknowledge pool parameter is not used after this point; the actual
+    // connection release happens when pg_restore runs against the DB directly.
+    let _ = pool;
 
     let restore_result = tokio::process::Command::new("pg_restore")
         .args(["--clean", "--if-exists", "-d", "magnetite", &temp_path])

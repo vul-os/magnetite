@@ -1,3 +1,6 @@
+// Payment/subscription service — Circle + Paystack integration, platform surface, not yet wired.
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -100,14 +103,12 @@ impl SubscriptionService {
         .execute(&self.pool)
         .await?;
 
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_play_sessions_user ON play_sessions(user_id)"
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_play_sessions_user ON play_sessions(user_id)")
+            .execute(&self.pool)
+            .await?;
 
         sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions(user_id)"
+            "CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions(user_id)",
         )
         .execute(&self.pool)
         .await?;
@@ -150,7 +151,10 @@ impl SubscriptionService {
                 .fetch_one(&self.pool)
                 .await?;
 
-                Ok(Some(SubscriptionWithTier { subscription: sub, tier }))
+                Ok(Some(SubscriptionWithTier {
+                    subscription: sub,
+                    tier,
+                }))
             }
             None => Ok(None),
         }
@@ -162,13 +166,12 @@ impl SubscriptionService {
         tier_id: Uuid,
         payment_method: &str,
     ) -> Result<UserSubscription> {
-        let tier = sqlx::query_as::<_, SubscriptionTier>(
-            "SELECT * FROM subscription_tiers WHERE id = $1",
-        )
-        .bind(tier_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Tier not found".to_string()))?;
+        let tier =
+            sqlx::query_as::<_, SubscriptionTier>("SELECT * FROM subscription_tiers WHERE id = $1")
+                .bind(tier_id)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or_else(|| AppError::NotFound("Tier not found".to_string()))?;
 
         if tier.price_usdc > Decimal::ZERO {
             match payment_method {
@@ -179,9 +182,7 @@ impl SubscriptionService {
                     return self.create_circle_subscription(user_id, &tier).await;
                 }
                 _ => {
-                    return Err(AppError::BadRequest(
-                        "Invalid payment provider".to_string(),
-                    ));
+                    return Err(AppError::BadRequest("Invalid payment provider".to_string()));
                 }
             }
         } else {
@@ -234,7 +235,9 @@ impl SubscriptionService {
         user_id: Uuid,
         tier: &SubscriptionTier,
     ) -> Result<UserSubscription> {
-        let secret_key = self.paystack_secret_key.as_ref()
+        let secret_key = self
+            .paystack_secret_key
+            .as_ref()
             .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
 
         let client = reqwest::Client::new();
@@ -260,7 +263,9 @@ impl SubscriptionService {
             .map_err(|e| AppError::Internal(format!("Paystack request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(AppError::Internal("Failed to create Paystack session".to_string()));
+            return Err(AppError::Internal(
+                "Failed to create Paystack session".to_string(),
+            ));
         }
 
         let subscription_id = Uuid::new_v4();
@@ -306,7 +311,9 @@ impl SubscriptionService {
         user_id: Uuid,
         tier: &SubscriptionTier,
     ) -> Result<UserSubscription> {
-        let api_key = self.circle_api_key.as_ref()
+        let api_key = self
+            .circle_api_key
+            .as_ref()
             .ok_or_else(|| AppError::Internal("Circle not configured".to_string()))?;
 
         let client = reqwest::Client::new();
@@ -330,7 +337,9 @@ impl SubscriptionService {
             .map_err(|e| AppError::Internal(format!("Circle request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(AppError::Internal("Failed to create Circle subscription".to_string()));
+            return Err(AppError::Internal(
+                "Failed to create Circle subscription".to_string(),
+            ));
         }
 
         let subscription_id = Uuid::new_v4();
@@ -370,13 +379,12 @@ impl SubscriptionService {
     }
 
     pub async fn cancel(&self, subscription_id: Uuid) -> Result<()> {
-        let subscription = sqlx::query_as::<_, UserSubscription>(
-            "SELECT * FROM user_subscriptions WHERE id = $1",
-        )
-        .bind(subscription_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Subscription not found".to_string()))?;
+        let subscription =
+            sqlx::query_as::<_, UserSubscription>("SELECT * FROM user_subscriptions WHERE id = $1")
+                .bind(subscription_id)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or_else(|| AppError::NotFound("Subscription not found".to_string()))?;
 
         match subscription.payment_provider.as_str() {
             "paystack" => {
@@ -385,7 +393,8 @@ impl SubscriptionService {
                 }
             }
             "circle" => {
-                self.cancel_circle_subscription(&subscription_id.to_string()).await?;
+                self.cancel_circle_subscription(&subscription_id.to_string())
+                    .await?;
             }
             "free" => {}
             _ => {}
@@ -408,13 +417,18 @@ impl SubscriptionService {
     }
 
     async fn cancel_paystack_subscription(&self, reference: &str) -> Result<()> {
-        let secret_key = self.paystack_secret_key.as_ref()
+        let secret_key = self
+            .paystack_secret_key
+            .as_ref()
             .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
 
         let client = reqwest::Client::new();
 
         let response = client
-            .post(&format!("https://api.paystack.co/subscription/{}/manage/stop", reference))
+            .post(&format!(
+                "https://api.paystack.co/subscription/{}/manage/stop",
+                reference
+            ))
             .header("Authorization", format!("Bearer {}", secret_key))
             .send()
             .await
@@ -428,13 +442,18 @@ impl SubscriptionService {
     }
 
     async fn cancel_circle_subscription(&self, subscription_id: &str) -> Result<()> {
-        let api_key = self.circle_api_key.as_ref()
+        let api_key = self
+            .circle_api_key
+            .as_ref()
             .ok_or_else(|| AppError::Internal("Circle not configured".to_string()))?;
 
         let client = reqwest::Client::new();
 
         let response = client
-            .delete(&format!("https://api.circle.com/v1/subscriptions/{}", subscription_id))
+            .delete(&format!(
+                "https://api.circle.com/v1/subscriptions/{}",
+                subscription_id
+            ))
             .header("Authorization", format!("Bearer {}", api_key))
             .send()
             .await
@@ -477,7 +496,9 @@ impl SubscriptionService {
                     return Ok(false);
                 }
 
-                let hours = sub.tier.features
+                let hours = sub
+                    .tier
+                    .features
                     .get("hours")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(0);
@@ -494,10 +515,7 @@ impl SubscriptionService {
         match subscription {
             Some(sub) if sub.subscription.status == "active" => {
                 let features = &sub.tier.features;
-                let hours = features
-                    .get("hours")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0);
+                let hours = features.get("hours").and_then(|v| v.as_i64()).unwrap_or(0);
 
                 if hours == -1 {
                     return Ok(-1);
@@ -551,7 +569,11 @@ impl SubscriptionService {
         .execute(&self.pool)
         .await?;
 
-        tracing::info!("Recorded {} minutes of playtime for user {}", minutes, user_id);
+        tracing::info!(
+            "Recorded {} minutes of playtime for user {}",
+            minutes,
+            user_id
+        );
 
         Ok(())
     }
@@ -580,7 +602,11 @@ impl SubscriptionService {
                     }
                 }
                 "circle" => {
-                    if self.renew_circle_subscription(&subscription.id.to_string()).await.is_ok() {
+                    if self
+                        .renew_circle_subscription(&subscription.id.to_string())
+                        .await
+                        .is_ok()
+                    {
                         renewed_count += 1;
                     }
                 }
@@ -599,13 +625,18 @@ impl SubscriptionService {
     }
 
     async fn renew_paystack_subscription(&self, reference: &str) -> Result<()> {
-        let secret_key = self.paystack_secret_key.as_ref()
+        let secret_key = self
+            .paystack_secret_key
+            .as_ref()
             .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
 
         let client = reqwest::Client::new();
 
         let response = client
-            .post(&format!("https://api.paystack.co/transaction/charge/{}", reference))
+            .post(&format!(
+                "https://api.paystack.co/transaction/charge/{}",
+                reference
+            ))
             .header("Authorization", format!("Bearer {}", secret_key))
             .json(&serde_json::json!({
                 "authorization_code": reference
@@ -638,7 +669,9 @@ impl SubscriptionService {
     }
 
     async fn renew_circle_subscription(&self, subscription_id: &str) -> Result<()> {
-        let api_key = self.circle_api_key.as_ref()
+        let api_key = self
+            .circle_api_key
+            .as_ref()
             .ok_or_else(|| AppError::Internal("Circle not configured".to_string()))?;
 
         let client = reqwest::Client::new();
@@ -724,29 +757,19 @@ impl SubscriptionService {
         .execute(&self.pool)
         .await?;
 
-        tracing::info!(
-            "Activated {} subscription for user {}",
-            provider,
-            user_id
-        );
+        tracing::info!("Activated {} subscription for user {}", provider, user_id);
 
         Ok(())
     }
 
-    pub async fn handle_paystack_success(
-        &self,
-        reference: &str,
-        user_id: Uuid,
-    ) -> Result<()> {
-        self.activate_subscription(user_id, "paystack", reference).await
+    pub async fn handle_paystack_success(&self, reference: &str, user_id: Uuid) -> Result<()> {
+        self.activate_subscription(user_id, "paystack", reference)
+            .await
     }
 
-    pub async fn handle_circle_success(
-        &self,
-        payment_id: &str,
-        user_id: Uuid,
-    ) -> Result<()> {
-        self.activate_subscription(user_id, "circle", payment_id).await
+    pub async fn handle_circle_success(&self, payment_id: &str, user_id: Uuid) -> Result<()> {
+        self.activate_subscription(user_id, "circle", payment_id)
+            .await
     }
 }
 
@@ -831,7 +854,7 @@ impl PaymentService {
 
     pub async fn create_wallet(&self, user_id: Uuid) -> Result<WalletInfo> {
         tracing::info!("Creating USDC wallet for user: {}", user_id);
-        
+
         Ok(WalletInfo {
             wallet_id: format!("wallet_{}", uuid::Uuid::new_v4()),
             address: Some(format!("0x{:x}", rand::random::<u128>())),
@@ -841,7 +864,7 @@ impl PaymentService {
 
     pub async fn get_wallet_balance(&self, wallet_id: &str) -> Result<BalanceInfo> {
         tracing::info!("Checking balance for wallet: {}", wallet_id);
-        
+
         Ok(BalanceInfo {
             wallet_id: wallet_id.to_string(),
             balance: Decimal::ZERO,
@@ -855,7 +878,7 @@ impl PaymentService {
         amount: Decimal,
     ) -> Result<TransferResponse> {
         tracing::info!("Depositing {} to wallet: {}", amount, wallet_id);
-        
+
         Ok(TransferResponse {
             transfer_id: format!("transfer_{}", uuid::Uuid::new_v4()),
             status: "pending".to_string(),
@@ -870,7 +893,7 @@ impl PaymentService {
         amount: Decimal,
     ) -> Result<TransferResponse> {
         tracing::info!("Withdrawing {} to address: {}", amount, to_address);
-        
+
         Ok(TransferResponse {
             transfer_id: format!("transfer_{}", uuid::Uuid::new_v4()),
             status: "pending".to_string(),
@@ -885,7 +908,7 @@ impl PaymentService {
         amount: Decimal,
     ) -> Result<TransferResponse> {
         tracing::info!("Creating payment of {} to address: {}", amount, to_address);
-        
+
         Ok(TransferResponse {
             transfer_id: format!("payment_{}", uuid::Uuid::new_v4()),
             status: "completed".to_string(),
@@ -900,10 +923,14 @@ impl PaymentService {
         amount: Decimal,
         _email: &str,
     ) -> Result<PaystackSession> {
-        tracing::info!("Creating Paystack session for user: {}, amount: {}", user_id, amount);
-        
+        tracing::info!(
+            "Creating Paystack session for user: {}, amount: {}",
+            user_id,
+            amount
+        );
+
         let reference = format!("PS_{}", uuid::Uuid::new_v4());
-        
+
         Ok(PaystackSession {
             session_id: format!("session_{}", uuid::Uuid::new_v4()),
             checkout_url: format!("https://paystack.com/pay/{}", reference),
@@ -911,12 +938,9 @@ impl PaymentService {
         })
     }
 
-    pub async fn verify_paystack_payment(
-        &self,
-        reference: &str,
-    ) -> Result<PaystackVerification> {
+    pub async fn verify_paystack_payment(&self, reference: &str) -> Result<PaystackVerification> {
         tracing::info!("Verifying Paystack payment: {}", reference);
-        
+
         Ok(PaystackVerification {
             status: "success".to_string(),
             reference: reference.to_string(),
@@ -928,9 +952,9 @@ impl PaymentService {
     pub async fn convert_zar_to_usdc(&self, zar_amount: Decimal) -> Result<Decimal> {
         let exchange_rate = Decimal::new(2750, 1);
         let platform_fee = Decimal::new(3, 2);
-        
+
         let usdc_amount = (zar_amount / exchange_rate) * (Decimal::ONE - platform_fee);
-        
+
         tracing::info!("Converted {} ZAR to {} USDC", zar_amount, usdc_amount);
         Ok(usdc_amount)
     }
@@ -938,10 +962,10 @@ impl PaymentService {
     pub fn calculate_earnings(&self, game_revenue: Decimal) -> EarningsBreakdown {
         let platform_percentage = Decimal::new(15, 2);
         let developer_percentage = Decimal::ONE - platform_percentage;
-        
+
         let platform_share = game_revenue * platform_percentage;
         let developer_share = game_revenue * developer_percentage;
-        
+
         EarningsBreakdown {
             total_revenue: game_revenue,
             developer_share,
@@ -957,10 +981,14 @@ impl PaymentService {
         amount: Decimal,
         destination: &str,
     ) -> Result<PayoutInfo> {
-        tracing::info!("Processing payout for user: {}, amount: {}", user_id, amount);
-        
+        tracing::info!(
+            "Processing payout for user: {}, amount: {}",
+            user_id,
+            amount
+        );
+
         let payout_id = Uuid::new_v4();
-        
+
         let payout = PayoutInfo {
             payout_id,
             user_id,
@@ -969,13 +997,13 @@ impl PaymentService {
             status: "pending".to_string(),
             created_at: Utc::now(),
         };
-        
+
         Ok(payout)
     }
 
     pub async fn process_weekly_payouts(&self, _db: &sqlx::PgPool) -> Result<Vec<PayoutInfo>> {
         tracing::info!("Processing weekly auto-payouts");
-        
+
         Ok(vec![])
     }
 }
@@ -988,9 +1016,9 @@ mod tests {
     fn test_calculate_earnings() {
         let service = PaymentService::mock();
         let revenue = Decimal::new(10000, 2);
-        
+
         let earnings = service.calculate_earnings(revenue);
-        
+
         assert_eq!(earnings.total_revenue, revenue);
         assert!(earnings.developer_share > earnings.platform_share);
         assert_eq!(earnings.developer_percentage, Decimal::new(85, 0));
@@ -1001,9 +1029,9 @@ mod tests {
         let zar = Decimal::new(275000, 2);
         let exchange_rate = Decimal::new(2750, 1);
         let platform_fee = Decimal::new(3, 2);
-        
+
         let usdc_amount = (zar / exchange_rate) * (Decimal::ONE - platform_fee);
-        
+
         assert!(usdc_amount > Decimal::ZERO);
     }
 }

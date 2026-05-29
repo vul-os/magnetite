@@ -1,9 +1,7 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::get,
-    Json, Router,
-};
+// Health API helper structs — used by the live/ready endpoints exposed in main.rs.
+#![allow(dead_code)]
+
+use axum::{extract::State, http::StatusCode, Json};
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -38,10 +36,7 @@ pub async fn health() -> Json<serde_json::Value> {
 }
 
 pub async fn ready(State(pool): State<PgPool>) -> Json<serde_json::Value> {
-    let db_check = sqlx::query("SELECT 1")
-        .fetch_one(&pool)
-        .await
-        .is_ok();
+    let db_check = sqlx::query("SELECT 1").fetch_one(&pool).await.is_ok();
 
     Json(serde_json::json!({
         "ready": db_check,

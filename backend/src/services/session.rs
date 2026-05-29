@@ -1,3 +1,6 @@
+// Session service — token generation, refresh, revocation; platform surface, partially wired.
+#![allow(dead_code)]
+
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
@@ -78,7 +81,9 @@ pub fn generate_secure_token(size: usize) -> String {
     base64::encode_config(&bytes, base64::URL_SAFE_NO_PAD)
 }
 
-pub fn hash_refresh_token(token: &str) -> std::result::Result<String, argon2::password_hash::Error> {
+pub fn hash_refresh_token(
+    token: &str,
+) -> std::result::Result<String, argon2::password_hash::Error> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     Ok(argon2.hash_password(token.as_bytes(), &salt)?.to_string())
@@ -94,11 +99,7 @@ pub fn verify_refresh_token(token: &str, hash: &str) -> bool {
         .is_ok()
 }
 
-pub fn generate_access_token(
-    user_id: Uuid,
-    session_id: Uuid,
-    email: &str,
-) -> Result<String> {
+pub fn generate_access_token(user_id: Uuid, session_id: Uuid, email: &str) -> Result<String> {
     use jsonwebtoken::{encode, EncodingKey, Header};
 
     let now = Utc::now().timestamp();
@@ -137,7 +138,7 @@ pub fn decode_access_token(token: &str) -> Result<AccessTokenClaims> {
 pub fn generate_tokens(user_id: Uuid, email: &str) -> Result<(AccessToken, RefreshToken)> {
     let access_token_str = generate_access_token(user_id, Uuid::nil(), email)?;
     let refresh_token_str = generate_refresh_token();
-    
+
     Ok((
         AccessToken {
             token: access_token_str,
@@ -159,8 +160,8 @@ pub async fn create_session(
 ) -> Result<AuthTokens> {
     let session_id = Uuid::new_v4();
     let refresh_token = generate_refresh_token();
-    let refresh_token_hash = hash_refresh_token(&refresh_token)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let refresh_token_hash =
+        hash_refresh_token(&refresh_token).map_err(|e| AppError::Internal(e.to_string()))?;
     let expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS);
 
     sqlx::query(
@@ -188,11 +189,9 @@ pub async fn create_session(
 }
 
 pub async fn validate_refresh_token(db: &sqlx::PgPool, token: &str) -> Result<Session> {
-    let sessions = sqlx::query_as::<_, Session>(
-        "SELECT * FROM sessions WHERE expires_at > NOW()",
-    )
-    .fetch_all(db)
-    .await?;
+    let sessions = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE expires_at > NOW()")
+        .fetch_all(db)
+        .await?;
 
     let session = sessions
         .iter()
@@ -210,13 +209,11 @@ pub async fn refresh_session(
 ) -> Result<AuthTokens> {
     let session = validate_refresh_token(db, refresh_token).await?;
 
-    let user = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, email FROM users WHERE id = $1",
-    )
-    .bind(session.user_id)
-    .fetch_optional(db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let user = sqlx::query_as::<_, (Uuid, String)>("SELECT id, email FROM users WHERE id = $1")
+        .bind(session.user_id)
+        .fetch_optional(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let new_access_token = generate_access_token(user.0, session.id, &user.1)?;
 
@@ -254,13 +251,11 @@ pub async fn refresh_session(
 }
 
 pub async fn revoke_session(db: &sqlx::PgPool, session_id: Uuid, user_id: Uuid) -> Result<()> {
-    let result = sqlx::query(
-        "DELETE FROM sessions WHERE id = $1 AND user_id = $2",
-    )
-    .bind(session_id)
-    .bind(user_id)
-    .execute(db)
-    .await?;
+    let result = sqlx::query("DELETE FROM sessions WHERE id = $1 AND user_id = $2")
+        .bind(session_id)
+        .bind(user_id)
+        .execute(db)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Session not found".to_string()));
@@ -272,23 +267,19 @@ pub async fn revoke_session(db: &sqlx::PgPool, session_id: Uuid, user_id: Uuid) 
 pub async fn revoke_token(db: &sqlx::PgPool, token: &str) -> Result<()> {
     let session = validate_refresh_token(db, token).await?;
 
-    sqlx::query(
-        "DELETE FROM sessions WHERE id = $1",
-    )
-    .bind(session.id)
-    .execute(db)
-    .await?;
+    sqlx::query("DELETE FROM sessions WHERE id = $1")
+        .bind(session.id)
+        .execute(db)
+        .await?;
 
     Ok(())
 }
 
 pub async fn revoke_all_sessions(db: &sqlx::PgPool, user_id: Uuid) -> Result<u64> {
-    let result = sqlx::query(
-        "DELETE FROM sessions WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .execute(db)
-    .await?;
+    let result = sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+        .bind(user_id)
+        .execute(db)
+        .await?;
 
     Ok(result.rows_affected())
 }
@@ -322,26 +313,19 @@ pub async fn list_user_sessions(
         .collect())
 }
 
-pub async fn get_session_by_id(
-    db: &sqlx::PgPool,
-    session_id: Uuid,
-) -> Result<Option<Session>> {
-    let session = sqlx::query_as::<_, Session>(
-        "SELECT * FROM sessions WHERE id = $1",
-    )
-    .bind(session_id)
-    .fetch_optional(db)
-    .await?;
+pub async fn get_session_by_id(db: &sqlx::PgPool, session_id: Uuid) -> Result<Option<Session>> {
+    let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = $1")
+        .bind(session_id)
+        .fetch_optional(db)
+        .await?;
 
     Ok(session)
 }
 
 pub async fn cleanup_expired_sessions(db: &sqlx::PgPool) -> Result<u64> {
-    let result = sqlx::query(
-        "DELETE FROM sessions WHERE expires_at < NOW()",
-    )
-    .execute(db)
-    .await?;
+    let result = sqlx::query("DELETE FROM sessions WHERE expires_at < NOW()")
+        .execute(db)
+        .await?;
 
     Ok(result.rows_affected())
 }

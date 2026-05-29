@@ -1,3 +1,6 @@
+// Anti-cheat detection service — platform surface area, not yet wired to game sessions.
+#![allow(dead_code)]
+
 use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -172,7 +175,10 @@ pub fn detect_anomalies(session_data: &SessionData) -> Vec<Anomaly> {
             } else {
                 Severity::Low
             },
-            description: format!("Unusual timing patterns detected (variance: {:.2})", timing_variance),
+            description: format!(
+                "Unusual timing patterns detected (variance: {:.2})",
+                timing_variance
+            ),
             detected_at: now,
             session_id: session_data.session_id,
         });
@@ -289,7 +295,11 @@ pub struct BanRecord {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-pub async fn check_ban(db: &sqlx::PgPool, user_id: Uuid, fingerprint: &DeviceFingerprint) -> Result<bool> {
+pub async fn check_ban(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+    fingerprint: &DeviceFingerprint,
+) -> Result<bool> {
     let ban = sqlx::query_as::<_, BanRecord>(
         r#"
         SELECT * FROM anti_cheat_bans
@@ -379,8 +389,8 @@ pub async fn store_replay(
     inputs: Vec<Input>,
 ) -> Result<SessionReplay> {
     let replay_id = Uuid::new_v4();
-    let inputs_json = serde_json::to_value(&inputs)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let inputs_json =
+        serde_json::to_value(&inputs).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let replay = sqlx::query_as::<_, SessionReplay>(
         r#"
@@ -400,18 +410,17 @@ pub async fn store_replay(
 }
 
 pub async fn get_replay(db: &sqlx::PgPool, session_id: Uuid) -> Result<Option<Vec<Input>>> {
-    let replay = sqlx::query_as::<_, SessionReplay>(
-        "SELECT * FROM session_replays WHERE session_id = $1",
-    )
-    .bind(session_id)
-    .fetch_optional(db)
-    .await
-    .map_err(AppError::from)?;
+    let replay =
+        sqlx::query_as::<_, SessionReplay>("SELECT * FROM session_replays WHERE session_id = $1")
+            .bind(session_id)
+            .fetch_optional(db)
+            .await
+            .map_err(AppError::from)?;
 
     match replay {
         Some(r) => {
-            let inputs: Vec<Input> = serde_json::from_value(r.inputs)
-                .map_err(|e| AppError::Internal(e.to_string()))?;
+            let inputs: Vec<Input> =
+                serde_json::from_value(r.inputs).map_err(|e| AppError::Internal(e.to_string()))?;
             Ok(Some(inputs))
         }
         None => Ok(None),
@@ -419,13 +428,11 @@ pub async fn get_replay(db: &sqlx::PgPool, session_id: Uuid) -> Result<Option<Ve
 }
 
 pub async fn unban_user(db: &sqlx::PgPool, user_id: Uuid) -> Result<()> {
-    let result = sqlx::query(
-        "DELETE FROM anti_cheat_bans WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .execute(db)
-    .await
-    .map_err(AppError::from)?;
+    let result = sqlx::query("DELETE FROM anti_cheat_bans WHERE user_id = $1")
+        .bind(user_id)
+        .execute(db)
+        .await
+        .map_err(AppError::from)?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("No ban found for user".to_string()));

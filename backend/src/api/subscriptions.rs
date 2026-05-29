@@ -1,5 +1,8 @@
+// Subscriptions API — tier management and billing; platform surface, partially wired.
+#![allow(dead_code)]
+
 use axum::{
-    extract::{State, Extension},
+    extract::{Extension, State},
     middleware::from_fn_with_state,
     routing::{delete, get, post},
     Json, Router,
@@ -12,7 +15,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::api::notifications::NotificationService;
 use crate::api::response;
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 pub enum SubscriptionTier {
     Free,
@@ -233,7 +236,9 @@ pub async fn subscribe(
     }
 
     let notif_service = NotificationService::new(pool.clone());
-    let _ = notif_service.create_subscription_renewal_notification(user_id, &tier.name).await;
+    let _ = notif_service
+        .create_subscription_renewal_notification(user_id, &tier.name)
+        .await;
 
     Ok(response::success_response(UserSubscriptionResponse {
         id: subscription.id,
@@ -273,8 +278,26 @@ pub async fn cancel_subscription(
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(list_tiers))
-        .route("/me", get(get_my_subscription).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/", post(subscribe).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/", delete(cancel_subscription).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/me",
+            get(get_my_subscription).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/",
+            post(subscribe).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/",
+            delete(cancel_subscription).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

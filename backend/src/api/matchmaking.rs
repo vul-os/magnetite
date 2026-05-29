@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Extension},
+    extract::{Extension, State},
     middleware::from_fn_with_state,
     routing::{delete, get, post},
     Json, Router,
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::api::middleware;
 use crate::api::response;
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize)]
 pub struct MatchmakingStatus {
@@ -113,8 +113,26 @@ pub async fn get_status(
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
-        .route("/join", post(join).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/leave", delete(leave).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
-        .route("/status", get(get_status).layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)))
+        .route(
+            "/join",
+            post(join).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/leave",
+            delete(leave).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/status",
+            get(get_status).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::api::response;
-use crate::error::{Result, AppError};
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Achievement {
@@ -65,17 +65,20 @@ pub async fn list_achievements(
     State(pool): State<PgPool>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<response::PaginatedResponse<UserAchievement>>> {
-    let achievements = sqlx::query_as::<_, (
-        Uuid,
-        Uuid,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        i32,
-        i32,
-        Option<chrono::DateTime<chrono::Utc>>,
-    )>(
+    let achievements = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            i32,
+            i32,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
         r#"
         SELECT
             ua.id, ua.achievement_id, a.name, a.description, a.icon, a.category,
@@ -92,7 +95,17 @@ pub async fn list_achievements(
     let result: Vec<UserAchievement> = achievements
         .into_iter()
         .map(|row| {
-            let (id, achievement_id, name, description, icon, category, threshold, progress, unlocked_at) = row;
+            let (
+                id,
+                achievement_id,
+                name,
+                description,
+                icon,
+                category,
+                threshold,
+                progress,
+                unlocked_at,
+            ) = row;
             let locked = unlocked_at.is_none();
             UserAchievement {
                 id,
@@ -117,16 +130,19 @@ pub async fn get_achievement(
     State(pool): State<PgPool>,
     Path((user_id, achievement_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<response::ApiResponse<AchievementDetail>>> {
-    let result = sqlx::query_as::<_, (
-        Uuid,
-        String,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        i32,
-        i32,
-        Option<chrono::DateTime<chrono::Utc>>,
-    )>(
+    let result = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            i32,
+            i32,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
         r#"
         SELECT
             a.id, a.name, a.description, a.icon, a.category, a.threshold,
@@ -241,12 +257,14 @@ pub async fn get_leaderboard(
     let leaderboard: Vec<LeaderboardEntry> = entries
         .into_iter()
         .enumerate()
-        .map(|(i, (user_id, username, achievement_count))| LeaderboardEntry {
-            rank: (i + 1) as i32,
-            user_id,
-            username,
-            achievement_count,
-        })
+        .map(
+            |(i, (user_id, username, achievement_count))| LeaderboardEntry {
+                rank: (i + 1) as i32,
+                user_id,
+                username,
+                achievement_count,
+            },
+        )
         .collect();
 
     let total = leaderboard.len() as u64;
