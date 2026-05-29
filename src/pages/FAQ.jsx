@@ -43,9 +43,10 @@ export default function FAQ() {
   return (
     <Layout>
       <div className="faq-page">
-        <header className="faq-header">
-          <h1>Frequently Asked Questions</h1>
-          <p>Find answers to common questions about Magnetite</p>
+        <header className="faq-header bg-atmosphere reveal">
+          <span className="kicker reveal-1">// SUPPORT &amp; HELP</span>
+          <h1 className="faq-main-heading reveal-2">Frequently Asked Questions</h1>
+          <p className="faq-header-desc reveal-3">Find answers to common questions about Magnetite</p>
         </header>
 
         <div className="faq-search">

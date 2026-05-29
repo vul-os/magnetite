@@ -39,21 +39,23 @@ export default function Profile() {
 
   return (
     <Layout>
-      <div className="profile-page">
-        <ProfileCard
-          user={user}
-          isOwnProfile={!username}
-          isFollowing={isFollowing}
-          onEdit={() => window.location.href = '/edit-profile'}
-          onFollow={() => setIsFollowing(true)}
-          onUnfollow={() => setIsFollowing(false)}
-        />
+      <div className="profile-page reveal">
+        <div className="reveal-1">
+          <ProfileCard
+            user={user}
+            isOwnProfile={!username}
+            isFollowing={isFollowing}
+            onEdit={() => window.location.href = '/edit-profile'}
+            onFollow={() => setIsFollowing(true)}
+            onUnfollow={() => setIsFollowing(false)}
+          />
+        </div>
 
         <div className="profile-sections">
-          <section className="profile-section">
+          <section className="profile-section reveal-2">
             <div className="section-header">
-              <h3>Recent Games</h3>
-              <Link to="/leaderboard" className="view-all">View All</Link>
+              <h3>// Recent Games</h3>
+              <Link to="/leaderboard" className="view-all">View All →</Link>
             </div>
             <div className="recent-games-grid">
               {recentGames.map(game => (
@@ -72,25 +74,25 @@ export default function Profile() {
             </div>
           </section>
 
-          <section className="profile-section">
+          <section className="profile-section reveal-3">
             <div className="section-header">
-              <h3>Achievements</h3>
-              <Link to="/achievements" className="view-all">View All</Link>
+              <h3>// Achievements</h3>
+              <Link to="/achievements" className="view-all">View All →</Link>
             </div>
             <div className="achievements-preview">
               {achievements.map(achievement => (
                 <div key={achievement.id} className="achievement-preview-item">
-                  <span className="achievement-icon">{achievement.icon}</span>
+                  <span className="achievement-icon" aria-hidden="true">{achievement.icon}</span>
                   <span className="achievement-name">{achievement.name}</span>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="profile-section">
+          <section className="profile-section reveal-4">
             <div className="section-header">
-              <h3>Friends</h3>
-              <Link to="/friends" className="view-all">View All</Link>
+              <h3>// Friends</h3>
+              <Link to="/friends" className="view-all">View All →</Link>
             </div>
             <div className="friends-preview">
               {friends.map(friend => (
@@ -98,10 +100,14 @@ export default function Profile() {
                   key={friend.id}
                   to={`/profile/${friend.username}`}
                   className="friend-preview-item"
+                  aria-label={`${friend.username}'s profile`}
                 >
-                  <img src={friend.avatar} alt={friend.username} loading="lazy" />
+                  <img src={friend.avatar} alt={`${friend.username} avatar`} loading="lazy" />
                   <span className="friend-name">{friend.username}</span>
-                  <span className={`friend-status ${friend.status}`} aria-hidden="true" />
+                  <span
+                    className={`friend-status ${friend.status}`}
+                    aria-label={friend.status === 'online' ? 'Online' : 'Offline'}
+                  />
                 </Link>
               ))}
             </div>

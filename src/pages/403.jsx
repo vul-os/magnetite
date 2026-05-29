@@ -8,7 +8,7 @@ export default function Forbidden() {
 
   return (
     <Layout>
-      <div className="error-page">
+      <div className="error-page reveal">
         <div className="error-illustration error-illustration--lock">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />

@@ -1,74 +1,117 @@
-/* ── Game Studio Page ────────────────────────────────────────────────────── */
+/* ── Game Studio Page — Industrial Magnetite polish ─────────────────────── */
 
+@keyframes studioReveal {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Root ────────────────────────────────────────────────────────────────── */
 .game-studio {
   max-width: 1100px;
   margin: 0 auto;
-  animation: fadeInUp var(--t-slow) var(--ease-out) both;
+  animation: studioReveal var(--t-slow) var(--ease-out) both;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .game-studio, .studio-header, .studio-grid { animation: none !important; }
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
 .studio-header {
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
+  animation: studioReveal var(--t-slow) var(--ease-out) 0.06s both;
 }
 
 .studio-header h1 {
-  font-size: var(--text-3xl);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
+  font-weight: 800;
+  letter-spacing: -0.025em;
   margin: 0.25rem 0 0.375rem;
 }
 
 .studio-subtitle {
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
+  font-family: var(--font-sans);
   margin: 0;
   max-width: 600px;
 }
 
 /* ── Grid ────────────────────────────────────────────────────────────────── */
-
 .studio-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   align-items: start;
+  animation: studioReveal var(--t-slow) var(--ease-out) 0.12s both;
 }
 
 /* ── Cards ───────────────────────────────────────────────────────────────── */
-
 .studio-card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 1.75rem;
-  transition: border-color var(--t-fast) var(--ease-out);
+  transition: border-color var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out);
 }
 
 .studio-card:hover {
   border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.github-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.github-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--gradient-primary);
+}
+
+.config-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--gradient-energy);
+}
+
+.config-card {
+  position: relative;
+  overflow: hidden;
 }
 
 .studio-card h2 {
+  font-family: var(--font-display);
   font-size: var(--text-lg);
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   margin: 0.25rem 0 0.375rem;
 }
 
 .card-description {
   color: var(--color-text-secondary);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   margin: 0 0 1.5rem;
   line-height: 1.6;
 }
 
 /* ── GitHub connect ──────────────────────────────────────────────────────── */
-
 .github-connect {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
+
+.input-group { display: flex; flex-direction: column; gap: 0.375rem; }
 
 .github-input {
   width: 100%;
@@ -88,13 +131,12 @@
   box-shadow: var(--shadow-glow-focus);
 }
 
-.github-input::placeholder {
-  color: var(--color-text-muted);
-}
+.github-input::placeholder { color: var(--color-text-muted); }
 
 .github-btn {
   width: 100%;
   justify-content: center;
+  gap: 0.625rem;
 }
 
 .github-connected {
@@ -104,7 +146,7 @@
   gap: 1rem;
   padding: 0.875rem 1rem;
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.2);
+  border: 1px solid rgba(56, 225, 200, 0.22);
   border-radius: var(--radius-sm);
   margin-bottom: 1.5rem;
 }
@@ -125,14 +167,13 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-success);
-  background: rgba(61, 220, 132, 0.1);
+  background: rgba(61, 220, 132, 0.10);
   border: 1px solid rgba(61, 220, 132, 0.2);
   padding: 1px 7px;
   border-radius: var(--radius-xs);
 }
 
 /* ── Permissions ─────────────────────────────────────────────────────────── */
-
 .github-permissions {
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
@@ -161,6 +202,7 @@
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
   line-height: 1.5;
@@ -174,11 +216,54 @@
 }
 
 /* ── Config form ─────────────────────────────────────────────────────────── */
-
 .config-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.config-form label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.375rem;
+  display: block;
+}
+
+.config-form input,
+.config-form textarea,
+.config-form select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+}
+
+.config-form input:focus,
+.config-form textarea:focus,
+.config-form select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-glow-focus);
+}
+
+.config-form input::placeholder,
+.config-form textarea::placeholder { color: var(--color-text-muted); }
+
+.config-form textarea { min-height: 80px; resize: vertical; }
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.875rem;
 }
 
 .deploy-btn {
@@ -187,10 +272,25 @@
   margin-top: 0.25rem;
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: studioSpin 0.8s linear infinite;
+}
 
+@keyframes studioSpin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .studio-grid {
-    grid-template-columns: 1fr;
-  }
+  .studio-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .studio-header h1 { font-size: var(--text-2xl); }
+  .form-row { grid-template-columns: 1fr; }
 }

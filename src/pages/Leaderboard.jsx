@@ -14,7 +14,6 @@ const TIME_FILTERS = [
 
 const ITEMS_PER_PAGE = 10;
 
-// Deterministic pseudo-random so same game+filter yields same numbers
 function seededRand(a, b) {
   const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -58,7 +57,6 @@ export default function Leaderboard() {
   const [currentPage, setCurrentPage]   = useState(1);
   const [apiEntries, setApiEntries]     = useState(null);
 
-  // Load game list from API
   useEffect(() => {
     let cancelled = false;
     api.games.list().then(data => {
@@ -73,7 +71,6 @@ export default function Leaderboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Load leaderboard from API
   useEffect(() => {
     if (!selectedGame) return;
     let cancelled = false;
@@ -108,13 +105,13 @@ export default function Leaderboard() {
 
   return (
     <Layout>
-      <div className="leaderboard-page">
-        <header className="page-header">
+      <div className="leaderboard-page reveal">
+        <header className="page-header reveal-1">
+          <span className="kicker">// Compete Worldwide</span>
           <h1>Leaderboard</h1>
-          <p>// COMPETE WORLDWIDE</p>
         </header>
 
-        <div className="leaderboard-controls">
+        <div className="leaderboard-controls reveal-2">
           <div className="game-select">
             <label htmlFor="game-selector">Game</label>
             <select
@@ -143,12 +140,12 @@ export default function Leaderboard() {
         </div>
 
         {userRank > 0 && userRank > 3 && (
-          <div className="your-rank-banner" role="status">
+          <div className="your-rank-banner reveal-3" role="status">
             Your rank: #{userRank}
           </div>
         )}
 
-        <div className="leaderboard-container" role="table" aria-label="Leaderboard">
+        <div className="leaderboard-container reveal-4" role="table" aria-label="Leaderboard">
           <div className="leaderboard-header" role="row">
             <span className="col-rank" role="columnheader">Rank</span>
             <span className="col-player" role="columnheader">Player</span>
@@ -169,7 +166,7 @@ export default function Leaderboard() {
         </div>
 
         {totalPages > 1 && (
-          <nav className="pagination" aria-label="Leaderboard pages">
+          <nav className="pagination reveal-5" aria-label="Leaderboard pages">
             <button
               className="btn btn-secondary btn-sm"
               disabled={currentPage === 1}
@@ -179,7 +176,7 @@ export default function Leaderboard() {
               Previous
             </button>
             <span className="page-info" aria-current="page">
-              Page {currentPage} of {totalPages}
+              {currentPage} / {totalPages}
             </span>
             <button
               className="btn btn-secondary btn-sm"

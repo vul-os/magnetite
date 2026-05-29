@@ -4,15 +4,36 @@ import { api } from '../api/client';
 import './auth.css';
 
 const TOKEN_KEY = 'magnetite_token';
-const USER_KEY = 'magnetite_user';
+const USER_KEY  = 'magnetite_user';
+
+/* Defined at module level to satisfy react-hooks/static-components */
+function AuthShell({ children }) {
+  return (
+    <div className="auth-page">
+      <div className="auth-background" aria-hidden="true">
+        <div className="auth-bg-gradient" />
+        <div className="auth-bg-glow auth-bg-glow-1" />
+        <div className="auth-bg-glow auth-bg-glow-2" />
+      </div>
+      <div className="auth-container-center">
+        <div className="auth-card">
+          <div className="auth-logo-container" style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
+            <div className="auth-logo-icon">M</div>
+            <span className="auth-logo-text">Magnetite</span>
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const processedRef = useRef(false);
 
-  // Derive initial error state from URL params synchronously (no effect needed)
-  const errorParam = searchParams.get('error');
+  const errorParam   = searchParams.get('error');
   const initialError = errorParam ? decodeURIComponent(errorParam) : '';
 
   const [callbackState, setCallbackState] = useState(
@@ -22,34 +43,29 @@ export default function AuthCallback() {
   );
 
   useEffect(() => {
-    // Don't run again if we already have an error from URL params or already processed
     if (callbackState.type === 'error' || processedRef.current) return;
     processedRef.current = true;
 
-    const action = searchParams.get('action');
+    const action      = searchParams.get('action');
     const destination = searchParams.get('destination') || '/';
 
     let token = searchParams.get('token');
     if (!token) {
       const hash = window.location.hash;
-      if (hash && hash.startsWith('#token=')) {
-        token = hash.slice(7);
-      }
-    }
-
-    if (!token) {
-      setCallbackState({ type: 'error', error: 'No authentication token received', success: '' });
-      return;
+      if (hash && hash.startsWith('#token=')) token = hash.slice(7);
     }
 
     const processCallback = async () => {
+      if (!token) {
+        setCallbackState({ type: 'error', error: 'No authentication token received', success: '' });
+        return;
+      }
+
       try {
         if (action === 'link') {
           await api.auth.linkAccount(token);
           setCallbackState({ type: 'success', error: '', success: 'Account linked successfully' });
-          setTimeout(() => {
-            navigate('/settings/connected-accounts', { replace: true });
-          }, 1500);
+          setTimeout(() => navigate('/settings/connected-accounts', { replace: true }), 1500);
         } else {
           localStorage.setItem(TOKEN_KEY, token);
           const user = await api.auth.me();
@@ -69,89 +85,56 @@ export default function AuthCallback() {
 
   if (type === 'processing') {
     return (
-      <div className="auth-page">
-        <div className="auth-background">
-          <div className="auth-bg-gradient" />
-          <div className="auth-bg-glow auth-bg-glow-1" />
-        </div>
-        <div className="auth-container-center">
-          <div className="auth-card" style={{ textAlign: 'center' }}>
-            <div className="auth-header">
-              <div className="auth-logo-container">
-                <div className="auth-logo-icon">M</div>
-                <span className="auth-logo-text">Magnetite</span>
-              </div>
-              <h1 className="auth-title">Signing In</h1>
-              <p className="auth-subtitle">Completing authentication, please wait...</p>
-            </div>
-            <div className="auth-body" style={{ alignItems: 'center' }}>
-              <span className="spinner" style={{ width: 32, height: 32, color: 'var(--color-accent)', borderWidth: 3 }} />
-            </div>
+      <AuthShell>
+        <div className="auth-state-card">
+          <div className="auth-state-icon auth-state-icon--processing" aria-label="Signing in">
+            <span className="spinner spinner-md" style={{ color: 'var(--color-accent)' }} />
+          </div>
+          <div>
+            <h1 className="auth-state-title">Signing in</h1>
+            <p className="auth-state-body">
+              Completing authentication, please wait&hellip;
+            </p>
           </div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   if (type === 'error') {
     return (
-      <div className="auth-page">
-        <div className="auth-background">
-          <div className="auth-bg-gradient" />
-          <div className="auth-bg-glow auth-bg-glow-1" />
-        </div>
-        <div className="auth-container-center">
-          <div className="auth-card">
-            <div className="auth-header">
-              <div className="auth-logo-container">
-                <div className="auth-logo-icon">M</div>
-                <span className="auth-logo-text">Magnetite</span>
-              </div>
-              <h1 className="auth-title">Authentication Failed</h1>
-            </div>
-            <div className="auth-body">
-              <div className="auth-error">
-                <span className="auth-error-icon">!</span>
-                {error}
-              </div>
-              <button
-                className="auth-submit-btn"
-                onClick={() => navigate('/login', { replace: true })}
-              >
-                Return to Login
-              </button>
-            </div>
+      <AuthShell>
+        <div className="auth-state-card">
+          <div className="auth-state-icon auth-state-icon--error" aria-hidden="true">✕</div>
+          <div>
+            <h1 className="auth-state-title">Authentication failed</h1>
+            <p className="auth-state-body">{error}</p>
           </div>
+          <button
+            className="auth-submit-btn"
+            onClick={() => navigate('/login', { replace: true })}
+            style={{ width: '100%' }}
+          >
+            Return to Sign In
+          </button>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   if (type === 'success') {
     return (
-      <div className="auth-page">
-        <div className="auth-background">
-          <div className="auth-bg-gradient" />
-          <div className="auth-bg-glow auth-bg-glow-1" />
-        </div>
-        <div className="auth-container-center">
-          <div className="auth-card" style={{ textAlign: 'center' }}>
-            <div className="auth-header">
-              <div className="auth-logo-container">
-                <div className="auth-logo-icon">M</div>
-                <span className="auth-logo-text">Magnetite</span>
-              </div>
-              <h1 className="auth-title">Account Linked!</h1>
-              <p className="auth-subtitle">{success}</p>
-            </div>
-            <div className="auth-body">
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 13, textAlign: 'center', margin: 0 }}>
-                Redirecting to connected accounts...
-              </p>
-            </div>
+      <AuthShell>
+        <div className="auth-state-card">
+          <div className="auth-state-icon auth-state-icon--success" aria-hidden="true">✓</div>
+          <div>
+            <h1 className="auth-state-title">Account linked!</h1>
+            <p className="auth-state-body">
+              {success} Redirecting to connected accounts&hellip;
+            </p>
           </div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 

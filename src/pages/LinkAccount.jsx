@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Layout from '../components/Layout';
 import { getOAuthUrl, api } from '../api/client';
 
 const OAuthProviders = [
-  { id: 'google', name: 'Google', icon: 'G' },
-  { id: 'discord', name: 'Discord', icon: 'D' },
-  { id: 'github', name: 'GitHub', icon: 'GH' },
-  { id: 'gitlab', name: 'GitLab', icon: 'GL' },
+  { id: 'google',  name: 'Google',  abbr: 'G',  cls: 'google' },
+  { id: 'discord', name: 'Discord', abbr: 'Di', cls: 'discord' },
+  { id: 'github',  name: 'GitHub',  abbr: 'GH', cls: 'github' },
+  { id: 'gitlab',  name: 'GitLab', abbr: 'GL', cls: 'gitlab' },
 ];
 
 const USER_KEY = 'magnetite_user';
@@ -19,11 +20,11 @@ function navigateToProvider(provider) {
 export default function LinkAccount() {
   const navigate = useNavigate();
   const [linkedAccounts, setLinkedAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [linking, setLinking] = useState(null);
-  const [unlinking, setUnlinking] = useState(null);
-  const [showConfirm, setShowConfirm] = useState(null);
-  const [error, setError] = useState('');
+  const [loading, setLoading]               = useState(true);
+  const [linking, setLinking]               = useState(null);
+  const [unlinking, setUnlinking]           = useState(null);
+  const [showConfirm, setShowConfirm]       = useState(null);
+  const [error, setError]                   = useState('');
 
   const loadLinkedAccounts = useCallback(async () => {
     try {
@@ -63,98 +64,105 @@ export default function LinkAccount() {
     }
   };
 
-  const isLinked = (providerId) => {
-    return linkedAccounts.some(a => a.provider === providerId);
-  };
-
-  if (loading) {
-    return (
-      <div className="settings-container">
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading linked accounts...</p>
-        </div>
-      </div>
-    );
-  }
+  const isLinked = (providerId) => linkedAccounts.some(a => a.provider === providerId);
 
   return (
-    <div className="settings-container">
-      <div className="settings-header">
-        <h1>Link Account</h1>
-        <p>Connect additional OAuth providers to your account</p>
-      </div>
+    <Layout>
+      <div className="connected-accounts-page">
+        <header className="settings-page-header reveal reveal-1">
+          <span className="kicker">// OAUTH PROVIDERS</span>
+          <h1 className="settings-page-title">Link Account</h1>
+          <p className="settings-page-subtitle">
+            Connect OAuth providers to enable password-free sign-in.
+          </p>
+        </header>
 
-      {error && <div className="error-banner">{error}</div>}
+        {error && (
+          <div className="auth-error reveal" role="alert" style={{ marginBottom: '1.5rem' }}>
+            <span className="auth-error-icon" aria-hidden="true">!</span>
+            {error}
+          </div>
+        )}
 
-      <div className="linked-accounts-list">
-        {OAuthProviders.map((provider) => {
-          const linked = isLinked(provider.id);
-          const linkedAccount = linkedAccounts.find(a => a.provider === provider.id);
+        {loading ? (
+          <div className="settings-loading">
+            <span className="spinner spinner-lg" style={{ color: 'var(--color-accent)' }} aria-label="Loading" />
+          </div>
+        ) : (
+          <div className="connected-accounts-grid reveal reveal-2">
+            {OAuthProviders.map((provider) => {
+              const linked = isLinked(provider.id);
+              const linkedAccount = linkedAccounts.find(a => a.provider === provider.id);
 
-          return (
-            <div key={provider.id} className="account-card">
-              <div className="account-info">
-                <div className="account-icon">{provider.icon}</div>
-                <div className="account-details">
-                  <h3>{provider.name}</h3>
-                  {linked ? (
-                    <p className="linked-email">{linkedAccount?.email || 'Connected'}</p>
-                  ) : (
-                    <p className="not-linked">Not linked</p>
-                  )}
+              return (
+                <div key={provider.id} className={`provider-card${linked ? ' linked' : ''}`}>
+                  <div className={`provider-icon ${provider.cls}`} aria-hidden="true">
+                    {provider.abbr}
+                  </div>
+                  <div className="provider-info">
+                    <p className="provider-name">{provider.name}</p>
+                    <span className={`provider-status${linked ? ' connected' : ''}`}>
+                      {linked ? (linkedAccount?.email || 'Connected') : 'Not connected'}
+                    </span>
+                  </div>
+                  <div className="provider-actions">
+                    {linked ? (
+                      showConfirm === provider.id ? (
+                        <div className="provider-confirm-row">
+                          <span className="provider-confirm-label">Disconnect?</span>
+                          <button
+                            className="provider-disconnect-btn"
+                            onClick={() => handleUnlinkAccount(provider.id, linkedAccount.id)}
+                            disabled={unlinking === linkedAccount.id}
+                          >
+                            {unlinking === linkedAccount.id
+                              ? <span className="spinner spinner-sm" aria-hidden="true" />
+                              : 'Yes'}
+                          </button>
+                          <button
+                            className="settings-action-btn"
+                            onClick={() => setShowConfirm(null)}
+                            disabled={unlinking === linkedAccount.id}
+                            style={{ padding: '0.4rem 0.75rem' }}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="provider-disconnect-btn"
+                          onClick={() => setShowConfirm(provider.id)}
+                        >
+                          Disconnect
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        className="provider-connect-btn"
+                        onClick={() => handleLinkAccount(provider.id)}
+                        disabled={linking !== null}
+                      >
+                        {linking === provider.id
+                          ? <span className="spinner spinner-sm" aria-hidden="true" />
+                          : 'Connect'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="account-actions">
-                {linked ? (
-                  showConfirm === provider.id ? (
-                    <div className="confirm-unlink">
-                      <span>Unlink this account?</span>
-                      <div className="confirm-buttons">
-                        <button
-                          className="btn-danger"
-                          onClick={() => handleUnlinkAccount(provider.id, linkedAccount.id)}
-                          disabled={unlinking === linkedAccount.id}
-                        >
-                          {unlinking === linkedAccount.id ? <span className="spinner" /> : 'Unlink'}
-                        </button>
-                        <button
-                          className="btn-secondary"
-                          onClick={() => setShowConfirm(null)}
-                          disabled={unlinking === linkedAccount.id}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      className="btn-danger-outline"
-                      onClick={() => setShowConfirm(provider.id)}
-                    >
-                      Disconnect
-                    </button>
-                  )
-                ) : (
-                  <button
-                    className="btn-primary"
-                    onClick={() => handleLinkAccount(provider.id)}
-                    disabled={linking !== null}
-                  >
-                    {linking === provider.id ? <span className="spinner" /> : 'Connect'}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        )}
 
-      <div className="settings-footer">
-        <button onClick={() => navigate('/settings/connected-accounts')}>
-          View Connected Accounts
-        </button>
+        <div style={{ marginTop: '1.5rem', textAlign: 'right' }} className="reveal reveal-3">
+          <button
+            className="settings-action-btn"
+            onClick={() => navigate('/settings/connected-accounts')}
+          >
+            View All Connected Accounts →
+          </button>
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }

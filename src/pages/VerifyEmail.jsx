@@ -3,6 +3,28 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import './auth.css';
 
+/* Shared auth page shell — defined at module level to avoid lint errors */
+function AuthShell({ children }) {
+  return (
+    <div className="auth-page">
+      <div className="auth-background" aria-hidden="true">
+        <div className="auth-bg-gradient" />
+        <div className="auth-bg-glow auth-bg-glow-1" />
+        <div className="auth-bg-glow auth-bg-glow-2" />
+      </div>
+      <div className="auth-container-center">
+        <div className="auth-card">
+          <div className="auth-logo-container" style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
+            <div className="auth-logo-icon">M</div>
+            <span className="auth-logo-text">Magnetite</span>
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -14,8 +36,8 @@ export default function VerifyEmail() {
 
   useEffect(() => {
     if (!token) return;
-
     let cancelled = false;
+
     async function verify() {
       try {
         await api.auth.verifyEmail(token);
@@ -44,116 +66,108 @@ export default function VerifyEmail() {
     }
   };
 
-  const renderContent = () => {
-    if (status === 'loading') {
-      return (
-        <>
-          <div className="auth-header">
-            <div className="auth-logo-container">
-              <div className="auth-logo-icon">M</div>
-              <span className="auth-logo-text">Magnetite</span>
-            </div>
-            <h1 className="auth-title">Verifying Email</h1>
-            <p className="auth-subtitle">Please wait while we verify your email address...</p>
-          </div>
-          <div className="auth-body" style={{ alignItems: 'center' }}>
-            <span className="spinner spinner-lg" style={{ color: 'var(--color-accent)', width: 32, height: 32 }} />
-          </div>
-        </>
-      );
-    }
-
-    if (status === 'invalid') {
-      return (
-        <>
-          <div className="auth-header">
-            <div className="auth-logo-container">
-              <div className="auth-logo-icon">M</div>
-              <span className="auth-logo-text">Magnetite</span>
-            </div>
-            <h1 className="auth-title">Invalid Link</h1>
-            <p className="auth-subtitle">This email verification link is invalid or has expired.</p>
-          </div>
-          <div className="auth-body">
-            <Link
-              to="/register"
-              className="auth-submit-btn"
-              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              Sign Up
-            </Link>
-          </div>
-        </>
-      );
-    }
-
-    if (status === 'success') {
-      return (
-        <>
-          <div className="auth-header">
-            <div className="auth-logo-container">
-              <div className="auth-logo-icon">M</div>
-              <span className="auth-logo-text">Magnetite</span>
-            </div>
-            <h1 className="auth-title">Email Verified!</h1>
-            <p className="auth-subtitle">Your email has been successfully verified.</p>
-          </div>
-          <div className="auth-body">
-            <Link
-              to="/login"
-              className="auth-submit-btn"
-              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              Log In
-            </Link>
-          </div>
-        </>
-      );
-    }
-
+  if (status === 'loading') {
     return (
-      <>
-        <div className="auth-header">
-          <div className="auth-logo-container">
-            <div className="auth-logo-icon">M</div>
-            <span className="auth-logo-text">Magnetite</span>
+      <AuthShell>
+        <div className="auth-state-card">
+          <div className="auth-state-icon auth-state-icon--processing" aria-label="Verifying">
+            <span className="spinner spinner-md" style={{ color: 'var(--color-accent)' }} />
           </div>
-          <h1 className="auth-title">Verification Failed</h1>
-          <p className="auth-subtitle">{error || 'This verification link has expired.'}</p>
-        </div>
-        <div className="auth-body">
-          <button
-            className="auth-submit-btn"
-            onClick={handleResend}
-            disabled={resending || resent}
-          >
-            {resending ? <span className="spinner spinner-sm" /> : resent ? 'Email Resent!' : 'Resend Verification Email'}
-          </button>
-          {resent && (
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 13, textAlign: 'center', margin: 0 }}>
-              Check your inbox for a new verification link.
+          <div>
+            <h1 className="auth-state-title">Verifying email</h1>
+            <p className="auth-state-body">
+              Please wait while we verify your email address&hellip;
             </p>
-          )}
-          <div className="auth-footer" style={{ textAlign: 'center' }}>
-            Already verified? <Link to="/login" className="auth-link-forgot">Log in</Link>
           </div>
         </div>
-      </>
+      </AuthShell>
     );
-  };
+  }
 
-  return (
-    <div className="auth-page">
-      <div className="auth-background">
-        <div className="auth-bg-gradient" />
-        <div className="auth-bg-glow auth-bg-glow-1" />
-        <div className="auth-bg-glow auth-bg-glow-2" />
-      </div>
-      <div className="auth-container-center">
-        <div className="auth-card">
-          {renderContent()}
+  if (status === 'invalid') {
+    return (
+      <AuthShell>
+        <div className="auth-state-card">
+          <div className="auth-state-icon auth-state-icon--error" aria-hidden="true">✕</div>
+          <div>
+            <h1 className="auth-state-title">Invalid link</h1>
+            <p className="auth-state-body">
+              This email verification link is invalid or has expired.
+              Create a new account or sign in to request a new link.
+            </p>
+          </div>
+          <Link to="/register" className="auth-submit-btn" style={{ textDecoration: 'none' }}>
+            Sign Up
+          </Link>
         </div>
+      </AuthShell>
+    );
+  }
+
+  if (status === 'success') {
+    return (
+      <AuthShell>
+        <div className="auth-state-card">
+          <div className="auth-state-icon auth-state-icon--success" aria-hidden="true">✓</div>
+          <div>
+            <h1 className="auth-state-title">Email verified!</h1>
+            <p className="auth-state-body">
+              Your email address has been successfully verified. You can now sign in
+              to your Magnetite account.
+            </p>
+          </div>
+          <Link to="/login" className="auth-submit-btn" style={{ textDecoration: 'none' }}>
+            Sign In
+          </Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  /* error state */
+  return (
+    <AuthShell>
+      <div className="auth-state-card">
+        <div className="auth-state-icon auth-state-icon--error" aria-hidden="true">!</div>
+        <div>
+          <h1 className="auth-state-title">Verification failed</h1>
+          <p className="auth-state-body">
+            {error || 'This verification link has expired.'}
+          </p>
+        </div>
+
+        <button
+          className="auth-submit-btn"
+          onClick={handleResend}
+          disabled={resending || resent}
+          style={{ width: '100%' }}
+        >
+          {resending
+            ? <span className="spinner spinner-sm" aria-hidden="true" />
+            : resent
+              ? 'Email Resent!'
+              : 'Resend Verification Email'}
+        </button>
+
+        {resent && (
+          <div className="auth-success" role="status">
+            <span className="auth-success-icon" aria-hidden="true">✓</span>
+            Check your inbox for a new verification link.
+          </div>
+        )}
+
+        {error && !resent && (
+          <div className="auth-error" role="alert">
+            <span className="auth-error-icon" aria-hidden="true">!</span>
+            {error}
+          </div>
+        )}
+
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 0 }}>
+          Already verified?{' '}
+          <Link to="/login" className="auth-link-forgot">Sign in</Link>
+        </p>
       </div>
-    </div>
+    </AuthShell>
   );
 }

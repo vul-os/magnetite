@@ -1,25 +1,33 @@
+/*
+ * TransactionSkeleton — Industrial Magnetite Wave 4
+ * Accent-tinted shimmer.
+ */
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .transaction-skeleton {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .transaction-skeleton .skeleton-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-xs);
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.07) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
   flex-shrink: 0;
 }
 
@@ -27,57 +35,58 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .transaction-skeleton .skeleton-text {
-  height: 14px;
-  width: 60%;
+  height: 13px;
+  width: 55%;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.06) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
   border-radius: 4px;
 }
 
 .transaction-skeleton .skeleton-subtext {
-  height: 12px;
-  width: 40%;
+  height: 11px;
+  width: 38%;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.04) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
   border-radius: 4px;
 }
 
 .transaction-skeleton .skeleton-amount {
-  height: 18px;
-  width: 70px;
+  height: 16px;
+  width: 64px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.06) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
   border-radius: 4px;
   flex-shrink: 0;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
+@media (prefers-reduced-motion: reduce) {
+  .transaction-skeleton .skeleton-icon,
+  .transaction-skeleton .skeleton-text,
+  .transaction-skeleton .skeleton-subtext,
+  .transaction-skeleton .skeleton-amount {
+    animation: none;
+    background: var(--color-bg-elevated);
   }
 }

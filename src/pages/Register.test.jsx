@@ -26,7 +26,7 @@ describe('Register', () => {
         <Register />
       </MemoryRouter>
     );
-    expect(screen.getByRole('heading', { name: /sign up/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /join magnetite/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/username/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/email/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/password/i)).toBeInTheDocument();
@@ -48,7 +48,7 @@ describe('Register', () => {
       </MemoryRouter>
     );
 
-    const submitButton = screen.getByRole('button', { name: /sign up/i });
+    const submitButton = screen.getByRole('button', { name: /create account/i });
     expect(submitButton).toBeDisabled();
   });
 
@@ -66,7 +66,7 @@ describe('Register', () => {
     fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: 'password123' } });
     fireEvent.click(screen.getByText(/i agree to the/i));
 
-    const submitButton = screen.getByRole('button', { name: /sign up/i });
+    const submitButton = screen.getByRole('button', { name: /create account/i });
     expect(submitButton).not.toBeDisabled();
   });
 
@@ -81,6 +81,6 @@ describe('Register', () => {
     fireEvent.change(screen.getByPlaceholderText(/email/i), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: 'password123' } });
 
-    expect(screen.getByRole('button', { name: /sign up/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /create account/i })).toBeDisabled();
   });
 });

@@ -39,6 +39,7 @@ Rust-games-at-any-scale narrative above.
 | D5 | sqlx | Upgrade `sqlx 0.7.4 → 0.8.x` to clear future-incompat | Removes the future-incompat rejection warning; small, contained change. |
 | D6 | Mock data | Keep mock fallbacks but wire pages to real API where the endpoint exists; mocks become graceful fallback only | Many pages still import `src/data/mock*`. |
 | D7 | Orchestration | Waves of up to 5 Sonnet agents via Workflow; 30-min audit loop for ~4 hours | Per user instruction. |
+| D8 | Parallelism | **Exactly 5 concurrent Sonnet agents per wave, no idle gaps** (user chose "Keep 5, no idle gaps" over worktree scale-up / dual-workflow). Each wave = 5 disjoint file partitions (safe max for one working tree). Overlap verify/commit with the next wave's non-overlapping work to avoid dead time. | User directive 2026-05-30. |
 
 ---
 
@@ -192,6 +193,21 @@ Light theme: invert bg/text, keep accents, soften shadows (define under `[data-t
   build-pipeline, architecture, sdk ref, security, self-hosting). Lint is now 0 errors + fmt clean, so the
   pre-commit hook passes — committing WITHOUT `--no-verify`.
   → next: **Wave 4 — UI/UX polish** (typography upgrade + atmosphere + per-route UX audit via frontend-design skill).
+- **Wave 4 (UI/UX polish) — DONE, verified:** 5 agents applied the elevated design system across every
+  route. Distinctive type live (Archivo display / Hanken Grotesk body / JetBrains Mono — Inter dropped),
+  fonts loaded via index.html, shared atmosphere/reveal/kicker CSS contract implemented. Showstopper hero
+  (layered glows, field lines, Rust terminal card, orchestrated reveals), cinematic marketplace + sticky
+  buy-bar game detail, split-panel auth, polished settings/dashboards/leaderboard/achievements/admin/error
+  pages/skeletons. Build green, lint **0 errors**.
+  - **Issues handled by orchestrator:** (a) foundation agent (parallel[0]) failed to emit StructuredOutput,
+    but its global edits landed via sibling agents — verified fonts + class contract present and building.
+    (b) Auth rebuild changed Login/Register copy ("Welcome back"/"Sign In", "Join Magnetite"/"Create
+    Account") which broke 7 unit tests asserting old `/log in//sign up/` names — updated the tests to the
+    new accessible names; **back to 33/33**. (c) `.bg-atmosphere`/glow contract is duplicated across
+    tokens.css (full) + index.css (partial) — harmless (cascade), flagged for Wave 5 consolidation; Navbar/
+    Footer didn't get the foundation polish pass — also Wave 5.
+  → Wave 4 committed; next Wave 5 = design-review→fix + consolidate CSS contract + Navbar/Footer polish +
+    perf (code-split heavy DeveloperDashboard) + a11y + GameGallery/GameScreenshot restyle.
 - **User directive (mid-run):** ensure UI/UX is amazing everywhere using the frontend-design skill →
   loaded the skill; elevated §3 typography (Archivo/Hanken Grotesk/JetBrains Mono, drop Inter) + atmosphere;
   added Wave 4 polish plan + per-route quality bar (§4).

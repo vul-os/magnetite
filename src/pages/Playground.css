@@ -61,7 +61,15 @@
   flex-shrink: 0;
 }
 
-.connection-status[data-status="connected"]    .status-dot { background: var(--color-success); }
+.connection-status[data-status="connected"]    .status-dot {
+  background: var(--color-success);
+  box-shadow: 0 0 6px rgba(61, 220, 132, 0.5);
+  animation: connPulse 2s ease-in-out infinite;
+}
+@keyframes connPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
 .connection-status[data-status="error"]        .status-dot { background: var(--color-error); }
 .connection-status[data-status="disconnected"] .status-dot { background: var(--color-text-muted); }
 
@@ -124,6 +132,7 @@
   font-weight: 700;
   color: var(--color-accent);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(56, 225, 200, 0.3);
 }
 
 /* ─── Exit button ──────────────────────────────────────────────────────────── */
@@ -169,11 +178,12 @@
 }
 
 .winner-announcement {
-  font-family: var(--font-mono);
-  font-size: var(--text-xl);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
   color: var(--color-accent);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
+  text-shadow: 0 0 24px rgba(56, 225, 200, 0.3);
 }
 
 .final-score {

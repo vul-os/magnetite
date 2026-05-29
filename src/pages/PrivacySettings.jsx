@@ -6,31 +6,49 @@ const MOCK_BLOCKED_USERS = [
   { id: 'user_002', username: 'toxic_player', blockedDate: '2026-05-02' },
 ];
 
-export default function Privacy() {
+function ToggleSetting({ label, description, checked, onChange }) {
+  return (
+    <div className="settings-toggle-row">
+      <div className="settings-toggle-text">
+        <span className="settings-toggle-label">{label}</span>
+        {description && <p className="settings-toggle-desc">{description}</p>}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        className={`settings-toggle-switch${checked ? ' checked' : ''}`}
+        onClick={() => onChange(!checked)}
+      >
+        <span className="settings-toggle-thumb" />
+      </button>
+    </div>
+  );
+}
+
+export default function PrivacySettings() {
   const [privacy, setPrivacy] = useState({
-    profileVisibility: 'public',
+    profileVisibility:  'public',
     showOnLeaderboards: true,
-    showOnlineStatus: true,
+    showOnlineStatus:   true,
     allowFriendRequests: true,
   });
   const [blockedUsers, setBlockedUsers] = useState(MOCK_BLOCKED_USERS);
-  const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [saveSuccess, setSaveSuccess]   = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting]       = useState(false);
 
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 800));
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
-    } catch {
-      console.error('Failed to save privacy settings');
-    } finally {
-      setSaving(false);
-    }
+      setTimeout(() => setSaveSuccess(false), 2500);
+    } catch { /* noop */ }
+    finally { setSaving(false); }
   };
 
   const handleUnblockUser = (userId) => {
@@ -41,105 +59,94 @@ export default function Privacy() {
     setExporting(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
-      alert('Data export has been initiated. You will receive an email when your data is ready for download.');
-    } catch {
-      console.error('Failed to export data');
-    } finally {
-      setExporting(false);
-    }
+    } catch { /* noop */ }
+    finally { setExporting(false); }
   };
 
   const handleDeleteAccount = () => {
-    alert('Account deletion has been initiated. You will receive an email with confirmation instructions.');
     setShowDeleteConfirm(false);
+    /* In production: call api.auth.deleteAccount() */
   };
 
   return (
     <Layout>
-      <div className="settings-page privacy-page">
-        <header className="settings-header">
-          <h1>Privacy</h1>
-          <p>Control your privacy settings and manage your data</p>
+      <div className="security-page">
+        {/* Header */}
+        <header className="settings-page-header reveal reveal-1">
+          <span className="kicker">// PRIVACY</span>
+          <h1 className="settings-page-title">Privacy</h1>
+          <p className="settings-page-subtitle">
+            Control who can see your data and how your information is used.
+          </p>
         </header>
 
-        <form className="settings-form" onSubmit={handleSave}>
-          <div className="form-section">
-            <h3>Profile Visibility</h3>
-            <div className="form-group">
-              <label>Who can see your profile</label>
+        <form onSubmit={handleSave}>
+          {/* Profile Visibility */}
+          <section className="settings-section reveal reveal-2">
+            <h2 className="settings-section-title">Profile Visibility</h2>
+            <div className="settings-field" style={{ maxWidth: 340, marginBottom: 0 }}>
+              <label className="settings-field-label" htmlFor="priv-vis">Who can view your profile</label>
               <select
+                id="priv-vis"
                 value={privacy.profileVisibility}
                 onChange={(e) => setPrivacy({ ...privacy, profileVisibility: e.target.value })}
+                className="settings-input"
               >
-                <option value="public">Public - Anyone can view your profile</option>
-                <option value="friends">Friends Only - Only friends can view your profile</option>
-                <option value="private">Private - Only you can view your profile</option>
+                <option value="public">Public — anyone can view</option>
+                <option value="friends">Friends Only</option>
+                <option value="private">Private — only you</option>
               </select>
             </div>
-          </div>
+          </section>
 
-          <div className="form-section">
-            <h3>Visibility Options</h3>
-            <div className="toggle-setting">
-              <div>
-                <span className="toggle-label">Show on Leaderboards</span>
-                <p className="toggle-description">Appear on public leaderboards with your scores</p>
-              </div>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={privacy.showOnLeaderboards}
-                  onChange={(e) => setPrivacy({ ...privacy, showOnLeaderboards: e.target.checked })}
-                />
-                <span className="toggle-slider"></span>
-              </label>
-            </div>
-            <div className="toggle-setting">
-              <div>
-                <span className="toggle-label">Show Online Status</span>
-                <p className="toggle-description">Let others see when you're online</p>
-              </div>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={privacy.showOnlineStatus}
-                  onChange={(e) => setPrivacy({ ...privacy, showOnlineStatus: e.target.checked })}
-                />
-                <span className="toggle-slider"></span>
-              </label>
-            </div>
-            <div className="toggle-setting">
-              <div>
-                <span className="toggle-label">Allow Friend Requests</span>
-                <p className="toggle-description">Let others send you friend requests</p>
-              </div>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={privacy.allowFriendRequests}
-                  onChange={(e) => setPrivacy({ ...privacy, allowFriendRequests: e.target.checked })}
-                />
-                <span className="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
+          {/* Visibility options */}
+          <section className="settings-section reveal reveal-3">
+            <h2 className="settings-section-title">Visibility Options</h2>
+            <ToggleSetting
+              label="Show on Leaderboards"
+              description="Appear in public rankings with your scores and stats."
+              checked={privacy.showOnLeaderboards}
+              onChange={(v) => setPrivacy({ ...privacy, showOnLeaderboards: v })}
+            />
+            <ToggleSetting
+              label="Show Online Status"
+              description="Let other players see when you&apos;re active."
+              checked={privacy.showOnlineStatus}
+              onChange={(v) => setPrivacy({ ...privacy, showOnlineStatus: v })}
+            />
+            <ToggleSetting
+              label="Allow Friend Requests"
+              description="Other players can send you friend requests."
+              checked={privacy.allowFriendRequests}
+              onChange={(v) => setPrivacy({ ...privacy, allowFriendRequests: v })}
+            />
+          </section>
 
-          <div className="form-section">
-            <h3>Blocked Users</h3>
-            <p className="section-description">Users you've blocked cannot see your profile or send you messages</p>
+          {/* Blocked users */}
+          <section className="settings-section reveal reveal-4">
+            <h2 className="settings-section-title">Blocked Users</h2>
+            <p className="settings-section-desc">
+              Blocked players cannot view your profile or send you messages.
+            </p>
             {blockedUsers.length === 0 ? (
-              <p className="empty-state">You haven't blocked any users</p>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
+                You haven&apos;t blocked any users.
+              </p>
             ) : (
-              <div className="blocked-users-list">
+              <div className="settings-blocked-list">
                 {blockedUsers.map(user => (
-                  <div key={user.id} className="blocked-user-item">
-                    <div className="blocked-user-info">
-                      <span className="blocked-username">@{user.username}</span>
-                      <span className="blocked-date">Blocked on {user.blockedDate}</span>
+                  <div key={user.id} className="settings-blocked-item">
+                    <div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-accent)' }}>
+                        @{user.username}
+                      </span>
+                      <span style={{ marginLeft: '0.75rem', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        Blocked {user.blockedDate}
+                      </span>
                     </div>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="settings-action-btn"
                       onClick={() => handleUnblockUser(user.id)}
                     >
                       Unblock
@@ -148,69 +155,80 @@ export default function Privacy() {
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Changes'}
+          <button type="submit" className="settings-save-btn reveal reveal-5" disabled={saving} style={{ marginBottom: '2rem' }}>
+            {saving
+              ? <><span className="spinner spinner-sm" aria-hidden="true" /> Saving&hellip;</>
+              : saveSuccess
+                ? <><span style={{ color: 'var(--color-success)' }}>✓</span> Saved!</>
+                : 'Save Changes'}
           </button>
         </form>
 
-        <div className="form-section danger-zone">
-          <h3>Data Management</h3>
-          <div className="danger-action">
+        {/* Data Management */}
+        <section className="settings-section reveal reveal-6">
+          <h2 className="settings-section-title">Data Management</h2>
+          <div className="settings-danger-row">
             <div>
-              <span className="action-title">Export Your Data</span>
-              <p className="action-description">Download a copy of all your data</p>
+              <span className="settings-danger-action-title">Export Your Data</span>
+              <p className="settings-danger-desc">
+                Download a copy of all your profile, game, and transaction data.
+              </p>
             </div>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="settings-action-btn"
               onClick={handleExportData}
               disabled={exporting}
             >
-              {exporting ? 'Exporting...' : 'Request Export'}
+              {exporting
+                ? <><span className="spinner spinner-sm" aria-hidden="true" /> Exporting&hellip;</>
+                : 'Request Export'}
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="form-section danger-zone">
-          <h3>Danger Zone</h3>
-          <div className="danger-action">
+        {/* Danger zone */}
+        <section className="settings-section settings-danger-zone reveal reveal-7">
+          <h2 className="settings-section-title">Danger Zone</h2>
+          <div className="settings-danger-row">
             <div>
-              <span className="action-title">Delete Account</span>
-              <p className="action-description">Permanently delete your account and all data</p>
+              <span className="settings-danger-action-title">Delete Account</span>
+              <p className="settings-danger-desc">
+                Permanently delete your account and all associated data. This cannot be undone.
+              </p>
             </div>
             {showDeleteConfirm ? (
-              <div className="confirm-delete">
-                <p className="confirm-text">Are you sure? This action cannot be undone.</p>
-                <div className="confirm-buttons">
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={handleDeleteAccount}
-                  >
-                    Yes, Delete Account
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowDeleteConfirm(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="settings-revoke-btn"
+                  style={{ padding: '0.5rem 1rem', border: '1px solid var(--color-error)', background: 'rgba(255,84,104,0.1)', color: 'var(--color-error)' }}
+                  onClick={handleDeleteAccount}
+                >
+                  Yes, delete
+                </button>
+                <button
+                  type="button"
+                  className="settings-action-btn"
+                  onClick={() => setShowDeleteConfirm(false)}
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <button
                 type="button"
-                className="btn btn-danger"
+                className="settings-revoke-btn"
+                style={{ padding: '0.5rem 1rem', border: '1px solid rgba(255,84,104,0.4)', color: 'var(--color-error)' }}
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 Delete Account
               </button>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </Layout>
   );

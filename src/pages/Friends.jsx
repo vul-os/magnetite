@@ -13,7 +13,6 @@ export default function Friends() {
   const [searchResults, setSearchResults] = useState([]);
   const [activeTab, setActiveTab] = useState('friends');
 
-  // Load friends from real API on mount
   useEffect(() => {
     let cancelled = false;
     api.social.friends().then(data => {
@@ -28,7 +27,6 @@ export default function Friends() {
   const handleSearch = useCallback((query) => {
     setSearchQuery(query);
     if (query.trim()) {
-      // Try real API first, fall back to mock
       api.social.searchUsers(query).then(data => {
         const list = Array.isArray(data) ? data : (data?.users ?? null);
         if (list) {
@@ -85,37 +83,44 @@ export default function Friends() {
 
   return (
     <Layout>
-      <div className="friends-page">
-        <header className="page-header">
+      <div className="friends-page reveal">
+        <header className="page-header reveal-1">
+          <span className="kicker">// Social Network</span>
           <h1>Friends</h1>
-          <p>// SOCIAL NETWORK</p>
         </header>
 
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="Search players by username..."
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            aria-label="Search users"
-            aria-autocomplete="list"
-          />
-          {searchResults.length > 0 && (
-            <div className="search-results" role="listbox" aria-label="Search results">
-              {searchResults.map(user => (
-                <div key={user.id} className="search-result-item" role="option">
-                  <img src={user.avatar} alt="" loading="lazy" />
-                  <span>{user.username}</span>
-                  <button onClick={() => handleAddFriend(user)} className="btn btn-primary btn-sm">
-                    Add
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="reveal-2">
+          <div className="search-box">
+            <input
+              type="text"
+              placeholder="Search players by username..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              aria-label="Search users"
+              aria-autocomplete="list"
+              aria-expanded={searchResults.length > 0}
+            />
+            {searchResults.length > 0 && (
+              <div className="search-results" role="listbox" aria-label="Search results">
+                {searchResults.map(user => (
+                  <div key={user.id} className="search-result-item" role="option">
+                    <img src={user.avatar} alt="" loading="lazy" />
+                    <span>{user.username}</span>
+                    <button
+                      onClick={() => handleAddFriend(user)}
+                      className="btn btn-primary btn-sm"
+                      aria-label={`Add ${user.username} as friend`}
+                    >
+                      Add
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="tabs" role="tablist">
+        <div className="tabs reveal-3" role="tablist" aria-label="Friends sections">
           <button
             role="tab"
             aria-selected={activeTab === 'friends'}
@@ -142,11 +147,11 @@ export default function Friends() {
           </button>
         </div>
 
-        <div className="tab-content">
+        <div className="tab-content reveal-4">
           {activeTab === 'friends' && (
-            <div className="friends-list" role="tabpanel">
+            <div className="friends-list" role="tabpanel" aria-label="Friends list">
               {friends.length === 0 ? (
-                <p className="empty-state-inline">No friends yet. Search for users to add friends!</p>
+                <p className="empty-state-inline">No friends yet — search for players above</p>
               ) : (
                 friends.map(friend => (
                   <FriendCard
@@ -161,22 +166,30 @@ export default function Friends() {
           )}
 
           {activeTab === 'requests' && (
-            <div className="requests-list" role="tabpanel">
+            <div className="requests-list" role="tabpanel" aria-label="Pending requests">
               {pendingRequests.length === 0 ? (
                 <p className="empty-state-inline">No pending requests</p>
               ) : (
                 pendingRequests.map(request => (
                   <div key={request.id} className="request-card">
-                    <img src={request.avatar} alt={request.username} loading="lazy" />
+                    <img src={request.avatar} alt={`${request.username} avatar`} loading="lazy" />
                     <div className="request-info">
                       <h4>{request.username}</h4>
                       <span>Sent {new Date(request.sentAt).toLocaleDateString()}</span>
                     </div>
                     <div className="request-actions">
-                      <button onClick={() => handleAcceptRequest(request)} className="btn btn-primary btn-sm">
+                      <button
+                        onClick={() => handleAcceptRequest(request)}
+                        className="btn btn-primary btn-sm"
+                        aria-label={`Accept request from ${request.username}`}
+                      >
                         Accept
                       </button>
-                      <button onClick={() => handleDeclineRequest(request)} className="btn btn-secondary btn-sm">
+                      <button
+                        onClick={() => handleDeclineRequest(request)}
+                        className="btn btn-secondary btn-sm"
+                        aria-label={`Decline request from ${request.username}`}
+                      >
                         Decline
                       </button>
                     </div>
@@ -187,18 +200,22 @@ export default function Friends() {
           )}
 
           {activeTab === 'blocked' && (
-            <div className="blocked-list" role="tabpanel">
+            <div className="blocked-list" role="tabpanel" aria-label="Blocked users">
               {blockedUsers.length === 0 ? (
                 <p className="empty-state-inline">No blocked users</p>
               ) : (
                 blockedUsers.map(user => (
                   <div key={user.id} className="blocked-card">
-                    <img src={user.avatar} alt={user.username} loading="lazy" />
+                    <img src={user.avatar} alt={`${user.username} avatar`} loading="lazy" />
                     <div className="blocked-info">
                       <h4>{user.username}</h4>
                       <span>Blocked {new Date(user.blockedAt).toLocaleDateString()}</span>
                     </div>
-                    <button onClick={() => handleUnblock(user)} className="btn btn-secondary btn-sm">
+                    <button
+                      onClick={() => handleUnblock(user)}
+                      className="btn btn-secondary btn-sm"
+                      aria-label={`Unblock ${user.username}`}
+                    >
                       Unblock
                     </button>
                   </div>

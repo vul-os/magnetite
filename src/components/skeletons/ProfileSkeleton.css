@@ -1,77 +1,108 @@
+/*
+ * ProfileSkeleton — Industrial Magnetite Wave 4
+ * Accent-tinted shimmer. Matches profile card layout.
+ */
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .profile-skeleton {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32px;
+  padding: 2.5rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Cover placeholder at top */
+.profile-skeleton::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.04) 50%,
+    var(--color-bg-elevated) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-skeleton::before { animation: none; }
 }
 
 .profile-skeleton .skeleton-avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
+  width: 88px;
+  height: 88px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.07) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  margin-bottom: 20px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  margin-bottom: 1.25rem;
+  margin-top: 1rem;
 }
 
 .profile-skeleton .skeleton-name {
-  height: 24px;
-  width: 160px;
+  height: 22px;
+  width: 150px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.07) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
-  margin-bottom: 24px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-xs);
+  margin-bottom: 1.25rem;
 }
 
 .profile-skeleton .skeleton-bio {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   max-width: 280px;
 }
 
 .profile-skeleton .skeleton-bio-line {
-  height: 14px;
+  height: 13px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.05) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
   border-radius: 4px;
 }
 
-.profile-skeleton .skeleton-bio-line:nth-child(2) {
-  width: 85%;
-}
-
-.profile-skeleton .skeleton-bio-line:nth-child(3) {
-  width: 70%;
-}
+.profile-skeleton .skeleton-bio-line:nth-child(2) { width: 85%; }
+.profile-skeleton .skeleton-bio-line:nth-child(3) { width: 65%; }
 
 .profile-skeleton .skeleton-stats {
   display: flex;
-  gap: 32px;
-  margin-top: 24px;
-  padding-top: 24px;
+  gap: 2rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
   border-top: 1px solid var(--color-border);
   width: 100%;
   justify-content: center;
@@ -81,42 +112,44 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .profile-skeleton .skeleton-stat-value {
-  height: 28px;
-  width: 48px;
+  height: 24px;
+  width: 44px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.07) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-xs);
 }
 
 .profile-skeleton .skeleton-stat-label {
-  height: 12px;
-  width: 56px;
+  height: 11px;
+  width: 52px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.05) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 4px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 3px;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
+@media (prefers-reduced-motion: reduce) {
+  .profile-skeleton .skeleton-avatar,
+  .profile-skeleton .skeleton-name,
+  .profile-skeleton .skeleton-bio-line,
+  .profile-skeleton .skeleton-stat-value,
+  .profile-skeleton .skeleton-stat-label {
+    animation: none;
+    background: var(--color-bg-elevated);
   }
 }

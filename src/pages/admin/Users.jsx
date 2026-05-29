@@ -78,10 +78,10 @@ export default function Users() {
     <Layout>
       <div className="admin-layout">
         <AdminSidebar />
-        <main className="admin-main">
-          <header className="admin-header">
+        <main className="admin-main reveal">
+          <header className="admin-header reveal-1">
             <div>
-              <span className="kicker">// PLATFORM CONTROL</span>
+              <span className="kicker">// Platform Control</span>
               <h1>User Management</h1>
               <p>Manage users and permissions</p>
             </div>

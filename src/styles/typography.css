@@ -1,47 +1,149 @@
-.font-sans {
-  font-family: var(--font-family);
+/*
+ * Industrial Magnetite — Typography
+ * Display = Archivo (headings, large callouts)
+ * Sans   = Hanken Grotesk (body, UI prose)
+ * Mono   = JetBrains Mono (labels, stats, code, IDs)
+ *
+ * Scale (px): 12 / 13 / 14 / 16 / 18 / 22 / 28 / 36 / 48 / 64 / 80
+ * Fluid clamp() for hero/section headings; tight tracking on display; wide on mono kickers.
+ */
+
+/* ─── Base element styles ─────────────────────────────────────────────────── */
+
+body {
+  font-family: var(--font-sans);
 }
 
-.font-mono {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+/* h1–h6: Archivo, tight tracking, display-weight */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+  margin: 0;
 }
 
-.text-xs { font-size: 12px; }
-.text-sm { font-size: 14px; }
-.text-base { font-size: 16px; }
-.text-lg { font-size: 18px; }
-.text-xl { font-size: 20px; }
-.text-2xl { font-size: 24px; }
-.text-3xl { font-size: 30px; }
-.text-4xl { font-size: 36px; }
-.text-5xl { font-size: 48px; }
-.text-6xl { font-size: 72px; }
+/* Fluid heading sizes (clamp: min, fluid, max) */
+h1 {
+  font-size: clamp(2rem, 5vw + 0.5rem, 5rem);     /* 32px → 80px */
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.0;
+}
 
-.font-light { font-weight: 300; }
-.font-normal { font-weight: 400; }
-.font-medium { font-weight: 500; }
+h2 {
+  font-size: clamp(1.5rem, 3vw + 0.5rem, 3rem);   /* 24px → 48px */
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+h3 {
+  font-size: clamp(1.125rem, 2vw + 0.25rem, 1.75rem); /* 18px → 28px */
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h4 {
+  font-size: clamp(1rem, 1.5vw + 0.25rem, 1.375rem); /* 16px → 22px */
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+h5 {
+  font-size: 1rem;          /* 16px */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+h6 {
+  font-size: 0.875rem;      /* 14px */
+  font-weight: 600;
+  letter-spacing: 0em;
+  line-height: 1.4;
+}
+
+/* Body paragraphs */
+p {
+  font-family: var(--font-sans);
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* Code, kbd, pre, samp inherit mono from base */
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+}
+
+/* ─── Utility classes ─────────────────────────────────────────────────────── */
+
+/* Font families */
+.font-display { font-family: var(--font-display); }
+.font-sans    { font-family: var(--font-sans); }
+.font-mono    { font-family: var(--font-mono); }
+
+/* Size tokens (aligned to the 12-step scale) */
+.text-2xs  { font-size: var(--text-2xs); }   /* 12px */
+.text-xs   { font-size: var(--text-xs); }    /* 13px */
+.text-sm   { font-size: var(--text-sm); }    /* 14px */
+.text-base { font-size: var(--text-base); }  /* 16px */
+.text-lg   { font-size: var(--text-lg); }    /* 18px */
+.text-xl   { font-size: var(--text-xl); }    /* 22px */
+.text-2xl  { font-size: var(--text-2xl); }   /* 28px */
+.text-3xl  { font-size: var(--text-3xl); }   /* 36px */
+.text-4xl  { font-size: var(--text-4xl); }   /* 48px */
+.text-5xl  { font-size: var(--text-5xl); }   /* 64px */
+
+/* Weights */
+.font-light    { font-weight: 300; }
+.font-normal   { font-weight: 400; }
+.font-medium   { font-weight: 500; }
 .font-semibold { font-weight: 600; }
-.font-bold { font-weight: 700; }
+.font-bold     { font-weight: 700; }
+.font-extrabold{ font-weight: 800; }
+.font-black    { font-weight: 900; }
 
-.leading-none { line-height: 1; }
-.leading-tight { line-height: 1.25; }
-.leading-normal { line-height: 1.6; }
+/* Tracking */
+.tracking-tight   { letter-spacing: -0.025em; }
+.tracking-normal  { letter-spacing: 0em; }
+.tracking-wide    { letter-spacing: 0.06em; }
+.tracking-wider   { letter-spacing: 0.10em; }
+.tracking-widest  { letter-spacing: 0.16em; }
+
+/* Leading */
+.leading-none    { line-height: 1; }
+.leading-tight   { line-height: 1.1; }
+.leading-snug    { line-height: 1.25; }
+.leading-normal  { line-height: 1.6; }
 .leading-relaxed { line-height: 1.75; }
 
-.text-primary { color: var(--color-text-primary); }
+/* Colors */
+.text-primary   { color: var(--color-text-primary); }
 .text-secondary { color: var(--color-text-secondary); }
-.text-muted { color: var(--color-text-muted); }
-.text-success { color: var(--color-success); }
-.text-error { color: var(--color-error); }
+.text-muted     { color: var(--color-text-muted); }
+.text-accent    { color: var(--color-accent); }
+.text-amber     { color: var(--color-amber); }
+.text-success   { color: var(--color-success); }
+.text-warning   { color: var(--color-warning); }
+.text-error     { color: var(--color-error); }
+.text-info      { color: var(--color-info); }
 
-.text-left { text-align: left; }
+/* Alignment */
+.text-left   { text-align: left; }
 .text-center { text-align: center; }
-.text-right { text-align: right; }
+.text-right  { text-align: right; }
 
-.uppercase { text-transform: uppercase; }
-.lowercase { text-transform: lowercase; }
+/* Transform */
+.uppercase  { text-transform: uppercase; }
+.lowercase  { text-transform: lowercase; }
 .capitalize { text-transform: capitalize; }
 
+/* Overflow */
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -55,5 +157,59 @@
   overflow: hidden;
 }
 
-.underline { text-decoration: underline; }
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Decoration */
+.underline    { text-decoration: underline; }
 .line-through { text-decoration: line-through; }
+.no-underline { text-decoration: none; }
+
+/* ─── Display heading utilities ───────────────────────────────────────────── */
+
+/* Hero-scale display: largest fluid heading */
+.display-hero {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 7vw + 0.5rem, 6.25rem); /* 48px → 100px */
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+/* Section-scale display */
+.display-section {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw + 0.5rem, 3.5rem); /* 32px → 56px */
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.0;
+}
+
+/* Numeric / stat display (mono) */
+.display-stat {
+  font-family: var(--font-mono);
+  font-size: clamp(2.25rem, 5vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+/* Gradient text helper */
+.text-gradient {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-energy {
+  background: var(--gradient-energy);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}

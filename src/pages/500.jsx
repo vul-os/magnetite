@@ -5,7 +5,7 @@ import './error-pages.css';
 export default function ServerErrorPage({ onRetry }) {
   return (
     <Layout>
-      <div className="error-page">
+      <div className="error-page reveal">
         <div className="error-illustration error-illustration--server">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="2" y="3" width="20" height="6" rx="1" />

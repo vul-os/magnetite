@@ -28,12 +28,13 @@
 .pricing-hero .container { position: relative; z-index: 1; }
 
 .pricing-hero-title {
+  font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, var(--text-4xl));
   font-weight: 800;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.028em;
   margin: 0.5rem 0 1rem;
   color: var(--color-text-primary);
-  line-height: 1.1;
+  line-height: 1.06;
 }
 
 .pricing-hero-subtitle {
@@ -59,9 +60,10 @@
 
 /* ── Section titles ────────────────────────────────────────────────────────── */
 .pricing-section-title {
+  font-family: var(--font-display);
   font-size: var(--text-3xl);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.023em;
   color: var(--color-text-primary);
   margin: 0.5rem 0 2.5rem;
   text-align: center;

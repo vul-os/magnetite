@@ -21,26 +21,27 @@ function WelcomeStep({ onNext }) {
   return (
     <div className="onboarding-step welcome-step">
       <div className="welcome-visual">
-        <div className="welcome-icon">M</div>
-        <div className="welcome-glow"></div>
+        <div className="welcome-icon" aria-hidden="true">M</div>
+        <div className="welcome-glow" aria-hidden="true"></div>
       </div>
+      <span className="step-kicker">// BUILT IN RUST</span>
       <h1>Welcome to Magnetite</h1>
       <p className="welcome-subtitle">
-        The decentralized gaming platform where developers own their games,
-        players keep their winnings, and everyone plays on a level field.
+        The open-source platform for building, distributing, and monetising
+        Rust games — from a weekend game jam to a live-service title.
       </p>
       <div className="welcome-features">
         <div className="welcome-feature">
-          <span className="feature-icon">⚡</span>
-          <span>Play Open Source Games</span>
+          <span className="feature-icon" aria-hidden="true">⚡</span>
+          <span>Play Rust games compiled to WASM</span>
         </div>
         <div className="welcome-feature">
-          <span className="feature-icon">💎</span>
-          <span>Pay with USDC</span>
+          <span className="feature-icon" aria-hidden="true">◈</span>
+          <span>Pay with USDC — instant settlement</span>
         </div>
         <div className="welcome-feature">
-          <span className="feature-icon">📈</span>
-          <span>Earn as Developer</span>
+          <span className="feature-icon" aria-hidden="true">◉</span>
+          <span>Earn 85% of playtime revenue as developer</span>
         </div>
       </div>
       <Button size="lg" onClick={onNext}>

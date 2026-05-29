@@ -1,7 +1,17 @@
+/*
+ * GameCardSkeleton — Industrial Magnetite Wave 4
+ * Accent-tinted shimmer.
+ */
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .game-card-skeleton {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -9,90 +19,92 @@
   aspect-ratio: 16 / 9;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.05) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.8s ease-in-out infinite;
 }
 
 .game-card-skeleton .skeleton-content {
-  padding: 20px;
+  padding: 1.25rem;
 }
 
 .game-card-skeleton .skeleton-title {
-  height: 22px;
-  width: 85%;
+  height: 18px;
+  width: 80%;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.07) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
-  margin-bottom: 10px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-xs);
+  margin-bottom: 0.625rem;
 }
 
 .game-card-skeleton .skeleton-developer {
-  height: 16px;
-  width: 55%;
+  height: 13px;
+  width: 52%;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.05) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
-  margin-bottom: 16px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-xs);
+  margin-bottom: 1rem;
 }
 
 .game-card-skeleton .skeleton-rating {
-  height: 20px;
-  width: 100px;
+  height: 16px;
+  width: 90px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.05) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-xs);
 }
 
 .game-card-skeleton .skeleton-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 16px;
+  padding-top: 1rem;
   border-top: 1px solid var(--color-border);
-  margin-top: 16px;
+  margin-top: 1rem;
 }
 
 .game-card-skeleton .skeleton-price {
-  height: 28px;
-  width: 80px;
+  height: 24px;
+  width: 72px;
   background: linear-gradient(
     90deg,
-    var(--color-bg-card) 25%,
-    var(--color-bg-secondary) 50%,
-    var(--color-bg-card) 75%
+    var(--color-bg-elevated) 20%,
+    rgba(56, 225, 200, 0.07) 50%,
+    var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--radius-xs);
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
+@media (prefers-reduced-motion: reduce) {
+  .game-card-skeleton .skeleton-image,
+  .game-card-skeleton .skeleton-title,
+  .game-card-skeleton .skeleton-developer,
+  .game-card-skeleton .skeleton-rating,
+  .game-card-skeleton .skeleton-price {
+    animation: none;
+    background: var(--color-bg-elevated);
   }
 }

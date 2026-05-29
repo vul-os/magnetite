@@ -80,9 +80,10 @@
 
 .onboarding-step h1,
 .onboarding-step h2 {
+  font-family: var(--font-display);
   text-align: center;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.025em;
   margin-bottom: 0.5rem;
 }
 

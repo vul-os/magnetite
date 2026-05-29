@@ -31,6 +31,133 @@
   padding-bottom: 5rem;
 }
 
+/* ─── Cinematic sticky buy/play bar ─────────────────────────────────────────── */
+.gd-sticky-bar {
+  position: fixed;
+  top: 65px;
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-sticky) + 10);
+  background: rgba(15, 15, 22, 0.97);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--color-border);
+  transform: translateY(-100%);
+  opacity: 0;
+  transition:
+    transform var(--t) var(--ease-out),
+    opacity   var(--t) var(--ease-out);
+  pointer-events: none;
+}
+
+.gd-sticky-bar.visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gd-sticky-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0.875rem 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.gd-sticky-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gd-sticky-title {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gd-sticky-dev {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.gd-sticky-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-shrink: 0;
+}
+
+.gd-sticky-included {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+}
+
+.gd-sticky-price {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-amber);
+  letter-spacing: 0.04em;
+}
+
+.gd-sticky-play {
+  background: var(--color-accent);
+  color: #000;
+  border: none;
+  padding: 0.625rem 1.5rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 16px var(--color-accent-glow);
+  transition:
+    background  var(--t-fast) var(--ease-out),
+    box-shadow  var(--t-fast) var(--ease-out),
+    transform   var(--t-fast) var(--ease-out);
+  min-height: 40px;
+}
+
+.gd-sticky-play:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.gd-sticky-play:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gd-sticky-play:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .gd-sticky-inner {
+    padding: 0.75rem 1rem;
+    gap: 1rem;
+  }
+  .gd-sticky-included,
+  .gd-sticky-price { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gd-sticky-bar { transition: none; }
+}
+
 /* ─── Hero ─────────────────────────────────────────────────────────────────── */
 .game-hero {
   position: relative;
@@ -143,13 +270,14 @@
 }
 
 .game-title {
+  font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.25rem);
   font-weight: 800;
   color: #fff;
   margin: 0;
   text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
-  letter-spacing: -0.02em;
-  line-height: 1.08;
+  letter-spacing: -0.025em;
+  line-height: 1.06;
 }
 
 .game-developer {

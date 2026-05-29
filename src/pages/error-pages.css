@@ -4,7 +4,7 @@
  */
 
 .error-page {
-  min-height: calc(100vh - 200px);
+  min-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -12,7 +12,37 @@
   text-align: center;
   padding: 4rem 1.5rem;
   animation: error-fade-in var(--t-slow) var(--ease-out);
+  position: relative;
+  overflow: hidden;
 }
+
+/* Atmosphere: faint grid + glow behind icon */
+.error-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56, 225, 200, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 225, 200, 0.025) 1px, transparent 1px);
+  background-size: 52px 52px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.error-page::after {
+  content: '';
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(500px, 90vw);
+  height: min(500px, 90vw);
+  background: radial-gradient(ellipse, var(--color-accent-soft) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.error-page > * { position: relative; z-index: 1; }
 
 @keyframes error-fade-in {
   from { opacity: 0; transform: translateY(16px); }
@@ -81,9 +111,10 @@
 
 /* ── Title & message ─────────────────────────────────────────────────────── */
 .error-title {
+  font-family: var(--font-display);
   font-size: clamp(var(--text-xl), 4vw, var(--text-3xl));
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.025em;
   margin: 0 0 1rem;
   color: var(--color-text-primary);
 }

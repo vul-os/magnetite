@@ -1,6 +1,6 @@
 /*
- * EmptyState — Industrial Magnetite
- * Fade-in-up entrance, subtle icon float, mono kicker text.
+ * EmptyState — Industrial Magnetite Wave 4 Polish
+ * Floating icon, mono kicker, atmospheric depth.
  */
 
 .empty-state {
@@ -9,12 +9,29 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 3.5rem 1.5rem;
+  padding: 4rem 2rem;
+  position: relative;
   animation: empty-fade-in var(--t-slow, 420ms) var(--ease-out, cubic-bezier(.2,.8,.2,1)) forwards;
 }
 
+/* Atmospheric radial glow behind the icon */
+.empty-state::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -65%);
+  width: min(300px, 80vw);
+  height: min(300px, 80vw);
+  background: radial-gradient(ellipse, var(--color-accent-soft) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.empty-state > * { position: relative; z-index: 1; }
+
 @keyframes empty-fade-in {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -22,40 +39,46 @@
   .empty-state { animation: none; }
 }
 
+/* ── Icon ── */
 .empty-icon {
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   margin-bottom: 1.5rem;
   color: var(--color-accent);
-  opacity: 0.35;
-  animation: empty-float 3.5s ease-in-out infinite;
+  opacity: 0.5;
+  animation: empty-float 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px var(--color-accent-glow));
 }
 
 @keyframes empty-float {
   0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-8px); }
+  50%       { transform: translateY(-10px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .empty-icon { animation: none; }
 }
 
+/* ── Title ── */
 .empty-title {
+  font-family: var(--font-display);
   font-size: var(--text-xl, 22px);
   font-weight: 700;
   color: var(--color-text-primary);
-  letter-spacing: -0.01em;
-  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.625rem;
 }
 
+/* ── Description ── */
 .empty-description {
   font-size: var(--text-sm, 14px);
   color: var(--color-text-secondary);
-  margin: 0 0 1.5rem;
-  max-width: 340px;
-  line-height: 1.6;
+  margin: 0 0 1.75rem;
+  max-width: 360px;
+  line-height: 1.65;
 }
 
+/* ── CTA / action ── */
 .empty-action {
-  margin-top: 0.25rem;
+  margin-top: 0;
 }

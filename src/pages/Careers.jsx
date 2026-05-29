@@ -62,7 +62,7 @@ export default function Careers() {
   return (
     <div className="careers-page">
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="careers-hero" aria-labelledby="careers-heading">
+      <section className="careers-hero bg-atmosphere" aria-labelledby="careers-heading">
         <div className="magnetic-field" aria-hidden="true">
           <div className="field-line field-line-1" />
           <div className="field-line field-line-2" />
@@ -70,20 +70,20 @@ export default function Careers() {
           <div className="field-line field-line-4" />
           <div className="field-line field-line-5" />
         </div>
-        <div className="hero-content">
-          <div className="hiring-badge" role="status">
+        <div className="hero-content reveal">
+          <div className="hiring-badge reveal-1" role="status">
             <span className="pulse" aria-hidden="true" />
             We&apos;re Hiring
           </div>
-          <span className="kicker">// OPEN POSITIONS</span>
-          <h1 id="careers-heading" className="hero-title">
+          <span className="kicker reveal-1">// OPEN POSITIONS</span>
+          <h1 id="careers-heading" className="hero-title reveal-2">
             Join the <span className="gradient-text">Magnetite</span> Team
           </h1>
-          <p className="hero-subtitle">
+          <p className="hero-subtitle reveal-3">
             Help us build the platform for Rust games at any scale.
             We&apos;re looking for engineers who care deeply about developer experience and open source.
           </p>
-          <div className="hero-stats">
+          <div className="hero-stats reveal-4">
             <div className="stat">
               <span className="stat-value">12+</span>
               <span className="stat-label">Team Members</span>

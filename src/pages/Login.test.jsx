@@ -26,7 +26,7 @@ describe('Login', () => {
         <Login />
       </MemoryRouter>
     );
-    expect(screen.getByRole('heading', { name: /log in/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/email/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/password/i)).toBeInTheDocument();
   });
@@ -54,7 +54,7 @@ describe('Login', () => {
 
     fireEvent.change(screen.getByPlaceholderText(/email/i), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: 'password123' } });
-    fireEvent.click(screen.getByRole('button', { name: /log in/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123');
@@ -72,7 +72,7 @@ describe('Login', () => {
 
     fireEvent.change(screen.getByPlaceholderText(/email/i), { target: { value: 'bad@example.com' } });
     fireEvent.change(screen.getByPlaceholderText(/password/i), { target: { value: 'wrong' } });
-    fireEvent.click(screen.getByRole('button', { name: /log in/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument();

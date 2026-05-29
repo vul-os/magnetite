@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import GameCard from '../components/GameCard';
 import GameGallery from '../components/GameGallery';
@@ -148,12 +148,25 @@ export default function GameDetail() {
   const [activeTab, setActiveTab]               = useState('Overview');
   const [wishlisted, setWishlisted]             = useState(false);
   const [showShareToast, setShowShareToast]     = useState(false);
+  const [stickyBarVisible, setStickyBarVisible] = useState(false);
   const [userTier] = useState('basic');
+  const heroRef = useRef(null);
 
   const userTierLevel     = Object.keys(REQUIRED_TIER).indexOf(userTier);
   const requiredTierLevel = Object.keys(REQUIRED_TIER).indexOf(MOCK_GAME.requiredTier);
   const hasAccess         = userTierLevel >= requiredTierLevel || MOCK_GAME.isFree;
   const needsUpgrade      = !hasAccess && !MOCK_GAME.isFree;
+
+  // Show sticky buy bar once hero scrolls out of view
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => setStickyBarVisible(!entry.isIntersecting),
+      { threshold: 0 }
+    );
+    const el = heroRef.current;
+    if (el) observer.observe(el);
+    return () => { if (el) observer.unobserve(el); };
+  }, []);
 
   const handlePlayNow = () => {
     if (!walletConnected) { setWalletConnected(true); return; }
@@ -275,15 +288,40 @@ export default function GameDetail() {
   return (
     <Layout>
       <div className="game-detail">
+        {/* ── Sticky buy/play bar (appears on scroll) ── */}
+        <div className={`gd-sticky-bar ${stickyBarVisible ? 'visible' : ''}`} aria-hidden={!stickyBarVisible}>
+          <div className="gd-sticky-inner">
+            <div className="gd-sticky-info">
+              <span className="gd-sticky-title">{MOCK_GAME.title}</span>
+              <span className="gd-sticky-dev">by {MOCK_GAME.developer}</span>
+            </div>
+            <div className="gd-sticky-actions">
+              {hasAccess ? (
+                <span className="gd-sticky-included">// Included in plan</span>
+              ) : (
+                <span className="gd-sticky-price">Requires {TIER_NAMES[MOCK_GAME.requiredTier]}</span>
+              )}
+              <button
+                className="gd-sticky-play"
+                onClick={handlePlayNow}
+                disabled={inQueue}
+                tabIndex={stickyBarVisible ? 0 : -1}
+              >
+                {!walletConnected ? 'Connect & Play' : inQueue ? 'Joining...' : needsUpgrade ? 'Upgrade to Play' : 'Play Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* ── Hero ── */}
-        <section className="game-hero" aria-label={`${MOCK_GAME.title} hero`}>
+        <section className="game-hero" aria-label={`${MOCK_GAME.title} hero`} ref={heroRef}>
           <div className="hero-image-container">
             <img src={MOCK_GAME.thumbnail} alt={MOCK_GAME.title} className="hero-image" loading="eager" />
             <div className="hero-overlay" aria-hidden="true" />
             <div className="hero-gradient" aria-hidden="true" />
           </div>
-          <div className="hero-content">
-            <div className="hero-top">
+          <div className="hero-content reveal">
+            <div className="hero-top reveal-1">
               <span className="category-badge">{MOCK_GAME.category}</span>
               {MOCK_GAME.isFree ? (
                 <span className="tier-badge free">Free to Play</span>
@@ -293,7 +331,7 @@ export default function GameDetail() {
                 </span>
               )}
             </div>
-            <div className="hero-main">
+            <div className="hero-main reveal-2">
               <h1 className="game-title">{MOCK_GAME.title}</h1>
               <p className="game-developer">
                 by{' '}
@@ -303,7 +341,7 @@ export default function GameDetail() {
               </p>
               <StarRating rating={MOCK_GAME.rating} size="lg" />
             </div>
-            <div className="hero-actions">
+            <div className="hero-actions reveal-3">
               <div className="action-buttons">
                 <button
                   className="btn-play"

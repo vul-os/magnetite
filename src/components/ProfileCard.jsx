@@ -36,7 +36,7 @@ export default memo(function ProfileCard({
 
         {user.location && (
           <p className="profile-location">
-            <span aria-hidden="true">📍</span> {user.location}
+            <span aria-hidden="true">&#x1F4CD;</span> {user.location}
           </p>
         )}
 

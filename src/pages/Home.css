@@ -208,10 +208,11 @@
 }
 
 .hero-title {
+  font-family: var(--font-display);
   font-size: clamp(3rem, 6vw, var(--text-5xl));
   font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.025em;
+  line-height: 1.03;
+  letter-spacing: -0.028em;
   margin-bottom: 1.5rem;
   color: var(--color-text-primary);
 }
@@ -444,12 +445,13 @@
 }
 
 .section-title {
+  font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, var(--text-3xl));
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.023em;
   color: var(--color-text-primary);
   margin: 0 0 1rem;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .section-subtitle {

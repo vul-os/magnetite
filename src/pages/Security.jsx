@@ -13,16 +13,16 @@ const MOCK_API_KEYS = [
 ];
 
 export default function Security() {
-  const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
-  const [passwordError, setPasswordError] = useState('');
+  const [passwords, setPasswords]       = useState({ current: '', new: '', confirm: '' });
+  const [passwordError, setPasswordError]   = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [showSetup2FA, setShowSetup2FA] = useState(false);
-  const [sessions, setSessions] = useState(MOCK_SESSIONS);
-  const [apiKeys, setApiKeys] = useState(MOCK_API_KEYS);
+  const [showSetup2FA, setShowSetup2FA]   = useState(false);
+  const [sessions, setSessions]           = useState(MOCK_SESSIONS);
+  const [apiKeys, setApiKeys]             = useState(MOCK_API_KEYS);
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
-  const [newKeyName, setNewKeyName] = useState('');
-  const [newApiKey, setNewApiKey] = useState(null);
+  const [newKeyName, setNewKeyName]       = useState('');
+  const [newApiKey, setNewApiKey]         = useState(null);
 
   const handlePasswordChange = (e) => {
     e.preventDefault();
@@ -33,7 +33,6 @@ export default function Security() {
       setPasswordError('New passwords do not match');
       return;
     }
-
     if (passwords.new.length < 8) {
       setPasswordError('Password must be at least 8 characters');
       return;
@@ -44,18 +43,10 @@ export default function Security() {
     setTimeout(() => setPasswordSuccess(false), 3000);
   };
 
-  const handleSetup2FA = () => {
-    setShowSetup2FA(true);
-  };
-
   const handleVerify2FA = (e) => {
     e.preventDefault();
     setTwoFactorEnabled(true);
     setShowSetup2FA(false);
-  };
-
-  const handleDisable2FA = () => {
-    setTwoFactorEnabled(false);
   };
 
   const handleSignOutAll = () => {
@@ -90,223 +81,259 @@ export default function Security() {
 
   return (
     <Layout>
-      <div className="settings-page security-page">
-        <header className="settings-header">
-          <h1>Security</h1>
-          <p>Manage your password, two-factor authentication, and active sessions</p>
+      <div className="security-page">
+        {/* Header */}
+        <header className="settings-page-header reveal reveal-1">
+          <span className="kicker">// SECURITY</span>
+          <h1 className="settings-page-title">Security</h1>
+          <p className="settings-page-subtitle">
+            Manage your password, two-factor authentication, sessions, and API keys.
+          </p>
         </header>
 
-        <div className="settings-content">
-          <div className="form-section">
-            <h3>Change Password</h3>
-            <form className="settings-form" onSubmit={handlePasswordChange}>
-              <div className="form-group">
-                <label>Current Password</label>
+        {/* Password */}
+        <section className="settings-section reveal reveal-2">
+          <h2 className="settings-section-title">Change Password</h2>
+          <p className="settings-section-desc">
+            Use a strong password you don&apos;t use on other sites.
+          </p>
+
+          <form onSubmit={handlePasswordChange}>
+            <div className="settings-field">
+              <label className="settings-field-label" htmlFor="sec-cur-pw">Current Password</label>
+              <input
+                id="sec-cur-pw"
+                type="password"
+                value={passwords.current}
+                onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
+                className="settings-input"
+                placeholder="Enter current password"
+              />
+            </div>
+            <div className="settings-grid-2">
+              <div className="settings-field">
+                <label className="settings-field-label" htmlFor="sec-new-pw">New Password</label>
                 <input
+                  id="sec-new-pw"
                   type="password"
-                  value={passwords.current}
-                  onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                  placeholder="Enter current password"
+                  value={passwords.new}
+                  onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
+                  className="settings-input"
+                  placeholder="New password"
                 />
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>New Password</label>
-                  <input
-                    type="password"
-                    value={passwords.new}
-                    onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
-                    placeholder="Enter new password"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Confirm New Password</label>
-                  <input
-                    type="password"
-                    value={passwords.confirm}
-                    onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
-                    placeholder="Confirm new password"
-                  />
-                </div>
+              <div className="settings-field">
+                <label className="settings-field-label" htmlFor="sec-conf-pw">Confirm Password</label>
+                <input
+                  id="sec-conf-pw"
+                  type="password"
+                  value={passwords.confirm}
+                  onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
+                  className="settings-input"
+                  placeholder="Confirm new password"
+                />
               </div>
-              {passwordError && <p className="error-message">{passwordError}</p>}
-              {passwordSuccess && <p className="success-message">Password updated successfully!</p>}
-              <button type="submit" className="btn btn-primary">Update Password</button>
-            </form>
-          </div>
+            </div>
 
-          <div className="form-section">
-            <h3>Two-Factor Authentication</h3>
-            {twoFactorEnabled ? (
-              <div className="twofa-enabled">
-                <div className="status-badge enabled">
-                  <span className="status-icon">✓</span>
-                  2FA is enabled
-                </div>
-                <p>Your account is protected with two-factor authentication.</p>
-                <button className="btn btn-secondary" onClick={handleDisable2FA}>
-                  Disable 2FA
-                </button>
-              </div>
-            ) : showSetup2FA ? (
-              <form className="setup-2fa-form" onSubmit={handleVerify2FA}>
-                <div className="qr-placeholder">
-                  <div className="qr-code">
-                    <span className="qr-icon">⬡</span>
-                  </div>
-                  <p>Scan this QR code with your authenticator app</p>
-                </div>
-                <div className="form-group">
-                  <label>Verification Code</label>
-                  <input
-                    type="text"
-                    placeholder="Enter 6-digit code"
-                    maxLength={6}
-                    pattern="[0-9]{6}"
-                  />
-                </div>
-                <div className="form-actions">
-                  <button type="submit" className="btn btn-primary">Verify & Enable</button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowSetup2FA(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="twofa-disabled">
-                <p>Add an extra layer of security to your account by enabling two-factor authentication.</p>
-                <button className="btn btn-primary" onClick={handleSetup2FA}>
-                  Set Up 2FA
-                </button>
+            {passwordError && (
+              <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+                <span className="auth-error-icon" aria-hidden="true">!</span>
+                {passwordError}
               </div>
             )}
-          </div>
-
-          <div className="form-section">
-            <div className="section-header">
-              <div>
-                <h3>Active Sessions</h3>
-                <p className="section-description">Manage your active sessions across devices</p>
+            {passwordSuccess && (
+              <div className="auth-success" role="status" style={{ marginBottom: '1rem' }}>
+                <span className="auth-success-icon" aria-hidden="true">✓</span>
+                Password updated successfully!
               </div>
-              {sessions.length > 1 && (
-                <button
-                  className="btn btn-secondary danger"
-                  onClick={handleSignOutAll}
-                >
-                  Sign Out All Devices
-                </button>
-              )}
-            </div>
-            <div className="sessions-list">
-              {sessions.map(session => (
-                <div key={session.id} className="session-item">
-                  <div className="session-info">
-                    <span className="session-device">{session.device}</span>
-                    <span className="session-meta">
-                      {session.location} · {session.lastActive}
-                      {session.current && <span className="current-badge">Current</span>}
-                    </span>
-                  </div>
-                  {!session.current && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => handleRevokeSession(session.id)}
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+            )}
 
-          <div className="form-section">
-            <div className="section-header">
-              <div>
-                <h3>API Keys</h3>
-                <p className="section-description">Manage your API keys for programmatic access</p>
+            <button type="submit" className="settings-save-btn">Update Password</button>
+          </form>
+        </section>
+
+        {/* 2FA */}
+        <section className="settings-section reveal reveal-3">
+          <h2 className="settings-section-title">Two-Factor Authentication</h2>
+          <p className="settings-section-desc">
+            Add a second layer of security with an authenticator app.
+          </p>
+
+          {twoFactorEnabled ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="twofa-status-enabled">
+                <span aria-hidden="true">✓</span>
+                2FA is enabled — your account is protected
               </div>
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowNewKeyForm(true)}
-              >
-                + Create New Key
+              <button className="settings-action-btn" onClick={() => setTwoFactorEnabled(false)} style={{ alignSelf: 'flex-start' }}>
+                Disable 2FA
               </button>
             </div>
+          ) : showSetup2FA ? (
+            <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="twofa-qr-placeholder">
+                <div className="twofa-qr-code" aria-label="QR code placeholder">⬡</div>
+                <p style={{ font: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: 0, textAlign: 'center' }}>
+                  Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                </p>
+              </div>
+              <div className="settings-field">
+                <label className="settings-field-label" htmlFor="twofa-code">Verification Code</label>
+                <input
+                  id="twofa-code"
+                  type="text"
+                  className="settings-input"
+                  placeholder="Enter 6-digit code"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.2em', maxWidth: 200 }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="submit" className="settings-save-btn" style={{ margin: 0 }}>Verify &amp; Enable</button>
+                <button type="button" className="settings-action-btn" onClick={() => setShowSetup2FA(false)}>Cancel</button>
+              </div>
+            </form>
+          ) : (
+            <button className="settings-save-btn" onClick={() => setShowSetup2FA(true)} style={{ margin: 0 }}>
+              Set Up 2FA
+            </button>
+          )}
+        </section>
 
-            {showNewKeyForm && (
-              <form className="new-key-form" onSubmit={handleCreateApiKey}>
-                <div className="form-group">
-                  <label>Key Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Production API Key"
-                    value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-actions">
-                  <button type="submit" className="btn btn-primary">Create Key</button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => { setShowNewKeyForm(false); setNewKeyName(''); }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+        {/* Sessions */}
+        <section className="settings-section reveal reveal-4">
+          <div className="settings-section-head">
+            <div>
+              <h2 className="settings-section-title">Active Sessions</h2>
+              <p className="settings-section-desc" style={{ margin: 0 }}>
+                Your account is signed in on these devices.
+              </p>
+            </div>
+            {sessions.length > 1 && (
+              <button className="settings-revoke-btn" onClick={handleSignOutAll}>
+                Sign Out All
+              </button>
             )}
-
-            {newApiKey && (
-              <div className="new-key-display">
-                <h4>New API Key Created</h4>
-                <p className="key-warning">Copy this key now. You won't be able to see it again.</p>
-                <div className="key-value">
-                  <code>{newApiKey}</code>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => navigator.clipboard.writeText(newApiKey)}
-                  >
-                    Copy
-                  </button>
+          </div>
+          <div className="settings-sessions">
+            {sessions.map(session => (
+              <div key={session.id} className="settings-session-item">
+                <div className="settings-session-icon" aria-hidden="true">
+                  {session.current ? '◉' : '◎'}
                 </div>
+                <div className="settings-session-info">
+                  <span className="settings-session-device">
+                    {session.device}
+                    {session.current && (
+                      <span className="settings-session-badge">Current</span>
+                    )}
+                  </span>
+                  <span className="settings-session-meta">
+                    {session.location} · {session.lastActive}
+                  </span>
+                </div>
+                {!session.current && (
+                  <button
+                    className="settings-revoke-btn"
+                    onClick={() => handleRevokeSession(session.id)}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* API Keys */}
+        <section className="settings-section reveal reveal-5">
+          <div className="settings-section-head">
+            <div>
+              <h2 className="settings-section-title">API Keys</h2>
+              <p className="settings-section-desc" style={{ margin: 0 }}>
+                Programmatic access to Magnetite APIs.
+              </p>
+            </div>
+            <button
+              className="settings-save-btn"
+              style={{ margin: 0 }}
+              onClick={() => setShowNewKeyForm(true)}
+            >
+              + New Key
+            </button>
+          </div>
+
+          {showNewKeyForm && (
+            <form className="apikey-new-display" onSubmit={handleCreateApiKey} style={{ marginBottom: '1rem' }}>
+              <div className="settings-field" style={{ marginBottom: 0 }}>
+                <label className="settings-field-label" htmlFor="key-name">Key name</label>
+                <input
+                  id="key-name"
+                  type="text"
+                  className="settings-input"
+                  placeholder="e.g., Production API Key"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="submit" className="settings-save-btn" style={{ margin: 0 }}>Create Key</button>
                 <button
-                  className="btn btn-primary"
-                  onClick={() => setNewApiKey(null)}
+                  type="button"
+                  className="settings-action-btn"
+                  onClick={() => { setShowNewKeyForm(false); setNewKeyName(''); }}
                 >
-                  Done
+                  Cancel
                 </button>
               </div>
-            )}
+            </form>
+          )}
 
-            <div className="api-keys-list">
-              {apiKeys.map(key => (
-                <div key={key.id} className="api-key-item">
-                  <div className="key-info">
-                    <span className="key-name">{key.name}</span>
-                    <code className="key-value-display">{key.key}</code>
-                    <div className="key-meta">
-                      <span>Created: {key.created}</span>
-                      <span>Last used: {key.lastUsed}</span>
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => handleDeleteApiKey(key.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
+          {newApiKey && (
+            <div className="apikey-new-display" style={{ marginBottom: '1rem' }}>
+              <p className="apikey-warning">
+                ⚠ Copy this key now — you won&apos;t see it again.
+              </p>
+              <div className="apikey-value-row">
+                <code className="apikey-code">{newApiKey}</code>
+                <button
+                  className="settings-action-btn"
+                  onClick={() => navigator.clipboard.writeText(newApiKey)}
+                >
+                  Copy
+                </button>
+              </div>
+              <button className="settings-save-btn" style={{ margin: 0 }} onClick={() => setNewApiKey(null)}>
+                Done
+              </button>
             </div>
+          )}
+
+          <div className="apikeys-list">
+            {apiKeys.map(key => (
+              <div key={key.id} className="apikey-item">
+                <div className="apikey-item-info">
+                  <span className="apikey-item-name">{key.name}</span>
+                  <span className="apikey-item-value">{key.key}</span>
+                  <div className="apikey-item-meta">
+                    <span>Created {key.created}</span>
+                    <span>Last used {key.lastUsed}</span>
+                  </div>
+                </div>
+                <button
+                  className="settings-revoke-btn"
+                  onClick={() => handleDeleteApiKey(key.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
       </div>
     </Layout>
   );

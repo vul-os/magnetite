@@ -19,7 +19,7 @@ export default function About() {
   return (
     <div className="about-page">
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="about-hero" aria-labelledby="about-heading">
+      <section className="about-hero bg-atmosphere" aria-labelledby="about-heading">
         <div className="magnetic-field" aria-hidden="true">
           <div className="field-line field-line-1" />
           <div className="field-line field-line-2" />
@@ -27,13 +27,13 @@ export default function About() {
           <div className="field-line field-line-4" />
           <div className="field-line field-line-5" />
         </div>
-        <div className="hero-content">
-          <span className="kicker">// ABOUT MAGNETITE</span>
-          <h1 id="about-heading" className="hero-title">
+        <div className="hero-content reveal">
+          <span className="kicker reveal-1">// ABOUT MAGNETITE</span>
+          <h1 id="about-heading" className="hero-title reveal-2">
             Built for Rust developers,<br />
             <span className="gradient-text">by Rust developers</span>
           </h1>
-          <p className="hero-subtitle">
+          <p className="hero-subtitle reveal-3">
             We believe game publishing should be fair, transparent, and open.
             Magnetite is the platform where developers own their games and earn what they deserve.
           </p>

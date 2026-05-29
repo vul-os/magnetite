@@ -1,154 +1,249 @@
+/*
+ * Error Pages — Industrial Magnetite Wave 4 Polish
+ * On-brand, charming, atmospheric. Token-only colors.
+ */
+
+/* ─── Page wrapper ───────────────────────────────────────────────────────── */
 .error-page {
-  min-height: calc(100vh - 200px);
+  min-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 48px 24px;
+  padding: 4rem 1.5rem;
+  position: relative;
+  overflow: hidden;
 }
 
+/* Atmosphere backdrop */
+.error-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56, 225, 200, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 225, 200, 0.025) 1px, transparent 1px);
+  background-size: 52px 52px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.error-page::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -60%);
+  width: min(600px, 90vw);
+  height: min(600px, 90vw);
+  background: radial-gradient(ellipse, var(--color-accent-soft) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.error-page > * { position: relative; z-index: 1; }
+
+/* ─── Illustration ───────────────────────────────────────────────────────── */
 .error-illustration {
-  width: 120px;
-  height: 120px;
-  margin-bottom: 32px;
-  opacity: 0.8;
+  width: 100px;
+  height: 100px;
+  margin-bottom: 2rem;
+  position: relative;
 }
 
 .error-illustration svg {
   width: 100%;
   height: 100%;
   color: var(--color-accent);
+  opacity: 0.75;
+  filter: drop-shadow(0 0 18px var(--color-accent-glow));
+  animation: error-float 4s ease-in-out infinite;
 }
 
-.error-illustration img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.3));
+@keyframes error-float {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50%       { transform: translateY(-10px) rotate(2deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .error-illustration svg { animation: none; }
+}
+
+/* ─── Code ───────────────────────────────────────────────────────────────── */
 .error-code {
-  font-size: 6rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: clamp(5rem, 14vw, 9rem);
+  font-weight: 900;
   line-height: 1;
-  margin-bottom: 16px;
-  background: linear-gradient(135deg, var(--color-accent) 0%, #f97316 50%, var(--color-accent) 100%);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.04em;
+  background: linear-gradient(
+    135deg,
+    var(--color-accent) 0%,
+    var(--color-accent-hover) 40%,
+    var(--color-amber) 100%
+  );
   background-size: 200% 200%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: gradientShift 4s ease infinite;
+  animation: error-code-shift 6s ease-in-out infinite;
+  position: relative;
 }
 
+/* Subtle "shadow" duplicate for depth */
+.error-code::before {
+  content: attr(data-code);
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  background: linear-gradient(
+    135deg,
+    rgba(56, 225, 200, 0.15) 0%,
+    transparent 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  z-index: -1;
+}
+
+@keyframes error-code-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error-code { animation: none; background-position: 0% 50%; }
+}
+
+/* ─── Title ──────────────────────────────────────────────────────────────── */
 .error-title {
-  font-size: 2rem;
-  margin: 0 0 16px;
+  font-family: var(--font-display, 'Archivo', sans-serif);
+  font-size: clamp(var(--text-xl), 4vw, var(--text-3xl));
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0 0 1rem;
   color: var(--color-text-primary);
 }
 
+/* ─── Message ────────────────────────────────────────────────────────────── */
 .error-message {
-  max-width: 480px;
+  max-width: 460px;
   color: var(--color-text-secondary);
-  font-size: 1.1rem;
-  line-height: 1.6;
-  margin: 0 0 32px;
+  font-size: var(--text-base);
+  line-height: 1.7;
+  margin: 0 0 2rem;
 }
 
+/* ─── Search form (404) ──────────────────────────────────────────────────── */
 .error-search {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   width: 100%;
   max-width: 400px;
-  margin-bottom: 32px;
+  margin-bottom: 2rem;
 }
 
 .error-search .search-input {
   flex: 1;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
+.error-search .search-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-glow-focus);
+}
+
+.error-search .search-input::placeholder { color: var(--color-text-muted); }
+
+/* ─── Reasons list (403) ─────────────────────────────────────────────────── */
 .error-reasons {
   list-style: none;
   padding: 0;
-  margin: 0 0 32px;
+  margin: 0 0 2rem;
   text-align: left;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: 20px 24px;
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
   max-width: 400px;
   width: 100%;
 }
 
 .error-reasons li {
-  padding: 8px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.625rem 0;
   color: var(--color-text-secondary);
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
   border-bottom: 1px solid var(--color-border);
+  line-height: 1.5;
 }
 
-.error-reasons li:last-child {
-  border-bottom: none;
-}
+.error-reasons li:last-child { border-bottom: none; }
 
 .error-reasons li::before {
-  content: '•';
+  content: '→';
   color: var(--color-accent);
-  margin-right: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
+/* ─── Error ID ───────────────────────────────────────────────────────────── */
 .error-id {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 0.625rem;
+  padding: 0.5rem 1rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  margin-bottom: 32px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 2rem;
+  font-size: var(--text-xs);
 }
 
 .error-id-label {
+  font-family: var(--font-mono);
   color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .error-id code {
   color: var(--color-accent);
-  font-family: monospace;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
+/* ─── Actions ────────────────────────────────────────────────────────────── */
 .error-actions {
   display: flex;
-  gap: 16px;
+  gap: 0.875rem;
   flex-wrap: wrap;
   justify-content: center;
 }
 
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  .error-code {
-    font-size: 4rem;
-  }
-
-  .error-title {
-    font-size: 1.5rem;
-  }
-
-  .error-search {
-    flex-direction: column;
-  }
-
+  .error-page { padding: 3rem 1.25rem; }
+  .error-search { flex-direction: column; }
   .error-actions {
     flex-direction: column;
     width: 100%;
+    max-width: 320px;
   }
-
-  .error-actions .btn {
-    width: 100%;
-  }
+  .error-actions .btn { width: 100%; }
 }

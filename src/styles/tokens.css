@@ -2,10 +2,10 @@
  * Industrial Magnetite — Design Tokens
  * Single source of truth for all design primitives.
  * All values flow from here into index.css and component stylesheets.
+ *
+ * Fonts are loaded performantly via <link> in index.html.
+ * No @import here — avoids render-blocking duplication.
  */
-
-/* ─── Google Fonts import ─────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* ─── Root (dark, default) ────────────────────────────────────────────────── */
 :root {
@@ -52,8 +52,14 @@
   --gradient-hero:    radial-gradient(ellipse at 50% 0%, #16161f 0%, #07070b 60%);
 
   /* ── Typography ── */
-  --font-family:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Display (headings): Archivo — industrial, characterful, credible for Rust infra */
+  --font-display:     'Archivo', 'Archivo Variable', system-ui, sans-serif;
+  /* Body / UI prose: Hanken Grotesk — refined, warm, distinctive; replaces Inter */
+  --font-sans:        'Hanken Grotesk', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Mono (labels, stats, code, IDs): JetBrains Mono — on-brand for a code platform */
   --font-mono:        'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  /* Legacy alias — keeps existing --font-family refs working */
+  --font-family:      var(--font-sans);
 
   /* Type scale: 12/13/14/16/18/22/28/36/48/64 */
   --text-2xs:  12px;
@@ -147,5 +153,155 @@
     --transition-fast:   0ms linear;
     --transition-normal: 0ms linear;
     --transition-slow:   0ms linear;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHARED CSS-CLASS CONTRACT
+   These utility classes are the foundation every page/component applies.
+   The implementation lives here so all agents compose without editing each
+   other's files.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Keyframes for reveal system ────────────────────────────────────────── */
+@keyframes im-reveal-up {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes im-grain-drift {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-1px, 2px); }
+  40%  { transform: translate(2px, -1px); }
+  60%  { transform: translate(-2px, 1px); }
+  80%  { transform: translate(1px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ─── Atmosphere backdrop ────────────────────────────────────────────────── */
+/* Apply to section/page backdrops for grain + faint magnetic grid */
+.bg-atmosphere {
+  position: relative;
+  isolation: isolate;
+}
+
+.bg-atmosphere::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Magnetic grid: subtle crosshatch */
+  background-image:
+    linear-gradient(rgba(56, 225, 200, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 225, 200, 0.028) 1px, transparent 1px);
+  background-size: 52px 52px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-atmosphere::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  /* Grain texture via SVG fractal noise */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: 0.022;
+  pointer-events: none;
+  z-index: 0;
+  animation: im-grain-drift 8s steps(1) infinite;
+}
+
+/* Make sure content within .bg-atmosphere sits above the pseudo-elements */
+.bg-atmosphere > * { position: relative; z-index: 1; }
+
+/* ─── Standalone grain-only helper ──────────────────────────────────────── */
+.bg-grain {
+  position: relative;
+  isolation: isolate;
+}
+
+.bg-grain::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: 0.022;
+  pointer-events: none;
+  z-index: 0;
+  animation: im-grain-drift 8s steps(1) infinite;
+}
+
+.bg-grain > * { position: relative; z-index: 1; }
+
+/* ─── Grid-only helper ───────────────────────────────────────────────────── */
+.bg-grid {
+  position: relative;
+  isolation: isolate;
+}
+
+.bg-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56, 225, 200, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 225, 200, 0.028) 1px, transparent 1px);
+  background-size: 52px 52px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-grid > * { position: relative; z-index: 1; }
+
+/* ─── Glow utilities ─────────────────────────────────────────────────────── */
+/* Place .glow-accent as a sibling/child pseudo-element backdrop */
+.glow-accent {
+  position: relative;
+  isolation: isolate;
+}
+
+.glow-accent::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(700px, 90vw);
+  height: min(700px, 90vw);
+  background: radial-gradient(ellipse, var(--color-accent-soft) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.glow-accent > * { position: relative; z-index: 1; }
+
+.glow-amber {
+  position: relative;
+  isolation: isolate;
+}
+
+.glow-amber::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(600px, 90vw);
+  height: min(600px, 90vw);
+  background: radial-gradient(ellipse, var(--color-amber-soft) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.glow-amber > * { position: relative; z-index: 1; }
+
+/* ─── Reveal system ──────────────────────────────────────────────────────── */
+/* Defined in index.css (reveal + reveal-1 … reveal-8).                      */
+/* No duplicate definition here. The grain drift animation needs reduced-     */
+/* motion suppression which is handled per-section below.                     */
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-atmosphere::after,
+  .bg-grain::after {
+    animation: none;
   }
 }

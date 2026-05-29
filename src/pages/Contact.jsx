@@ -65,18 +65,18 @@ export default function Contact() {
   return (
     <div className="contact-page">
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="contact-hero" aria-labelledby="contact-heading">
+      <section className="contact-hero bg-atmosphere" aria-labelledby="contact-heading">
         <div className="magnetic-field" aria-hidden="true">
           <div className="field-line field-line-1" />
           <div className="field-line field-line-2" />
           <div className="field-line field-line-3" />
         </div>
-        <div className="hero-content">
-          <span className="kicker">// REACH US</span>
-          <h1 id="contact-heading" className="hero-title">
+        <div className="hero-content reveal">
+          <span className="kicker reveal-1">// REACH US</span>
+          <h1 id="contact-heading" className="hero-title reveal-2">
             Get in <span className="gradient-text">Touch</span>
           </h1>
-          <p className="hero-subtitle">
+          <p className="hero-subtitle reveal-3">
             Have questions about the platform, the SDK, or partnership opportunities?
             We&apos;d love to hear from you.
           </p>

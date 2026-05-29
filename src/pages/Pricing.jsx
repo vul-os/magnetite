@@ -110,16 +110,18 @@ export default function Pricing() {
   return (
     <div className="pricing-page">
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="pricing-hero" aria-labelledby="pricing-heading">
+      <section className="pricing-hero bg-atmosphere" aria-labelledby="pricing-heading">
         <div className="container">
-          <span className="kicker">// TRANSPARENT PRICING</span>
-          <h1 id="pricing-heading" className="pricing-hero-title">
-            Simple, honest pricing
-          </h1>
-          <p className="pricing-hero-subtitle">
-            Choose the plan that fits your gaming style. USDC or fiat — no hidden fees, no
-            long-term contracts.
-          </p>
+          <div className="reveal">
+            <span className="kicker reveal-1">// TRANSPARENT PRICING</span>
+            <h1 id="pricing-heading" className="pricing-hero-title reveal-2">
+              Simple, honest pricing
+            </h1>
+            <p className="pricing-hero-subtitle reveal-3">
+              Choose the plan that fits your gaming style. USDC or fiat — no hidden fees, no
+              long-term contracts.
+            </p>
+          </div>
         </div>
       </section>
 

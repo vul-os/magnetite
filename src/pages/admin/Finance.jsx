@@ -66,10 +66,10 @@ export default function Finance() {
     <Layout>
       <div className="admin-layout">
         <AdminSidebar />
-        <main className="admin-main">
-          <header className="admin-header">
+        <main className="admin-main reveal">
+          <header className="admin-header reveal-1">
             <div>
-              <span className="kicker">// PLATFORM CONTROL</span>
+              <span className="kicker">// Platform Control</span>
               <h1>Finance Dashboard</h1>
               <p>Revenue, fees, and payout management</p>
             </div>
