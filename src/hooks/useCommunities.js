@@ -1,33 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
-// ── Mock fallback data ─────────────────────────────────────────────────────
-const MOCK_COMMUNITIES = [
-  {
-    id: '1',
-    name: 'Magnetite Hub',
-    description: 'The official Magnetite gaming community.',
-    icon_url: null,
-    member_count: 1024,
-    online_count: 87,
-    owner_id: '1',
-  },
-  {
-    id: '2',
-    name: 'Rust Gamedev',
-    description: 'Building games in Rust — share your progress.',
-    icon_url: null,
-    member_count: 412,
-    online_count: 23,
-    owner_id: '2',
-  },
-];
+// ── Mock fallback data — only used when VITE_USE_MOCKS=true ───────────────
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-const MOCK_MEMBERS = [
-  { id: '1', username: 'dev_one', display_name: 'Dev One', status: 'online', roles: ['admin'] },
-  { id: '2', username: 'player_two', display_name: 'Player Two', status: 'idle', roles: ['member'] },
-  { id: '3', username: 'streamer', display_name: 'StreamerX', status: 'online', roles: ['member'] },
-];
+const MOCK_COMMUNITIES = USE_MOCKS
+  ? [
+      { id: '1', name: 'Magnetite Hub',  description: 'The official Magnetite gaming community.', icon_url: null, member_count: 1024, online_count: 87, owner_id: '1' },
+      { id: '2', name: 'Rust Gamedev',   description: 'Building games in Rust — share your progress.', icon_url: null, member_count: 412, online_count: 23, owner_id: '2' },
+    ]
+  : null;
+
+const MOCK_MEMBERS = USE_MOCKS
+  ? [
+      { id: '1', username: 'dev_one',     display_name: 'Dev One',    status: 'online', roles: ['admin']  },
+      { id: '2', username: 'player_two',  display_name: 'Player Two', status: 'idle',   roles: ['member'] },
+      { id: '3', username: 'streamer',    display_name: 'StreamerX',  status: 'online', roles: ['member'] },
+    ]
+  : null;
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 export function useCommunities() {
@@ -40,13 +30,21 @@ export function useCommunities() {
     try {
       setLoading(true);
       setError(null);
+
+      if (USE_MOCKS) {
+        if (!cancelled) setCommunities(MOCK_COMMUNITIES ?? []);
+        return;
+      }
+
       const data = await api.communities.list();
       if (!cancelled) {
-        setCommunities(Array.isArray(data) ? data : (data?.communities ?? MOCK_COMMUNITIES));
+        const list = Array.isArray(data) ? data : (data?.communities ?? null);
+        setCommunities(list ?? []);
       }
-    } catch {
+    } catch (err) {
       if (!cancelled) {
-        setCommunities(MOCK_COMMUNITIES);
+        setError(err.message ?? 'Failed to load communities');
+        setCommunities([]);
       }
     } finally {
       if (!cancelled) setLoading(false);
@@ -64,18 +62,22 @@ export function useCommunities() {
       setCommunities((prev) => [created, ...prev]);
       return { success: true, community: created };
     } catch (err) {
-      // Optimistic mock fallback
-      const mock = {
-        id: String(Date.now()),
-        name: data.name,
-        description: data.description ?? '',
-        icon_url: data.icon_url ?? null,
-        member_count: 1,
-        online_count: 1,
-        owner_id: 'me',
-      };
-      setCommunities((prev) => [mock, ...prev]);
-      return { success: true, community: mock, _mock: true, _error: err.message };
+      if (USE_MOCKS) {
+        // In mock mode, optimistic local add is acceptable
+        const mock = {
+          id: String(Date.now()),
+          name: data.name,
+          description: data.description ?? '',
+          icon_url: data.icon_url ?? null,
+          member_count: 1,
+          online_count: 1,
+          owner_id: 'me',
+        };
+        setCommunities((prev) => [mock, ...prev]);
+        return { success: true, community: mock, _mock: true, _error: err.message };
+      }
+      // Real mode: surface the error
+      return { success: false, error: err.message };
     }
   }, []);
 
@@ -124,22 +126,32 @@ export function useCommunityMembers(communityId) {
     if (!communityId) return;
     let cancelled = false;
 
-    async function fetch() {
+    async function fetchMembers() {
       try {
         setLoading(true);
         setError(null);
+
+        if (USE_MOCKS) {
+          if (!cancelled) setMembers(MOCK_MEMBERS ?? []);
+          return;
+        }
+
         const data = await api.communities.members(communityId);
         if (!cancelled) {
-          setMembers(Array.isArray(data) ? data : (data?.members ?? MOCK_MEMBERS));
+          const list = Array.isArray(data) ? data : (data?.members ?? null);
+          setMembers(list ?? []);
         }
-      } catch {
-        if (!cancelled) setMembers(MOCK_MEMBERS);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message ?? 'Failed to load members');
+          setMembers([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    fetch();
+    fetchMembers();
     return () => { cancelled = true; };
   }, [communityId]);
 

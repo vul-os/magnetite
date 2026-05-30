@@ -306,8 +306,12 @@ export default function GameDetail() {
               reviews={reviews.map((r, i) => ({ ...r, id: i }))}
               walletConnected={walletConnected}
               onCreateReview={() => {}}
-              onHelpful={(id) => console.log('Helpful:', id)}
-              onReport={(id) => console.log('Report:', id)}
+              onHelpful={() => {
+                /* TODO: POST /api/games/:id/reviews/:reviewId/helpful — endpoint not yet implemented */
+              }}
+              onReport={() => {
+                /* TODO: POST /api/games/:id/reviews/:reviewId/report — endpoint not yet implemented */
+              }}
             />
           </div>
         );

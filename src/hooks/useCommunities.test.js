@@ -16,11 +16,21 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
+const FAKE_COMMUNITIES = [
+  { id: '1', name: 'Magnetite Hub',  description: 'The official hub.', icon_url: null, member_count: 1024, online_count: 87, owner_id: '1' },
+  { id: '2', name: 'Rust Gamedev',   description: 'Rust game development.', icon_url: null, member_count: 412,  online_count: 23, owner_id: '2' },
+];
+
+const FAKE_MEMBERS = [
+  { id: '1', username: 'dev_one',    display_name: 'Dev One',    status: 'online', roles: ['admin']  },
+  { id: '2', username: 'player_two', display_name: 'Player Two', status: 'idle',   roles: ['member'] },
+];
+
 describe('useCommunities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: API unavailable → mock fallback.
-    api.communities.list.mockRejectedValue(new Error('no backend'));
+    // Default: API returns communities so tests have data to work with.
+    api.communities.list.mockResolvedValue({ communities: FAKE_COMMUNITIES });
     api.communities.create.mockRejectedValue(new Error('no backend'));
     api.communities.join.mockRejectedValue(new Error('no backend'));
     api.communities.leave.mockRejectedValue(new Error('no backend'));
@@ -30,7 +40,7 @@ describe('useCommunities', () => {
     vi.clearAllMocks();
   });
 
-  it('starts loading then populates with mock data on API failure', async () => {
+  it('starts loading then populates from API on success', async () => {
     const { result } = renderHook(() => useCommunities());
 
     expect(result.current.loading).toBe(true);
@@ -39,6 +49,17 @@ describe('useCommunities', () => {
 
     expect(result.current.communities.length).toBeGreaterThan(0);
     expect(result.current.error).toBeNull();
+  });
+
+  it('sets error and empty list on API failure', async () => {
+    api.communities.list.mockRejectedValue(new Error('no backend'));
+
+    const { result } = renderHook(() => useCommunities());
+
+    await vi.waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.communities).toEqual([]);
+    expect(result.current.error).toBeTruthy();
   });
 
   it('uses API data when backend returns valid communities', async () => {
@@ -100,21 +121,18 @@ describe('useCommunities', () => {
     expect(result.current.communities[0].id).toBe('c-new');
   });
 
-  it('createCommunity: falls back to optimistic mock on API failure', async () => {
+  it('createCommunity: returns success:false on API failure (real mode)', async () => {
     // api.communities.create already mocked to reject
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    const before = result.current.communities.length;
     let res;
     await act(async () => {
       res = await result.current.createCommunity({ name: 'Offline Community' });
     });
 
-    expect(res.success).toBe(true);
-    expect(res._mock).toBe(true);
-    expect(result.current.communities.length).toBe(before + 1);
-    expect(result.current.communities[0].name).toBe('Offline Community');
+    expect(res.success).toBe(false);
+    expect(res.error).toBeDefined();
   });
 
   it('joinCommunity: increments member_count on success', async () => {
@@ -192,7 +210,11 @@ describe('useCommunities', () => {
 describe('useCommunityMembers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.communities.members = vi.fn().mockRejectedValue(new Error('no backend'));
+    api.communities.members = vi.fn().mockResolvedValue({ members: FAKE_MEMBERS });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('returns empty members when communityId is null', async () => {
@@ -201,12 +223,23 @@ describe('useCommunityMembers', () => {
     expect(result.current.members).toEqual([]);
   });
 
-  it('populates members with mock data on API failure', async () => {
+  it('populates members from API on success', async () => {
     const { result } = renderHook(() => useCommunityMembers('comm-1'));
 
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.members.length).toBeGreaterThan(0);
+  });
+
+  it('sets error and empty members on API failure', async () => {
+    api.communities.members.mockRejectedValue(new Error('no backend'));
+
+    const { result } = renderHook(() => useCommunityMembers('comm-1'));
+
+    await vi.waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.members).toEqual([]);
+    expect(result.current.error).toBeTruthy();
   });
 
   it('uses API members when backend returns valid data', async () => {

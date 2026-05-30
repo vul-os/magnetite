@@ -364,6 +364,35 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
   - Verify: backend **0 warnings + fmt + all tests pass**; frontend build clean, lint **0 errors**, **113
     tests**. Committed.
 
+- **Fix Wave F3 (closing) — DONE, verified:** Final de-mock sweep (NotificationContext, useNotifications,
+  Friends/Profile/EditProfile, useLeaderboard/useChannels/useCommunities/useSearch, Leaderboard — all now real
+  fetch with error states; mock only via dynamic import behind `VITE_USE_MOCKS`); anti-cheat DB wiring (PgPool
+  injected into `GameWsHandler`; ban-on-connect via `check_ban`, `ban_user` 7d/30d on High/Critical anomalies,
+  `store_replay` at session end); cleanup jobs spawned; notification emails (payout/subscription/ban) via the
+  EmailService; fresh re-audit → GAPS.md finalized. Verify: backend **0 warnings + fmt + 151 tests pass**;
+  frontend build clean, lint **0 errors**, **115 tests pass**. Committed.
+
+### Gap-closure CLOSING SUMMARY (2026-05-30)
+**Buckets A (real bugs), B (frontend mocks), and C (integrations doable in-code) are CLOSED across F1–F3.**
+- Real bugs fixed (marketplace + payout revenue split, attribution, panics, phantom admin tables).
+- Security hardened (OAuth state on all providers, Google RS256/JWKS, admin-role guards).
+- Real **email** (Resend HTTP now / SES SMTP later, env-selected) wired into auth + notifications.
+- Real **payments** (Circle + Paystack HTTP, env-gated, explicit error when unconfigured, sandbox for dev);
+  real wallet/subscription/payout dispatch.
+- Real **matchmaking** session allocation + authoritative **game-WS** loop + **anti-cheat** (velocity + DB
+  ban/replay).
+- Frontend **de-mocked end-to-end**: pages/hooks/contexts fetch real data with loading/empty/error; mocks only
+  behind `VITE_USE_MOCKS` / `VITE_USE_MOCK_WS` dev flags (never silent fake success).
+- All new env vars documented in `.env.example` + docs.
+
+**Bucket D — remains as documented roadmap (needs external infra/credentials, NOT code):** MediaMTX media
+server + voice SFU for HLS/RTMP/scale; real GitHub CI runners executing `wasm-pack`; dedicated/auto-scaled
+game servers (`GAME_SERVER_WS_BASE`); full Bevy WASM builds for fps/motorsport templates (cargo-checked only);
+live FX rate feed; Circle deposit webhook; review helpful/report + 2FA TOTP backend endpoints. See GAPS.md.
+
+**Gap-closure loop TERMINATED** (A/B/C done). Final verified state: backend 0 warnings + fmt + 151 tests;
+frontend build clean, lint 0 errors, 115 tests; 6 Rust crates compile clean.
+
 ## 7. CLOSING SUMMARY (2026-05-30)
 
 **The autonomous multi-wave rebuild is COMPLETE.** Magnetite went from a stale-doc'd, 341-warning, mock-data

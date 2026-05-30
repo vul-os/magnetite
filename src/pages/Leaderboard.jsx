@@ -3,7 +3,6 @@ import Layout from '../components/Layout';
 import LeaderboardRow from '../components/LeaderboardRow';
 import LeaderboardSkeleton from '../components/skeletons/LeaderboardSkeleton';
 import EmptyState from '../components/empty/EmptyState';
-import { mockLeaderboard } from '../data/mockLeaderboard';
 import { api } from '../api/client';
 import './social.css';
 
@@ -31,7 +30,8 @@ function seededRand(a, b) {
   return x - Math.floor(x);
 }
 
-function buildFallbackData(gameId, timeFilter) {
+async function buildMockFallbackData(gameId, timeFilter) {
+  const { mockLeaderboard } = await import('../data/mockLeaderboard');
   const key = String(gameId);
   const baseData = mockLeaderboard[key] || mockLeaderboard['1'];
   const tf = TIME_FILTERS.findIndex(f => f.key === timeFilter);
@@ -55,24 +55,30 @@ function buildFallbackData(gameId, timeFilter) {
   return enriched;
 }
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export default function Leaderboard() {
-  const [games, setGames] = useState([
+  const MOCK_GAMES = [
     { id: 1, title: 'Cosmic Raiders'   },
     { id: 2, title: 'Puzzle Dimension' },
     { id: 3, title: 'Speed Legends'    },
     { id: 4, title: 'Dungeon Depths'   },
     { id: 5, title: 'Strategy Command' },
     { id: 6, title: 'Retro Arcade'     },
-  ]);
-  const [selectedGame, setSelectedGame] = useState(1);
-  const [timeFilter, setTimeFilter]     = useState('all-time');
-  const [currentPage, setCurrentPage]   = useState(1);
-  const [apiEntries, setApiEntries]     = useState(null);
-  const [loadedGame, setLoadedGame]     = useState(null);
+  ];
+
+  const [games, setGames]             = useState(USE_MOCKS ? MOCK_GAMES : []);
+  const [selectedGame, setSelectedGame] = useState(USE_MOCKS ? 1 : null);
+  const [timeFilter, setTimeFilter]   = useState('all-time');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [apiEntries, setApiEntries]   = useState(null);
+  const [loadedGame, setLoadedGame]   = useState(null);
+  const [fetchError, setFetchError]   = useState(null);
   /* loading = true until we've completed a fetch for the selectedGame */
   const loading = loadedGame !== selectedGame;
 
   useEffect(() => {
+    if (USE_MOCKS) return;
     let cancelled = false;
     api.games.list().then(data => {
       if (!cancelled && data) {
@@ -82,13 +88,24 @@ export default function Leaderboard() {
           setSelectedGame(list[0].id);
         }
       }
-    }).catch(() => { /* use mock */ });
+    }).catch(() => { /* empty game list handled below */ });
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     if (!selectedGame) return;
     let cancelled = false;
+    setFetchError(null);
+
+    if (USE_MOCKS) {
+      buildMockFallbackData(selectedGame, timeFilter).then(data => {
+        if (!cancelled) {
+          setApiEntries(data);
+          setLoadedGame(selectedGame);
+        }
+      });
+      return () => { cancelled = true; };
+    }
 
     api.games.leaderboard(selectedGame).then(data => {
       if (!cancelled) {
@@ -98,26 +115,22 @@ export default function Leaderboard() {
         setApiEntries(entries && entries.length > 0 ? entries : null);
         setLoadedGame(selectedGame);
       }
-    }).catch(() => {
+    }).catch((err) => {
       if (!cancelled) {
+        setFetchError(err.message ?? 'Failed to load leaderboard');
         setApiEntries(null);
         setLoadedGame(selectedGame);
       }
     });
 
     return () => { cancelled = true; };
-  }, [selectedGame]);
+  }, [selectedGame, timeFilter]);
 
   const currentUser = { username: 'PlayerOne' };
 
-  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-
   const leaderboardData = useMemo(() => {
-    if (apiEntries && apiEntries.length > 0) return apiEntries;
-    // Only show mock fallback when explicitly requested; otherwise show empty (real empty state)
-    if (useMocks) return buildFallbackData(selectedGame, timeFilter);
-    return [];
-  }, [apiEntries, selectedGame, timeFilter, useMocks]);
+    return apiEntries ?? [];
+  }, [apiEntries]);
 
   const totalPages  = Math.ceil(leaderboardData.length / ITEMS_PER_PAGE);
   const startIndex  = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -134,6 +147,13 @@ export default function Leaderboard() {
           <span className="kicker">// Compete Worldwide</span>
           <h1>Leaderboard</h1>
         </header>
+
+        {fetchError && (
+          <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+            <span className="auth-error-icon" aria-hidden="true">!</span>
+            {fetchError}
+          </div>
+        )}
 
         <div className="leaderboard-controls reveal-2">
           <div className="game-select">

@@ -9,6 +9,8 @@ use uuid::Uuid;
 
 use crate::api::notifications::{broadcast_notification, Notification, NotificationType};
 use crate::error::{AppError, Result};
+use crate::services::auth::get_user_by_id;
+use crate::services::email::EmailService;
 
 // Fee percentages are expressed as fractions (e.g. 0.30 = 30%), NOT as integer basis points.
 // Do NOT add a /100 divisor when multiplying against revenue — these are already in [0,1].
@@ -365,6 +367,54 @@ impl PayoutService {
         .map_err(|e| AppError::Database(e.to_string()))?;
 
         broadcast_notification(notification).await;
+
+        // Send transactional email — non-fatal: log on failure, do not roll back the payout.
+        match EmailService::from_env() {
+            Ok(email_svc) => match get_user_by_id(&self.pool, payout.user_id).await {
+                Ok(Some(user)) => {
+                    let amount_str = payout.amount.to_string();
+                    if let Err(e) = email_svc
+                        .send_payout_complete_email(
+                            &user.email,
+                            &user.username,
+                            &amount_str,
+                            &payout.destination,
+                            &transfer_id,
+                        )
+                        .await
+                    {
+                        tracing::warn!(
+                            payout_id = %payout.id,
+                            user_id = %payout.user_id,
+                            "Failed to send payout-complete email (non-fatal): {}",
+                            e
+                        );
+                    }
+                }
+                Ok(None) => {
+                    tracing::warn!(
+                        payout_id = %payout.id,
+                        user_id = %payout.user_id,
+                        "Payout-complete email skipped: user not found"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        payout_id = %payout.id,
+                        user_id = %payout.user_id,
+                        "Payout-complete email skipped: user lookup failed: {}",
+                        e
+                    );
+                }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    payout_id = %payout.id,
+                    "Payout-complete email skipped: email service not configured: {}",
+                    e
+                );
+            }
+        }
 
         Ok(())
     }

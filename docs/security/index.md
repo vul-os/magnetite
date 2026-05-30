@@ -88,9 +88,10 @@ Anomalies are recorded with `severity` (low / medium / high / critical) and
 `session_id`. High and critical anomalies trigger platform review and may result in
 session invalidation or account suspension.
 
-> **Note:** The anti-cheat service is implemented and its types are wired to the session
-> data model, but deep integration with the live session websocket loop is planned for
-> a future release.
+> **Status (F2):** Anti-cheat is now wired into `ws/game.rs`. `check_ban()` runs on
+> every player connect; velocity enforcement (`ANTICHEAT_MAX_VELOCITY` env var) runs on
+> every input tick; `detect_anomalies()` + `ban_user()` + `store_replay()` run on session
+> end. DB-backed ban checks gate connections in real time.
 
 ---
 

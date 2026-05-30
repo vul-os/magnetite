@@ -1,8 +1,13 @@
 // Game WebSocket handler and server-authoritative game loop.
 // Clients connect to /ws/game/<game_id>?token=<jwt>.
 // On connect: the JWT is validated; unauthenticated connections are rejected.
+//   Ban check: check_ban() is called on every connect; banned users are closed immediately.
 // Input frames from the client are processed by the server-authoritative loop
 // and suspicious inputs are flagged via the anti-cheat service.
+// On session end: detect_anomalies() runs; high/critical findings trigger ban_user() +
+//   store_replay() so the session data persists for review.
+// Several game-logic helpers (physics, interpolation) are platform APIs intended for
+// custom game-logic crates; dead_code is suppressed so the surface compiles cleanly.
 #![allow(dead_code)]
 
 use axum::extract::{Path, Query, State, WebSocketUpgrade};
@@ -21,7 +26,8 @@ use uuid::Uuid;
 
 use crate::api::middleware::validate_token;
 use crate::services::anticheat::{
-    self as anticheat_svc, Input as AntiCheatInput, Position as AntiCheatPosition, SessionData,
+    self as anticheat_svc, DeviceFingerprint, Input as AntiCheatInput,
+    Position as AntiCheatPosition, SessionData, Severity,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -438,12 +444,16 @@ impl Default for GameManager {
 
 pub struct GameWsHandler {
     manager: Arc<GameManager>,
+    /// DB pool injected so the WS handler can call DB-backed anti-cheat functions
+    /// (check_ban on connect, ban_user + store_replay at session end).
+    pool: sqlx::PgPool,
 }
 
 impl GameWsHandler {
-    pub fn new() -> Self {
+    pub fn new(pool: sqlx::PgPool) -> Self {
         Self {
             manager: Arc::new(GameManager::new()),
+            pool,
         }
     }
 
@@ -455,12 +465,6 @@ impl GameWsHandler {
 
     pub fn get_manager(&self) -> Arc<GameManager> {
         Arc::clone(&self.manager)
-    }
-}
-
-impl Default for GameWsHandler {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -495,7 +499,36 @@ async fn handle_game_connection(
         }
     };
 
+    // ── Anti-cheat ban check on connect ──────────────────────────────────────
+    // Build a minimal fingerprint (no real HTTP headers available at WS upgrade
+    // time via Axum's WebSocketUpgrade extractor, so we supply a zeroed sentinel
+    // that still allows the user-ID–based ban path to fire correctly).
+    let connect_fingerprint = DeviceFingerprint {
+        user_agent: "ws-connect".to_string(),
+        screen_resolution: "unknown".to_string(),
+        timezone: "unknown".to_string(),
+        language: "unknown".to_string(),
+        ip_address: "unknown".to_string(),
+        hash: format!("ws-{}", user_uuid),
+    };
+    match anticheat_svc::check_ban(&handler.pool, user_uuid, &connect_fingerprint).await {
+        Ok(true) => {
+            tracing::warn!(user_id = %user_uuid, "Game WS: banned user rejected on connect");
+            return axum::response::Response::builder()
+                .status(axum::http::StatusCode::FORBIDDEN)
+                .body(axum::body::Body::from("banned"))
+                .unwrap();
+        }
+        Err(e) => {
+            // Log but don't block on DB errors — fail-open so a DB blip doesn't
+            // shut out legitimate players.
+            tracing::error!(user_id = %user_uuid, error = %e, "Anti-cheat ban check DB error");
+        }
+        Ok(false) => {}
+    }
+
     let manager = handler.get_manager();
+    let pool = handler.pool.clone();
 
     ws.on_upgrade(move |socket| async move {
         let (mut write, mut read) = socket.split();
@@ -658,6 +691,7 @@ async fn handle_game_connection(
         }
 
         // ── Disconnect: run full anomaly detection on accumulated session data ─
+        let ac_inputs_for_replay = ac_inputs.clone();
         let ac_session_data = SessionData {
             session_id: ac_session_id,
             user_id: user_uuid,
@@ -685,6 +719,82 @@ async fn handle_game_connection(
                     "Anti-cheat anomaly"
                 );
             }
+
+            // ── DB writes: ban + replay for high/critical violations ───────────
+            // Determine the worst severity in this session's anomaly list.
+            let worst_severity = anomalies.iter().fold(Severity::Low, |worst, a| {
+                if a.severity == Severity::Critical
+                    || (a.severity == Severity::High && worst != Severity::Critical)
+                {
+                    a.severity.clone()
+                } else {
+                    worst
+                }
+            });
+
+            let is_bannable = worst_severity == Severity::Critical || worst_severity == Severity::High;
+
+            if is_bannable {
+                // Build a summary reason from all anomaly descriptions.
+                let reason = anomalies
+                    .iter()
+                    .map(|a| format!("[{:?}] {}", a.anomaly_type, a.description))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+
+                let ban_fingerprint = DeviceFingerprint {
+                    user_agent: "ws-session".to_string(),
+                    screen_resolution: "unknown".to_string(),
+                    timezone: "unknown".to_string(),
+                    language: "unknown".to_string(),
+                    ip_address: "unknown".to_string(),
+                    hash: format!("ws-{}", user_uuid),
+                };
+
+                // Duration: 30-day ban for critical, 7-day for high.
+                let ban_days = if worst_severity == Severity::Critical {
+                    Some(30)
+                } else {
+                    Some(7)
+                };
+
+                match anticheat_svc::ban_user(
+                    &pool,
+                    user_uuid,
+                    &reason,
+                    ban_days,
+                    Some(&ban_fingerprint),
+                )
+                .await
+                {
+                    Ok(ban) => tracing::warn!(
+                        user_id = %user_uuid,
+                        ban_id = %ban.id,
+                        ban_days = ?ban_days,
+                        "Anti-cheat: user banned after session anomaly"
+                    ),
+                    Err(e) => tracing::error!(
+                        user_id = %user_uuid,
+                        error = %e,
+                        "Anti-cheat: failed to write ban record"
+                    ),
+                }
+            }
+
+            // Always store the replay when anomalies are detected so reviewers
+            // have the raw input sequence regardless of whether a ban was issued.
+            match anticheat_svc::store_replay(&pool, ac_session_id, ac_inputs_for_replay).await {
+                Ok(replay) => tracing::info!(
+                    session_id = %ac_session_id,
+                    replay_id = %replay.id,
+                    "Anti-cheat: session replay stored"
+                ),
+                Err(e) => tracing::error!(
+                    session_id = %ac_session_id,
+                    error = %e,
+                    "Anti-cheat: failed to store session replay"
+                ),
+            }
         }
 
         // ── Disconnect: remove player and notify the room ─────────────────────
@@ -696,10 +806,8 @@ async fn handle_game_connection(
     })
 }
 
-pub fn router() -> Router {
-    let handler = Arc::new(GameWsHandler::new());
-    handler.router()
-}
+// Note: use `Arc::new(GameWsHandler::new(pool))` directly; this module no longer
+// exports a standalone router() because the handler requires a DB pool at construction time.
 
 #[cfg(test)]
 mod tests {

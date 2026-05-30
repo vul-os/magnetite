@@ -19,7 +19,7 @@ Magnetite is the open-source **unified gaming suite** for Rust game development 
 - **Controllers.** First-class gamepad support (Gamepad API + gilrs) with a unified binding layer.
 - **Graphics tiers.** `Lite2D` → `Standard3D` → `Advanced3D` — simple games stay lightweight, AAA games scale up.
 - **Open source.** Platform MIT, SDK MIT, game templates MIT.
-- **Real money, no middlemen.** USDC payments (Circle), Paystack fiat on-ramp, 15% platform fee, playtime-based developer payouts.
+- **Real money, no middlemen.** USDC payments (Circle), Paystack fiat on-ramp, 30% platform fee / 70% developer split, playtime-based developer payouts.
 
 ---
 

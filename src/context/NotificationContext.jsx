@@ -1,24 +1,33 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { api } from '../api/client';
-import { mockNotifications } from '../data/mockNotifications';
 
 const NotificationContext = createContext();
 
+/* Mock data — only used when VITE_USE_MOCKS=true */
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export function NotificationProvider({ children }) {
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState([]);
   const [initialized, setInitialized] = useState(false);
 
-  // Load from real API on mount; fall back to mocks if unavailable
+  // Load from real API on mount (or mock data if VITE_USE_MOCKS=true)
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
+        if (USE_MOCKS) {
+          const { mockNotifications } = await import('../data/mockNotifications');
+          if (!cancelled) setNotifications(mockNotifications);
+          return;
+        }
         const data = await api.notifications.list();
         if (!cancelled) {
           const list = Array.isArray(data) ? data : (data?.notifications ?? null);
           if (list) setNotifications(list);
         }
-      } catch { /* use mock data */ } finally {
+      } catch {
+        /* API unavailable — empty list is the honest state; no fabricated data shown */
+      } finally {
         if (!cancelled) setInitialized(true);
       }
     }

@@ -108,17 +108,17 @@ Pure Rust functions that contain no HTTP concerns. Called by API handlers.
 | `session` | JWT issuance/validation, refresh tokens, session table management |
 | `games` | Game record CRUD, status transitions |
 | `wallet` | USDC balance management, deposit/withdrawal validation |
-| `payment` | Circle (USDC) and Paystack webhook event processing |
-| `payout` | Developer earnings calculation (85/15 split), payout request/process |
+| `payment` | Circle (USDC) and Paystack integration — real HTTP clients gated on `CIRCLE_API_KEY`/`PAYSTACK_SECRET_KEY`; sandbox mode via `PAYMENTS_SANDBOX=true` |
+| `payout` | Developer earnings calculation (70/30 split), payout request/process; dispatches real Circle `/v1/transfers` in production |
 | `leaderboard` | Score submission, rank queries, friend scores |
-| `matchmaking` | Queue management, player pairing logic |
+| `matchmaking` | Queue management, player pairing logic; `start_game_session()` sets `server_endpoint` from `GAME_SERVER_WS_BASE` env var; estimated wait time derived from actual queue depth |
 | `achievements` | Progress tracking, unlock conditions |
 | `friends` | Friend request state machine, block list |
 | `invites` | Game session invite creation and acceptance |
 | `analytics` | Aggregated platform metrics for admin dashboard |
-| `anticheat` | Input velocity checks, score anomaly detection, session integrity |
+| `anticheat` | Input velocity checks, score anomaly detection, session integrity; wired into `ws/game.rs` (ban check on connect, velocity enforcement per tick, anomaly scan + replay store on disconnect) |
 | `cache` | Redis wrapper — get/set/delete/invalidate |
-| `email` | Multi-provider email dispatch (Resend, SMTP, AWS SES) |
+| `email` | Multi-provider email dispatch — `ResendProvider` (HTTPS POST to Resend) or `SesProvider` (lettre SMTP to AWS SES endpoint); provider selected by `EMAIL_PROVIDER` env var; wired into registration, verification, password-reset, and payout-notification flows |
 | `health` | Database and Redis connectivity checks |
 | `verification` | Email verification token issuance and validation |
 | `distribution` | Game artifact and version record management, play manifest resolution |
@@ -131,13 +131,16 @@ Pure Rust functions that contain no HTTP concerns. Called by API handlers.
 
 ### `src/jobs/` — Background workers
 
-Launched as `tokio::spawn` tasks at startup.
+All jobs are `tokio::spawn`'d at startup in `main.rs`.
 
-| Job | Function |
-|-----|----------|
-| `session_cleanup` | Periodically deletes expired refresh-token records |
-| `notification_cleanup` | Garbage-collects old read notifications |
-| `backup` | Schedules periodic database backup exports |
+| Job | Interval | Function |
+|-----|----------|----------|
+| `notification_cleanup` | 1 h | Garbage-collects old read notifications |
+| `session_cleanup` | 1 h | Expires stale auth sessions, old matchmaking entries, and expired password-reset tokens |
+| `verification_cleanup` | 1 h | Purges expired and used email-verification tokens |
+| `payout batch` | 1 h | Calls `PayoutService::process_pending_payouts()`; dispatches Circle USDC transfers for pending rows |
+| `subscription renewal` | 1 h | Calls `SubscriptionService::process_renewals()`; handles expired/renewed subscriptions |
+| `backup` | (not spawned) | `pg_dump` + S3/local storage — code exists but not yet scheduled; run manually via `backend/tools/backup.sh` |
 
 ---
 

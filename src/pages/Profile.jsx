@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import ProfileCard from '../components/ProfileCard';
-import { mockProfileUser, mockRecentGames, mockProfileAchievements, mockProfileFriends } from '../data/mockProfile';
 import { api } from '../api/client';
 import './social.css';
 
@@ -13,22 +12,31 @@ export default function Profile() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
-  const [user, setUser]               = useState(useMocks ? mockProfileUser : null);
-  const [recentGames, setRecentGames] = useState(useMocks ? mockRecentGames : []);
-  const [achievements, setAchievements] = useState(useMocks ? mockProfileAchievements : []);
-  const [friends, setFriends]         = useState(useMocks ? mockProfileFriends : []);
+  const [user, setUser]               = useState(null);
+  const [recentGames, setRecentGames] = useState([]);
+  const [achievements, setAchievements] = useState([]);
+  const [friends, setFriends]         = useState([]);
 
   useEffect(() => {
-    if (useMocks) {
-      setLoading(false);
-      return;
-    }
-
     let cancelled = false;
 
     async function loadProfile() {
       setLoading(true);
       setError(null);
+
+      if (useMocks) {
+        const { mockProfileUser, mockRecentGames, mockProfileAchievements, mockProfileFriends } =
+          await import('../data/mockProfile');
+        if (!cancelled) {
+          setUser(mockProfileUser);
+          setRecentGames(mockRecentGames);
+          setAchievements(mockProfileAchievements);
+          setFriends(mockProfileFriends);
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         const target = username || (await api.auth.me().then(me => me?.username).catch(() => null));
         if (!target) {
@@ -47,11 +55,7 @@ export default function Profile() {
       } catch (err) {
         if (!cancelled) {
           setError(err.message || 'Failed to load profile');
-          // Show mock data as fallback when VITE_USE_MOCKS is not set but API is down
-          setUser(mockProfileUser);
-          setRecentGames(mockRecentGames);
-          setAchievements(mockProfileAchievements);
-          setFriends(mockProfileFriends);
+          // No mock fallback — show the error state so the failure is visible
         }
       } finally {
         if (!cancelled) setLoading(false);

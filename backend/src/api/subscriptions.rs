@@ -16,6 +16,8 @@ use crate::api::middleware;
 use crate::api::notifications::NotificationService;
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::auth::get_user_by_id;
+use crate::services::email::EmailService;
 use crate::services::payment::PaymentService;
 
 pub enum SubscriptionTier {
@@ -297,6 +299,39 @@ pub async fn subscribe(
         .create_subscription_renewal_notification(user_id, &tier.name)
         .await;
 
+    // Send subscription-confirmation email — non-fatal: log on failure, do not roll back.
+    match EmailService::from_env() {
+        Ok(email_svc) => match get_user_by_id(&pool, user_id).await {
+            Ok(Some(user)) => {
+                if let Err(e) = email_svc
+                    .send_subscription_confirmation_email(
+                        &user.email,
+                        &user.username,
+                        &tier.name,
+                        &period_end,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        subscription_id = %subscription_id,
+                        user_id = %user_id,
+                        "Failed to send subscription-confirmation email (non-fatal): {}",
+                        e
+                    );
+                }
+            }
+            Ok(None) => {
+                tracing::warn!(user_id = %user_id, "Subscription confirmation email skipped: user not found");
+            }
+            Err(e) => {
+                tracing::warn!(user_id = %user_id, "Subscription confirmation email skipped: user lookup failed: {}", e);
+            }
+        },
+        Err(e) => {
+            tracing::warn!(user_id = %user_id, "Subscription confirmation email skipped: email service not configured: {}", e);
+        }
+    }
+
     Ok(response::success_response(UserSubscriptionResponse {
         id: subscription.id,
         tier: SubscriptionTierResponse {
@@ -328,6 +363,60 @@ pub async fn cancel_subscription(
     .await
     .map_err(|e| AppError::Database(e.to_string()))?
     .ok_or_else(|| AppError::NotFound("No active subscription found".to_string()))?;
+
+    // Send cancellation email — non-fatal: log on failure, do not roll back.
+    match EmailService::from_env() {
+        Ok(email_svc) => {
+            // Fetch tier name and user details for the email.
+            let tier_name_result =
+                sqlx::query_as::<_, (String,)>("SELECT name FROM subscription_tiers WHERE id = $1")
+                    .bind(subscription.tier_id)
+                    .fetch_optional(&pool)
+                    .await;
+
+            let tier_name = match tier_name_result {
+                Ok(Some((name,))) => name,
+                Ok(None) => "your plan".to_string(),
+                Err(e) => {
+                    tracing::warn!(
+                        user_id = %user_id,
+                        "Cancellation email: could not fetch tier name: {}",
+                        e
+                    );
+                    "your plan".to_string()
+                }
+            };
+
+            match get_user_by_id(&pool, user_id).await {
+                Ok(Some(user)) => {
+                    if let Err(e) = email_svc
+                        .send_subscription_cancellation_email(
+                            &user.email,
+                            &user.username,
+                            &tier_name,
+                            &subscription.current_period_end,
+                        )
+                        .await
+                    {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            "Failed to send subscription-cancellation email (non-fatal): {}",
+                            e
+                        );
+                    }
+                }
+                Ok(None) => {
+                    tracing::warn!(user_id = %user_id, "Cancellation email skipped: user not found");
+                }
+                Err(e) => {
+                    tracing::warn!(user_id = %user_id, "Cancellation email skipped: user lookup failed: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(user_id = %user_id, "Cancellation email skipped: email service not configured: {}", e);
+        }
+    }
 
     Ok(response::success_response(subscription))
 }

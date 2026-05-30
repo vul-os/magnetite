@@ -3,32 +3,49 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
-import { mockProfileUser } from '../data/mockProfile';
 import { api } from '../api/client';
+
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+const BLANK_PROFILE = { username: '', bio: '', location: '', avatar: '' };
 
 export default function EditProfile() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    username: mockProfileUser.username,
-    bio:      mockProfileUser.bio,
-    location: mockProfileUser.location,
-    avatar:   mockProfileUser.avatar,
-  });
+  const [formData, setFormData] = useState(BLANK_PROFILE);
   const [avatarFile, setAvatarFile] = useState(null);
   const [isSaving, setIsSaving]     = useState(false);
+  const [loadError, setLoadError]   = useState(null);
 
   useEffect(() => {
-    api.auth.me().then(me => {
-      if (me) {
-        setFormData(prev => ({
-          ...prev,
-          username: me.username || prev.username,
-          bio:      me.bio      || prev.bio,
-          location: me.location || prev.location,
-          avatar:   me.avatar   || prev.avatar,
-        }));
+    async function loadProfile() {
+      if (USE_MOCKS) {
+        try {
+          const { mockProfileUser } = await import('../data/mockProfile');
+          setFormData({
+            username: mockProfileUser.username || '',
+            bio:      mockProfileUser.bio      || '',
+            location: mockProfileUser.location || '',
+            avatar:   mockProfileUser.avatar   || '',
+          });
+        } catch { /* use blank */ }
+        return;
       }
-    }).catch(() => { /* use mock */ });
+
+      try {
+        const me = await api.auth.me();
+        if (me) {
+          setFormData({
+            username: me.username || '',
+            bio:      me.bio      || '',
+            location: me.location || '',
+            avatar:   me.avatar   || '',
+          });
+        }
+      } catch (err) {
+        setLoadError(err.message || 'Failed to load profile');
+      }
+    }
+    loadProfile();
   }, []);
 
   const handleChange = (e) => {
@@ -58,6 +75,12 @@ export default function EditProfile() {
   return (
     <Layout>
       <div className="edit-profile-page">
+        {loadError && (
+          <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+            <span className="auth-error-icon" aria-hidden="true">!</span>
+            {loadError}
+          </div>
+        )}
         {/* Header */}
         <header className="settings-page-header edit-profile-header reveal reveal-1">
           <span className="kicker">// YOUR PROFILE</span>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
-import { mockFriends, mockPendingRequests, mockBlockedUsers, mockSearchUsers } from '../data/mockFriends';
 import { api } from '../api/client';
 import { usePresence } from '../hooks/usePresence';
 import './social.css';
@@ -9,30 +8,47 @@ import './social.css';
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export default function Friends() {
-  const [friends, setFriends]               = useState(useMocks ? mockFriends : []);
-  const [pendingRequests, setPendingRequests] = useState(useMocks ? mockPendingRequests : []);
-  const [blockedUsers, setBlockedUsers]     = useState(useMocks ? mockBlockedUsers : []);
-  const [loading, setLoading]               = useState(!useMocks);
+  const [friends, setFriends]               = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [blockedUsers, setBlockedUsers]     = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [loadError, setLoadError]           = useState(null);
 
   // Presence indicators for each friend
   const friendIds = friends.map((f) => f.id);
   const { presenceMap } = usePresence(friendIds);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [searchError, setSearchError]     = useState(null);
   const [activeTab, setActiveTab] = useState('friends');
 
   useEffect(() => {
-    if (useMocks) return;
     let cancelled = false;
+
+    async function loadMocks() {
+      const { mockFriends, mockPendingRequests, mockBlockedUsers } = await import('../data/mockFriends');
+      if (!cancelled) {
+        setFriends(mockFriends);
+        setPendingRequests(mockPendingRequests);
+        setBlockedUsers(mockBlockedUsers);
+        setLoading(false);
+      }
+    }
+
+    if (useMocks) {
+      loadMocks();
+      return () => { cancelled = true; };
+    }
+
     api.social.friends()
       .then(data => {
         if (!cancelled) {
-          const list = Array.isArray(data) ? data : (data?.friends ?? null);
-          setFriends(list ?? mockFriends);
+          const list = Array.isArray(data) ? data : (data?.friends ?? []);
+          setFriends(list);
         }
       })
-      .catch(() => {
-        if (!cancelled) setFriends(mockFriends);
+      .catch((err) => {
+        if (!cancelled) setLoadError(err.message || 'Failed to load friends');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -40,21 +56,28 @@ export default function Friends() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleSearch = useCallback((query) => {
+  const handleSearch = useCallback(async (query) => {
     setSearchQuery(query);
+    setSearchError(null);
     if (query.trim()) {
+      if (useMocks) {
+        const { mockSearchUsers } = await import('../data/mockFriends');
+        const filtered = mockSearchUsers.filter(u =>
+          u.username.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(filtered);
+        return;
+      }
       api.social.searchUsers(query).then(data => {
         const list = Array.isArray(data) ? data : (data?.users ?? null);
         if (list) {
           setSearchResults(list);
         } else {
-          throw new Error('no results');
+          setSearchResults([]);
         }
-      }).catch(() => {
-        const filtered = mockSearchUsers.filter(u =>
-          u.username.toLowerCase().includes(query.toLowerCase())
-        );
-        setSearchResults(filtered);
+      }).catch((err) => {
+        setSearchError(err.message || 'Search failed');
+        setSearchResults([]);
       });
     } else {
       setSearchResults([]);
@@ -118,6 +141,13 @@ export default function Friends() {
           <h1>Friends</h1>
         </header>
 
+        {loadError && (
+          <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+            <span className="auth-error-icon" aria-hidden="true">!</span>
+            {loadError}
+          </div>
+        )}
+
         <div className="reveal-2">
           <div className="search-box">
             <input
@@ -129,6 +159,11 @@ export default function Friends() {
               aria-autocomplete="list"
               aria-expanded={searchResults.length > 0}
             />
+            {searchError && (
+              <p style={{ color: 'var(--color-error)', fontSize: 'var(--text-sm)', marginTop: '0.5rem', fontFamily: 'var(--font-mono)' }} role="alert">
+                {searchError}
+              </p>
+            )}
             {searchResults.length > 0 && (
               <div className="search-results" role="listbox" aria-label="Search results">
                 {searchResults.map(user => (

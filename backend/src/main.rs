@@ -41,6 +41,8 @@ use crate::api::versioning;
 use crate::api::wallet;
 use crate::api::webhooks;
 use crate::jobs::notification_cleanup;
+use crate::jobs::session_cleanup;
+use crate::jobs::verification_cleanup;
 use crate::middleware::cors_layer;
 use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
@@ -122,7 +124,7 @@ async fn main() {
         notification_broadcaster,
     ));
 
-    let game_ws_handler = std::sync::Arc::new(ws_game::GameWsHandler::new());
+    let game_ws_handler = std::sync::Arc::new(ws_game::GameWsHandler::new(pool.clone()));
 
     let app = Router::new()
         .nest("/api/v1", api_v1)
@@ -175,6 +177,14 @@ async fn main() {
             }
         }
     });
+
+    // Session + token cleanup: expire stale sessions, password-reset tokens,
+    // matchmaking entries, and unverified accounts every hour (mirrors notification_cleanup).
+    tokio::spawn(session_cleanup::run_cleanup_jobs(pool.clone()));
+
+    // Verification-token cleanup: purge expired and old used email/password-reset
+    // tokens every hour so the verification_tokens table stays lean.
+    tokio::spawn(verification_cleanup::run_cleanup_job(pool.clone()));
 
     axum::serve(listener, app).await.unwrap();
 }
