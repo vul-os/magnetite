@@ -33,9 +33,11 @@ function LockIcon() {
   );
 }
 
-export default function ChannelList({ server, channels, activeChannelId, onSelect }) {
-  const textChannels  = channels.filter(c => c.type === 'text');
-  const voiceChannels = channels.filter(c => c.type === 'voice');
+export default function ChannelList({ server, channels, activeChannelId, onSelect, loading = false }) {
+  // Normalise: API uses `kind`, mock uses `type`
+  const normalised = channels.map(c => ({ ...c, type: c.type ?? c.kind ?? 'text' }));
+  const textChannels  = normalised.filter(c => c.type === 'text');
+  const voiceChannels = normalised.filter(c => c.type === 'voice');
 
   return (
     <aside className="channel-list" aria-label={`${server?.name ?? 'Server'} channels`}>
@@ -83,12 +85,17 @@ export default function ChannelList({ server, channels, activeChannelId, onSelec
                   <span className="channel-item__icon" aria-hidden="true"><HashIcon /></span>
                   <span className="channel-item__name">{ch.name}</span>
                   {ch.private && <span className="channel-item__lock" aria-hidden="true"><LockIcon /></span>}
-                  {ch.unread > 0 && !activeChannelId === ch.id && (
+                  {ch.unread > 0 && ch.id !== activeChannelId && (
                     <span className="channel-item__badge" aria-hidden="true">{ch.unread > 9 ? '9+' : ch.unread}</span>
                   )}
                 </button>
               </li>
             ))}
+            {loading && textChannels.length === 0 && (
+              <li role="listitem" aria-busy="true">
+                <div className="channel-item-skeleton shimmer" aria-hidden="true" />
+              </li>
+            )}
           </ul>
         </section>
 

@@ -34,12 +34,37 @@ function needsDivider(a, b) {
   return new Date(a.createdAt).toDateString() !== new Date(b.createdAt).toDateString();
 }
 
-export default function MessageList({ messages, currentUserId }) {
+function MessageSkeleton() {
+  return (
+    <div className="message-list message-list--loading" aria-busy="true" aria-label="Loading messages">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="message-row message-skeleton">
+          <div className="message-avatar">
+            <div className="shimmer message-skeleton__avatar" aria-hidden="true" />
+          </div>
+          <div className="message-body">
+            <div className="message-header">
+              <div className="shimmer message-skeleton__name" aria-hidden="true" />
+              <div className="shimmer message-skeleton__time" aria-hidden="true" />
+            </div>
+            <div className="shimmer message-skeleton__content" aria-hidden="true" style={{ width: `${60 + i * 10}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function MessageList({ messages, currentUserId, loading = false }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  if (loading) {
+    return <MessageSkeleton />;
+  }
 
   if (!messages || messages.length === 0) {
     return (

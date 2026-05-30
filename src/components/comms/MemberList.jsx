@@ -61,11 +61,18 @@ function MemberGroup({ label, members, currentUserId }) {
   );
 }
 
-export default function MemberList({ members, currentUserId }) {
-  const online  = members.filter(m => m.status === 'online');
-  const idle    = members.filter(m => m.status === 'idle');
-  const dnd     = members.filter(m => m.status === 'dnd');
-  const offline = members.filter(m => m.status === 'offline');
+export default function MemberList({ members, currentUserId, presenceMap }) {
+  // Enrich status from live presenceMap when available
+  const enriched = members.map(m => {
+    if (presenceMap && presenceMap[m.id]) {
+      return { ...m, status: presenceMap[m.id].status ?? m.status };
+    }
+    return m;
+  });
+  const online  = enriched.filter(m => m.status === 'online');
+  const idle    = enriched.filter(m => m.status === 'idle');
+  const dnd     = enriched.filter(m => m.status === 'dnd');
+  const offline = enriched.filter(m => m.status === 'offline');
 
   const activeSections = [
     { label: 'Online',  members: online  },
@@ -73,6 +80,8 @@ export default function MemberList({ members, currentUserId }) {
     { label: 'Busy',    members: dnd     },
     { label: 'Offline', members: offline },
   ].filter(s => s.members.length > 0);
+
+  const onlineCount = enriched.filter(m => m.status !== 'offline').length;
 
   return (
     <aside
@@ -82,7 +91,7 @@ export default function MemberList({ members, currentUserId }) {
       <div className="member-list__header">
         <h2 className="member-list__title">Members</h2>
         <span className="member-list__count kicker">
-          {members.filter(m => m.status !== 'offline').length} online
+          {onlineCount} online
         </span>
       </div>
 

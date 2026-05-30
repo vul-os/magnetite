@@ -201,6 +201,18 @@
   .profile-status.online::before { animation: none; }
 }
 
+.profile-status.idle {
+  background: rgba(245, 165, 36, 0.12);
+  color: var(--color-amber);
+  border: 1px solid rgba(245, 165, 36, 0.25);
+}
+
+.profile-status.dnd {
+  background: rgba(255, 84, 104, 0.10);
+  color: var(--color-error);
+  border: 1px solid rgba(255, 84, 104, 0.25);
+}
+
 .profile-status.offline {
   background: var(--color-bg-elevated);
   color: var(--color-text-muted);
@@ -623,7 +635,9 @@
   border: 2px solid var(--color-bg-card);
 }
 
-.status-online  { background: var(--color-success); }
+.status-online  { background: var(--color-success); box-shadow: 0 0 5px rgba(61, 220, 132, 0.5); }
+.status-idle    { background: var(--color-amber); }
+.status-dnd     { background: var(--color-error); }
 .status-offline { background: var(--color-text-muted); }
 
 .friend-info { flex: 1; min-width: 0; }
@@ -643,6 +657,8 @@
 }
 
 .status-text.status-online  { color: var(--color-success); }
+.status-text.status-idle    { color: var(--color-amber); }
+.status-text.status-dnd     { color: var(--color-error); }
 .status-text.status-offline { color: var(--color-text-muted); }
 
 .friend-actions {

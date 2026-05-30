@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
+import { usePresence } from '../hooks/usePresence';
 import {
   MenuIcon,
   CloseIcon,
@@ -17,6 +18,24 @@ import {
 } from '../assets/icons';
 import './Navbar.css';
 
+// Inline DM icon (not in shared icon set)
+function DmIcon(props) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
 const NAV_LINKS = [
   { path: '/',             label: 'Marketplace', icon: HomeIcon },
   { path: '/communities',  label: 'Communities', icon: UsersIcon },
@@ -24,6 +43,17 @@ const NAV_LINKS = [
   { path: '/leaderboard',  label: 'Leaderboard', icon: TrophyIcon },
   { path: '/about',        label: 'About',       icon: UsersIcon },
 ];
+
+/** Map a presence status to its dot CSS class. */
+function presenceDotClass(status) {
+  switch (status) {
+    case 'online':  return 'presence-dot-online';
+    case 'idle':    return 'presence-dot-idle';
+    case 'dnd':     return 'presence-dot-dnd';
+    case 'offline':
+    default:        return 'presence-dot-offline';
+  }
+}
 
 const USER_MENU_ITEMS = [
   { path: '/profile',  label: 'Profile',  icon: UsersIcon },
@@ -43,6 +73,12 @@ export default function Navbar() {
   const { balance } = useWallet();
   const navigate   = useNavigate();
   const location   = useLocation();
+
+  // Current user presence
+  const currentUserId = user?.id ?? null;
+  const { getPresence } = usePresence(currentUserId ? [currentUserId] : []);
+  const myPresence = currentUserId ? getPresence(currentUserId) : { status: 'offline' };
+  const myDotClass = presenceDotClass(myPresence.status);
 
   const [isSearchOpen,        setIsSearchOpen]        = useState(false);
   const [isUserMenuOpen,      setIsUserMenuOpen]      = useState(false);
@@ -176,6 +212,16 @@ export default function Navbar() {
                   <span className="balance-currency">USDC</span>
                 </Link>
 
+                {/* Direct Messages */}
+                <Link
+                  to="/messages"
+                  className={`dm-nav-btn${location.pathname === '/messages' ? ' active' : ''}`}
+                  aria-label="Direct messages"
+                  aria-current={location.pathname === '/messages' ? 'page' : undefined}
+                >
+                  <DmIcon />
+                </Link>
+
                 {/* Notifications */}
                 <div ref={notificationsRef} className="notifications-wrapper">
                   <button
@@ -238,8 +284,11 @@ export default function Navbar() {
                     aria-haspopup="true"
                     aria-label={`User menu for ${user.username ?? 'account'}`}
                   >
-                    <div className="user-avatar" aria-hidden="true">
-                      {user.username?.charAt(0).toUpperCase() ?? 'U'}
+                    <div className="user-avatar-wrapper" aria-hidden="true">
+                      <div className="user-avatar">
+                        {user.username?.charAt(0).toUpperCase() ?? 'U'}
+                      </div>
+                      <span className={`navbar-presence-dot ${myDotClass}`} aria-label={`Status: ${myPresence.status}`} />
                     </div>
                     <ChevronDownIcon className={`chevron${isUserMenuOpen ? ' open' : ''}`} aria-hidden="true" />
                   </button>

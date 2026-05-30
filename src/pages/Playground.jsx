@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import GameHUD from '../components/GameHUD';
 import Modal from '../components/Modal';
+import GameOverlay from '../components/GameOverlay';
 import './Playground.css';
 
 const MOCK_PLAYERS = [
@@ -269,6 +270,13 @@ export default function Playground() {
           </button>
         </div>
       </Modal>
+
+      {/* In-game comms overlay — chat + voice (Tab / ` to toggle) */}
+      <GameOverlay
+        label="Match Chat"
+        channelId={gameId ? `match-${gameId}` : null}
+        voiceRoomId={gameId ? `match-voice-${gameId}` : null}
+      />
     </div>
   );
 }

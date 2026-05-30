@@ -1,5 +1,17 @@
 import { memo } from 'react';
 import Button from './common/Button';
+import { usePresence } from '../hooks/usePresence';
+
+/** Resolve presence status to { cssClass, label, dotColor } */
+function resolvePresence(status) {
+  switch (status) {
+    case 'online':  return { cssClass: 'online', label: 'Online', dotColor: 'var(--color-success)' };
+    case 'idle':    return { cssClass: 'idle',   label: 'Idle',   dotColor: 'var(--color-amber)' };
+    case 'dnd':     return { cssClass: 'dnd',    label: 'Do Not Disturb', dotColor: 'var(--color-error)' };
+    case 'offline':
+    default:        return { cssClass: 'offline', label: 'Offline', dotColor: 'var(--color-text-muted)' };
+  }
+}
 
 export default memo(function ProfileCard({
   user,
@@ -9,6 +21,15 @@ export default memo(function ProfileCard({
   onFollow,
   onUnfollow,
 }) {
+  // Pull live presence for this user if we have an id; fall back to user.isOnline boolean
+  const { getPresence } = usePresence(user?.id ? [user.id] : []);
+  const livePresence = user?.id ? getPresence(user.id) : null;
+
+  // Decide the effective status: live > prop > fallback
+  const effectiveStatus = livePresence?.status ?? (user.isOnline ? 'online' : 'offline');
+  const { cssClass, label } = resolvePresence(effectiveStatus);
+  const activityText = livePresence?.activity ?? label;
+
   return (
     <div className="profile-card">
       <div className="profile-cover" aria-hidden="true">
@@ -23,10 +44,10 @@ export default memo(function ProfileCard({
         <div className="profile-header">
           <h2 className="profile-username">{user.username}</h2>
           <span
-            className={`profile-status ${user.isOnline ? 'online' : 'offline'}`}
-            aria-label={user.isOnline ? 'Online' : 'Offline'}
+            className={`profile-status ${cssClass}`}
+            aria-label={label}
           >
-            {user.isOnline ? 'Online' : 'Offline'}
+            {activityText}
           </span>
         </div>
 

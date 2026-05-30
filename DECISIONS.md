@@ -239,6 +239,15 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
   helper) + CommsContext; Discord-like Communities UI shell (server rail/channels/chat/members/voice panel) +
   `/communities` route + nav link. Build green, lint **0 errors**, tests 33/33. Docs: comms overview/realtime/
   data-model/in-game. Committed. → next **Wave 7 (comms frontend wiring + in-game overlay + streaming UI)**.
+- **Wave 7 (comms frontend) — DONE, verified:** Communities page wired to live hooks (realtime chat, typing,
+  presence, load-more, connection pill) + CommsProvider mounted in App.jsx + `/messages`+`/streams` routes.
+  Direct Messages page (threads + conversation + presence). Voice client (getUserMedia + RTCPeerConnection
+  mesh + Web-Audio speaking ring, mute/deafen). In-game GameOverlay (chat+voice, hotkey) in Playground/Lobby/
+  Spectator. Streaming UI (Streams browse grid + StreamPlayer + GoLivePanel with getDisplayMedia / RTMP key).
+  Presence dots in Navbar/Friends/ProfileCard. Build green, lint **0 errors**, tests 33/33. Minor follow-ups
+  noted by agents (hardcoded CURRENT_USER_ID → wire to useAuth; VoicePanel prop pass-through) → Wave 9 polish.
+  → next **Wave 8 (game-dev capabilities: controllers, graphics tiers, FPS/motorsport templates, points
+  economy, dev marketplaces)**.
 - **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline committed (`1f25602`).
 - **Wave 1 (foundation) — DONE, verified:**
   - Frontend design system: new `src/styles/tokens.css` + rewritten `src/index.css` (Industrial Magnetite tokens; legacy var names aliased so pages still compile); restyled all 17 `common/*` components + Navbar + Toast. `npm run build` green.

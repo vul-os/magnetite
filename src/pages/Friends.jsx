@@ -3,12 +3,17 @@ import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
 import { mockFriends, mockPendingRequests, mockBlockedUsers, mockSearchUsers } from '../data/mockFriends';
 import { api } from '../api/client';
+import { usePresence } from '../hooks/usePresence';
 import './social.css';
 
 export default function Friends() {
   const [friends, setFriends] = useState(mockFriends);
   const [pendingRequests, setPendingRequests] = useState(mockPendingRequests);
   const [blockedUsers, setBlockedUsers] = useState(mockBlockedUsers);
+
+  // Presence indicators for each friend
+  const friendIds = friends.map((f) => f.id);
+  const { presenceMap } = usePresence(friendIds);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [activeTab, setActiveTab] = useState('friends');
@@ -150,18 +155,23 @@ export default function Friends() {
         <div className="tab-content reveal-4">
           {activeTab === 'friends' && (
             <div className="friends-list" role="tabpanel" aria-label="Friends list">
-              {friends.length === 0 ? (
-                <p className="empty-state-inline">No friends yet — search for players above</p>
-              ) : (
-                friends.map(friend => (
-                  <FriendCard
-                    key={friend.id}
-                    friend={friend}
-                    onInvite={handleInvite}
-                    onBlock={handleBlock}
-                  />
-                ))
-              )}
+              {friends.length === 0
+                ? <p className="empty-state-inline">No friends yet — search for players above</p>
+                : friends.map(friend => {
+                    const presence = presenceMap[friend.id];
+                    const friendWithPresence = presence
+                      ? { ...friend, status: presence.status, activity: presence.activity }
+                      : friend;
+                    return (
+                      <FriendCard
+                        key={friend.id}
+                        friend={friendWithPresence}
+                        onInvite={handleInvite}
+                        onBlock={handleBlock}
+                      />
+                    );
+                  })
+              }
             </div>
           )}
 

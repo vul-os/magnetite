@@ -4,6 +4,7 @@ import { ToastProvider, useToast } from './context/ToastContext';
 import { AnnouncementProvider } from './context/AnnouncementContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { AccessibilityProvider } from './components/AccessibilityProvider';
+import { CommsProvider } from './context/CommsContext';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import Toast from './components/Toast';
 import PageLoader from './components/PageLoader';
@@ -64,6 +65,8 @@ const AdminGames = lazy(() => import('./pages/admin/Games'));
 const AdminFinance = lazy(() => import('./pages/admin/Finance'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 const Communities = lazy(() => import('./pages/Communities'));
+const Messages = lazy(() => import('./pages/Messages'));
+const Streams = lazy(() => import('./pages/Streams'));
 
 function ToastContainer() {
   const { toasts, removeToast } = useToast();
@@ -112,71 +115,75 @@ function App() {
       <ThemeProvider>
         <AnnouncementProvider announcement="Magnetite v2.0 launching soon! New features and improvements coming your way.">
           <ToastProvider>
-            <a href="#main-content" className="skip-link">
-              Skip to main content
-            </a>
-            <AnnouncementBanner />
-            <ToastContainer />
-            <ErrorBoundary>
-              <BrowserRouter>
-                <AppContent />
-                <Suspense fallback={<PageLoader />}>
-                  <Routes>
-                    <Route path="/" element={<Marketplace />} />
-                    <Route path="/home" element={<LandingPage />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/forgot-password" element={<ForgotPassword />} />
-                    <Route path="/reset-password" element={<ResetPassword />} />
-                    <Route path="/verify-email" element={<VerifyEmail />} />
-                    <Route path="/auth/callback" element={<AuthCallback />} />
-                    <Route path="/settings/linked-accounts" element={<LinkAccount />} />
-                    <Route path="/settings/connected-accounts" element={<ConnectedAccounts />} />
-                    <Route path="/marketplace" element={<Marketplace />} />
-                    <Route path="/game/:id" element={<GameDetail />} />
-                    <Route path="/play/:id" element={<Playground />} />
-                    <Route path="/subscription" element={<Subscription />} />
-                    <Route path="/game-access" element={<GameAccess />} />
-                    <Route path="/lobby/:id" element={<GameLobby />} />
-                    <Route path="/spectate/:id" element={<Spectator />} />
-                    <Route path="/developers" element={<DeveloperDashboard />} />
-                    <Route path="/developers/studio" element={<GameStudio />} />
-                    <Route path="/developers/deploy" element={<GameDeploy />} />
-                    <Route path="/developers/earnings" element={<Earnings />} />
-                    <Route path="/developers/settings" element={<Settings />} />
-                    <Route path="/wallet" element={<Wallet />} />
-                    <Route path="/friends" element={<Friends />} />
-                    <Route path="/leaderboard" element={<Leaderboard />} />
-                    <Route path="/achievements" element={<Achievements />} />
-                    <Route path="/profile/:username" element={<Profile />} />
-                    <Route path="/edit-profile" element={<EditProfile />} />
-                    <Route path="/wishlist" element={<Wishlist />} />
-                    <Route path="/onboarding" element={<Onboarding />} />
-                    <Route path="/welcome" element={<Welcome />} />
-                    <Route path="/pricing" element={<Pricing />} />
-                    <Route path="/about" element={<About />} />
-                    <Route path="/contact" element={<Contact />} />
-                    <Route path="/careers" element={<Careers />} />
-                    <Route path="/faq" element={<FAQ />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/settings/security" element={<Security />} />
-                    <Route path="/settings/privacy" element={<PrivacySettings />} />
-                    <Route path="/privacy" element={<Privacy />} />
-                    <Route path="/terms" element={<Terms />} />
-                    <Route path="/cookies" element={<Cookies />} />
-                    <Route path="/403" element={<Forbidden />} />
-                    <Route path="/500" element={<ServerError />} />
-                    <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-                    <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
-                    <Route path="/admin/games" element={<AdminRoute><AdminGames /></AdminRoute>} />
-                    <Route path="/admin/finance" element={<AdminRoute><AdminFinance /></AdminRoute>} />
-                    <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
-                    <Route path="/communities" element={<Communities />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Suspense>
-              </BrowserRouter>
-            </ErrorBoundary>
+            <CommsProvider>
+              <a href="#main-content" className="skip-link">
+                Skip to main content
+              </a>
+              <AnnouncementBanner />
+              <ToastContainer />
+              <ErrorBoundary>
+                <BrowserRouter>
+                  <AppContent />
+                  <Suspense fallback={<PageLoader />}>
+                    <Routes>
+                      <Route path="/" element={<Marketplace />} />
+                      <Route path="/home" element={<LandingPage />} />
+                      <Route path="/login" element={<Login />} />
+                      <Route path="/register" element={<Register />} />
+                      <Route path="/forgot-password" element={<ForgotPassword />} />
+                      <Route path="/reset-password" element={<ResetPassword />} />
+                      <Route path="/verify-email" element={<VerifyEmail />} />
+                      <Route path="/auth/callback" element={<AuthCallback />} />
+                      <Route path="/settings/linked-accounts" element={<LinkAccount />} />
+                      <Route path="/settings/connected-accounts" element={<ConnectedAccounts />} />
+                      <Route path="/marketplace" element={<Marketplace />} />
+                      <Route path="/game/:id" element={<GameDetail />} />
+                      <Route path="/play/:id" element={<Playground />} />
+                      <Route path="/subscription" element={<Subscription />} />
+                      <Route path="/game-access" element={<GameAccess />} />
+                      <Route path="/lobby/:id" element={<GameLobby />} />
+                      <Route path="/spectate/:id" element={<Spectator />} />
+                      <Route path="/developers" element={<DeveloperDashboard />} />
+                      <Route path="/developers/studio" element={<GameStudio />} />
+                      <Route path="/developers/deploy" element={<GameDeploy />} />
+                      <Route path="/developers/earnings" element={<Earnings />} />
+                      <Route path="/developers/settings" element={<Settings />} />
+                      <Route path="/wallet" element={<Wallet />} />
+                      <Route path="/friends" element={<Friends />} />
+                      <Route path="/leaderboard" element={<Leaderboard />} />
+                      <Route path="/achievements" element={<Achievements />} />
+                      <Route path="/profile/:username" element={<Profile />} />
+                      <Route path="/edit-profile" element={<EditProfile />} />
+                      <Route path="/wishlist" element={<Wishlist />} />
+                      <Route path="/onboarding" element={<Onboarding />} />
+                      <Route path="/welcome" element={<Welcome />} />
+                      <Route path="/pricing" element={<Pricing />} />
+                      <Route path="/about" element={<About />} />
+                      <Route path="/contact" element={<Contact />} />
+                      <Route path="/careers" element={<Careers />} />
+                      <Route path="/faq" element={<FAQ />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="/settings/security" element={<Security />} />
+                      <Route path="/settings/privacy" element={<PrivacySettings />} />
+                      <Route path="/privacy" element={<Privacy />} />
+                      <Route path="/terms" element={<Terms />} />
+                      <Route path="/cookies" element={<Cookies />} />
+                      <Route path="/403" element={<Forbidden />} />
+                      <Route path="/500" element={<ServerError />} />
+                      <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                      <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+                      <Route path="/admin/games" element={<AdminRoute><AdminGames /></AdminRoute>} />
+                      <Route path="/admin/finance" element={<AdminRoute><AdminFinance /></AdminRoute>} />
+                      <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
+                      <Route path="/communities" element={<Communities />} />
+                      <Route path="/messages" element={<Messages />} />
+                      <Route path="/streams" element={<Streams />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </Suspense>
+                </BrowserRouter>
+              </ErrorBoundary>
+            </CommsProvider>
           </ToastProvider>
         </AnnouncementProvider>
       </ThemeProvider>

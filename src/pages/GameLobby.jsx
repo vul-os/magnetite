@@ -4,6 +4,7 @@ import PlayerList from '../components/PlayerList';
 import LobbyChat from '../components/LobbyChat';
 import ReadyButton from '../components/ReadyButton';
 import StartGameButton from '../components/StartGameButton';
+import GameOverlay from '../components/GameOverlay';
 import './GameLobby.css';
 
 const MOCK_CURRENT_USER = {
@@ -58,6 +59,10 @@ export default function GameLobby() {
   const handleStartGame = useCallback(() => {
     console.log('Starting game...');
   }, []);
+
+  // Derive a stable channel + voice room from the game/lobby id
+  const overlayChannelId   = _gameId ? `lobby-${_gameId}` : 'lobby-default';
+  const overlayVoiceRoomId = _gameId ? `lobby-voice-${_gameId}` : null;
 
   return (
     <div className="game-lobby" role="main">
@@ -130,6 +135,13 @@ export default function GameLobby() {
           </div>
         </div>
       </div>
+
+      {/* In-game comms overlay — chat + voice (Tab / ` to toggle) */}
+      <GameOverlay
+        label="Lobby"
+        channelId={overlayChannelId}
+        voiceRoomId={overlayVoiceRoomId}
+      />
     </div>
   );
 }

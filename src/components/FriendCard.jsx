@@ -1,8 +1,19 @@
 import { memo } from 'react';
 
+/** Map a presence status string to CSS modifier + human label. */
+function resolveStatus(status) {
+  switch (status) {
+    case 'online':  return { cls: 'status-online',   label: 'Online' };
+    case 'idle':    return { cls: 'status-idle',     label: 'Idle' };
+    case 'dnd':     return { cls: 'status-dnd',      label: 'Do Not Disturb' };
+    case 'offline':
+    default:        return { cls: 'status-offline',  label: 'Offline' };
+  }
+}
+
 export default memo(function FriendCard({ friend, onInvite, onBlock, showActions = true }) {
-  const isOnline = friend.status === 'online';
-  const statusClass = isOnline ? 'status-online' : 'status-offline';
+  const { cls: statusClass, label: statusLabel } = resolveStatus(friend.status);
+  const activityText = friend.activity ?? statusLabel;
 
   return (
     <div className="friend-card">
@@ -14,14 +25,14 @@ export default memo(function FriendCard({ friend, onInvite, onBlock, showActions
         />
         <span
           className={`status-indicator ${statusClass}`}
-          aria-label={isOnline ? 'Online' : 'Offline'}
+          aria-label={statusLabel}
         />
       </div>
 
       <div className="friend-info">
         <h4>{friend.username}</h4>
         <span className={`status-text ${statusClass}`}>
-          {isOnline ? 'Online' : 'Offline'}
+          {activityText}
         </span>
       </div>
 

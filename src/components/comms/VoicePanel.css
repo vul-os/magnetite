@@ -1,4 +1,5 @@
-/* VoicePanel — voice channel status / controls bar */
+/* ── VoicePanel — Wave 7 live voice experience ── */
+
 .voice-panel {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
@@ -10,11 +11,16 @@
   gap: 0.625rem;
   position: relative;
   overflow: hidden;
+  transition: border-color var(--t) var(--ease-out);
 }
 
-/* Subtle accent glow at top edge */
-.voice-panel::before {
-  content: '';
+/* Connection state border tints */
+.voice-panel--connected  { border-color: rgba(56, 225, 200, 0.25); }
+.voice-panel--connecting { border-color: rgba(91, 157, 255, 0.25); }
+.voice-panel--failed     { border-color: rgba(255, 84, 104, 0.35); }
+
+/* ── Top gradient accent bar ───────────────────────────────────────────── */
+.voice-panel__accent-bar {
   position: absolute;
   top: 0;
   left: 0;
@@ -22,61 +28,164 @@
   height: 2px;
   background: var(--gradient-primary);
   border-radius: var(--radius) var(--radius) 0 0;
+  pointer-events: none;
 }
 
-/* Status line */
+/* ── Status line ───────────────────────────────────────────────────────── */
 .voice-panel__status {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
+/* Presence dot — green pulse when idle/ready, cyan when connected */
 .voice-panel__indicator {
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-success);
+  border-radius: var(--radius-full, 50%);
+  background: var(--color-text-muted);
   flex-shrink: 0;
+  transition: background var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out);
+}
+
+.voice-panel--connected .voice-panel__indicator {
+  background: var(--color-success);
   box-shadow: 0 0 6px var(--color-success);
-  animation: pulse-dot 2s ease infinite;
+}
+
+.voice-panel--connecting .voice-panel__indicator {
+  background: var(--color-info);
+  box-shadow: 0 0 6px var(--color-info);
+}
+
+.voice-panel--failed .voice-panel__indicator {
+  background: var(--color-error);
+  box-shadow: 0 0 6px var(--color-error);
+}
+
+.voice-panel__indicator--pulsing {
+  animation: pulse-dot 1.4s ease infinite;
 }
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50%       { opacity: 0.35; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .voice-panel__indicator { animation: none; }
+  .voice-panel__indicator--pulsing { animation: none; }
 }
 
+/* Info column */
 .voice-panel__info {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  flex: 1;
 }
 
 .voice-panel__channel-name {
   font-family: var(--font-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-xs, 0.75rem);
   font-weight: 600;
-  color: var(--color-success);
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.voice-panel--connected .voice-panel__channel-name {
+  color: var(--color-success);
+}
+
 .voice-panel__sub {
   font-size: 10px;
   color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-/* Participants */
+/* ── Spinner (connecting) ───────────────────────────────────────────────── */
+.voice-panel__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-info);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-panel__spinner { animation: none; opacity: 0.6; }
+}
+
+/* ── Join / Retry button (inline status area) ───────────────────────────── */
+.voice-panel__join-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  transition:
+    background var(--t-fast) var(--ease-out),
+    transform  var(--t-fast) var(--ease-out);
+}
+
+.voice-panel__join-btn:hover {
+  background: rgba(56, 225, 200, 0.2);
+  transform: translateY(-1px);
+}
+
+.voice-panel__join-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.voice-panel__join-btn--retry {
+  border-color: var(--color-error);
+  background: rgba(255, 84, 104, 0.1);
+  color: var(--color-error);
+}
+
+.voice-panel__join-btn--retry:hover {
+  background: rgba(255, 84, 104, 0.18);
+}
+
+/* ── Permission / device error banner ──────────────────────────────────── */
+.voice-panel__permission-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  background: rgba(255, 84, 104, 0.08);
+  border: 1px solid rgba(255, 84, 104, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+}
+
+/* ── Participant list ───────────────────────────────────────────────────── */
 .voice-panel__participants {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
 }
 
 .voice-participant {
@@ -97,17 +206,23 @@
   background: rgba(56, 225, 200, 0.06);
 }
 
+/* Avatar wrap: positions speaking ring + dot relative to avatar */
+.voice-participant__avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+}
+
 .voice-participant__avatar {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-full, 50%);
   background: var(--color-bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2px solid transparent;
-  position: relative;
-  flex-shrink: 0;
   transition: border-color var(--t-fast) var(--ease-out);
 }
 
@@ -120,61 +235,76 @@
   font-weight: 700;
   font-size: 11px;
   color: var(--color-accent);
+  line-height: 1;
 }
 
+/* Presence dot — bottom-right corner of avatar-wrap */
 .voice-participant__dot {
   position: absolute;
   bottom: -1px;
   right: -1px;
 }
 
-.voice-participant__mute-icon {
-  display: flex;
-  align-items: center;
-  color: var(--color-error);
-  flex-shrink: 0;
-}
-
+/* Speaking ring — animated border around the avatar-wrap */
 .voice-participant__speaking-ring {
   position: absolute;
   inset: -3px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-full, 50%);
   border: 2px solid var(--color-accent);
-  opacity: 0.6;
-  animation: speaking-ring 1.5s ease infinite;
+  opacity: 0.7;
+  animation: speaking-ring 1.4s ease-in-out infinite;
   pointer-events: none;
-  display: none;
-}
-
-.voice-participant--speaking .voice-participant__speaking-ring {
-  display: block;
 }
 
 @keyframes speaking-ring {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50% { transform: scale(1.08); opacity: 0.3; }
+  0%, 100% { transform: scale(1);    opacity: 0.7; }
+  50%       { transform: scale(1.12); opacity: 0.25; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .voice-participant__speaking-ring { animation: none; }
+  .voice-participant__speaking-ring {
+    animation: none;
+    opacity: 0.5;
+  }
 }
 
+/* Participant name */
 .voice-participant__name {
   font-family: var(--font-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-xs, 0.75rem);
   font-weight: 500;
   color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  transition: color var(--t-fast) var(--ease-out);
 }
 
 .voice-participant--speaking .voice-participant__name {
   color: var(--color-text-primary);
 }
 
-/* Controls */
+/* Mute badge */
+.voice-participant__mute-icon {
+  display: flex;
+  align-items: center;
+  color: var(--color-error);
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.voice-panel__empty {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 0.25rem 0;
+  margin: 0;
+}
+
+/* ── Controls row ───────────────────────────────────────────────────────── */
 .voice-panel__controls {
   display: flex;
   align-items: center;
@@ -196,12 +326,12 @@
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
-  transition:
-    background var(--t-fast) var(--ease-out),
-    border-color var(--t-fast) var(--ease-out),
-    color var(--t-fast) var(--ease-out),
-    transform var(--t-fast) var(--ease-out);
   min-height: 34px;
+  transition:
+    background    var(--t-fast) var(--ease-out),
+    border-color  var(--t-fast) var(--ease-out),
+    color         var(--t-fast) var(--ease-out),
+    transform     var(--t-fast) var(--ease-out);
 }
 
 .voice-ctrl-btn:hover:not(:disabled) {
@@ -215,6 +345,7 @@
   outline-offset: 1px;
 }
 
+/* Muted / deafened state — red tint */
 .voice-ctrl-btn--active {
   background: rgba(255, 84, 104, 0.12);
   border-color: rgba(255, 84, 104, 0.3);
@@ -225,6 +356,7 @@
   background: rgba(255, 84, 104, 0.18);
 }
 
+/* Leave button */
 .voice-ctrl-btn--leave {
   background: rgba(255, 84, 104, 0.08);
   border-color: rgba(255, 84, 104, 0.2);

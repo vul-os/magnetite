@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import GameOverlay from '../components/GameOverlay';
 import './Spectator.css';
 
 const MOCK_SPECTATORS = [
@@ -240,6 +241,13 @@ export default function Spectator() {
           </form>
         </aside>
       </div>
+
+      {/* In-game comms overlay — chat + voice (Tab / ` to toggle) */}
+      <GameOverlay
+        label="Spectator"
+        channelId={gameId ? `spectate-${gameId}` : null}
+        voiceRoomId={null}
+      />
     </div>
   );
 }

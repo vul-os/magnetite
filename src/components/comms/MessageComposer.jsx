@@ -4,8 +4,15 @@ import './MessageComposer.css';
 /**
  * MessageComposer — text input with emoji, attachment, and send controls.
  * onSend(text) is called with the message string.
+ * onTypingStart / onTypingStop are optional callbacks wired to the comms socket.
  */
-export default function MessageComposer({ channel, onSend, disabled = false }) {
+export default function MessageComposer({
+  channel,
+  onSend,
+  disabled = false,
+  onTypingStart,
+  onTypingStop,
+}) {
   const [value, setValue] = useState('');
   const [typing, setTyping]   = useState(false);
   const textareaRef = useRef(null);
@@ -14,11 +21,16 @@ export default function MessageComposer({ channel, onSend, disabled = false }) {
   const handleChange = useCallback((e) => {
     setValue(e.target.value);
 
-    // Simulate "typing" indicator state
-    setTyping(true);
+    if (!typing) {
+      setTyping(true);
+      onTypingStart?.();
+    }
     clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => setTyping(false), 2000);
-  }, []);
+    typingTimer.current = setTimeout(() => {
+      setTyping(false);
+      onTypingStop?.();
+    }, 2000);
+  }, [typing, onTypingStart, onTypingStop]);
 
   const handleSubmit = useCallback((e) => {
     e?.preventDefault();
@@ -27,8 +39,10 @@ export default function MessageComposer({ channel, onSend, disabled = false }) {
     onSend?.(text);
     setValue('');
     setTyping(false);
+    clearTimeout(typingTimer.current);
+    onTypingStop?.();
     textareaRef.current?.focus();
-  }, [value, disabled, onSend]);
+  }, [value, disabled, onSend, onTypingStop]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

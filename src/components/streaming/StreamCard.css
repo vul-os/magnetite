@@ -1,0 +1,191 @@
+/* StreamCard — live stream browse card */
+
+.stream-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
+  outline: none;
+}
+
+.stream-card:hover,
+.stream-card:focus-visible {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md), 0 0 0 0 transparent;
+  transform: translateY(-2px);
+}
+
+.stream-card:focus-visible {
+  box-shadow: var(--shadow-md), var(--shadow-glow-focus);
+}
+
+/* ── Thumbnail ── */
+.stream-card__thumb-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--color-bg-secondary);
+}
+
+.stream-card__thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--t) var(--ease-out);
+}
+
+.stream-card:hover .stream-card__thumb-img,
+.stream-card:focus-visible .stream-card__thumb-img {
+  transform: scale(1.03);
+}
+
+.stream-card__thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-card) 100%);
+}
+
+/* ── Live badge ── */
+.stream-card__live-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--color-error);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px 2px 5px;
+  line-height: 18px;
+}
+
+.stream-card__live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+  animation: stream-live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes stream-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-card__live-dot { animation: none; }
+}
+
+/* ── Viewer chip ── */
+.stream-card__viewer-chip {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Hover play overlay ── */
+.stream-card__hover-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+
+.stream-card:hover .stream-card__hover-overlay,
+.stream-card:focus-visible .stream-card__hover-overlay {
+  opacity: 1;
+}
+
+/* ── Info row ── */
+.stream-card__info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem;
+}
+
+.stream-card__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  border: 1px solid rgba(56, 225, 200, 0.22);
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stream-card__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-card__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-card__streamer {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin: 0 0 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-card__game {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-accent);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+}
