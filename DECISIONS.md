@@ -229,6 +229,16 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
   streaming incl. in-game, build-any-game-on-one-SDK from simple→advanced FPS/motorsport, controllers,
   points/score economy, dev paid marketplaces, shared central services). Captured in §1b + §4b. Loop now
   continues into the suite program (Waves 6-9). → launching **Wave 6 (comms core: backend + SDK)**.
+- **Wave 6 (comms core) — DONE, verified:** Backend: migration `20260530_communities.sql` (11 tables:
+  communities/members/channels/channel_members/messages/dm_threads/dm_messages/presence/voice_rooms/
+  voice_participants/streams), services + api for communities/channels/messages/DMs/presence, **ws/comms.rs**
+  (chat+presence broadcast) and **ws/voice.rs** (WebRTC SDP/ICE signaling relay, mesh, SFU documented) — all
+  wired in mod.rs/main.rs, **0 warnings**, fmt clean, tests compile. SDK: `platform::comms` (typed in-game
+  chat+voice surface mirroring the ws protocol), **101 tests pass**, 0 warnings. Frontend: client.js comms
+  surface + hooks (useCommunities/Channels/Messages/Presence/Voice/CommsSocket incl. RTCPeerConnection voice
+  helper) + CommsContext; Discord-like Communities UI shell (server rail/channels/chat/members/voice panel) +
+  `/communities` route + nav link. Build green, lint **0 errors**, tests 33/33. Docs: comms overview/realtime/
+  data-model/in-game. Committed. → next **Wave 7 (comms frontend wiring + in-game overlay + streaming UI)**.
 - **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline committed (`1f25602`).
 - **Wave 1 (foundation) — DONE, verified:**
   - Frontend design system: new `src/styles/tokens.css` + rewritten `src/index.css` (Industrial Magnetite tokens; legacy var names aliased so pages still compile); restyled all 17 `common/*` components + Navbar + Toast. `npm run build` green.

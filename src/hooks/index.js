@@ -23,3 +23,11 @@ export { useTheme } from './useTheme';
 export { useDebounce } from './useDebounce';
 export { useClickOutside } from './useClickOutside';
 export { useMemoOne } from './useMemoOne';
+
+// ── Wave 6: Comms Core ────────────────────────────────────────────────────
+export { useCommunities, useCommunityMembers } from './useCommunities';
+export { useChannels } from './useChannels';
+export { useMessages } from './useMessages';
+export { usePresence } from './usePresence';
+export { useVoice } from './useVoice';
+export { useCommsSocket } from './useCommsSocket';

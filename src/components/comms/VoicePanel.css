@@ -1,0 +1,244 @@
+/* VoicePanel — voice channel status / controls bar */
+.voice-panel {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle accent glow at top edge */
+.voice-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-primary);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* Status line */
+.voice-panel__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.voice-panel__indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--color-success);
+  animation: pulse-dot 2s ease infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-panel__indicator { animation: none; }
+}
+
+.voice-panel__info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.voice-panel__channel-name {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-success);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-panel__sub {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+/* Participants */
+.voice-panel__participants {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.voice-participant {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.375rem;
+  border-radius: var(--radius-sm);
+  position: relative;
+  transition: background var(--t-fast) var(--ease-out);
+}
+
+.voice-participant:hover {
+  background: var(--color-bg-card);
+}
+
+.voice-participant--speaking {
+  background: rgba(56, 225, 200, 0.06);
+}
+
+.voice-participant__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+.voice-participant--speaking .voice-participant__avatar {
+  border-color: var(--color-accent);
+}
+
+.voice-participant__initial {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-accent);
+}
+
+.voice-participant__dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+}
+
+.voice-participant__mute-icon {
+  display: flex;
+  align-items: center;
+  color: var(--color-error);
+  flex-shrink: 0;
+}
+
+.voice-participant__speaking-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-accent);
+  opacity: 0.6;
+  animation: speaking-ring 1.5s ease infinite;
+  pointer-events: none;
+  display: none;
+}
+
+.voice-participant--speaking .voice-participant__speaking-ring {
+  display: block;
+}
+
+@keyframes speaking-ring {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.08); opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-participant__speaking-ring { animation: none; }
+}
+
+.voice-participant__name {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.voice-participant--speaking .voice-participant__name {
+  color: var(--color-text-primary);
+}
+
+/* Controls */
+.voice-panel__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.voice-ctrl-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  transition:
+    background var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
+  min-height: 34px;
+}
+
+.voice-ctrl-btn:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.voice-ctrl-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.voice-ctrl-btn--active {
+  background: rgba(255, 84, 104, 0.12);
+  border-color: rgba(255, 84, 104, 0.3);
+  color: var(--color-error);
+}
+
+.voice-ctrl-btn--active:hover {
+  background: rgba(255, 84, 104, 0.18);
+}
+
+.voice-ctrl-btn--leave {
+  background: rgba(255, 84, 104, 0.08);
+  border-color: rgba(255, 84, 104, 0.2);
+  color: var(--color-error);
+  flex: 0 0 auto;
+  padding: 0.4rem 0.75rem;
+}
+
+.voice-ctrl-btn--leave:hover {
+  background: rgba(255, 84, 104, 0.18);
+  border-color: rgba(255, 84, 104, 0.4);
+  transform: translateY(-1px);
+}
+
+.voice-ctrl-btn__label {
+  font-size: 11px;
+}

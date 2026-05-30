@@ -19,6 +19,8 @@ use crate::api::achievements;
 use crate::api::admin;
 use crate::api::auth;
 use crate::api::categories;
+use crate::api::channels;
+use crate::api::communities;
 use crate::api::developer;
 use crate::api::distribution;
 use crate::api::games;
@@ -26,6 +28,7 @@ use crate::api::github;
 use crate::api::health;
 use crate::api::leaderboard;
 use crate::api::matchmaking;
+use crate::api::messages;
 use crate::api::metrics;
 use crate::api::notifications;
 use crate::api::oauth;
@@ -38,6 +41,8 @@ use crate::jobs::notification_cleanup;
 use crate::middleware::cors_layer;
 use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
+use crate::ws::comms;
+use crate::ws::voice;
 
 #[tokio::main]
 async fn main() {
@@ -77,6 +82,17 @@ async fn main() {
         .nest("/users", social::users_router(pool.clone()))
         .nest("/subscriptions", subscriptions::router(pool.clone()))
         .nest("/notifications", notifications::router(pool.clone()))
+        // Wave 6: comms core — communities, channels, messages, DMs
+        .nest("/communities", communities::router(pool.clone()))
+        .nest(
+            "/communities/:community_id/channels",
+            channels::router(pool.clone()),
+        )
+        .nest(
+            "/channels/:channel_id/messages",
+            messages::channel_messages_router(pool.clone()),
+        )
+        .nest("/dms", messages::dms_router(pool.clone()))
         .route("/health", get(health_check))
         .layer(axum::middleware::from_fn_with_state(
             versioning_state.clone(),
@@ -99,6 +115,9 @@ async fn main() {
         .nest("/api/v1", api_v1)
         .merge(health_metrics)
         .merge(notification_ws_handler.router())
+        // Wave 6: real-time comms and voice signaling WebSocket endpoints
+        .merge(comms::router(pool.clone()))
+        .merge(voice::router(pool.clone()))
         .layer(cors_layer())
         .layer(from_fn_with_state(
             rate_limiter.clone(),

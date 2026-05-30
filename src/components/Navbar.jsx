@@ -18,10 +18,11 @@ import {
 import './Navbar.css';
 
 const NAV_LINKS = [
-  { path: '/',            label: 'Marketplace', icon: HomeIcon },
-  { path: '/developers',  label: 'Developers',  icon: UsersIcon },
-  { path: '/leaderboard', label: 'Leaderboard', icon: TrophyIcon },
-  { path: '/about',       label: 'About',       icon: UsersIcon },
+  { path: '/',             label: 'Marketplace', icon: HomeIcon },
+  { path: '/communities',  label: 'Communities', icon: UsersIcon },
+  { path: '/developers',   label: 'Developers',  icon: UsersIcon },
+  { path: '/leaderboard',  label: 'Leaderboard', icon: TrophyIcon },
+  { path: '/about',        label: 'About',       icon: UsersIcon },
 ];
 
 const USER_MENU_ITEMS = [

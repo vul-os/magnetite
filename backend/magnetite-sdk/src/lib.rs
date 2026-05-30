@@ -47,6 +47,16 @@
 //! export_game!(MyGame);
 //! ```
 //!
+//! ## Platform services
+//!
+//! The [`platform`] module exposes shared platform services that in-game code
+//! can call directly:
+//!
+//! | Service | Path |
+//! |---|---|
+//! | Chat + presence | [`platform::comms`] |
+//! | Voice signaling | [`platform::comms::VoiceSignal`] |
+//!
 //! ## Feature flags
 //!
 //! *(Planned — not yet implemented.)*
@@ -63,6 +73,7 @@
 pub mod game;
 pub mod input;
 pub mod networking;
+pub mod platform;
 pub mod protocol;
 pub mod state;
 
@@ -72,6 +83,10 @@ pub use input::{Action, Direction, Input, InputEvent, KeyCode, KeyState, MouseSt
 pub use networking::{
     FullInterest, InterestManager, NetworkManager, PredictionBuffer, RadiusInterest, ServerConfig,
     ServerNetworkManager, StateSyncProtocol, TickLoop,
+};
+pub use platform::comms::{
+    ChatMessage, ClientCommsMessage, CommsClient, CommsConfig, CommsConnectionState,
+    CommsErrorCode, CommsEvent, PresenceStatus, PresenceUpdate, ServerCommsMessage, VoiceSignal,
 };
 pub use protocol::{ClientMessage, Envelope, ErrorCode, ServerMessage, PROTOCOL_VERSION};
 pub use state::{GameState, PlayerId, PlayerState, Position, Rotation, Snapshot};

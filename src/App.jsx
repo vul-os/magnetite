@@ -63,6 +63,7 @@ const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminGames = lazy(() => import('./pages/admin/Games'));
 const AdminFinance = lazy(() => import('./pages/admin/Finance'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
+const Communities = lazy(() => import('./pages/Communities'));
 
 function ToastContainer() {
   const { toasts, removeToast } = useToast();
@@ -170,6 +171,7 @@ function App() {
                     <Route path="/admin/games" element={<AdminRoute><AdminGames /></AdminRoute>} />
                     <Route path="/admin/finance" element={<AdminRoute><AdminFinance /></AdminRoute>} />
                     <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
+                    <Route path="/communities" element={<Communities />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

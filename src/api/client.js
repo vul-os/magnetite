@@ -112,4 +112,67 @@ export const api = {
     earnings: () => request('/api/developer/earnings'),
     analytics: (gameId) => request(`/api/developer/analytics/${gameId}`),
   },
+
+  // ── Wave 6: Comms Core ────────────────────────────────────────────────────
+
+  communities: {
+    /** List all communities the current user is a member of. */
+    list: () => request('/api/communities'),
+    /** Fetch a single community by id. */
+    get: (id) => request(`/api/communities/${id}`),
+    /** Create a new community. data: { name, description?, icon_url? } */
+    create: (data) => request('/api/communities', { method: 'POST', body: JSON.stringify(data) }),
+    /** Join a community by invite code or id. */
+    join: (id) => request(`/api/communities/${id}/join`, { method: 'POST' }),
+    /** Leave a community. */
+    leave: (id) => request(`/api/communities/${id}/leave`, { method: 'DELETE' }),
+    /** List members of a community. */
+    members: (id) => request(`/api/communities/${id}/members`),
+  },
+
+  channels: {
+    /** List channels within a community. */
+    list: (communityId) => request(`/api/communities/${communityId}/channels`),
+    /** Create a channel inside a community. data: { name, kind } where kind = 'text' | 'voice' */
+    create: (communityId, data) =>
+      request(`/api/communities/${communityId}/channels`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  messages: {
+    /** List messages in a channel (paginated). params: { limit?, before? } */
+    list: (channelId, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/channels/${channelId}/messages${qs ? `?${qs}` : ''}`);
+    },
+    /** Post a message to a channel. data: { content } */
+    post: (channelId, data) =>
+      request(`/api/channels/${channelId}/messages`, { method: 'POST', body: JSON.stringify(data) }),
+    /** List DM messages between the current user and another. */
+    listDMs: (userId, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/dms/${userId}${qs ? `?${qs}` : ''}`);
+    },
+    /** Send a DM to another user. data: { content } */
+    sendDM: (userId, data) =>
+      request(`/api/dms/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  voice: {
+    /** List voice rooms in a community. */
+    rooms: (communityId) => request(`/api/communities/${communityId}/voice-rooms`),
+    /** Obtain a join token for a voice room. Returns { token, room_id }. */
+    joinToken: (roomId) => request(`/api/voice-rooms/${roomId}/join`, { method: 'POST' }),
+  },
+
+  streams: {
+    /** List active streams in a community. */
+    list: (communityId) => request(`/api/communities/${communityId}/streams`),
+    /** Start streaming in a channel. data: { channel_id, title? } */
+    goLive: (communityId, data) =>
+      request(`/api/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) }),
+  },
 };

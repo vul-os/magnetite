@@ -1,0 +1,18 @@
+/* PresenceDot — status indicator */
+.presence-dot {
+  display: inline-block;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  border: 2px solid var(--color-bg-card);
+}
+
+/* Sizes */
+.presence-dot--sm  { width: 10px; height: 10px; }
+.presence-dot--md  { width: 12px; height: 12px; }
+.presence-dot--lg  { width: 14px; height: 14px; }
+
+/* Status colors */
+.presence-dot--online  { background: var(--color-success); }
+.presence-dot--idle    { background: var(--color-warning); }
+.presence-dot--dnd     { background: var(--color-error); }
+.presence-dot--offline { background: var(--color-text-muted); opacity: 0.6; }

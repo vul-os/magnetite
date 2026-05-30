@@ -17,6 +17,7 @@ and payment rails — so developers only write game logic.
 | [SDK Reference](./for-developers/sdk.md) | `magnetite-sdk` crate reference |
 | [Build & Distribution Pipeline](./for-developers/build-pipeline.md) | How games go from source to players |
 | [Architecture Overview](./architecture.md) | Backend modules, services, and data flow |
+| [Comms Suite](./comms/index.md) | Communities, channels, chat, presence, voice, streaming |
 | [Self-Hosting Guide](./self-hosting/index.md) | Docker Compose and Fly.io deployments |
 | [Security & Sandboxing](./security/index.md) | Auth, anti-cheat, and deployment hardening |
 | [API Reference](./api-reference/index.md) | REST API endpoints |
@@ -34,6 +35,7 @@ and payment rails — so developers only write game logic.
 | **Persistence** | Leaderboards, achievements, session history, replays |
 | **Payments** | USDC via Circle; Paystack fiat on-ramp; 15% platform fee; playtime-based developer payouts |
 | **Social** | Friends, invites, notifications |
+| **Comms** | Communities (servers/guilds), text channels, real-time chat, presence, voice rooms (WebRTC), streaming (go live / watch) |
 | **Analytics** | Developer dashboard, revenue breakdown, session stats |
 
 ---

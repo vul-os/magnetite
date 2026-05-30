@@ -162,12 +162,13 @@ The backend exposes all routes under `/api`. Key modules:
 | Achievements | `/api/achievements` | Definitions, progress, unlock |
 | Social | `/api/social` | Friends, invites, activity feed |
 | Notifications | `/api/notifications` | List, mark read, preferences |
+| Comms | `/api/comms` | Communities, channels, messages, voice rooms, streams, presence |
 | Profile | `/api/profile` | View/edit, avatar, public stats |
 | Tournaments | `/api/tournaments` | Create, join, bracket |
 | Admin | `/api/admin` | User management, game moderation, finance, settings |
 | Health | `/api/health` | Liveness + readiness |
 | Webhooks | `/api/webhooks` | GitHub push, payment events |
-| WebSocket | `/ws/game/{id}` | Real-time game state, player input |
+| WebSocket | `/ws/` | Real-time game state, chat, presence, voice signaling |
 
 ---
 
@@ -231,6 +232,10 @@ See [`backend/magnetite-sdk/`](backend/magnetite-sdk/) and
 | SDK Reference (`GameLogic`, `Input`, `GameState`, `Snapshot`) | [`docs/for-developers/sdk.md`](docs/for-developers/sdk.md) |
 | Build & Distribution Pipeline | [`docs/for-developers/build-pipeline.md`](docs/for-developers/build-pipeline.md) |
 | Architecture Overview (backend modules, services, data flow) | [`docs/architecture.md`](docs/architecture.md) |
+| Comms Suite Overview (communities, chat, presence, voice, streaming) | [`docs/comms/index.md`](docs/comms/index.md) |
+| Comms Realtime Protocol (WS chat/presence + WebRTC signaling) | [`docs/comms/realtime.md`](docs/comms/realtime.md) |
+| Comms Data Model (communities/channels/messages/voice_rooms/streams) | [`docs/comms/data-model.md`](docs/comms/data-model.md) |
+| In-Game Chat and Voice (`platform::comms` SDK usage) | [`docs/comms/in-game.md`](docs/comms/in-game.md) |
 | REST API Reference (all real endpoints) | [`docs/api-reference/index.md`](docs/api-reference/index.md) |
 | Self-Hosting Guide (Docker Compose + Fly.io) | [`docs/self-hosting/index.md`](docs/self-hosting/index.md) |
 | Environment Variables | [`docs/self-hosting/environment-variables.md`](docs/self-hosting/environment-variables.md) |

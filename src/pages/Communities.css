@@ -1,0 +1,202 @@
+/*
+ * Communities.css — Discord-like three-pane layout
+ * Industrial Magnetite design system
+ */
+
+/* ─── Page shell ─────────────────────────────────────────────────────────────  */
+.communities-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg-primary);
+}
+
+/* ─── Three-pane shell ───────────────────────────────────────────────────────  */
+.communities-shell {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  /* bg-atmosphere grid applied via the class */
+}
+
+/* ─── Main center column ─────────────────────────────────────────────────────  */
+.communities-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg-card);
+  min-width: 0;
+}
+
+/* ─── Channel header bar ─────────────────────────────────────────────────────  */
+.channel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1rem;
+  height: 52px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-bg-card);
+}
+
+.channel-header__left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.channel-header__hash {
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.channel-header__name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-header__topic {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--color-border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-header__right {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.channel-header-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+
+.channel-header-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+}
+
+.channel-header-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* ─── Voice channel "join" view ──────────────────────────────────────────────  */
+.voice-channel-view {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.voice-channel-view__inner {
+  text-align: center;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  animation: reveal-in var(--t-slow) var(--ease-out) both;
+}
+
+.voice-channel-view__title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.voice-channel-view__desc {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.voice-channel-view__join {
+  padding: 0.625rem 1.5rem;
+  font-size: var(--text-sm);
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────────  */
+
+/* Tablet: hide member list */
+@media (max-width: 1100px) {
+  .member-list {
+    display: none;
+  }
+}
+
+/* Small tablet: hide member list, shrink channel list */
+@media (max-width: 860px) {
+  .channel-list {
+    width: 200px;
+    min-width: 160px;
+  }
+}
+
+/* Mobile: collapse channel list (show only server rail) */
+@media (max-width: 600px) {
+  .channel-list {
+    display: none;
+  }
+
+  .server-rail {
+    width: 60px;
+    min-width: 60px;
+  }
+
+  .server-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .channel-header__topic {
+    display: none;
+  }
+}
+
+/* Very small: collapse rail too */
+@media (max-width: 400px) {
+  .server-rail {
+    display: none;
+  }
+}
