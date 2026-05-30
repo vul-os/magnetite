@@ -201,6 +201,50 @@ Light theme: invert bg/text, keep accents, soften shadows (define under `[data-t
 Each wave keeps the rule: **5 disjoint-file Sonnet agents, exactly one owns any shared global file, exactly
 one runs the frontend build.** The autonomous 30-min loop continues until this program reaches its DoD.
 
+## 4c. Gap-Closure Program (fix waves, 2026-05-30)
+
+Driven by the read-only audit in `GAPS.md` (129 findings). Goal: fix everything achievable WITHOUT external
+infra/credentials; leave true infra items as documented roadmap. Automated, no questions — grounded defaults
+chosen at each crossroad below.
+
+**Decisions (autonomous):**
+- **Email — provider abstraction, Resend now / SES later.** Add an `EmailProvider` trait with two impls:
+  `ResendProvider` (full, via reqwest HTTPS — `RESEND_API_KEY`) and `SesProvider` (AWS SES v2, selectable
+  later). Provider chosen by `EMAIL_PROVIDER=resend|ses` (default `resend`); `EMAIL_FROM` for sender. If the
+  selected provider is unconfigured, `send_email` logs + returns a clear error (no silent success). Construct
+  from env inside handlers (no shared app-state/main.rs change). Wire into: registration (verification email),
+  forgot/reset password, welcome, payout + subscription notifications. **SES crossroad:** implement via the
+  `aws-sdk-sesv2` crate (clean, no hand-rolled SigV4) behind the same trait; it compiles now and is live once
+  AWS creds are set. _Grounded: Resend is a single Bearer-auth POST (works immediately); SES via official SDK._
+- **Payments — real HTTP clients, gated on env, no fabricated success.** Replace `PaymentService::mock()` with
+  real Circle + Paystack reqwest clients gated on `CIRCLE_API_KEY` / `PAYSTACK_SECRET_KEY`. **Crossroad —
+  unconfigured behavior:** return an explicit `PaymentError::ProviderUnconfigured` (502/“payments not
+  configured”) rather than fabricating a successful transfer, EXCEPT when `PAYMENTS_SANDBOX=true` (local dev),
+  which returns clearly-labeled sandbox results. Wallet deposit/withdraw, subscription subscribe, and developer
+  payout dispatch all call the real provider path. Fix Paystack to use the user's real email; make ZAR→USDC
+  rate `ZAR_USDC_RATE` env-configurable (default kept, but not silently hardcoded).
+- **Security fixes:** validate OAuth `state` on Discord/GitHub/GitLab (match Google); verify Google ID token
+  via JWKS/RS256; enforce admin role on `admin/*`, `points/award`, `points/season/reset` (reuse existing
+  `is_admin`/role check used elsewhere). 
+- **Correctness bugs:** marketplace dev share `0.7%`→`70%`; `create_game`/github attribution use the authed
+  user id (not the nil UUID); replace `services/games.rs` `todo!()` stubs with real impls (or delete if truly
+  dead) so they can't panic; add a migration for the admin-analytics tables (`api_request_logs`,
+  `websocket_connections`) the endpoint queries (or rewrite the query against existing tables).
+- **Realtime/jobs:** mount `ws/game.rs` in the router; make frontend `useWebSocket` use a REAL browser
+  WebSocket (mock only behind an explicit `VITE_USE_MOCK_WS` dev flag); fix hardcoded `ws://localhost:3000`
+  endpoints to derive from env. Spawn the scheduled jobs (payouts, subscription renewals, cleanups) in main.rs.
+- **Frontend de-mock:** pages/hooks must FETCH real data with proper loading/empty/error states; keep mock
+  ONLY behind an explicit `VITE_USE_MOCKS` dev flag (default off), never as a silent success that hides
+  failures. Remove `useAuth`’s fabricated-JWT-on-failure path (surface the real error).
+- **Bucket D (left as roadmap, needs infra/creds):** MediaMTX media server + SFU; real GitHub CI runners
+  executing `wasm-pack`; dedicated/auto-scaled game servers; live FX feed; full Bevy WASM template builds.
+  These get clear TODOs + roadmap entries, not fake implementations.
+
+**Fix waves:** F1 = correctness+security+email+frontend-demock; F2 = real payments (Circle/Paystack) +
+matchmaking session allocation + game WS wiring; F3 = remaining de-mock + WASM/CI hardening + docs + refresh
+`GAPS.md` + final verification. Loop (5 disjoint Sonnet agents/wave, one owns shared globals, one builds)
+until buckets A/B/C are closed; then stop with bucket D documented.
+
 ## 5. Definition of Done
 - `npm run build` clean; `npm run lint` clean; `npm test` green.
 - `cargo check` 0 warnings; `cargo test` green; sqlx upgraded.
