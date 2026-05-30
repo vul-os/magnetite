@@ -37,50 +37,28 @@ export function useAuth() {
   }, []);
 
   const login = useCallback(async (email, password) => {
-    try {
-      const result = await api.auth.login({ email, password });
-      const token = result.token || result.access_token;
-      const userData = result.user || result;
-      if (token) {
-        localStorage.setItem(TOKEN_KEY, token);
-        // Also set under the key used by client.js
-        localStorage.setItem('token', token);
-      }
-      localStorage.setItem(USER_KEY, JSON.stringify(userData));
-      setUser(userData);
-    } catch {
-      // Mock fallback
-      if (!email || !password) throw new Error('Invalid credentials');
-      const mockUser = { id: 1, username: email.split('@')[0], email };
-      const token = 'mock_jwt_token_' + Date.now();
+    const result = await api.auth.login({ email, password });
+    const token = result.token || result.access_token;
+    const userData = result.user || result;
+    if (token) {
       localStorage.setItem(TOKEN_KEY, token);
+      // Also set under the key used by client.js
       localStorage.setItem('token', token);
-      localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
-      setUser(mockUser);
     }
+    localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    setUser(userData);
   }, []);
 
   const register = useCallback(async (username, email, password) => {
-    try {
-      const result = await api.auth.register({ username, email, password });
-      const token = result.token || result.access_token;
-      const userData = result.user || result;
-      if (token) {
-        localStorage.setItem(TOKEN_KEY, token);
-        localStorage.setItem('token', token);
-      }
-      localStorage.setItem(USER_KEY, JSON.stringify(userData));
-      setUser(userData);
-    } catch {
-      // Mock fallback
-      if (!username || !email || !password) throw new Error('All fields are required');
-      const mockUser = { id: 1, username, email };
-      const token = 'mock_jwt_token_' + Date.now();
+    const result = await api.auth.register({ username, email, password });
+    const token = result.token || result.access_token;
+    const userData = result.user || result;
+    if (token) {
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem('token', token);
-      localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
-      setUser(mockUser);
     }
+    localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    setUser(userData);
   }, []);
 
   const logout = useCallback(() => {

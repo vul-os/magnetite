@@ -6,7 +6,9 @@ import GoLivePanel from '../components/streaming/GoLivePanel';
 import { api } from '../api/client';
 import './Streams.css';
 
-// ── Mock stream data (graceful fallback) ──────────────────────────────────────
+// ── Mock stream data — only used when VITE_USE_MOCKS=true ───────────────────
+
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 const MOCK_STREAMS = [
   {
@@ -117,8 +119,9 @@ function makeMockChatMessages(streamer) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Streams() {
-  const [streams, setStreams]           = useState([]);
-  const [loading, setLoading]           = useState(true);
+  const [streams, setStreams]           = useState(USE_MOCKS ? MOCK_STREAMS : []);
+  const [loading, setLoading]           = useState(!USE_MOCKS);
+  const [streamsError, setStreamsError] = useState(null);
   const [watchingStream, setWatching]   = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [showGoLive, setShowGoLive]     = useState(false);
@@ -126,17 +129,26 @@ export default function Streams() {
 
   // ── Fetch streams ─────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (USE_MOCKS) return;
+
     let cancelled = false;
 
     async function fetchStreams() {
+      setLoading(true);
+      setStreamsError(null);
       try {
-        const data = await api.streams.list('global').catch(() => null);
+        const data = await api.streams.list('global');
         if (!cancelled) {
-          const result = Array.isArray(data) && data.length > 0 ? data : MOCK_STREAMS;
+          const result = Array.isArray(data?.streams)
+            ? data.streams
+            : (Array.isArray(data) ? data : []);
           setStreams(result);
         }
-      } catch {
-        if (!cancelled) setStreams(MOCK_STREAMS);
+      } catch (err) {
+        if (!cancelled) {
+          setStreamsError(err.message ?? 'Failed to load streams');
+          setStreams([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -150,7 +162,12 @@ export default function Streams() {
   const handleWatch = useCallback(async (stream) => {
     setWatching(stream);
     setShowGoLive(false);
-    setChatMessages(makeMockChatMessages(stream.streamer));
+    // Seed chat with mocks only in mock mode; in production the comms WS feeds messages
+    if (USE_MOCKS) {
+      setChatMessages(makeMockChatMessages(stream.streamer));
+    } else {
+      setChatMessages([]);
+    }
 
     // Try to resolve the real HLS/watch URL from the backend.
     try {
@@ -308,6 +325,21 @@ export default function Streams() {
             )}
           </p>
         </div>
+
+        {/* ── Error state ── */}
+        {!loading && streamsError && (
+          <div className="streams-empty reveal reveal-3" role="alert">
+            <span className="kicker">// error</span>
+            <p className="streams-empty__text">{streamsError}</p>
+            <button
+              className="btn btn-primary"
+              onClick={() => window.location.reload()}
+              aria-label="Retry loading streams"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* ── Loading skeletons ── */}
         {loading && (

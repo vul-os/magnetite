@@ -8,7 +8,6 @@ use axum::{
     routing::get,
     Router,
 };
-use base64;
 use rand::Rng;
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -430,7 +429,7 @@ pub async fn handle_google_callback(
     code: &str,
 ) -> Result<AuthTokens> {
     let access_token = exchange_google_code(config, code).await?;
-    let user_info = decode_google_id_token(&access_token)?;
+    let user_info = decode_google_id_token(&access_token).await?;
 
     let existing_user = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM users WHERE email = $1")
         .bind(&user_info.email)
@@ -492,18 +491,68 @@ pub async fn exchange_google_code(config: &OAuthConfig, code: &str) -> Result<St
         .ok_or_else(|| AppError::Internal("No id_token in Google response".to_string()))
 }
 
-pub fn decode_google_id_token(id_token: &str) -> Result<GoogleUserInfo> {
-    let parts: Vec<&str> = id_token.split('.').collect();
-    if parts.len() != 3 {
-        return Err(AppError::Internal("Invalid id_token format".to_string()));
+/// Verify a Google ID token by fetching the JWKS and checking the RS256 signature.
+///
+/// Decision §4c: "verify Google ID token via JWKS/RS256".
+/// We fetch https://www.googleapis.com/oauth2/v3/certs, find the key matching the token's
+/// `kid`, build a DecodingKey from the RSA components (n, e in base64url), and fully
+/// validate the token (signature, exp, iss, aud).  The previous base64-only decode is
+/// replaced — forged tokens no longer pass.
+pub async fn decode_google_id_token(id_token: &str) -> Result<GoogleUserInfo> {
+    use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+
+    // 1. Extract the `kid` so we can look up the right JWKS key.
+    let header = decode_header(id_token)
+        .map_err(|e| AppError::Internal(format!("Failed to decode id_token header: {}", e)))?;
+    let kid = header.kid.unwrap_or_default();
+
+    // 2. Fetch Google's public JWKS.
+    #[derive(Deserialize)]
+    struct JwkKey {
+        kid: String,
+        n: String,
+        e: String,
+        #[allow(dead_code)]
+        alg: Option<String>,
+        #[allow(dead_code)]
+        kty: Option<String>,
+        #[allow(dead_code)]
+        r#use: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Jwks {
+        keys: Vec<JwkKey>,
     }
 
-    let payload = parts[1];
-    let decoded = base64::decode(payload)
-        .map_err(|e| AppError::Internal(format!("Failed to decode id_token: {}", e)))?;
+    let jwks: Jwks = reqwest::get("https://www.googleapis.com/oauth2/v3/certs")
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to fetch Google JWKS: {}", e)))?
+        .json()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to parse Google JWKS: {}", e)))?;
 
-    let payload_str = String::from_utf8(decoded)
-        .map_err(|e| AppError::Internal(format!("Invalid utf8 in id_token: {}", e)))?;
+    let jwk =
+        jwks.keys.iter().find(|k| k.kid == kid).ok_or_else(|| {
+            AppError::Internal(format!("Google JWK kid '{}' not found in JWKS", kid))
+        })?;
+
+    // 3. Decode the base64url-encoded RSA modulus and exponent.
+    let n_bytes = base64::decode_config(&jwk.n, base64::URL_SAFE_NO_PAD)
+        .map_err(|e| AppError::Internal(format!("Failed to decode JWK n: {}", e)))?;
+    let e_bytes = base64::decode_config(&jwk.e, base64::URL_SAFE_NO_PAD)
+        .map_err(|e| AppError::Internal(format!("Failed to decode JWK e: {}", e)))?;
+
+    let decoding_key = DecodingKey::from_rsa_raw_components(&n_bytes, &e_bytes);
+
+    // 4. Validate the token: RS256 signature + exp + iss + aud.
+    let google_client_id = std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default();
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_issuer(&["https://accounts.google.com", "accounts.google.com"]);
+    if !google_client_id.is_empty() {
+        validation.set_audience(&[&google_client_id]);
+    } else {
+        validation.validate_aud = false;
+    }
 
     #[derive(Deserialize)]
     struct Claims {
@@ -513,14 +562,15 @@ pub fn decode_google_id_token(id_token: &str) -> Result<GoogleUserInfo> {
         sub: String,
     }
 
-    let claims: Claims = serde_json::from_str(&payload_str)
-        .map_err(|e| AppError::Internal(format!("Failed to parse id_token claims: {}", e)))?;
+    let token_data = decode::<Claims>(id_token, &decoding_key, &validation).map_err(|e| {
+        AppError::Authentication(format!("Google id_token verification failed: {}", e))
+    })?;
 
     Ok(GoogleUserInfo {
-        id: claims.sub,
-        email: claims.email,
-        name: claims.name,
-        picture: claims.picture,
+        id: token_data.claims.sub,
+        email: token_data.claims.email,
+        name: token_data.claims.name,
+        picture: token_data.claims.picture,
     })
 }
 
@@ -552,20 +602,64 @@ pub async fn get_google_user(access_token: &str) -> Result<GoogleUserInfo> {
     Ok(user)
 }
 
+/// Store the generated `state` in an HttpOnly cookie and redirect to the provider.
+fn redirect_with_state_cookie(
+    url: &str,
+    state: &str,
+    cookie_name: &str,
+) -> axum::response::Response {
+    let cookie = format!(
+        "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600",
+        cookie_name, state
+    );
+    let mut response = Redirect::to(url).into_response();
+    response.headers_mut().insert(
+        "Set-Cookie",
+        HeaderValue::from_str(&cookie).expect("valid cookie header value"),
+    );
+    response
+}
+
+/// Extract `cookie_name` value from the Cookie header and compare with `state`.
+fn validate_state_cookie(headers: &HeaderMap, cookie_name: &str, state: &str) -> bool {
+    headers
+        .get("cookie")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookie_str| {
+            cookie_str.split(';').find_map(|c| {
+                let mut parts = c.trim().splitn(2, '=');
+                if parts.next() == Some(cookie_name) {
+                    parts.next().map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .map(|s| s == state)
+        .unwrap_or(false)
+}
+
 pub async fn discord_login() -> impl IntoResponse {
     let config = OAuthConfig {
         client_id: std::env::var("DISCORD_CLIENT_ID").unwrap_or_default(),
         client_secret: std::env::var("DISCORD_CLIENT_SECRET").unwrap_or_default(),
         redirect_uri: std::env::var("DISCORD_REDIRECT_URI").unwrap_or_default(),
     };
-    let (url, _) = create_oauth_url(OAuthProvider::Discord, &config);
-    axum::response::Redirect::to(&url)
+    let (url, state) = create_oauth_url(OAuthProvider::Discord, &config);
+    redirect_with_state_cookie(&url, &state, "discord_oauth_state")
 }
 
 pub async fn discord_callback(
     State(pool): State<PgPool>,
     Query(query): Query<CallbackQuery>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !validate_state_cookie(&headers, "discord_oauth_state", &query.state) {
+        let frontend_url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        return Redirect::to(&format!("{}/auth/error?reason=invalid_state", frontend_url))
+            .into_response();
+    }
     let config = OAuthConfig {
         client_id: std::env::var("DISCORD_CLIENT_ID").unwrap_or_default(),
         client_secret: std::env::var("DISCORD_CLIENT_SECRET").unwrap_or_default(),
@@ -583,14 +677,21 @@ pub async fn github_login() -> impl IntoResponse {
         client_secret: std::env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),
         redirect_uri: std::env::var("GITHUB_REDIRECT_URI").unwrap_or_default(),
     };
-    let (url, _) = create_oauth_url(OAuthProvider::GitHub, &config);
-    axum::response::Redirect::to(&url)
+    let (url, state) = create_oauth_url(OAuthProvider::GitHub, &config);
+    redirect_with_state_cookie(&url, &state, "github_oauth_state")
 }
 
 pub async fn github_callback(
     State(pool): State<PgPool>,
     Query(query): Query<CallbackQuery>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !validate_state_cookie(&headers, "github_oauth_state", &query.state) {
+        let frontend_url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        return Redirect::to(&format!("{}/auth/error?reason=invalid_state", frontend_url))
+            .into_response();
+    }
     let config = OAuthConfig {
         client_id: std::env::var("GITHUB_CLIENT_ID").unwrap_or_default(),
         client_secret: std::env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),
@@ -608,14 +709,21 @@ pub async fn gitlab_login() -> impl IntoResponse {
         client_secret: std::env::var("GITLAB_CLIENT_SECRET").unwrap_or_default(),
         redirect_uri: std::env::var("GITLAB_REDIRECT_URI").unwrap_or_default(),
     };
-    let (url, _) = create_oauth_url(OAuthProvider::GitLab, &config);
-    axum::response::Redirect::to(&url)
+    let (url, state) = create_oauth_url(OAuthProvider::GitLab, &config);
+    redirect_with_state_cookie(&url, &state, "gitlab_oauth_state")
 }
 
 pub async fn gitlab_callback(
     State(pool): State<PgPool>,
     Query(query): Query<CallbackQuery>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !validate_state_cookie(&headers, "gitlab_oauth_state", &query.state) {
+        let frontend_url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        return Redirect::to(&format!("{}/auth/error?reason=invalid_state", frontend_url))
+            .into_response();
+    }
     let config = OAuthConfig {
         client_id: std::env::var("GITLAB_CLIENT_ID").unwrap_or_default(),
         client_secret: std::env::var("GITLAB_CLIENT_SECRET").unwrap_or_default(),

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 
-// ── Mock fallback data ─────────────────────────────────────────────────────
+// ── Mock fallback — only used when VITE_USE_MOCKS=true ────────────────────────
 function makeMockMessages(channelId) {
   const now = Date.now();
   return [
@@ -29,6 +29,8 @@ function makeMockMessages(channelId) {
   ];
 }
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 // ── Hook ───────────────────────────────────────────────────────────────────
 export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
   const [messages, setMessages] = useState([]);
@@ -41,6 +43,7 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
   useEffect(() => {
     if (!channelId && !isDM) return;
     setMessages([]);
+    setError(null);
     oldestIdRef.current = null;
     setHasMore(true);
   }, [channelId, isDM, dmUserId]);
@@ -60,7 +63,9 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
         return;
       }
 
-      const fetched = Array.isArray(data) ? data : (data?.messages ?? makeMockMessages(channelId ?? dmUserId));
+      // Normalize response: array or { messages: [] }
+      const fetched = Array.isArray(data) ? data : (Array.isArray(data?.messages) ? data.messages : []);
+
       if (!cancelled) {
         if (params.before) {
           setMessages((prev) => [...fetched, ...prev]);
@@ -72,13 +77,17 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
         }
         setHasMore(fetched.length >= (params.limit ?? 50));
       }
-    } catch {
+    } catch (err) {
       if (!cancelled) {
-        const mocks = makeMockMessages(channelId ?? dmUserId ?? 'dm');
-        if (params.before) {
-          setMessages((prev) => [...mocks, ...prev]);
-        } else {
-          setMessages(mocks);
+        setError(err.message ?? 'Failed to load messages');
+        // In mock mode, show placeholder messages so the UI is not broken
+        if (USE_MOCKS) {
+          const mocks = makeMockMessages(channelId ?? dmUserId ?? 'dm');
+          if (params.before) {
+            setMessages((prev) => [...mocks, ...prev]);
+          } else {
+            setMessages(mocks);
+          }
         }
         setHasMore(false);
       }

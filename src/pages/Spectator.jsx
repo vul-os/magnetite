@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useWebSocket } from '../hooks/useWebSocket';
 import GameOverlay from '../components/GameOverlay';
 import './Spectator.css';
 
+// ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 const MOCK_SPECTATORS = [
   { id: 1, username: 'Viewer123',   isChatting: true  },
   { id: 2, username: 'GamerFan',    isChatting: false },
@@ -16,19 +18,28 @@ const MOCK_PLAYERS = [
   { id: 4, username: 'NoobMaster', score:  720, kills: 2, deaths: 5, position: { x: 20, y: 75 } },
 ];
 
-export default function Spectator() {
-  const { id: gameId }      = useParams();
-  const navigate            = useNavigate();
-  const wsRef               = useRef(null);
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-  const [players, setPlayers]           = useState(MOCK_PLAYERS);
+export default function Spectator() {
+  const { id: gameId }  = useParams();
+  const navigate        = useNavigate();
+
+  const { isConnected, lastMessage, sendMessage } = useWebSocket(
+    `/ws/spectate/${gameId}`
+  );
+
+  const [players, setPlayers]           = useState(USE_MOCKS ? MOCK_PLAYERS : []);
   const [cameraMode, setCameraMode]     = useState('follow');
-  const [followedPlayer, setFollowedPlayer] = useState(MOCK_PLAYERS[0]);
-  const [spectators, setSpectators]     = useState(MOCK_SPECTATORS);
-  const [chatMessages, setChatMessages] = useState([
-    { id: 1, player: 'Viewer123', message: 'Great game!',      timestamp: 60000 },
-    { id: 2, player: 'GamerFan',  message: 'This is intense!', timestamp: 30000 },
-  ]);
+  const [followedPlayer, setFollowedPlayer] = useState(USE_MOCKS ? MOCK_PLAYERS[0] : null);
+  const [spectators, setSpectators]     = useState(USE_MOCKS ? MOCK_SPECTATORS : []);
+  const [chatMessages, setChatMessages] = useState(
+    USE_MOCKS
+      ? [
+          { id: 1, player: 'Viewer123', message: 'Great game!',      timestamp: 60000 },
+          { id: 2, player: 'GamerFan',  message: 'This is intense!', timestamp: 30000 },
+        ]
+      : []
+  );
   const [chatInput, setChatInput]       = useState('');
 
   // camera position derived from followedPlayer — no extra state needed
@@ -36,43 +47,41 @@ export default function Spectator() {
     ? `translate(${-followedPlayer.position.x}%, ${-followedPlayer.position.y}%)`
     : 'translate(0, 0)';
 
+  // Send join_spectate once the WS connects
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws       = new WebSocket(`${protocol}//${window.location.host}/ws/spectate/${gameId}`);
-    wsRef.current  = ws;
+    if (isConnected) {
+      sendMessage({ type: 'join_spectate', gameId });
+    }
+  }, [isConnected, gameId, sendMessage]);
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'join_spectate', gameId }));
-    };
+  // Handle incoming WS messages
+  useEffect(() => {
+    if (!lastMessage) return;
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      switch (data.type) {
-        case 'players_update':
-          setPlayers(data.players);
-          if (cameraMode === 'follow') {
-            const updated = data.players.find(p => p.id === followedPlayer?.id);
-            if (updated) setFollowedPlayer(updated);
-          }
-          break;
-        case 'spectator_update':
-          setSpectators(data.spectators);
-          break;
-        case 'chat_message':
-          setChatMessages(prev => [...prev, data.message]);
-          break;
-        default:
-          break;
-      }
-    };
-
-    ws.onclose = () => navigate('/matchmaking');
-
-    return () => ws.close();
+    switch (lastMessage.type) {
+      case 'players_update':
+        setPlayers(lastMessage.players);
+        if (cameraMode === 'follow') {
+          const updated = lastMessage.players.find(p => p.id === followedPlayer?.id);
+          if (updated) setFollowedPlayer(updated);
+        }
+        break;
+      case 'spectator_update':
+        setSpectators(lastMessage.spectators);
+        break;
+      case 'chat_message':
+        setChatMessages(prev => [...prev, lastMessage.message]);
+        break;
+      case 'game_ended':
+        navigate('/matchmaking');
+        break;
+      default:
+        break;
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
+  }, [lastMessage]);
 
-  const handleSendChat = (e) => {
+  const handleSendChat = useCallback((e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
@@ -81,52 +90,55 @@ export default function Spectator() {
       { id: Date.now(), player: 'You', message: chatInput, timestamp: Date.now() },
     ]);
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'spectator_chat', message: chatInput }));
-    }
-
+    sendMessage({ type: 'spectator_chat', message: chatInput });
     setChatInput('');
-  };
+  }, [chatInput, sendMessage]);
 
-  const handleExit = () => {
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ type: 'leave_spectate' }));
-      wsRef.current.close();
-    }
+  const handleExit = useCallback(() => {
+    sendMessage({ type: 'leave_spectate' });
     navigate('/matchmaking');
-  };
+  }, [sendMessage, navigate]);
 
-  const handleFollowPlayer = (playerId) => {
+  const handleFollowPlayer = useCallback((playerId) => {
     const p = players.find(pl => pl.id === parseInt(playerId, 10));
     if (p) { setFollowedPlayer(p); setCameraMode('follow'); }
-  };
+  }, [players]);
 
   // sort players by score descending for leaderboard
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
+  // Loading state when no data yet
+  const isLoading = !USE_MOCKS && !isConnected && players.length === 0;
 
   return (
     <div className="spectator-container" role="main" aria-label="Spectator view">
       {/* Game map */}
       <div className="spectator-viewport">
-        <div className="game-world" style={{ transform: cameraTranslate }}>
-          <div className="game-map" aria-hidden="true">
-            {players.map(player => (
-              <div
-                key={player.id}
-                className={`player-marker ${cameraMode === 'follow' && followedPlayer?.id === player.id ? 'followed' : ''}`}
-                style={{ left: `${player.position.x}%`, top: `${player.position.y}%` }}
-                role="button"
-                tabIndex={0}
-                aria-label={`Follow ${player.username}`}
-                onClick={() => handleFollowPlayer(player.id)}
-                onKeyDown={e => e.key === 'Enter' && handleFollowPlayer(player.id)}
-              >
-                <div className="player-icon" />
-                <span className="player-label">{player.username}</span>
-              </div>
-            ))}
+        {isLoading ? (
+          <div className="spectator-connecting" aria-live="polite">
+            <span className="kicker">// connecting…</span>
           </div>
-        </div>
+        ) : (
+          <div className="game-world" style={{ transform: cameraTranslate }}>
+            <div className="game-map" aria-hidden="true">
+              {players.map(player => (
+                <div
+                  key={player.id}
+                  className={`player-marker ${cameraMode === 'follow' && followedPlayer?.id === player.id ? 'followed' : ''}`}
+                  style={{ left: `${player.position.x}%`, top: `${player.position.y}%` }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Follow ${player.username}`}
+                  onClick={() => handleFollowPlayer(player.id)}
+                  onKeyDown={e => e.key === 'Enter' && handleFollowPlayer(player.id)}
+                >
+                  <div className="player-icon" />
+                  <span className="player-label">{player.username}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* HUD overlay */}
@@ -192,6 +204,9 @@ export default function Spectator() {
         {/* Leaderboard panel */}
         <aside className="spectator-leaderboard" aria-label="Player leaderboard">
           <h3 className="spectator-panel-title">// Players</h3>
+          {players.length === 0 && !isLoading && (
+            <p className="spectator-empty">No player data yet.</p>
+          )}
           <div className="spectator-players-list" role="list">
             {sortedPlayers.map((player, idx) => (
               <div
@@ -219,6 +234,9 @@ export default function Spectator() {
         <aside className="spectator-chat" aria-label="Spectator chat">
           <h3 className="spectator-panel-title">// Spectator Chat</h3>
           <div className="spectator-chat-messages" aria-live="polite">
+            {chatMessages.length === 0 && (
+              <p className="spectator-empty">No messages yet.</p>
+            )}
             {chatMessages.map(msg => (
               <div key={msg.id} className="spectator-chat-msg">
                 <span className="spectator-chat-player">{msg.player}:</span>

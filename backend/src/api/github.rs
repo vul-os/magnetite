@@ -3,8 +3,9 @@
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::HeaderMap,
+    middleware::from_fn_with_state,
     routing::{get, post},
     Json, Router,
 };
@@ -16,6 +17,7 @@ use sha2::Sha256;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::api::middleware;
 use crate::error::{AppError, Result};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -873,6 +875,7 @@ pub struct Game {
 
 pub async fn register_repository(
     State(pool): State<PgPool>,
+    Extension(developer_id): Extension<Uuid>,
     Json(payload): Json<RegisterRepoRequest>,
 ) -> Result<Json<Game>> {
     let parts: Vec<&str> = payload.repository.split('/').collect();
@@ -912,10 +915,11 @@ pub async fn register_repository(
     let game_id = Uuid::new_v4();
     let game = sqlx::query_as::<_, Game>(
         "INSERT INTO games (id, developer_id, github_repo, title, description, status, active, created_at)
-         VALUES ($1, '00000000-0000-0000-0000-000000000000', $2, $3, $4, 'draft', true, NOW())
+         VALUES ($1, $2, $3, $4, $5, 'draft', true, NOW())
          RETURNING id, developer_id, github_repo, title, description, status, active, created_at",
     )
     .bind(game_id)
+    .bind(developer_id)
     .bind(&payload.repository)
     .bind(&payload.title)
     .bind(&payload.description)
@@ -1025,7 +1029,13 @@ pub fn router(pool: PgPool) -> Router {
         .route("/webhooks/github", post(handle_webhook))
         .route("/installations", get(list_installations))
         .route("/repos", get(list_repos))
-        .route("/repos/register", post(register_repository))
+        .route(
+            "/repos/register",
+            post(register_repository).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .route("/repos/:owner/:repo/build-status", get(get_build_status))
         .with_state(pool)
 }

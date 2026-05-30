@@ -1,30 +1,40 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Pagination from '../../components/Pagination';
 import Button from '../../components/common/Button';
 import './admin.css';
 
-const MOCK_USERS = [
-  { id: 1,  username: 'CryptoGamer42',  email: 'crypto@example.com',      verified: true,  developer: true,  banned: false, createdAt: '2024-01-15', games: 3  },
-  { id: 2,  username: 'PixelMaster',    email: 'pixel@example.com',        verified: true,  developer: true,  banned: false, createdAt: '2024-02-20', games: 7  },
-  { id: 3,  username: 'NeonRacer99',    email: 'neon@example.com',         verified: true,  developer: false, banned: false, createdAt: '2024-03-10', games: 0  },
-  { id: 4,  username: 'Cheater123',     email: 'cheater@example.com',      verified: false, developer: false, banned: true,  createdAt: '2024-03-15', games: 0  },
-  { id: 5,  username: 'StarForge_Admin',email: 'admin@starforge.com',      verified: true,  developer: true,  banned: false, createdAt: '2024-01-01', games: 12 },
-  { id: 6,  username: 'IndieDev_Mike',  email: 'mike@example.com',         verified: true,  developer: true,  banned: false, createdAt: '2024-04-01', games: 2  },
-  { id: 7,  username: 'NewPlayer2024',  email: 'newbie@example.com',       verified: false, developer: false, banned: false, createdAt: '2024-05-10', games: 0  },
-  { id: 8,  username: 'GameLover99',    email: 'lover@example.com',        verified: true,  developer: false, banned: false, createdAt: '2024-04-22', games: 0  },
-  { id: 9,  username: 'BlockchainGamer',email: 'blockchain@example.com',   verified: true,  developer: true,  banned: false, createdAt: '2024-02-28', games: 4  },
-  { id: 10, username: 'CasualPlayer',   email: 'casual@example.com',       verified: false, developer: false, banned: false, createdAt: '2024-05-15', games: 0  },
-  { id: 11, username: 'ProStreamer',    email: 'stream@example.com',        verified: true,  developer: false, banned: false, createdAt: '2024-03-05', games: 0  },
-  { id: 12, username: 'SuspiciousUser', email: 'suspicious@example.com',   verified: false, developer: false, banned: false, createdAt: '2024-05-18', games: 0  },
-];
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+function authFetch(endpoint, options = {}) {
+  const token = localStorage.getItem('token');
+  return fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+}
+
+/* Mock data — only used when VITE_USE_MOCKS=true */
+const MOCK_USERS = import.meta.env.VITE_USE_MOCKS
+  ? [
+      { id: 1,  username: 'CryptoGamer42',   email: 'crypto@example.com',    verified: true,  developer: true,  banned: false, createdAt: '2024-01-15', games: 3  },
+      { id: 2,  username: 'PixelMaster',     email: 'pixel@example.com',     verified: true,  developer: true,  banned: false, createdAt: '2024-02-20', games: 7  },
+      { id: 3,  username: 'NeonRacer99',     email: 'neon@example.com',      verified: true,  developer: false, banned: false, createdAt: '2024-03-10', games: 0  },
+      { id: 4,  username: 'Cheater123',      email: 'cheater@example.com',   verified: false, developer: false, banned: true,  createdAt: '2024-03-15', games: 0  },
+      { id: 5,  username: 'StarForge_Admin', email: 'admin@starforge.com',   verified: true,  developer: true,  banned: false, createdAt: '2024-01-01', games: 12 },
+    ]
+  : null;
 
 const FILTER_OPTIONS = [
-  { value: 'all',        label: 'All Users'   },
-  { value: 'verified',   label: 'Verified'    },
-  { value: 'banned',     label: 'Banned'      },
-  { value: 'developers', label: 'Developers'  },
+  { value: 'all',        label: 'All Users'  },
+  { value: 'verified',   label: 'Verified'   },
+  { value: 'banned',     label: 'Banned'     },
+  { value: 'developers', label: 'Developers' },
 ];
 
 const SORT_OPTIONS = [
@@ -32,46 +42,112 @@ const SORT_OPTIONS = [
   { value: 'username', label: 'Username'    },
 ];
 
+function normaliseUser(u) {
+  return {
+    id:        u.id,
+    username:  u.username,
+    email:     u.email,
+    verified:  u.banned_at == null,
+    developer: u.is_developer ?? false,
+    banned:    u.banned_at != null,
+    createdAt: u.created_at ? u.created_at.split('T')[0] : '',
+    games:     u.games ?? 0,
+  };
+}
+
 export default function Users() {
+  const [users, setUsers]             = useState(MOCK_USERS ? MOCK_USERS.map(u => ({ ...u })) : []);
+  const [loading, setLoading]         = useState(!MOCK_USERS);
+  const [error, setError]             = useState(null);
   const [search, setSearch]           = useState('');
   const [filter, setFilter]           = useState('all');
   const [sort, setSort]               = useState('date');
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage]         = useState(10);
   const [actionLoading, setActionLoading] = useState(null);
+  const [actionError, setActionError]     = useState(null);
+
+  const fetchUsers = useCallback(async () => {
+    if (import.meta.env.VITE_USE_MOCKS) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await authFetch('/api/admin/users?limit=200');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const raw = json.data ?? json ?? [];
+      setUsers(Array.isArray(raw) ? raw.map(normaliseUser) : []);
+    } catch (err) {
+      setError(err.message || 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const filteredUsers = useMemo(() => {
-    let users = [...MOCK_USERS];
-
+    let list = [...users];
     if (search) {
       const q = search.toLowerCase();
-      users = users.filter(u =>
+      list = list.filter(u =>
         u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
       );
     }
-
-    if (filter === 'verified')   users = users.filter(u => u.verified && !u.banned);
-    if (filter === 'banned')     users = users.filter(u => u.banned);
-    if (filter === 'developers') users = users.filter(u => u.developer);
-
-    users.sort((a, b) =>
+    if (filter === 'verified')   list = list.filter(u => u.verified && !u.banned);
+    if (filter === 'banned')     list = list.filter(u => u.banned);
+    if (filter === 'developers') list = list.filter(u => u.developer);
+    list.sort((a, b) =>
       sort === 'username'
         ? a.username.localeCompare(b.username)
         : new Date(b.createdAt) - new Date(a.createdAt)
     );
-
-    return users;
-  }, [search, filter, sort]);
+    return list;
+  }, [users, search, filter, sort]);
 
   const paginatedUsers = useMemo(() => {
     const start = (currentPage - 1) * perPage;
     return filteredUsers.slice(start, start + perPage);
   }, [filteredUsers, currentPage, perPage]);
 
-  const handleAction = async (_action, userId) => {
+  const handleAction = async (action, userId) => {
     setActionLoading(userId);
-    await new Promise(r => setTimeout(r, 500));
-    setActionLoading(null);
+    setActionError(null);
+    try {
+      let res;
+      if (action === 'ban') {
+        res = await authFetch(`/api/admin/users/${userId}/ban`, {
+          method: 'PUT',
+          body: JSON.stringify({ banned: true }),
+        });
+      } else if (action === 'unban') {
+        res = await authFetch(`/api/admin/users/${userId}/ban`, {
+          method: 'PUT',
+          body: JSON.stringify({ banned: false }),
+        });
+      } else if (action === 'verify') {
+        res = await authFetch(`/api/admin/users/${userId}/role`, {
+          method: 'PUT',
+          body: JSON.stringify({ role: 'user' }),
+        });
+      }
+      if (res && !res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Action failed (HTTP ${res.status})`);
+      }
+      /* optimistic update */
+      setUsers(prev => prev.map(u => {
+        if (u.id !== userId && String(u.id) !== String(userId)) return u;
+        if (action === 'ban')    return { ...u, banned: true,  verified: false };
+        if (action === 'unban')  return { ...u, banned: false };
+        if (action === 'verify') return { ...u, verified: true };
+        return u;
+      }));
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (
@@ -86,6 +162,23 @@ export default function Users() {
               <p>Manage users and permissions</p>
             </div>
           </header>
+
+          {error && (
+            <div className="admin-error-banner" role="alert">
+              <span className="auth-error-icon" aria-hidden="true">!</span>
+              {error}
+              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={fetchUsers}>
+                Retry
+              </button>
+            </div>
+          )}
+
+          {actionError && (
+            <div className="admin-error-banner" role="alert">
+              <span className="auth-error-icon" aria-hidden="true">!</span>
+              {actionError}
+            </div>
+          )}
 
           <div className="admin-toolbar">
             <div className="search-box">
@@ -120,95 +213,105 @@ export default function Users() {
           </div>
 
           <div className="admin-table-container">
-            <table className="admin-table" aria-label="Users">
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Status</th>
-                  <th>Role</th>
-                  <th>Games</th>
-                  <th>Joined</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedUsers.map(user => (
-                  <tr key={user.id}>
-                    <td>
-                      <div className="user-cell">
-                        <span className="user-avatar" aria-hidden="true">
-                          {user.username.charAt(0).toUpperCase()}
-                        </span>
-                        <div className="user-info">
-                          <span className="user-name">{user.username}</span>
-                          <span className="user-email">{user.email}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      {user.banned ? (
-                        <span className="status-badge banned">Banned</span>
-                      ) : user.verified ? (
-                        <span className="status-badge verified">Verified</span>
-                      ) : (
-                        <span className="status-badge pending">Pending</span>
-                      )}
-                    </td>
-                    <td>
-                      {user.developer ? (
-                        <span className="role-badge developer">Developer</span>
-                      ) : (
-                        <span className="role-badge player">Player</span>
-                      )}
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
-                        {user.games}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                        {user.createdAt}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <Button variant="ghost" size="sm">View</Button>
-                        {!user.banned ? (
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            loading={actionLoading === user.id}
-                            onClick={() => handleAction('ban', user.id)}
-                          >
-                            Ban
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            loading={actionLoading === user.id}
-                            onClick={() => handleAction('unban', user.id)}
-                          >
-                            Unban
-                          </Button>
-                        )}
-                        {!user.verified && !user.banned && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            loading={actionLoading === user.id}
-                            onClick={() => handleAction('verify', user.id)}
-                          >
-                            Verify
-                          </Button>
-                        )}
-                      </div>
-                    </td>
+            {loading ? (
+              <div className="admin-loading" aria-busy="true" style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                <span className="spinner" aria-hidden="true" /> Loading users&hellip;
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                No users found
+              </div>
+            ) : (
+              <table className="admin-table" aria-label="Users">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Role</th>
+                    <th>Games</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginatedUsers.map(user => (
+                    <tr key={user.id}>
+                      <td>
+                        <div className="user-cell">
+                          <span className="user-avatar" aria-hidden="true">
+                            {user.username.charAt(0).toUpperCase()}
+                          </span>
+                          <div className="user-info">
+                            <span className="user-name">{user.username}</span>
+                            <span className="user-email">{user.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        {user.banned ? (
+                          <span className="status-badge banned">Banned</span>
+                        ) : user.verified ? (
+                          <span className="status-badge verified">Verified</span>
+                        ) : (
+                          <span className="status-badge pending">Pending</span>
+                        )}
+                      </td>
+                      <td>
+                        {user.developer ? (
+                          <span className="role-badge developer">Developer</span>
+                        ) : (
+                          <span className="role-badge player">Player</span>
+                        )}
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
+                          {user.games}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                          {user.createdAt}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="action-buttons">
+                          <Button variant="ghost" size="sm">View</Button>
+                          {!user.banned ? (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              loading={actionLoading === user.id}
+                              onClick={() => handleAction('ban', user.id)}
+                            >
+                              Ban
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              loading={actionLoading === user.id}
+                              onClick={() => handleAction('unban', user.id)}
+                            >
+                              Unban
+                            </Button>
+                          )}
+                          {!user.verified && !user.banned && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              loading={actionLoading === user.id}
+                              onClick={() => handleAction('verify', user.id)}
+                            >
+                              Verify
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <Pagination

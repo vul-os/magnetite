@@ -213,9 +213,12 @@ chosen at each crossroad below.
   later). Provider chosen by `EMAIL_PROVIDER=resend|ses` (default `resend`); `EMAIL_FROM` for sender. If the
   selected provider is unconfigured, `send_email` logs + returns a clear error (no silent success). Construct
   from env inside handlers (no shared app-state/main.rs change). Wire into: registration (verification email),
-  forgot/reset password, welcome, payout + subscription notifications. **SES crossroad:** implement via the
-  `aws-sdk-sesv2` crate (clean, no hand-rolled SigV4) behind the same trait; it compiles now and is live once
-  AWS creds are set. _Grounded: Resend is a single Bearer-auth POST (works immediately); SES via official SDK._
+  forgot/reset password, welcome, payout + subscription notifications. **SES crossroad:** prefer the LIGHTEST
+  transport already available — if `lettre` is already a dependency, implement `SesProvider` (and a generic
+  SMTP fallback) via lettre SMTP to the SES endpoint (`email-smtp.<region>.amazonaws.com`, SES SMTP creds);
+  only if no SMTP transport exists, fall back to SES HTTPS. AVOID adding the heavy `aws-sdk-sesv2`/`aws-config`
+  unless trivial. Record the final transport chosen. _Grounded: Resend = one Bearer POST (works now); SES via
+  SMTP avoids dependency bloat and is live once SES SMTP creds are set._
 - **Payments — real HTTP clients, gated on env, no fabricated success.** Replace `PaymentService::mock()` with
   real Circle + Paystack reqwest clients gated on `CIRCLE_API_KEY` / `PAYSTACK_SECRET_KEY`. **Crossroad —
   unconfigured behavior:** return an explicit `PaymentError::ProviderUnconfigured` (502/“payments not
@@ -314,6 +317,31 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
   CHANGELOG. Tests expanded to **113 passing (11 files)**. Formatted the 3 template crates.
 
 ---
+
+## 6b. Gap-Closure Progress Log
+
+- **Fix Wave F1 — DONE, verified:** Backend correctness/security + email + frontend de-mock.
+  - **Bugs fixed:** marketplace dev-share 0.7%→**70%** (removed extra `/100`; 4 unit tests added);
+    `create_game` + GitHub repo register now attribute the **authed user** (Extension extractor) not nil UUID;
+    `services/games.rs` `todo!()` → real sqlx impls; admin `analytics_performance` rewritten against EXISTING
+    tables (transactions, voice_participants) instead of adding hollow tables (grounded crossroad: no writers
+    yet → migration would be empty).
+  - **Security:** OAuth `state` CSRF validation added to Discord/GitHub/GitLab; Google ID token now verified
+    via JWKS + RS256 (jsonwebtoken); admin-role guard on `points/award` + `points/season/reset`.
+  - **Realtime/jobs:** mounted `ws/game` router (was unmounted); spawned payout + subscription-renewal jobs
+    on 1h intervals (no new deps).
+  - **Email (crossroads recorded):** `EmailProvider` trait + `ResendProvider` (reqwest HTTPS) + `SesProvider`
+    via **lettre SMTP** to `email-smtp.<region>.amazonaws.com` (lettre already a dep → avoided aws-sdk bloat);
+    `EMAIL_PROVIDER` default `resend`; unconfigured → clear Err, not silent success. Added `async-trait` dep.
+    Email templates rendered **inline in Rust** (existing Tera-style `{% %}` templates are incompatible with
+    the handlebars dep) to avoid a new template-engine crate. Wired into register(verification)/forgot/reset/
+    verify(welcome); verification failure does NOT block registration (resend endpoint exists).
+  - **Frontend de-mock:** ~30 pages/hooks now fetch real data with loading/empty/error; mock gated behind
+    `VITE_USE_MOCKS`/`VITE_USE_MOCK_WS` (default off); `useWebSocket` uses a real browser socket w/ env-derived
+    URL; `useAuth` no longer fabricates a JWT. 8 unit tests reconciled to the new real-fetch contract.
+  - Verify: backend 0 warnings + fmt clean + tests compile; frontend build clean, lint **0 errors**, **113
+    tests pass**. KNOWN deferred to F2: `services/payout.rs` has the same `/100` share bug (prod + its test) —
+    F2's first task. Committed.
 
 ## 7. CLOSING SUMMARY (2026-05-30)
 

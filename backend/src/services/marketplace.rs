@@ -474,8 +474,9 @@ impl MarketplaceService {
         idempotency_key: Option<&str>,
     ) -> Result<StorePurchase> {
         let price = item.price;
-        let developer_share = price * developer_share_pct() / Decimal::new(100, 0);
-        let platform_fee = price * platform_fee_pct() / Decimal::new(100, 0);
+        // developer_share_pct() returns 0.70 (the fractional form), so multiply directly.
+        let developer_share = price * developer_share_pct();
+        let platform_fee = price * platform_fee_pct();
 
         let mut tx = self.pool.begin().await?;
 
@@ -736,8 +737,9 @@ mod tests {
     #[test]
     fn revenue_share_sums_to_price() {
         let price = Decimal::new(1000, 2); // 10.00
-        let dev = price * developer_share_pct() / Decimal::new(100, 0);
-        let fee = price * platform_fee_pct() / Decimal::new(100, 0);
+                                           // developer_share_pct() = 0.70, platform_fee_pct() = 0.30; no extra /100.
+        let dev = price * developer_share_pct();
+        let fee = price * platform_fee_pct();
         assert_eq!(dev + fee, price);
     }
 
@@ -758,7 +760,8 @@ mod tests {
     #[test]
     fn developer_share_is_70_pct() {
         let price = Decimal::new(100_00, 2); // 100.00
-        let dev = price * developer_share_pct() / Decimal::new(100, 0);
+                                             // developer_share_pct() = 0.70; multiply directly — no extra /100 needed.
+        let dev = price * developer_share_pct();
         assert_eq!(dev, Decimal::new(70_00, 2));
     }
 }

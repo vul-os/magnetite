@@ -3,6 +3,7 @@ import GameCard from '../components/GameCard';
 import Layout from '../components/Layout';
 import OnboardingTour from '../components/OnboardingTour';
 import { useTour } from '../hooks/useTour';
+import { useGames } from '../hooks/useGames';
 import './Marketplace.css';
 
 const TOUR_KEY = 'magnetite_marketplace_tour_done';
@@ -38,21 +39,6 @@ const MARKETPLACE_TOUR_STEPS = [
     description: 'Explore our collection of games. Click on any game card to view details and start playing!',
     position: 'top',
   },
-];
-
-const MOCK_GAMES = [
-  { id: 1,  title: 'Cosmic Raiders',    developer: 'StarForge Studios',   fee_per_session: 0.50, category: 'Action',   thumbnail: 'https://picsum.photos/seed/game1/400/225',  rating: 4.5, players_online: 234, is_new: false },
-  { id: 2,  title: 'Puzzle Dimension',  developer: 'MindBend Games',      fee_per_session: 0.25, category: 'Puzzle',   thumbnail: 'https://picsum.photos/seed/game2/400/225',  rating: 4.8, players_online:  89, is_new: true  },
-  { id: 3,  title: 'Speed Legends',     developer: 'Velocity Labs',       fee_per_session: 0.75, category: 'Racing',   thumbnail: 'https://picsum.photos/seed/game3/400/225',  rating: 4.2, players_online: 156, is_new: false },
-  { id: 4,  title: 'Dungeon Depths',    developer: 'Tome Interactive',    fee_per_session: 1.00, category: 'RPG',      thumbnail: 'https://picsum.photos/seed/game4/400/225',  rating: 4.9, players_online: 412, is_new: false },
-  { id: 5,  title: 'Strategy Command',  developer: 'Tactical Soft',       fee_per_session: 0.40, category: 'Strategy', thumbnail: 'https://picsum.photos/seed/game5/400/225',  rating: 4.4, players_online:  67, is_new: true  },
-  { id: 6,  title: 'Retro Arcade',      developer: 'Pixel Dreams',        fee_per_session: 0.15, category: 'Arcade',   thumbnail: 'https://picsum.photos/seed/game6/400/225',  rating: 4.1, players_online:  23, is_new: false },
-  { id: 7,  title: 'Cyber Assault',     developer: 'Neon Forge',          fee_per_session: 0.60, category: 'Action',   thumbnail: 'https://picsum.photos/seed/game7/400/225',  rating: 4.6, players_online: 198, is_new: true  },
-  { id: 8,  title: 'Word Master',       developer: 'Lexicon Labs',        fee_per_session: 0.20, category: 'Puzzle',   thumbnail: 'https://picsum.photos/seed/game8/400/225',  rating: 4.3, players_online:  45, is_new: false },
-  { id: 9,  title: 'Turbo Drift',       developer: 'Road Warriors',       fee_per_session: 0.55, category: 'Racing',   thumbnail: 'https://picsum.photos/seed/game9/400/225',  rating: 4.7, players_online: 178, is_new: false },
-  { id: 10, title: 'Dragon Quest',      developer: 'Mythic Entertainment', fee_per_session: 1.25, category: 'RPG',     thumbnail: 'https://picsum.photos/seed/game10/400/225', rating: 4.9, players_online: 523, is_new: false },
-  { id: 11, title: 'Empire Builder',    developer: 'Sovereign Games',     fee_per_session: 0.45, category: 'Strategy', thumbnail: 'https://picsum.photos/seed/game11/400/225', rating: 4.5, players_online: 112, is_new: true  },
-  { id: 12, title: 'Space Invaders',    developer: 'RetroCore',           fee_per_session: 0.10, category: 'Arcade',   thumbnail: 'https://picsum.photos/seed/game12/400/225', rating: 4.0, players_online:  34, is_new: false },
 ];
 
 const CATEGORIES = ['All', 'Action', 'Puzzle', 'Racing', 'RPG', 'Strategy', 'Arcade'];
@@ -100,12 +86,33 @@ function EmptyState({ hasFilters, onClearFilters }) {
   );
 }
 
+function ErrorState({ message, onRetry }) {
+  return (
+    <div className="empty-state" role="alert">
+      <div className="empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none">
+          <circle cx="32" cy="32" r="28" stroke="var(--color-error)" strokeWidth="1.5" opacity="0.5"/>
+          <path d="M32 20v16M32 42v2" stroke="var(--color-error)" strokeWidth="2" strokeLinecap="round" opacity="0.7"/>
+        </svg>
+      </div>
+      <h3 className="empty-title">Failed to load games</h3>
+      <p className="empty-desc">{message || 'Could not connect to the server. Please try again.'}</p>
+      {onRetry && (
+        <button className="clear-filters-btn" onClick={onRetry}>
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Marketplace() {
   const [search, setSearch]         = useState('');
   const [category, setCategory]     = useState('All');
   const [priceRange, setPriceRange] = useState([0, 5]);
   const [sortBy, setSortBy]         = useState('popular');
-  const [isLoading]                 = useState(false);
+
+  const { games: allGames, loading: isLoading, error: gamesError } = useGames();
 
   const tour = useTour(MARKETPLACE_TOUR_STEPS, {
     onComplete: () => localStorage.setItem(TOUR_KEY, 'true'),
@@ -121,7 +128,7 @@ export default function Marketplace() {
     category !== 'All' || search !== '' || priceRange[0] > 0 || priceRange[1] < 5;
 
   const filteredGames = useMemo(() => {
-    let games = MOCK_GAMES.filter(game => {
+    let games = allGames.filter(game => {
       const matchesSearch   = game.title.toLowerCase().includes(search.toLowerCase()) ||
                               game.developer.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = category === 'All' || game.category === category;
@@ -148,7 +155,7 @@ export default function Marketplace() {
         break;
     }
     return games;
-  }, [search, category, priceRange, sortBy]);
+  }, [allGames, search, category, priceRange, sortBy]);
 
   const clearAllFilters = () => {
     setSearch('');
@@ -325,6 +332,8 @@ export default function Marketplace() {
         <div className="marketplace-content">
           {isLoading ? (
             <LoadingSkeleton />
+          ) : gamesError ? (
+            <ErrorState message={gamesError} />
           ) : filteredGames.length > 0 ? (
             <div className="game-grid">
               {filteredGames.map(game => (

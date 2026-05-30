@@ -3,58 +3,84 @@ import Layout from '../components/Layout';
 import { api } from '../api/client';
 import './Earnings.css';
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+// Mock data — only used when VITE_USE_MOCKS === 'true'
 const MOCK_TRANSACTIONS = [
   { id: 'tx_001', type: 'game',    description: 'Cosmic Raiders - Session #4521', amount: -1.50,   balance: 24580.50, date: '2026-05-18 14:32' },
-  { id: 'tx_002', type: 'game',    description: 'Cosmic Raiders - Session #4520', amount: -0.50,   balance: 24582.00, date: '2026-05-18 14:28' },
-  { id: 'tx_003', type: 'deposit', description: 'USDC Deposit',                    amount: 500.00,  balance: 24582.50, date: '2026-05-18 10:15' },
-  { id: 'tx_004', type: 'game',    description: 'Galaxy Conquest - Session #892',  amount: -1.00,   balance: 24082.50, date: '2026-05-17 22:45' },
-  { id: 'tx_005', type: 'payout',  description: 'Payout to Wallet',                amount: -500.00, balance: 24083.50, date: '2026-05-17 18:00' },
-  { id: 'tx_006', type: 'game',    description: 'Dungeon Realms - Session #234',   amount: -2.00,   balance: 24583.50, date: '2026-05-17 15:22' },
-  { id: 'tx_007', type: 'game',    description: 'Cosmic Raiders - Session #4519',  amount: -0.50,   balance: 24585.50, date: '2026-05-17 12:08' },
-  { id: 'tx_008', type: 'deposit', description: 'USDC Deposit',                    amount: 1000.00, balance: 24586.00, date: '2026-05-16 09:30' },
+  { id: 'tx_002', type: 'deposit', description: 'USDC Deposit',                    amount: 500.00,  balance: 24582.50, date: '2026-05-18 10:15' },
+  { id: 'tx_003', type: 'payout',  description: 'Payout to Wallet',                amount: -500.00, balance: 24083.50, date: '2026-05-17 18:00' },
 ];
 
 const MOCK_PAYOUTS = [
   { id: 'pay_001', amount: 500.00,  method: 'USDC (Polygon)', status: 'Completed', date: '2026-05-17' },
   { id: 'pay_002', amount: 1250.00, method: 'USDC (Polygon)', status: 'Completed', date: '2026-05-10' },
-  { id: 'pay_003', amount: 800.00,  method: 'USDC (Polygon)', status: 'Completed', date: '2026-05-03' },
-  { id: 'pay_004', amount: 2100.00, method: 'USDC (Polygon)', status: 'Completed', date: '2026-04-25' },
 ];
 
 export default function Earnings() {
-  const [balance, setBalance]               = useState(24580.50);
-  const [pendingBalance, setPendingBalance]  = useState(384.25);
-  const [lifetimeEarnings]                  = useState(89432.00);
-  const [transactions, setTransactions]     = useState(MOCK_TRANSACTIONS);
-  const [payouts]                           = useState(MOCK_PAYOUTS);
+  const [balance, setBalance]               = useState(USE_MOCKS ? 24580.50 : null);
+  const [pendingBalance, setPendingBalance]  = useState(USE_MOCKS ? 384.25 : 0);
+  const [lifetimeEarnings, setLifetimeEarnings] = useState(USE_MOCKS ? 89432.00 : null);
+  const [transactions, setTransactions]     = useState(USE_MOCKS ? MOCK_TRANSACTIONS : []);
+  const [payouts, setPayouts]               = useState(USE_MOCKS ? MOCK_PAYOUTS : []);
   const [activeTab, setActiveTab]           = useState('transactions');
   const [withdrawing, setWithdrawing]       = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
-  const [loading, setLoading]               = useState(true);
+  const [withdrawError, setWithdrawError]   = useState(null);
+  const [loading, setLoading]               = useState(!USE_MOCKS);
+  const [loadError, setLoadError]           = useState(null);
 
   useEffect(() => {
+    if (USE_MOCKS) return;
+
+    let cancelled = false;
+
     async function loadData() {
+      setLoading(true);
+      setLoadError(null);
       try {
-        const [balanceData, txData] = await Promise.allSettled([
-          api.wallet.balance(),
+        const [earningsData, txData, payoutsData] = await Promise.allSettled([
+          api.developer.earnings(),
           api.wallet.transactions(),
+          api.developer.payouts(),
         ]);
-        if (balanceData.status === 'fulfilled') {
-          setBalance(balanceData.value.balance || balance);
-          setPendingBalance(balanceData.value.pending || 0);
+
+        if (cancelled) return;
+
+        if (earningsData.status === 'fulfilled') {
+          const d = earningsData.value?.data ?? earningsData.value;
+          // EarningsSummary: { total_earnings, pending_payout, total_paid, recent_earnings }
+          if (d?.total_earnings != null) setLifetimeEarnings(Number(d.total_earnings));
+          if (d?.pending_payout != null) setPendingBalance(Number(d.pending_payout));
+          // Available = total_paid (already paid out) used here as available balance
+          if (d?.total_paid != null) setBalance(Number(d.total_paid));
+        } else {
+          throw earningsData.reason;
         }
+
         if (txData.status === 'fulfilled') {
-          setTransactions(txData.value.transactions || MOCK_TRANSACTIONS);
+          const d = txData.value?.data ?? txData.value;
+          const list = Array.isArray(d?.transactions) ? d.transactions
+            : Array.isArray(d?.items) ? d.items
+            : Array.isArray(d) ? d : [];
+          setTransactions(list);
         }
-      } catch {
-        /* use mock data */
+
+        if (payoutsData.status === 'fulfilled') {
+          const d = payoutsData.value?.data ?? payoutsData.value;
+          const list = Array.isArray(d) ? d : (d?.payouts ?? []);
+          setPayouts(list);
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError(err.message || 'Failed to load earnings');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
+
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
   }, []);
 
   const handleWithdraw = async (e) => {
@@ -62,18 +88,15 @@ export default function Earnings() {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return;
 
     setWithdrawing(true);
+    setWithdrawError(null);
     try {
       await api.wallet.withdraw({ amount: parseFloat(withdrawAmount) });
-      setBalance(prev => prev - parseFloat(withdrawAmount));
+      setBalance(prev => (prev ?? 0) - parseFloat(withdrawAmount));
       setWithdrawSuccess(true);
       setWithdrawAmount('');
       setTimeout(() => setWithdrawSuccess(false), 3000);
-    } catch {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setBalance(prev => prev - parseFloat(withdrawAmount));
-      setWithdrawSuccess(true);
-      setWithdrawAmount('');
-      setTimeout(() => setWithdrawSuccess(false), 3000);
+    } catch (err) {
+      setWithdrawError(err.message || 'Withdrawal failed. Please try again.');
     } finally {
       setWithdrawing(false);
     }
@@ -92,12 +115,20 @@ export default function Earnings() {
           <p className="earnings-subtitle">Track your Rust game revenue and manage USDC payouts</p>
         </header>
 
+        {loadError && (
+          <div role="alert" style={{ padding: '0.75rem 1rem', marginBottom: '1.5rem', background: 'rgba(255,84,104,0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius)', color: 'var(--color-error)', fontSize: '0.875rem' }}>
+            {loadError}
+          </div>
+        )}
+
         <div className="earnings-summary">
           <div className="summary-card primary">
             <span className="summary-icon" aria-hidden="true">💰</span>
             <div className="summary-content">
               <span className="summary-label">Available Balance</span>
-              <span className="summary-value amber">${balance.toLocaleString()}</span>
+              <span className="summary-value amber">
+                {loading ? '—' : balance != null ? `$${Number(balance).toLocaleString()}` : '—'}
+              </span>
             </div>
           </div>
           <div className="summary-card">
@@ -111,7 +142,9 @@ export default function Earnings() {
             <span className="summary-icon" aria-hidden="true">📈</span>
             <div className="summary-content">
               <span className="summary-label">Lifetime Earnings</span>
-              <span className="summary-value amber">${lifetimeEarnings.toLocaleString()}</span>
+              <span className="summary-value amber">
+                {loading ? '—' : lifetimeEarnings != null ? `$${Number(lifetimeEarnings).toLocaleString()}` : '—'}
+              </span>
             </div>
           </div>
         </div>
@@ -137,7 +170,7 @@ export default function Earnings() {
             <button
               type="submit"
               className="btn btn-primary withdraw-btn"
-              disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) > balance}
+              disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) > (balance ?? 0)}
             >
               {withdrawing
                 ? 'Processing…'
@@ -145,6 +178,11 @@ export default function Earnings() {
                   ? '✓ Withdrawal Initiated!'
                   : 'Withdraw'}
             </button>
+            {withdrawError && (
+              <p role="alert" style={{ color: 'var(--color-error)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                {withdrawError}
+              </p>
+            )}
           </form>
           <p className="withdraw-note">Withdrawals are processed to your connected Polygon wallet within 24 hours. Platform fee: 15%.</p>
         </div>

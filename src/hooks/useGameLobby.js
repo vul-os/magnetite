@@ -10,47 +10,44 @@ export function useGameLobby(lobbyId, currentUser) {
   const [countdown, setCountdown] = useState(null);
   const [gameRules, setGameRules] = useState(null);
   const [error, setError] = useState(null);
-  const mockInitRef = useRef(null);
   const countdownRef = useRef(null);
 
   const isHost = players.find(p => p.id === currentUser?.id)?.isHost || false;
   const allReady = players.length > 0 && players.every(p => p.isReady || p.isHost);
 
+  // When invalid lobby/user, mark as invalid immediately
   useEffect(() => {
     if (!lobbyId || !currentUser) {
       setLobbyState('invalid');
-      return;
     }
+  }, [lobbyId, currentUser]);
 
-    setLobbyState('connecting');
-
-    mockInitRef.current = setTimeout(() => {
-      const mockPlayers = [
-        { id: currentUser.id, username: currentUser.username, avatar: currentUser.avatar, isReady: false, isHost: true },
-        { id: 2, username: 'ChessMaster99', avatar: null, isReady: true, isHost: false },
-        { id: 3, username: 'GoPlayer42', avatar: null, isReady: false, isHost: false },
-      ];
-      setPlayers(mockPlayers);
-      setGameRules({
-        name: 'Chess',
-        description: 'Classic chess match with standard rules. White moves first.',
-        timeControl: '10 min',
-        maxPlayers: 2,
-        stake: '5 USDC',
-      });
+  // Transition from 'connecting' to 'waiting' once the WS is live
+  useEffect(() => {
+    if (isConnected && lobbyState === 'connecting') {
       setLobbyState('waiting');
-    }, 500);
+      // Request current lobby state from the server
+      sendMessage({ type: 'get_lobby_state' });
+    }
+  }, [isConnected, lobbyState, sendMessage]);
 
+  useEffect(() => {
     return () => {
-      if (mockInitRef.current) clearTimeout(mockInitRef.current);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [lobbyId, currentUser]);
+  }, []);
 
   useEffect(() => {
     if (!lastMessage) return;
 
     switch (lastMessage.type) {
+      case 'lobby_state': {
+        // Full lobby snapshot sent on join
+        if (Array.isArray(lastMessage.players)) setPlayers(lastMessage.players);
+        if (lastMessage.rules) setGameRules(lastMessage.rules);
+        if (lastMessage.state) setLobbyState(lastMessage.state);
+        break;
+      }
       case 'player_joined':
         if (!players.find(p => p.id === lastMessage.player.id)) {
           setPlayers(prev => [...prev, lastMessage.player]);

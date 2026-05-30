@@ -8,20 +8,26 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * useCommsSocket (or a component) can push updates into via `setPresence`.
  *
  * Presence statuses: 'online' | 'idle' | 'dnd' | 'offline'
+ *
+ * Mock data is seeded only when VITE_USE_MOCKS=true; otherwise the map
+ * starts empty and is populated exclusively by real WS presence_update events.
  */
 
+// ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 const MOCK_PRESENCE = {
   '1': { status: 'online', activity: 'Playing Rust Racer', updated_at: Date.now() },
   '2': { status: 'idle', activity: null, updated_at: Date.now() - 600_000 },
   '3': { status: 'online', activity: 'Streaming', updated_at: Date.now() - 30_000 },
 };
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 // Stable status ordering for sorting member lists
 const STATUS_ORDER = { online: 0, dnd: 1, idle: 2, offline: 3 };
 
 export function usePresence(userIds = []) {
   // presenceMap: { [userId]: { status, activity, updated_at } }
-  const [presenceMap, setPresenceMap] = useState({});
+  const [presenceMap, setPresenceMap] = useState(USE_MOCKS ? MOCK_PRESENCE : {});
   const idSetRef = useRef(new Set());
 
   // Keep idSet in sync
@@ -29,10 +35,8 @@ export function usePresence(userIds = []) {
     idSetRef.current = new Set(userIds);
   }, [userIds]);
 
-  // Seed with mock data on mount (real updates come from useCommsSocket)
-  useEffect(() => {
-    setPresenceMap(MOCK_PRESENCE);
-  }, []);
+  // Real presence updates arrive from the comms WebSocket via setPresence / bulkSetPresence.
+  // No API polling here — the WS push model is the authoritative source.
 
   /** Called by useCommsSocket when a presence_update WS message arrives. */
   const setPresence = useCallback((userId, presenceData) => {

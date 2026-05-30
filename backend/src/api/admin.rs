@@ -998,41 +998,39 @@ pub async fn analytics_performance(
 ) -> Result<Json<PerformanceAnalytics>> {
     require_admin(&pool, user_id).await?;
 
-    let api_response_times = sqlx::query_as::<_, PerformanceMetric>(
-        "SELECT 
-            'api' as endpoint,
-            COALESCE(AVG(response_time_ms), 0) as avg_response_time_ms,
-            COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms), 0) as p95_response_time_ms,
-            COALESCE(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY response_time_ms), 0) as p99_response_time_ms,
-            COUNT(*) as request_count,
-            COUNT(*) FILTER (WHERE status_code >= 400) as error_count,
-            CASE WHEN COUNT(*) > 0 THEN COUNT(*) FILTER (WHERE status_code >= 400)::float / COUNT(*)::float * 100 ELSE 0 END as error_rate
-         FROM api_request_logs
-         WHERE created_at > NOW() - INTERVAL '24 hours'",
-    )
-    .fetch_all(&pool)
-    .await?;
-
+    // The tables api_request_logs and websocket_connections do not exist yet.
+    // Decision §4c: rewrite against existing tables rather than adding a migration for
+    // infra-only tables that have no writers yet.  We derive proxy metrics from the
+    // `transactions` table (which exists and has real data).
     let total_requests_24h = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM api_request_logs WHERE created_at > NOW() - INTERVAL '24 hours'",
+        "SELECT COUNT(*) FROM transactions WHERE created_at > NOW() - INTERVAL '24 hours'",
     )
     .fetch_one(&pool)
     .await?;
 
-    let total_errors_24h = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM api_request_logs WHERE created_at > NOW() - INTERVAL '24 hours' AND status_code >= 400",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let total_errors_24h: i64 = 0; // no error log table — return 0 until api_request_logs is added
 
-    let overall_error_rate = if total_requests_24h > 0 {
-        (total_errors_24h as f64 / total_requests_24h as f64) * 100.0
+    let overall_error_rate = 0.0_f64; // same — no data yet
+
+    // Build a synthetic PerformanceMetric row from transaction stats.
+    let tx_count_24h = total_requests_24h;
+    let api_response_times = if tx_count_24h > 0 {
+        vec![PerformanceMetric {
+            endpoint: "transactions".to_string(),
+            avg_response_time_ms: 0.0,
+            p95_response_time_ms: 0.0,
+            p99_response_time_ms: 0.0,
+            request_count: tx_count_24h,
+            error_count: 0,
+            error_rate: 0.0,
+        }]
     } else {
-        0.0
+        vec![]
     };
 
+    // active_websocket_connections: count voices / chat participants as a proxy.
     let active_websocket_connections = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM websocket_connections WHERE disconnected_at IS NULL",
+        "SELECT COUNT(*) FROM voice_participants WHERE left_at IS NULL",
     )
     .fetch_optional(&pool)
     .await?

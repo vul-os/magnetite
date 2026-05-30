@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
+// ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 
 const MOCK_STORES = [
   {
@@ -33,19 +33,26 @@ const MOCK_ENTITLEMENTS = [
   { id: 'e2', item_id: 'i4', item_name: 'Carbon Livery',     game_title: 'Speed Legends',  purchased_at: '2026-05-18T14:22:00Z', currency: 'usdc'   },
 ];
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useMarketplace() {
-  const [stores, setStores]           = useState(MOCK_STORES);
-  const [items, setItems]             = useState({});
-  const [entitlements, setEntitlements] = useState(MOCK_ENTITLEMENTS);
-  const [loading, setLoading]         = useState(true);
-  const [purchasing, setPurchasing]   = useState(false);
+  const [stores, setStores]             = useState(USE_MOCKS ? MOCK_STORES : []);
+  const [items, setItems]               = useState({});
+  const [entitlements, setEntitlements] = useState(USE_MOCKS ? MOCK_ENTITLEMENTS : []);
+  const [loading, setLoading]           = useState(!USE_MOCKS);
+  const [error, setError]               = useState(null);
+  const [purchasing, setPurchasing]     = useState(false);
 
   useEffect(() => {
+    if (USE_MOCKS) return;
+
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
+      setError(null);
       try {
         const [storesRes, entRes] = await Promise.allSettled([
           api.stores.list(),
@@ -55,12 +62,19 @@ export function useMarketplace() {
         if (!cancelled) {
           if (storesRes.status === 'fulfilled' && Array.isArray(storesRes.value?.stores)) {
             setStores(storesRes.value.stores);
+          } else if (storesRes.status === 'fulfilled' && Array.isArray(storesRes.value)) {
+            setStores(storesRes.value);
+          } else if (storesRes.status === 'rejected') {
+            setError(storesRes.reason?.message ?? 'Failed to load stores');
           }
+
           if (entRes.status === 'fulfilled' && Array.isArray(entRes.value?.entitlements)) {
             setEntitlements(entRes.value.entitlements);
+          } else if (entRes.status === 'fulfilled' && Array.isArray(entRes.value)) {
+            setEntitlements(entRes.value);
           }
         }
-      } catch { /* use mock */ } finally {
+      } finally {
         if (!cancelled) setLoading(false);
       }
     }
@@ -69,15 +83,23 @@ export function useMarketplace() {
     return () => { cancelled = true; };
   }, []);
 
-  /** Lazy-load items for a store (with mock fallback). */
+  /** Lazy-load items for a store. Falls back to mock only when VITE_USE_MOCKS=true. */
   const loadItems = useCallback(async (storeId) => {
     if (items[storeId]) return; // already loaded
     try {
       const data = await api.stores.items(storeId);
       const list = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : null);
-      setItems(prev => ({ ...prev, [storeId]: list ?? MOCK_ITEMS[storeId] ?? [] }));
+      if (USE_MOCKS) {
+        setItems(prev => ({ ...prev, [storeId]: list ?? MOCK_ITEMS[storeId] ?? [] }));
+      } else {
+        setItems(prev => ({ ...prev, [storeId]: list ?? [] }));
+      }
     } catch {
-      setItems(prev => ({ ...prev, [storeId]: MOCK_ITEMS[storeId] ?? [] }));
+      if (USE_MOCKS) {
+        setItems(prev => ({ ...prev, [storeId]: MOCK_ITEMS[storeId] ?? [] }));
+      } else {
+        setItems(prev => ({ ...prev, [storeId]: [] }));
+      }
     }
   }, [items]);
 
@@ -137,7 +159,7 @@ export function useMarketplace() {
   }, [entitlements]);
 
   return {
-    stores, items, entitlements, loading, purchasing,
+    stores, items, entitlements, loading, error, purchasing,
     loadItems, createStore, addItem, updateItem, removeItem, purchase, hasEntitlement,
   };
 }

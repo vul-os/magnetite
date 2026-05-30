@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import GameCard from '../components/GameCard';
 import GameGallery from '../components/GameGallery';
 import ReviewList from '../components/ReviewList';
+import { api } from '../api/client';
 import './GameDetail.css';
 
 const REQUIRED_TIER = {
@@ -19,6 +21,9 @@ const TIER_NAMES = {
   unlimited: 'Unlimited',
 };
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+// Mock data only used when VITE_USE_MOCKS === 'true'
 const MOCK_GAME = {
   id: 1,
   title: 'Cosmic Raiders',
@@ -29,58 +34,31 @@ const MOCK_GAME = {
   rating: 4.7,
   category: 'Action',
   description:
-    'Embark on an interstellar adventure in Cosmic Raiders — a server-authoritative Rust game compiled to WebAssembly. Battle alien forces across 12 unique star systems, upgrade your spacecraft, and compete against players worldwide. The entire game logic is authored in Rust with Bevy, running with deterministic netcode on the Magnetite platform.',
+    'Embark on an interstellar adventure in Cosmic Raiders — a server-authoritative Rust game compiled to WebAssembly. Battle alien forces across 12 unique star systems, upgrade your spacecraft, and compete against players worldwide.',
   thumbnail: 'https://picsum.photos/seed/game1/1920/600',
   screenshots: [
     'https://picsum.photos/seed/ss1/1920/1080',
     'https://picsum.photos/seed/ss2/1920/1080',
     'https://picsum.photos/seed/ss3/1920/1080',
-    'https://picsum.photos/seed/ss4/1920/1080',
   ],
-  video: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-  github: 'https://github.com/starforge/cosmic-raiders',
+  video: null,
+  github: null,
   release_date: '2026-03-15',
   players_min: 1,
   players_max: 4,
-  system_requirements: {
-    os: 'Any modern browser (WASM) / Windows 10 / macOS Ventura+',
-    processor: 'Intel Core i5-8400 / AMD Ryzen 5 2600',
-    memory: '8 GB RAM',
-    graphics: 'NVIDIA GTX 1060 / AMD RX 580 (native) or WebGPU',
-    storage: '15 GB (native) / streamed in-browser',
-  },
-  achievements: [
-    { name: 'First Victory', description: 'Win your first match', progress: 1, total: 1 },
-    { name: 'Space Explorer', description: 'Visit all 12 star systems', progress: 9, total: 12 },
-    { name: 'Ace Pilot', description: 'Achieve 100 kills in a single match', progress: 45, total: 100 },
-    { name: 'Team Player', description: 'Complete 50 co-op missions', progress: 15, total: 50 },
-  ],
+  system_requirements: {},
+  achievements: [],
 };
 
 const MOCK_LEADERBOARD = [
   { rank: 1, player: 'NebulaKing',  score: 15420, avatar: 'https://picsum.photos/seed/p1/40/40' },
   { rank: 2, player: 'SpaceAce',    score: 14850, avatar: 'https://picsum.photos/seed/p2/40/40' },
   { rank: 3, player: 'AstroNinja',  score: 13200, avatar: 'https://picsum.photos/seed/p3/40/40' },
-  { rank: 4, player: 'VoidWalker',  score: 11900, avatar: 'https://picsum.photos/seed/p4/40/40' },
-  { rank: 5, player: 'StarDust99',  score: 10500, avatar: 'https://picsum.photos/seed/p5/40/40' },
-  { rank: 6, player: 'CosmicWind',  score:  9800, avatar: 'https://picsum.photos/seed/p6/40/40' },
-  { rank: 7, player: 'GalaxyPro',   score:  9200, avatar: 'https://picsum.photos/seed/p7/40/40' },
-  { rank: 8, player: 'NovaFlare',   score:  8700, avatar: 'https://picsum.photos/seed/p8/40/40' },
-  { rank: 9, player: 'PulsarX',     score:  8100, avatar: 'https://picsum.photos/seed/p9/40/40' },
-  { rank: 10, player: 'QuasarKing', score:  7500, avatar: 'https://picsum.photos/seed/p10/40/40' },
 ];
 
 const MOCK_REVIEWS = [
-  { user: 'GameMaster42',  rating: 5, comment: 'Best space shooter I have ever played! The Rust WASM build is silky smooth.', date: '2026-05-10', helpful: 24 },
-  { user: 'PocketRocket',  rating: 4, comment: 'Great visuals and gameplay. Matchmaking could be slightly faster — otherwise fantastic!', date: '2026-05-08', helpful: 18 },
-  { user: 'CosmicDrifter', rating: 5, comment: 'Addictive gameplay loop. The server-authoritative Rust netcode means zero desync.', date: '2026-05-05', helpful: 31 },
-  { user: 'SpaceExplorer', rating: 4, comment: 'Really enjoy the co-op missions. Would love more boss fights in future updates.', date: '2026-05-02', helpful: 12 },
-];
-
-const MOCK_SIMILAR_GAMES = [
-  { id: 2, title: 'Nebula Strike',    developer: 'Void Studios', requiredTier: 'pro',   isFree: false, rating: 4.5, thumbnail: 'https://picsum.photos/seed/game2/400/225', players_online: 342 },
-  { id: 3, title: 'Stellar Conquest', developer: 'Orbit Games',  requiredTier: 'basic', isFree: false, rating: 4.2, thumbnail: 'https://picsum.photos/seed/game3/400/225', players_online: 128 },
-  { id: 4, title: 'Galaxy Warfare',   developer: 'Astro Inc',    requiredTier: 'free',  isFree: true,  rating: 4.8, thumbnail: 'https://picsum.photos/seed/game4/400/225', players_online: 567 },
+  { user: 'GameMaster42', rating: 5, comment: 'Best space shooter I have played!', date: '2026-05-10', helpful: 24 },
+  { user: 'PocketRocket', rating: 4, comment: 'Great visuals and gameplay.', date: '2026-05-08', helpful: 18 },
 ];
 
 const TABS = ['Overview', 'Leaderboard', 'Reviews'];
@@ -143,6 +121,14 @@ function AchievementCard({ achievement }) {
 }
 
 export default function GameDetail() {
+  const { id } = useParams();
+
+  const [game, setGame]                         = useState(USE_MOCKS ? MOCK_GAME : null);
+  const [leaderboard, setLeaderboard]           = useState(USE_MOCKS ? MOCK_LEADERBOARD : []);
+  const [reviews, setReviews]                   = useState(USE_MOCKS ? MOCK_REVIEWS : []);
+  const [pageLoading, setPageLoading]           = useState(!USE_MOCKS);
+  const [pageError, setPageError]               = useState(null);
+
   const [walletConnected, setWalletConnected]   = useState(false);
   const [inQueue, setInQueue]                   = useState(false);
   const [activeTab, setActiveTab]               = useState('Overview');
@@ -151,11 +137,6 @@ export default function GameDetail() {
   const [stickyBarVisible, setStickyBarVisible] = useState(false);
   const [userTier] = useState('basic');
   const heroRef = useRef(null);
-
-  const userTierLevel     = Object.keys(REQUIRED_TIER).indexOf(userTier);
-  const requiredTierLevel = Object.keys(REQUIRED_TIER).indexOf(MOCK_GAME.requiredTier);
-  const hasAccess         = userTierLevel >= requiredTierLevel || MOCK_GAME.isFree;
-  const needsUpgrade      = !hasAccess && !MOCK_GAME.isFree;
 
   // Show sticky buy bar once hero scrolls out of view
   useEffect(() => {
@@ -167,6 +148,57 @@ export default function GameDetail() {
     if (el) observer.observe(el);
     return () => { if (el) observer.unobserve(el); };
   }, []);
+
+  useEffect(() => {
+    if (USE_MOCKS || !id) return;
+
+    let cancelled = false;
+
+    async function loadGame() {
+      setPageLoading(true);
+      setPageError(null);
+      try {
+        const [gameData, lbData, reviewData] = await Promise.allSettled([
+          api.games.get(id),
+          api.games.leaderboard(id),
+          api.reviews.list(id),
+        ]);
+
+        if (cancelled) return;
+
+        if (gameData.status === 'fulfilled') {
+          const g = gameData.value?.data ?? gameData.value;
+          setGame(g);
+        } else {
+          throw gameData.reason;
+        }
+
+        if (lbData.status === 'fulfilled') {
+          const lb = lbData.value?.data ?? lbData.value;
+          setLeaderboard(Array.isArray(lb) ? lb : (lb?.entries ?? []));
+        }
+
+        if (reviewData.status === 'fulfilled') {
+          const rv = reviewData.value?.data ?? reviewData.value;
+          setReviews(Array.isArray(rv) ? rv : (rv?.reviews ?? []));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPageError(err.message || 'Failed to load game');
+        }
+      } finally {
+        if (!cancelled) setPageLoading(false);
+      }
+    }
+
+    loadGame();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  const userTierLevel     = Object.keys(REQUIRED_TIER).indexOf(userTier);
+  const requiredTierLevel = Object.keys(REQUIRED_TIER).indexOf(game?.requiredTier ?? game?.required_tier ?? 'free');
+  const hasAccess         = userTierLevel >= requiredTierLevel || game?.isFree || game?.is_free;
+  const needsUpgrade      = !hasAccess && !(game?.isFree || game?.is_free);
 
   const handlePlayNow = () => {
     if (!walletConnected) { setWalletConnected(true); return; }
@@ -189,19 +221,19 @@ export default function GameDetail() {
       case 'Overview':
         return (
           <div className="tab-overview">
-            <GameGallery images={MOCK_GAME.screenshots} title={MOCK_GAME.title} />
+            <GameGallery images={game.screenshots ?? []} title={game.title} />
 
             <div className="overview-section">
               <h3>// About This Game</h3>
-              <p className="game-description">{MOCK_GAME.description}</p>
+              <p className="game-description">{game.description}</p>
             </div>
 
-            {MOCK_GAME.video && (
+            {game.video && (
               <div className="video-section">
                 <h3>// Gameplay Video</h3>
                 <div className="video-container">
                   <iframe
-                    src={MOCK_GAME.video}
+                    src={game.video}
                     title="Gameplay Video"
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -214,10 +246,10 @@ export default function GameDetail() {
             <div className="achievements-section">
               <div className="section-header-row">
                 <h3 style={{ margin: 0 }}>// Achievements</h3>
-                <span className="achievement-count">{MOCK_GAME.achievements.length} Total</span>
+                <span className="achievement-count">{(game.achievements ?? []).length} Total</span>
               </div>
               <div className="achievements-grid">
-                {MOCK_GAME.achievements.map((a, i) => (
+                {(game.achievements ?? []).map((a, i) => (
                   <AchievementCard key={i} achievement={a} />
                 ))}
               </div>
@@ -233,7 +265,7 @@ export default function GameDetail() {
               <a href="/leaderboard" className="view-all-link">View Full Leaderboard →</a>
             </div>
             <div className="leaderboard-list">
-              {MOCK_LEADERBOARD.map(entry => (
+              {leaderboard.map(entry => (
                 <div key={entry.rank} className={`leaderboard-row rank-${entry.rank}`}>
                   <span className="rank">#{entry.rank}</span>
                   <img src={entry.avatar} alt="" className="player-avatar" loading="lazy" aria-hidden="true" />
@@ -250,14 +282,14 @@ export default function GameDetail() {
           <div className="tab-reviews">
             <div className="reviews-summary">
               <div className="rating-overview">
-                <div className="big-rating">{MOCK_GAME.rating}</div>
-                <StarRating rating={MOCK_GAME.rating} size="lg" />
-                <p>{MOCK_REVIEWS.length} Reviews</p>
+                <div className="big-rating">{game.rating}</div>
+                <StarRating rating={game.rating} size="lg" />
+                <p>{reviews.length} Reviews</p>
               </div>
               <div className="rating-breakdown">
                 {[5, 4, 3, 2, 1].map(stars => {
-                  const count   = MOCK_REVIEWS.filter(r => r.rating === stars).length;
-                  const percent = (count / MOCK_REVIEWS.length) * 100;
+                  const count   = reviews.filter(r => r.rating === stars).length;
+                  const percent = (count / reviews.length) * 100;
                   return (
                     <div key={stars} className="rating-row">
                       <span>{stars} Stars</span>
@@ -271,7 +303,7 @@ export default function GameDetail() {
               </div>
             </div>
             <ReviewList
-              reviews={MOCK_REVIEWS.map((r, i) => ({ ...r, id: i }))}
+              reviews={reviews.map((r, i) => ({ ...r, id: i }))}
               walletConnected={walletConnected}
               onCreateReview={() => {}}
               onHelpful={(id) => console.log('Helpful:', id)}
@@ -285,6 +317,48 @@ export default function GameDetail() {
     }
   };
 
+  // Loading / error / not-found states — after all hooks
+  if (pageLoading) {
+    return (
+      <Layout>
+        <div className="game-detail" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+          <div style={{ maxWidth: 600, margin: '0 auto' }}>
+            <div style={{ height: 300, borderRadius: 'var(--radius-lg)', marginBottom: '1.5rem', background: 'var(--color-bg-elevated)' }} />
+            <div style={{ height: 32, width: '60%', borderRadius: 'var(--radius)', marginBottom: '1rem', background: 'var(--color-bg-elevated)' }} />
+            <div style={{ height: 20, width: '40%', borderRadius: 'var(--radius)', background: 'var(--color-bg-elevated)' }} />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (pageError) {
+    return (
+      <Layout>
+        <div className="game-detail" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+          <h2 style={{ color: 'var(--color-error)' }}>Could not load game</h2>
+          <p style={{ color: 'var(--color-text-secondary)', marginTop: '0.5rem' }}>{pageError}</p>
+          <a href="/marketplace" className="btn btn-primary" style={{ marginTop: '1.5rem', display: 'inline-block' }}>
+            Back to Marketplace
+          </a>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!game) {
+    return (
+      <Layout>
+        <div className="game-detail" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+          <h2>Game not found</h2>
+          <a href="/marketplace" className="btn btn-primary" style={{ marginTop: '1.5rem', display: 'inline-block' }}>
+            Back to Marketplace
+          </a>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="game-detail">
@@ -292,14 +366,14 @@ export default function GameDetail() {
         <div className={`gd-sticky-bar ${stickyBarVisible ? 'visible' : ''}`} aria-hidden={!stickyBarVisible}>
           <div className="gd-sticky-inner">
             <div className="gd-sticky-info">
-              <span className="gd-sticky-title">{MOCK_GAME.title}</span>
-              <span className="gd-sticky-dev">by {MOCK_GAME.developer}</span>
+              <span className="gd-sticky-title">{game.title}</span>
+              <span className="gd-sticky-dev">by {game.developer}</span>
             </div>
             <div className="gd-sticky-actions">
               {hasAccess ? (
                 <span className="gd-sticky-included">// Included in plan</span>
               ) : (
-                <span className="gd-sticky-price">Requires {TIER_NAMES[MOCK_GAME.requiredTier]}</span>
+                <span className="gd-sticky-price">Requires {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']}</span>
               )}
               <button
                 className="gd-sticky-play"
@@ -314,32 +388,32 @@ export default function GameDetail() {
         </div>
 
         {/* ── Hero ── */}
-        <section className="game-hero" aria-label={`${MOCK_GAME.title} hero`} ref={heroRef}>
+        <section className="game-hero" aria-label={`${game.title} hero`} ref={heroRef}>
           <div className="hero-image-container">
-            <img src={MOCK_GAME.thumbnail} alt={MOCK_GAME.title} className="hero-image" loading="eager" />
+            <img src={game.thumbnail} alt={game.title} className="hero-image" loading="eager" />
             <div className="hero-overlay" aria-hidden="true" />
             <div className="hero-gradient" aria-hidden="true" />
           </div>
           <div className="hero-content reveal">
             <div className="hero-top reveal-1">
-              <span className="category-badge">{MOCK_GAME.category}</span>
-              {MOCK_GAME.isFree ? (
+              <span className="category-badge">{game.category}</span>
+              {(game.isFree || game.is_free) ? (
                 <span className="tier-badge free">Free to Play</span>
               ) : (
                 <span className="tier-badge">
-                  {TIER_NAMES[MOCK_GAME.requiredTier]} Tier
+                  {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']} Tier
                 </span>
               )}
             </div>
             <div className="hero-main reveal-2">
-              <h1 className="game-title">{MOCK_GAME.title}</h1>
+              <h1 className="game-title">{game.title}</h1>
               <p className="game-developer">
                 by{' '}
-                <a href={`/developer/${MOCK_GAME.developerId}`}>
-                  {MOCK_GAME.developer}
+                <a href={`/developer/${game.developerId}`}>
+                  {game.developer}
                 </a>
               </p>
-              <StarRating rating={MOCK_GAME.rating} size="lg" />
+              <StarRating rating={game.rating} size="lg" />
             </div>
             <div className="hero-actions reveal-3">
               <div className="action-buttons">
@@ -350,7 +424,7 @@ export default function GameDetail() {
                   aria-label={
                     !walletConnected ? 'Connect wallet and play' :
                     inQueue ? 'Joining game queue' :
-                    needsUpgrade ? `Upgrade to ${TIER_NAMES[MOCK_GAME.requiredTier]} to play` :
+                    needsUpgrade ? `Upgrade to ${TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']} to play` :
                     'Play Now'
                   }
                 >
@@ -374,12 +448,12 @@ export default function GameDetail() {
                 </button>
               </div>
               <div className="price-display">
-                {MOCK_GAME.isFree ? (
+                {(game.isFree || game.is_free) ? (
                   <span className="price-free">// Free to Play</span>
                 ) : hasAccess ? (
                   <span className="price-included">// Included in your plan</span>
                 ) : (
-                  <span className="price-upgrade">// Requires {TIER_NAMES[MOCK_GAME.requiredTier]}</span>
+                  <span className="price-upgrade">// Requires {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']}</span>
                 )}
               </div>
             </div>
@@ -402,7 +476,7 @@ export default function GameDetail() {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
               <span className="info-label">Players</span>
-              <span className="info-value">{MOCK_GAME.players_min}–{MOCK_GAME.players_max}</span>
+              <span className="info-value">{game.players_min}–{game.players_max}</span>
             </div>
             <div className="info-divider" aria-hidden="true" />
             <div className="info-item">
@@ -413,14 +487,14 @@ export default function GameDetail() {
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
               <span className="info-label">Released</span>
-              <span className="info-value">{formatDate(MOCK_GAME.release_date)}</span>
+              <span className="info-value">{formatDate(game.release_date)}</span>
             </div>
             <div className="info-divider" aria-hidden="true" />
             <div className="info-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
               </svg>
-              <a href={MOCK_GAME.github} target="_blank" rel="noopener noreferrer" className="info-link">
+              <a href={game.github} target="_blank" rel="noopener noreferrer" className="info-link">
                 Source on GitHub ↗
               </a>
             </div>
@@ -463,14 +537,14 @@ export default function GameDetail() {
               <h3>// Developer</h3>
               <div className="developer-info">
                 <img
-                  src={`https://picsum.photos/seed/${MOCK_GAME.developerId}/80/80`}
-                  alt={MOCK_GAME.developer}
+                  src={`https://picsum.photos/seed/${game.developerId}/80/80`}
+                  alt={game.developer}
                   className="developer-avatar"
                   loading="lazy"
                 />
                 <div className="developer-details">
-                  <span className="developer-name">{MOCK_GAME.developer}</span>
-                  <a href={`/developer/${MOCK_GAME.developerId}`} className="developer-link">
+                  <span className="developer-name">{game.developer}</span>
+                  <a href={`/developer/${game.developerId}`} className="developer-link">
                     View Profile →
                   </a>
                 </div>
@@ -480,7 +554,7 @@ export default function GameDetail() {
             <div className="sidebar-card system-req-card">
               <h3>// System Requirements</h3>
               <ul className="system-req-list">
-                {Object.entries(MOCK_GAME.system_requirements).map(([key, value]) => (
+                {Object.entries(game.system_requirements ?? {}).map(([key, value]) => (
                   <li key={key}>
                     <span className="req-label">{key}</span>
                     {value}
@@ -492,7 +566,7 @@ export default function GameDetail() {
             <div className="sidebar-card similar-games-card">
               <h3>// Similar Games</h3>
               <div className="similar-games-list">
-                {MOCK_SIMILAR_GAMES.map(game => (
+                {[].map(game => (
                   <GameCard key={game.id} game={game} showPlayButton={false} />
                 ))}
               </div>

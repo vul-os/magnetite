@@ -66,6 +66,23 @@ pub struct SeasonResetResponse {
     pub new_season_name: String,
 }
 
+// ─── Admin guard ──────────────────────────────────────────────────────────────
+
+/// Verify that `user_id` has the `is_admin` flag set in the users table.
+/// Reuses the same DB query pattern as `admin::require_admin`.
+async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<()> {
+    let is_admin = sqlx::query_scalar::<_, bool>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    if !is_admin {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+    Ok(())
+}
+
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// GET /points/balance — authenticated user's own balance.
@@ -97,13 +114,13 @@ pub async fn get_user_balance(
 }
 
 /// POST /points/award — award points to a user (admin / game-server use).
-/// Requires auth; in production this endpoint should be further restricted
-/// to service accounts or admin roles.
+/// Restricted to admin users only.
 pub async fn award_points(
     State(pool): State<PgPool>,
-    Extension(_caller_id): Extension<Uuid>,
+    Extension(caller_id): Extension<Uuid>,
     Json(payload): Json<AwardPointsRequest>,
 ) -> Result<Json<response::ApiResponse<LedgerEntry>>> {
+    require_admin(&pool, caller_id).await?;
     let svc = PointsService::new(pool);
     let entry = svc
         .award(
@@ -223,12 +240,13 @@ pub async fn get_active_season(
 }
 
 /// POST /points/season/reset — end current season, zero balances, start new one.
-/// Requires auth (admin-only in production).
+/// Restricted to admin users only.
 pub async fn season_reset(
     State(pool): State<PgPool>,
-    Extension(_caller_id): Extension<Uuid>,
+    Extension(caller_id): Extension<Uuid>,
     Json(payload): Json<SeasonResetRequest>,
 ) -> Result<Json<response::ApiResponse<SeasonResetResponse>>> {
+    require_admin(&pool, caller_id).await?;
     if payload.new_season_name.trim().is_empty() {
         return Err(AppError::Validation(
             "new_season_name must not be empty".to_string(),

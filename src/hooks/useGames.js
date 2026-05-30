@@ -2,26 +2,32 @@ import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { mockGames } from '../data/mockGames';
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export function useGames(_filters = {}) {
-  const [games, setGames] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [games, setGames] = useState(USE_MOCKS ? mockGames : []);
+  const [loading, setLoading] = useState(!USE_MOCKS);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (USE_MOCKS) return;
+
     let cancelled = false;
 
     async function fetchGames() {
+      setLoading(true);
+      setError(null);
       try {
-        setLoading(true);
-        setError(null);
         const data = await api.games.list();
         if (!cancelled) {
-          setGames(Array.isArray(data) ? data : (data?.games ?? mockGames));
+          // Accept either { games: [...] } or a plain array
+          const list = Array.isArray(data) ? data : (data?.games ?? data?.data ?? []);
+          setGames(list);
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message);
-          setGames(mockGames); // graceful fallback
+          setError(err.message || 'Failed to load games');
+          setGames([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -30,7 +36,6 @@ export function useGames(_filters = {}) {
 
     fetchGames();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { games, loading, error };

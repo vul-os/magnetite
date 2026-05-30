@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
-// ── Mock data (renders without a backend) ────────────────────────────────────
+// ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 
 const MOCK_BALANCE = {
   points: 4_820,
@@ -12,7 +12,7 @@ const MOCK_BALANCE = {
     ends_at: '2026-08-31T23:59:59Z',
     tier: 'Gold',
     next_tier: 'Platinum',
-    progress: 68,           // % toward next tier
+    progress: 68,
     points_needed: 2_180,
   },
 };
@@ -47,20 +47,27 @@ const MOCK_LEADERBOARD = [
   { rank: 10, username: 'CrystalByte',   points: 29_100, avatar: 'https://picsum.photos/seed/crystal/40/40' },
 ];
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function usePoints() {
-  const [balance, setBalance]         = useState(MOCK_BALANCE);
-  const [history, setHistory]         = useState(MOCK_HISTORY);
-  const [rewards, setRewards]         = useState(MOCK_REWARDS);
-  const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD);
-  const [loading, setLoading]         = useState(true);
+  const [balance, setBalance]         = useState(USE_MOCKS ? MOCK_BALANCE : null);
+  const [history, setHistory]         = useState(USE_MOCKS ? MOCK_HISTORY : []);
+  const [rewards, setRewards]         = useState(USE_MOCKS ? MOCK_REWARDS : []);
+  const [leaderboard, setLeaderboard] = useState(USE_MOCKS ? MOCK_LEADERBOARD : []);
+  const [loading, setLoading]         = useState(!USE_MOCKS);
+  const [error, setError]             = useState(null);
   const [redeeming, setRedeeming]     = useState(false);
 
   useEffect(() => {
+    if (USE_MOCKS) return;
+
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
+      setError(null);
       try {
         const [balRes, histRes, rewRes, lbRes] = await Promise.allSettled([
           api.points.balance(),
@@ -70,12 +77,31 @@ export function usePoints() {
         ]);
 
         if (!cancelled) {
-          if (balRes.status === 'fulfilled' && balRes.value) setBalance(balRes.value);
-          if (histRes.status === 'fulfilled' && Array.isArray(histRes.value?.history)) setHistory(histRes.value.history);
-          if (rewRes.status === 'fulfilled' && Array.isArray(rewRes.value?.rewards)) setRewards(rewRes.value.rewards);
-          if (lbRes.status === 'fulfilled' && Array.isArray(lbRes.value?.entries)) setLeaderboard(lbRes.value.entries);
+          if (balRes.status === 'fulfilled' && balRes.value) {
+            setBalance(balRes.value);
+          } else if (balRes.status === 'rejected') {
+            setError(balRes.reason?.message ?? 'Failed to load points balance');
+          }
+
+          if (histRes.status === 'fulfilled' && Array.isArray(histRes.value?.history)) {
+            setHistory(histRes.value.history);
+          } else if (histRes.status === 'fulfilled' && Array.isArray(histRes.value)) {
+            setHistory(histRes.value);
+          }
+
+          if (rewRes.status === 'fulfilled' && Array.isArray(rewRes.value?.rewards)) {
+            setRewards(rewRes.value.rewards);
+          } else if (rewRes.status === 'fulfilled' && Array.isArray(rewRes.value)) {
+            setRewards(rewRes.value);
+          }
+
+          if (lbRes.status === 'fulfilled' && Array.isArray(lbRes.value?.entries)) {
+            setLeaderboard(lbRes.value.entries);
+          } else if (lbRes.status === 'fulfilled' && Array.isArray(lbRes.value)) {
+            setLeaderboard(lbRes.value);
+          }
         }
-      } catch { /* use mock */ } finally {
+      } finally {
         if (!cancelled) setLoading(false);
       }
     }
@@ -88,12 +114,11 @@ export function usePoints() {
     setRedeeming(true);
     try {
       const result = await api.points.redeem({ reward_id: rewardId });
-      // Update balance from response or optimistically deduct
       const reward = rewards.find(r => r.id === rewardId);
       if (result?.points != null) {
         setBalance(b => ({ ...b, points: result.points }));
       } else if (reward) {
-        setBalance(b => ({ ...b, points: Math.max(0, b.points - reward.cost) }));
+        setBalance(b => b ? { ...b, points: Math.max(0, b.points - reward.cost) } : b);
       }
       setHistory(h => [
         { id: Date.now(), type: 'redeem', amount: -(reward?.cost ?? 0), description: `Redeemed: ${reward?.name ?? 'Reward'}`, created_at: new Date().toISOString() },
@@ -107,5 +132,5 @@ export function usePoints() {
     }
   }, [rewards]);
 
-  return { balance, history, rewards, leaderboard, loading, redeeming, redeem };
+  return { balance, history, rewards, leaderboard, loading, error, redeeming, redeem };
 }

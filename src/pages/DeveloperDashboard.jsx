@@ -13,6 +13,9 @@ import {
 } from 'recharts';
 import './DeveloperDashboard.css';
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+// Mock data — only used when VITE_USE_MOCKS === 'true'
 const MOCK_STATS = {
   totalGames: 4,
   totalEarnings: 24580.50,
@@ -23,30 +26,11 @@ const MOCK_STATS = {
 const MOCK_GAMES = [
   { id: 1, title: 'Cosmic Raiders', status: 'Active', players: 8420, earnings: 12450.00, category: 'Action' },
   { id: 2, title: 'Galaxy Conquest', status: 'Active', players: 2941, earnings: 2970.50, category: 'Strategy' },
-  { id: 3, title: 'Neon Drift', status: 'Draft', players: 0, earnings: 0, category: 'Racing' },
-  { id: 4, title: 'Dungeon Realms', status: 'Pending', players: 1486, earnings: 9160.00, category: 'RPG' },
 ];
-
-const generateRevenueData = () => {
-  const data = [];
-  const today = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    data.push({
-      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      revenue: Math.floor(Math.random() * 500) + 100,
-    });
-  }
-  return data;
-};
 
 const MOCK_ACTIVITIES = [
   { id: 1, type: 'player', message: '128 new players joined Cosmic Raiders', time: '2 hours ago' },
-  { id: 2, type: 'review', message: 'New 5-star review on Galaxy Conquest', time: '4 hours ago' },
-  { id: 3, type: 'earnings', message: 'Earned 450.00 USDC from Dungeon Realms', time: '6 hours ago' },
-  { id: 4, type: 'player', message: '95 new players joined Dungeon Realms', time: '8 hours ago' },
-  { id: 5, type: 'review', message: 'New 4-star review on Cosmic Raiders', time: '12 hours ago' },
+  { id: 2, type: 'earnings', message: 'Earned 450.00 USDC from Dungeon Realms', time: '6 hours ago' },
 ];
 
 /* Design-token colours for recharts (must match CSS vars) */
@@ -87,29 +71,68 @@ const getActivityIcon = (type) => {
 };
 
 export default function DeveloperDashboard() {
-  const [stats, setStats] = useState(MOCK_STATS);
-  const [games, setGames] = useState(MOCK_GAMES);
-  const [revenueData] = useState(generateRevenueData);
-  const [activities] = useState(MOCK_ACTIVITIES);
+  const [stats, setStats]         = useState(USE_MOCKS ? MOCK_STATS : null);
+  const [games, setGames]         = useState(USE_MOCKS ? MOCK_GAMES : []);
+  const [revenueData, setRevenueData] = useState([]);
+  const [activities]              = useState(USE_MOCKS ? MOCK_ACTIVITIES : []);
+  const [loading, setLoading]     = useState(!USE_MOCKS);
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
+    if (USE_MOCKS) return;
+
+    let cancelled = false;
+
     async function loadData() {
+      setLoading(true);
+      setLoadError(null);
       try {
-        const [gamesData, walletData] = await Promise.allSettled([
-          api.games.list(),
-          api.wallet.balance(),
+        const [dashData, gamesData] = await Promise.allSettled([
+          api.developer.dashboard(),
+          api.developer.games(),
         ]);
+
+        if (cancelled) return;
+
+        if (dashData.status === 'fulfilled') {
+          const d = dashData.value?.data ?? dashData.value;
+          setStats({
+            totalGames: d?.total_games ?? 0,
+            totalEarnings: Number(d?.total_earnings ?? 0),
+            totalPlayers: Number(d?.total_players ?? 0),
+            thisMonthRevenue: 0,
+          });
+          if (Array.isArray(d?.revenue_chart)) {
+            setRevenueData(d.revenue_chart.map(p => ({
+              date: p.date,
+              revenue: Number(p.revenue ?? 0),
+            })));
+          }
+        } else {
+          throw dashData.reason;
+        }
+
         if (gamesData.status === 'fulfilled') {
-          setGames(gamesData.value.games || MOCK_GAMES);
+          const d = gamesData.value?.data ?? gamesData.value;
+          const list = Array.isArray(d) ? d : (d?.games ?? []);
+          setGames(list.map(g => ({
+            id: g.id,
+            title: g.title,
+            status: g.status ?? 'active',
+            players: Number(g.total_players ?? g.players ?? 0),
+            earnings: Number(g.total_revenue ?? g.earnings ?? 0),
+            category: g.category ?? '',
+          })));
         }
-        if (walletData.status === 'fulfilled') {
-          setStats(prev => ({ ...prev, totalEarnings: walletData.value.balance || prev.totalEarnings }));
-        }
-      } catch {
-        /* use mock data */
+      } catch (err) {
+        if (!cancelled) setLoadError(err.message || 'Failed to load dashboard');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
+
     loadData();
+    return () => { cancelled = true; };
   }, []);
 
   const handleDeleteGame = (gameId) => {
@@ -137,6 +160,12 @@ export default function DeveloperDashboard() {
           </div>
         </header>
 
+        {loadError && (
+          <div role="alert" style={{ padding: '0.75rem 1rem', marginBottom: '1.5rem', background: 'rgba(255,84,104,0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius)', color: 'var(--color-error)', fontSize: '0.875rem' }}>
+            {loadError}
+          </div>
+        )}
+
         <section className="stats-section">
           <div className="stats-grid">
             <div className="stat-card">
@@ -145,7 +174,7 @@ export default function DeveloperDashboard() {
               </div>
               <div className="stat-content">
                 <span className="stat-label">Total Games</span>
-                <span className="stat-value">{stats.totalGames}</span>
+                <span className="stat-value">{loading ? '—' : (stats?.totalGames ?? 0)}</span>
               </div>
             </div>
             <div className="stat-card">
@@ -154,7 +183,7 @@ export default function DeveloperDashboard() {
               </div>
               <div className="stat-content">
                 <span className="stat-label">Total Players</span>
-                <span className="stat-value">{stats.totalPlayers.toLocaleString()}</span>
+                <span className="stat-value">{loading ? '—' : (stats?.totalPlayers ?? 0).toLocaleString()}</span>
               </div>
             </div>
             <div className="stat-card">
@@ -163,7 +192,7 @@ export default function DeveloperDashboard() {
               </div>
               <div className="stat-content">
                 <span className="stat-label">Total Earnings (USDC)</span>
-                <span className="stat-value amber-value">${stats.totalEarnings.toLocaleString()}</span>
+                <span className="stat-value amber-value">{loading ? '—' : `$${(stats?.totalEarnings ?? 0).toLocaleString()}`}</span>
               </div>
             </div>
             <div className="stat-card highlight">
@@ -172,7 +201,7 @@ export default function DeveloperDashboard() {
               </div>
               <div className="stat-content">
                 <span className="stat-label">This Month Revenue</span>
-                <span className="stat-value amber-value">${stats.thisMonthRevenue.toLocaleString()}</span>
+                <span className="stat-value amber-value">{loading ? '—' : `$${(stats?.thisMonthRevenue ?? 0).toLocaleString()}`}</span>
               </div>
             </div>
           </div>
@@ -233,6 +262,14 @@ export default function DeveloperDashboard() {
                 <h2>My Rust Games</h2>
                 <Link to="/game-studio" className="view-all-link">View All</Link>
               </div>
+              {loading ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading games…</div>
+              ) : games.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <p>No games yet.</p>
+                  <Link to="/game-studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>Create Your First Game</Link>
+                </div>
+              ) : (
               <table className="games-table">
                 <thead>
                   <tr>
@@ -281,6 +318,7 @@ export default function DeveloperDashboard() {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
 

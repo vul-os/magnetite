@@ -8,13 +8,16 @@ import { api } from '../api/client';
  * is the "intent" layer; useCommsSocket is the "transport" layer.
  */
 
+// ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 const MOCK_ROOMS = [
   { id: 'vr1', name: 'General Voice', community_id: '1', participant_count: 3, max_participants: 20 },
   { id: 'vr2', name: 'Game Room Alpha', community_id: '1', participant_count: 0, max_participants: 8 },
 ];
 
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export function useVoice(communityId) {
-  const [rooms, setRooms] = useState([]);
+  const [rooms, setRooms] = useState(USE_MOCKS ? MOCK_ROOMS : []);
   const [currentRoom, setCurrentRoom] = useState(null);
   const [joinToken, setJoinToken] = useState(null);
   const [muted, setMuted] = useState(false);
@@ -31,16 +34,21 @@ export function useVoice(communityId) {
   // ── Room list ─────────────────────────────────────────────────────────────
   const fetchRooms = useCallback(async () => {
     if (!communityId) return;
+    if (USE_MOCKS) return;
+
     let cancelled = false;
     try {
       setLoading(true);
       setError(null);
       const data = await api.voice.rooms(communityId);
       if (!cancelled) {
-        setRooms(Array.isArray(data) ? data : (data?.rooms ?? MOCK_ROOMS));
+        setRooms(Array.isArray(data) ? data : (data?.rooms ?? []));
       }
-    } catch {
-      if (!cancelled) setRooms(MOCK_ROOMS);
+    } catch (err) {
+      if (!cancelled) {
+        setError(err.message ?? 'Failed to load voice rooms');
+        setRooms([]);
+      }
     } finally {
       if (!cancelled) setLoading(false);
     }
@@ -62,11 +70,10 @@ export function useVoice(communityId) {
       setError(null);
 
       let tokenData;
-      try {
-        tokenData = await api.voice.joinToken(roomId);
-      } catch {
-        // Mock token when backend not available
+      if (USE_MOCKS) {
         tokenData = { token: `mock-voice-token-${roomId}-${Date.now()}`, room_id: roomId };
+      } else {
+        tokenData = await api.voice.joinToken(roomId);
       }
 
       const room = rooms.find((r) => r.id === roomId) ?? { id: roomId, name: 'Voice Room' };

@@ -1,15 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { api } from '../api/client';
+import { api, getOAuthUrl } from '../api/client';
 import './GameStudio.css';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+function authFetch(endpoint, options = {}) {
+  const token = localStorage.getItem('token');
+  return fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+}
 
 const CATEGORIES = ['Action', 'Puzzle', 'Racing', 'RPG', 'Strategy', 'Arcade', 'Sports', 'Casual'];
 
 export default function GameStudio() {
-  const [githubRepo, setGithubRepo] = useState('');
+  const [githubRepo, setGithubRepo]     = useState('');
   const [githubConnected, setGithubConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [connecting, setConnecting]     = useState(false);
+  const [connectError, setConnectError] = useState(null);
+  const [installations, setInstallations] = useState([]);
+  const [formData, setFormData]         = useState({
     title: '',
     description: '',
     category: 'Action',
@@ -18,43 +34,117 @@ export default function GameStudio() {
     min_players: 1,
     max_players: 4,
   });
-  const [deploying, setDeploying] = useState(false);
+  const [deploying, setDeploying]       = useState(false);
   const [deploySuccess, setDeploySuccess] = useState(false);
+  const [deployError, setDeployError]   = useState(null);
+
+  /* Check if GitHub App is already installed (any installations available) */
+  useEffect(() => {
+    async function checkInstallations() {
+      try {
+        const res = await authFetch('/api/github/installations');
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.installations ?? []);
+          setInstallations(list);
+          if (list.length > 0) {
+            setGithubConnected(true);
+          }
+        }
+      } catch {
+        /* Not connected — user can trigger the OAuth flow */
+      }
+    }
+    checkInstallations();
+  }, []);
+
+  /* Handle OAuth callback: after GitHub App install, GitHub redirects back
+   * with ?installation_id=... or ?code=... The user is already logged in so
+   * we just reload installations. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('installation_id') || params.get('setup_action') === 'install') {
+      /* Clean the URL and mark as connected */
+      window.history.replaceState({}, '', window.location.pathname);
+      authFetch('/api/github/installations')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data) {
+            const list = Array.isArray(data) ? data : (data.installations ?? []);
+            setInstallations(list);
+            setGithubConnected(list.length > 0);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   const handleConnectGithub = async () => {
-    if (!githubRepo.trim()) return;
-    setConnecting(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setGithubConnected(true);
-    } catch {
-      console.error('Failed to connect GitHub');
-    } finally {
-      setConnecting(false);
+    if (!githubRepo.trim() && !githubConnected) {
+      /* Start the GitHub App OAuth/installation flow */
+      setConnecting(true);
+      setConnectError(null);
+      try {
+        /* Redirect to GitHub App installation page.
+         * The OAuth URL for github provider is /api/oauth/github which starts the flow. */
+        const oauthUrl = getOAuthUrl('github');
+        window.location.href = oauthUrl;
+      } catch (err) {
+        setConnectError(err.message || 'Failed to start GitHub OAuth flow');
+        setConnecting(false);
+      }
+      return;
+    }
+
+    if (githubRepo.trim()) {
+      /* Register a specific repository */
+      setConnecting(true);
+      setConnectError(null);
+      try {
+        const [owner, repo] = githubRepo.trim().split('/');
+        if (!owner || !repo) throw new Error('Repository must be in owner/repository format');
+        const res = await authFetch('/api/github/repos/register', {
+          method: 'POST',
+          body: JSON.stringify({ owner, repo }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || `Registration failed (HTTP ${res.status})`);
+        }
+        setGithubConnected(true);
+      } catch (err) {
+        setConnectError(err.message);
+      } finally {
+        setConnecting(false);
+      }
     }
   };
 
   const handleDisconnectGithub = () => {
     setGithubConnected(false);
     setGithubRepo('');
+    setInstallations([]);
   };
 
   const handleDeploy = async (e) => {
     e.preventDefault();
     setDeploying(true);
+    setDeployError(null);
+    setDeploySuccess(false);
     try {
       await api.games.create(formData);
-      await new Promise(resolve => setTimeout(resolve, 2000));
       setDeploySuccess(true);
       setTimeout(() => setDeploySuccess(false), 3000);
-    } catch {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setDeploySuccess(true);
-      setTimeout(() => setDeploySuccess(false), 3000);
+    } catch (err) {
+      setDeployError(err.message || 'Deployment failed');
     } finally {
       setDeploying(false);
     }
   };
+
+  const connectedRepo = installations.length > 0
+    ? installations[0]?.full_name ?? installations[0]?.name ?? githubRepo
+    : githubRepo;
 
   return (
     <Layout>
@@ -71,12 +161,19 @@ export default function GameStudio() {
             <h2>GitHub Integration</h2>
             <p className="card-description">Connect your Rust game repository to enable automatic WASM builds and deployments</p>
 
+            {connectError && (
+              <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+                <span className="auth-error-icon" aria-hidden="true">!</span>
+                {connectError}
+              </div>
+            )}
+
             {!githubConnected ? (
               <div className="github-connect">
                 <div className="input-group">
                   <input
                     type="text"
-                    placeholder="owner/repository"
+                    placeholder="owner/repository (optional — or click Connect to install App)"
                     value={githubRepo}
                     onChange={(e) => setGithubRepo(e.target.value)}
                     className="github-input"
@@ -86,7 +183,7 @@ export default function GameStudio() {
                 <button
                   className="btn btn-primary github-btn"
                   onClick={handleConnectGithub}
-                  disabled={connecting || !githubRepo.trim()}
+                  disabled={connecting}
                 >
                   {connecting ? (
                     <>
@@ -109,9 +206,14 @@ export default function GameStudio() {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                   </svg>
-                  <span>{githubRepo}</span>
+                  <span>{connectedRepo || 'GitHub Connected'}</span>
                   <span className="connected-badge-label">Connected</span>
                 </div>
+                {installations.length > 1 && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {installations.length} repositories available
+                  </span>
+                )}
                 <button className="btn btn-secondary" onClick={handleDisconnectGithub}>Disconnect</button>
               </div>
             )}
@@ -130,6 +232,13 @@ export default function GameStudio() {
             <span className="kicker">// STEP 2</span>
             <h2>Game Configuration</h2>
             <p className="card-description">Configure your Rust game&apos;s metadata and playtime pricing</p>
+
+            {deployError && (
+              <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+                <span className="auth-error-icon" aria-hidden="true">!</span>
+                {deployError}
+              </div>
+            )}
 
             <form className="config-form" onSubmit={handleDeploy}>
               <div className="form-group">
@@ -241,6 +350,12 @@ export default function GameStudio() {
                   'Deploy Game'
                 )}
               </button>
+
+              {!githubConnected && (
+                <p style={{ marginTop: '0.5rem', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Connect GitHub (Step 1) to enable deployment
+                </p>
+              )}
             </form>
           </section>
         </div>

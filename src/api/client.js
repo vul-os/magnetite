@@ -110,6 +110,7 @@ export const api = {
     dashboard: () => request('/api/developer/dashboard'),
     games: () => request('/api/developer/games'),
     earnings: () => request('/api/developer/earnings'),
+    payouts: () => request('/api/developer/payouts'),
     analytics: (gameId) => request(`/api/developer/analytics/${gameId}`),
   },
 

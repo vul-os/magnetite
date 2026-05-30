@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import Button from '../../components/common/Button';
@@ -6,117 +6,222 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Modal from '../../components/common/Modal';
 import DeploymentStatus from './DeploymentStatus';
+import { getOAuthUrl } from '../../api/client';
 import './GameDeploy.css';
 
-const MOCK_REPOS = [
-  { value: 'cosmic-raiders', label: 'cosmic-raiders', description: 'Action space shooter game' },
-  { value: 'galaxy-conquest', label: 'galaxy-conquest', description: '4X strategy game' },
-  { value: 'neon-drift', label: 'neon-drift', description: 'High-speed racing game' },
-  { value: 'dungeon-realms', label: 'dungeon-realms', description: 'Roguelike RPG' },
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+function authFetch(endpoint, options = {}) {
+  const token = localStorage.getItem('token');
+  return fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+}
+
+/* Mock data — only used when VITE_USE_MOCKS=true */
+const MOCK_REPOS = import.meta.env.VITE_USE_MOCKS
+  ? [
+      { value: 'cosmic-raiders',  label: 'cosmic-raiders',  description: 'Action space shooter game' },
+      { value: 'galaxy-conquest', label: 'galaxy-conquest',  description: '4X strategy game'          },
+      { value: 'neon-drift',      label: 'neon-drift',       description: 'High-speed racing game'     },
+    ]
+  : null;
+
+const MOCK_DEPLOYMENTS = import.meta.env.VITE_USE_MOCKS
+  ? [
+      {
+        id:         'deploy-1',
+        name:       'Cosmic Raiders - Production',
+        status:     'success',
+        repo:       'exo/cosmic-raiders',
+        branch:     'main',
+        commit:     'a1b2c3d4',
+        version:    '2.4.1',
+        duration:   '4m 32s',
+        url:        'https://cosmic-raiders.magnetite.games',
+        startedAt:  new Date(Date.now() - 3600000).toISOString(),
+        progress:   100,
+      },
+    ]
+  : null;
+
+const MOCK_TIER_OPTIONS = [
+  { value: 'free',       label: 'Free',       description: 'No subscription required'   },
+  { value: 'basic',      label: 'Basic',      description: 'Basic tier subscribers only' },
+  { value: 'pro',        label: 'Pro',        description: 'Pro tier subscribers only'   },
+  { value: 'enterprise', label: 'Enterprise', description: 'Enterprise tier only'        },
 ];
 
-const MOCK_BRANCHES = [
-  { value: 'main', label: 'main' },
+const STATIC_BRANCHES = [
+  { value: 'main',    label: 'main'    },
   { value: 'develop', label: 'develop' },
   { value: 'staging', label: 'staging' },
 ];
 
-const MOCK_TIER_OPTIONS = [
-  { value: 'free', label: 'Free', description: 'No subscription required' },
-  { value: 'basic', label: 'Basic', description: 'Basic tier subscribers only' },
-  { value: 'pro', label: 'Pro', description: 'Pro tier subscribers only' },
-  { value: 'enterprise', label: 'Enterprise', description: 'Enterprise tier only' },
-];
+function normaliseRepo(r) {
+  return {
+    value:       r.id ?? r.full_name ?? r.name,
+    label:       r.name ?? r.full_name ?? String(r.id),
+    description: r.description ?? '',
+  };
+}
 
-const MOCK_DEPLOYMENTS = [
-  {
-    id: 'deploy-1',
-    name: 'Cosmic Raiders - Production',
-    status: 'success',
-    repo: 'exo/cosmic-raiders',
-    branch: 'main',
-    commit: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6',
-    version: '2.4.1',
-    duration: '4m 32s',
-    url: 'https://cosmic-raiders.magnetite.games',
-    startedAt: new Date(Date.now() - 3600000).toISOString(),
-    progress: 100,
-  },
-  {
-    id: 'deploy-2',
-    name: 'Cosmic Raiders - Staging',
-    status: 'building',
-    repo: 'exo/cosmic-raiders',
-    branch: 'develop',
-    commit: 'b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7',
-    version: '2.5.0-beta',
-    duration: '2m 15s',
-    startedAt: new Date(Date.now() - 135000).toISOString(),
-    progress: 68,
-  },
-];
-
-const MOCK_BUILD_LOGS = `[2024-01-15 10:32:15] Starting build process...
-[2024-01-15 10:32:16] Cloning repository from https://github.com/exo/cosmic-raiders
-[2024-01-15 10:32:18] Checking out commit a1b2c3d
-[2024-01-15 10:32:19] Installing dependencies...
-[2024-01-15 10:32:24] \x1b[32m✓\x1b[0m Dependencies installed successfully
-[2024-01-15 10:32:25] Running linter...
-[2024-01-15 10:32:28] \x1b[32m✓\x1b[0m Linting passed
-[2024-01-15 10:32:29] Running type checks...
-[2024-01-15 10:32:35] \x1b[32m✓\x1b[0m Type checks passed
-[2024-01-15 10:32:36] Building game assets...
-[2024-01-15 10:33:02] \x1b[32m✓\x1b[0m Game assets built successfully
-[2024-01-15 10:33:03] Running tests...
-[2024-01-15 10:33:12] \x1b[32m✓\x1b[0m All 47 tests passed
-[2024-01-15 10:33:13] Building Docker image...
-[2024-01-15 10:34:02] \x1b[32m✓\x1b[0m Docker image built successfully
-[2024-01-15 10:34:03] Pushing image to registry...
-[2024-01-15 10:34:28] \x1b[32m✓\x1b[0m Image pushed to registry
-[2024-01-15 10:34:29] Deploying to production...
-[2024-01-15 10:35:41] \x1b[32m✓\x1b[0m Deployment successful!
-[2024-01-15 10:35:42] Game is live at: https://cosmic-raiders.magnetite.games`;
+function normaliseDeploy(d) {
+  return {
+    id:        d.id,
+    name:      d.name ?? d.game_title ?? 'Deployment',
+    status:    d.status ?? 'pending',
+    repo:      d.repo ?? d.github_repo ?? '',
+    branch:    d.branch ?? d.build_branch ?? 'main',
+    commit:    d.commit ?? d.commit_sha ?? '',
+    version:   d.version ?? '',
+    duration:  d.duration ?? '—',
+    url:       d.url ?? d.artifact_url ?? null,
+    startedAt: d.started_at ?? d.created_at ?? new Date().toISOString(),
+    progress:  d.progress ?? (d.status === 'success' ? 100 : d.status === 'building' ? 50 : 0),
+    logs:      d.logs ?? d.build_log ?? null,
+  };
+}
 
 export default function GameDeploy() {
-  const [step, setStep] = useState(1);
+  const [step, setStep]               = useState(1);
   const [githubConnected, setGithubConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [selectedRepo, setSelectedRepo] = useState('');
+  const [connecting, setConnecting]   = useState(false);
+  const [connectError, setConnectError] = useState(null);
+  const [repos, setRepos]             = useState(MOCK_REPOS ?? []);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [selectedRepo, setSelectedRepo]   = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [gameSettings, setGameSettings] = useState({
-    title: '',
-    description: '',
-    tier: 'free',
-  });
-  const [deploying, setDeploying] = useState(false);
-  const [deployments, setDeployments] = useState(MOCK_DEPLOYMENTS);
+  const [gameSettings, setGameSettings] = useState({ title: '', description: '', tier: 'free' });
+  const [deploying, setDeploying]       = useState(false);
+  const [deployError, setDeployError]   = useState(null);
+  const [deployments, setDeployments]   = useState(MOCK_DEPLOYMENTS ?? []);
+  const [deploymentsLoading, setDeploymentsLoading] = useState(!MOCK_DEPLOYMENTS);
   const [showWebhookModal, setShowWebhookModal] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState('');
+  const [webhookLoading, setWebhookLoading] = useState(false);
+
+  /* Check existing GitHub installations on mount */
+  useEffect(() => {
+    async function checkGitHub() {
+      try {
+        const res = await authFetch('/api/github/installations');
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.installations ?? []);
+          if (list.length > 0) {
+            setGithubConnected(true);
+            setStep(2);
+          }
+        }
+      } catch {
+        /* not connected */
+      }
+    }
+    checkGitHub();
+  }, []);
+
+  /* Handle OAuth callback return */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('installation_id') || params.get('setup_action') === 'install') {
+      window.history.replaceState({}, '', window.location.pathname);
+      setGithubConnected(true);
+      setStep(2);
+    }
+  }, []);
+
+  /* Load repos from backend when connected */
+  const loadRepos = useCallback(async () => {
+    if (import.meta.env.VITE_USE_MOCKS) return;
+    setReposLoading(true);
+    try {
+      const res = await authFetch('/api/github/repos');
+      if (res.ok) {
+        const data = await res.json();
+        const raw = Array.isArray(data) ? data : (data.repos ?? data.repositories ?? []);
+        setRepos(raw.map(normaliseRepo));
+      }
+    } catch {
+      /* keep empty list */
+    } finally {
+      setReposLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (deployments.some(d => d.status === 'building')) {
-      const interval = setInterval(() => {
-        setDeployments(prev => prev.map(d => {
-          if (d.status === 'building') {
-            const newProgress = Math.min(d.progress + Math.random() * 5, 95);
-            return { ...d, progress: newProgress };
-          }
-          return d;
-        }));
-      }, 2000);
-      return () => clearInterval(interval);
+    if (githubConnected) loadRepos();
+  }, [githubConnected, loadRepos]);
+
+  /* Load recent deployments */
+  useEffect(() => {
+    if (import.meta.env.VITE_USE_MOCKS) return;
+    async function loadDeployments() {
+      setDeploymentsLoading(true);
+      try {
+        const res = await authFetch('/api/developer/games');
+        if (res.ok) {
+          const data = await res.json();
+          const raw = data.games ?? data ?? [];
+          /* Map games with build statuses to deployment entries */
+          const builds = Array.isArray(raw)
+            ? raw.flatMap(g =>
+                (g.builds ?? []).map(b => normaliseDeploy({ ...b, name: g.title, repo: g.github_repo }))
+              )
+            : [];
+          if (builds.length > 0) setDeployments(builds);
+        }
+      } catch {
+        /* keep empty */
+      } finally {
+        setDeploymentsLoading(false);
+      }
     }
+    loadDeployments();
+  }, []);
+
+  /* Poll building deployments for status */
+  useEffect(() => {
+    const building = deployments.filter(d => d.status === 'building' || d.status === 'pending');
+    if (building.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const d of building) {
+        try {
+          /* Check build status via the build-status endpoint if we have owner/repo */
+          const parts = d.repo.split('/');
+          if (parts.length === 2) {
+            const res = await authFetch(`/api/github/repos/${parts[0]}/${parts[1]}/build-status`);
+            if (res.ok) {
+              const status = await res.json();
+              setDeployments(prev => prev.map(dep =>
+                dep.id === d.id
+                  ? { ...dep, status: status.status ?? dep.status, progress: status.progress ?? dep.progress }
+                  : dep
+              ));
+            }
+          }
+        } catch {
+          /* ignore poll errors */
+        }
+      }
+    }, 5000);
+    return () => clearInterval(interval);
   }, [deployments]);
 
   const handleConnectGithub = async () => {
     setConnecting(true);
+    setConnectError(null);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setGithubConnected(true);
-      setStep(2);
-    } catch {
-      console.error('Failed to connect GitHub');
-    } finally {
+      /* Start real GitHub OAuth/App installation flow */
+      const oauthUrl = getOAuthUrl('github');
+      window.location.href = oauthUrl;
+    } catch (err) {
+      setConnectError(err.message || 'Failed to start GitHub OAuth');
       setConnecting(false);
     }
   };
@@ -125,12 +230,13 @@ export default function GameDeploy() {
     setGithubConnected(false);
     setSelectedRepo('');
     setSelectedBranch('');
+    setRepos([]);
     setStep(1);
   };
 
   const handleSelectRepo = (repoValue) => {
     setSelectedRepo(repoValue);
-    const repo = MOCK_REPOS.find(r => r.value === repoValue);
+    const repo = repos.find(r => r.value === repoValue);
     if (repo) {
       setGameSettings(prev => ({ ...prev, title: repo.label }));
     }
@@ -138,48 +244,77 @@ export default function GameDeploy() {
 
   const handleTriggerDeploy = async () => {
     setDeploying(true);
-    const newDeployment = {
-      id: `deploy-${Date.now()}`,
-      name: `${gameSettings.title} - Production`,
-      status: 'pending',
-      repo: `exo/${selectedRepo}`,
-      branch: selectedBranch,
-      commit: '',
-      version: '1.0.0',
-      duration: '—',
-      startedAt: new Date().toISOString(),
-      progress: 0,
-    };
+    setDeployError(null);
+    try {
+      /* Create the game record first */
+      const res = await authFetch('/api/games', {
+        method: 'POST',
+        body: JSON.stringify({
+          title:        gameSettings.title,
+          description:  gameSettings.description,
+          github_repo:  selectedRepo,
+          branch:       selectedBranch,
+          fee_per_session: 0,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Failed to register game (HTTP ${res.status})`);
+      }
+      const game = await res.json();
 
-    setDeployments(prev => [newDeployment, ...prev]);
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setDeployments(prev => prev.map(d =>
-      d.id === newDeployment.id ? { ...d, status: 'building', progress: 5 } : d
-    ));
-
-    setTimeout(() => {
-      setDeployments(prev => prev.map(d =>
-        d.id === newDeployment.id ? { ...d, status: 'success', progress: 100, url: `https://${selectedRepo}.magnetite.games`, logs: MOCK_BUILD_LOGS } : d
-      ));
-    }, 8000);
-
-    setDeploying(false);
+      /* The build will be triggered by webhook when the game is registered.
+       * Add an optimistic entry showing queued status — actual status comes from the backend. */
+      const newDeployment = normaliseDeploy({
+        id:         game.id ?? `local-${Date.now()}`,
+        name:       gameSettings.title,
+        status:     'building',
+        repo:       selectedRepo,
+        branch:     selectedBranch,
+        commit:     '',
+        started_at: new Date().toISOString(),
+        progress:   5,
+      });
+      setDeployments(prev => [newDeployment, ...prev]);
+    } catch (err) {
+      setDeployError(err.message);
+    } finally {
+      setDeploying(false);
+    }
   };
 
-  const handleRollback = (deployId) => {
-    console.log('Rolling back deployment:', deployId);
+  const handleRollback = async (deployId) => {
+    /* TODO: rollback endpoint not yet implemented in the backend.
+     * The distribution API has version/artifact management but no rollback trigger.
+     * Showing a clear notice rather than a no-op console.log. */
+    alert('Rollback is not yet implemented. Manually redeploy an earlier version to roll back.');
+    void deployId;
   };
 
   const handleCancelBuild = (deployId) => {
     setDeployments(prev => prev.filter(d => d.id !== deployId));
   };
 
-  const generateWebhookSecret = () => {
-    const secret = Array.from({ length: 32 }, () =>
-      Math.random().toString(36).charAt(2)
-    ).join('');
-    setWebhookSecret(secret);
+  const generateWebhookSecret = async () => {
+    setWebhookLoading(true);
+    try {
+      /* Request a webhook secret from the backend rather than generating client-side */
+      const res = await authFetch('/api/github/webhook-secret', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setWebhookSecret(data.secret ?? data.webhook_secret ?? '');
+      } else {
+        /* Backend endpoint may not exist yet — fall through to disabled state */
+        throw new Error('Webhook secret endpoint not available');
+      }
+    } catch {
+      /* TODO: implement POST /api/github/webhook-secret in backend to return a
+       * securely-generated secret stored server-side. For now show a notice. */
+      setWebhookSecret('');
+      alert('Webhook secret generation requires a backend endpoint (not yet implemented). Set GITHUB_WEBHOOK_SECRET in your environment instead.');
+    } finally {
+      setWebhookLoading(false);
+    }
   };
 
   return (
@@ -221,7 +356,7 @@ export default function GameDeploy() {
               <div className="step-connector" />
               <div className={`step ${step >= 3 ? 'active' : ''}`}>
                 <span className="step-number">3</span>
-                <span className="step-label">Configure & Deploy</span>
+                <span className="step-label">Configure &amp; Deploy</span>
               </div>
             </div>
 
@@ -231,6 +366,13 @@ export default function GameDeploy() {
                 <p className="card-description">
                   Link your GitHub account to access your repositories and enable automatic deployments
                 </p>
+
+                {connectError && (
+                  <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+                    <span className="auth-error-icon" aria-hidden="true">!</span>
+                    {connectError}
+                  </div>
+                )}
 
                 {!githubConnected ? (
                   <div className="github-connect-section">
@@ -305,22 +447,29 @@ export default function GameDeploy() {
                 <div className="form-section">
                   <div className="form-group">
                     <label>Repository</label>
-                    <Select
-                      options={MOCK_REPOS.map(r => ({
-                        value: r.value,
-                        label: r.label,
-                      }))}
-                      value={selectedRepo}
-                      onChange={handleSelectRepo}
-                      placeholder="Select a repository..."
-                      isSearchable
-                    />
+                    {reposLoading ? (
+                      <div style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+                        <span className="spinner spinner-sm" aria-hidden="true" /> Loading repositories&hellip;
+                      </div>
+                    ) : repos.length === 0 ? (
+                      <div style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+                        No repositories found. Install the GitHub App on your repositories first.
+                      </div>
+                    ) : (
+                      <Select
+                        options={repos.map(r => ({ value: r.value, label: r.label }))}
+                        value={selectedRepo}
+                        onChange={handleSelectRepo}
+                        placeholder="Select a repository..."
+                        isSearchable
+                      />
+                    )}
                   </div>
 
                   <div className="form-group">
                     <label>Branch</label>
                     <Select
-                      options={MOCK_BRANCHES}
+                      options={STATIC_BRANCHES}
                       value={selectedBranch}
                       onChange={setSelectedBranch}
                       placeholder="Select a branch..."
@@ -345,10 +494,35 @@ export default function GameDeploy() {
 
             {step === 3 && (
               <div className="deploy-card config-deploy-card">
-                <h2>Configure & Deploy</h2>
+                <h2>Configure &amp; Deploy</h2>
                 <p className="card-description">
                   Set up your game settings and trigger the deployment pipeline
                 </p>
+
+                {deployError && (
+                  <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+                    <span className="auth-error-icon" aria-hidden="true">!</span>
+                    {deployError}
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    background: 'var(--color-amber-soft)',
+                    border: '1px solid var(--color-amber)',
+                    borderRadius: 'var(--radius)',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem',
+                    color: 'var(--color-amber)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-xs)',
+                  }}
+                  role="note"
+                >
+                  WASM build pipeline: deploying registers the game and queues a build.
+                  The actual wasm-pack build runs on the CI worker (backend stub — see GAPS.md).
+                  Build status will update via webhook when the CI worker reports back.
+                </div>
 
                 <div className="form-section">
                   <div className="form-group">
@@ -424,19 +598,25 @@ export default function GameDeploy() {
               </div>
             )}
 
-            {deployments.length > 0 && (
+            {(deploymentsLoading || deployments.length > 0) && (
               <div className="deployments-section">
                 <h3>Recent Deployments</h3>
-                <div className="deployments-list">
-                  {deployments.map(deployment => (
-                    <DeploymentStatus
-                      key={deployment.id}
-                      deployment={deployment}
-                      onRollback={handleRollback}
-                      onCancel={handleCancelBuild}
-                    />
-                  ))}
-                </div>
+                {deploymentsLoading ? (
+                  <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }} aria-busy="true">
+                    <span className="spinner spinner-sm" aria-hidden="true" /> Loading deployments&hellip;
+                  </div>
+                ) : (
+                  <div className="deployments-list">
+                    {deployments.map(deployment => (
+                      <DeploymentStatus
+                        key={deployment.id}
+                        deployment={deployment}
+                        onRollback={handleRollback}
+                        onCancel={handleCancelBuild}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -452,7 +632,7 @@ export default function GameDeploy() {
                   <strong>Webhooks</strong> trigger builds on push events
                 </li>
                 <li>
-                  <strong>Rollbacks</strong> restore the previous version
+                  <strong>Build status</strong> updates via GitHub webhook callbacks
                 </li>
                 <li>
                   <strong>Build logs</strong> are retained for 7 days
@@ -487,10 +667,10 @@ export default function GameDeploy() {
             <div className="webhook-section">
               <h4>Webhook URL</h4>
               <div className="webhook-url-box">
-                <code>https://api.magnetite.games/webhooks/github</code>
+                <code>{API_BASE}/webhooks/github</code>
                 <button
                   className="copy-btn"
-                  onClick={() => navigator.clipboard.writeText('https://api.magnetite.games/webhooks/github')}
+                  onClick={() => navigator.clipboard.writeText(`${API_BASE}/webhooks/github`)}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -503,11 +683,21 @@ export default function GameDeploy() {
             <div className="webhook-section">
               <h4>Webhook Secret</h4>
               <div className="webhook-secret-box">
-                <code>{webhookSecret || 'Generate a secret to secure your webhook'}</code>
-                <Button variant="secondary" size="sm" onClick={generateWebhookSecret}>
+                <code>{webhookSecret || 'Click Generate to create a secure secret'}</code>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={generateWebhookSecret}
+                  isLoading={webhookLoading}
+                >
                   Generate
                 </Button>
               </div>
+              {webhookSecret && (
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', fontFamily: 'var(--font-mono)', marginTop: '0.5rem' }}>
+                  Copy this secret — set it as GITHUB_WEBHOOK_SECRET in your backend environment.
+                </p>
+              )}
             </div>
 
             <div className="webhook-section">
@@ -528,11 +718,11 @@ export default function GameDeploy() {
               <h4>Setup Instructions</h4>
               <ol className="setup-instructions">
                 <li>Go to your repository on GitHub</li>
-                <li>Navigate to Settings → Webhooks → Add webhook</li>
+                <li>Navigate to Settings &rarr; Webhooks &rarr; Add webhook</li>
                 <li>Paste the webhook URL above</li>
                 <li>Set content type to <code>application/json</code></li>
                 <li>Generate and copy the secret, then paste it here</li>
-                <li>Select "Push" events and save</li>
+                <li>Select &ldquo;Push&rdquo; events and save</li>
               </ol>
             </div>
           </div>

@@ -32,6 +32,7 @@ hex = "0.4"
 urlencoding = "2"
 handlebars = "5"
 lettre = { version = "0.11", features = ["tokio1-native-tls", "tokio1", "smtp-transport", "builder"] }
+async-trait = "0.1"
 sys-info = "0.9"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 aws-config = { version = "1", features = ["behavior-version-latest"] }

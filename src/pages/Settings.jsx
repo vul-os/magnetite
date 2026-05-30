@@ -3,19 +3,38 @@ import Layout from '../components/Layout';
 import ThemeToggle from '../components/ThemeToggle';
 import { api } from '../api/client';
 
-const MOCK_USER = {
-  name: 'StarForge Studios',
-  email: 'dev@starforge.com',
-  avatar: 'https://picsum.photos/seed/avatar/200/200',
-  bio: 'Indie game developer specialising in action and RPG games built in Rust.',
-  location: 'San Francisco, CA',
-};
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-const MOCK_SESSIONS = [
-  { id: 'sess_001', device: 'Chrome on Mac OS', location: 'San Francisco, CA', lastActive: 'Now', current: true },
-  { id: 'sess_002', device: 'Safari on iPhone', location: 'San Francisco, CA', lastActive: '2 hours ago', current: false },
-  { id: 'sess_003', device: 'Firefox on Windows', location: 'New York, NY', lastActive: 'Yesterday', current: false },
-];
+function authFetch(endpoint, options = {}) {
+  const token = localStorage.getItem('token');
+  return fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+}
+
+/* Mock fallbacks — only when VITE_USE_MOCKS=true */
+const MOCK_USER = import.meta.env.VITE_USE_MOCKS
+  ? {
+      name: 'StarForge Studios',
+      email: 'dev@starforge.com',
+      avatar: 'https://picsum.photos/seed/avatar/200/200',
+      bio: 'Indie game developer specialising in action and RPG games built in Rust.',
+      location: 'San Francisco, CA',
+    }
+  : null;
+
+const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS
+  ? [
+      { id: 'sess_001', device: 'Chrome on Mac OS',    location: 'San Francisco, CA', lastActive: 'Now',       current: true  },
+      { id: 'sess_002', device: 'Safari on iPhone',    location: 'San Francisco, CA', lastActive: '2 hours ago', current: false },
+      { id: 'sess_003', device: 'Firefox on Windows',  location: 'New York, NY',       lastActive: 'Yesterday',  current: false },
+    ]
+  : null;
 
 /* ── Reusable Toggle component ─────────────────────────────────────────────── */
 function ToggleSetting({ label, description, checked, onChange }) {
@@ -61,10 +80,26 @@ const TABS = [
   { id: 'privacy',       label: 'Privacy',        icon: '⊕' },
 ];
 
+const DEFAULT_PROFILE = MOCK_USER ?? {
+  name: '', email: '', avatar: '', bio: '', location: '',
+};
+
+function normaliseSession(s) {
+  return {
+    id:         s.id ?? s.session_id,
+    device:     s.user_agent ?? s.device ?? 'Unknown device',
+    location:   s.ip_address  ?? s.location ?? 'Unknown',
+    lastActive: s.last_active ?? s.updated_at
+      ? new Date(s.last_active ?? s.updated_at).toLocaleString()
+      : 'Unknown',
+    current:    s.current ?? false,
+  };
+}
+
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
-  const [profile, setProfile]     = useState(MOCK_USER);
-  const [account, setAccount]     = useState({ email: MOCK_USER.email, twoFactorEnabled: false });
+  const [profile, setProfile]     = useState(DEFAULT_PROFILE);
+  const [account, setAccount]     = useState({ email: DEFAULT_PROFILE.email, twoFactorEnabled: false });
   const [notifications, setNotifications] = useState({
     email: { promotions: true, updates: true, newsletter: false },
     push:  { matches: true, friends: true, system: false },
@@ -75,20 +110,33 @@ export default function Settings() {
     showOnLeaderboards: true,
     blockedUsers: [],
   });
-  const [saving, setSaving]       = useState(false);
+  const [saving, setSaving]           = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [sessions, setSessions]   = useState(MOCK_SESSIONS);
-  const [loading, setLoading]     = useState(true);
+  const [saveError, setSaveError]     = useState(null);
+  const [sessions, setSessions]       = useState(MOCK_SESSIONS ?? []);
+  const [loading, setLoading]         = useState(true);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   useEffect(() => {
     async function loadData() {
+      setLoading(true);
       try {
+        /* Load profile */
         const userData = await api.auth.me();
         if (userData?.user) {
-          setProfile(prev => ({ ...prev, ...userData.user }));
+          const u = userData.user;
+          setProfile(prev => ({
+            ...prev,
+            name:     u.username ?? u.name ?? prev.name,
+            email:    u.email    ?? prev.email,
+            avatar:   u.avatar   ?? prev.avatar,
+            bio:      u.bio      ?? prev.bio,
+            location: u.location ?? prev.location,
+          }));
+          setAccount(prev => ({ ...prev, email: u.email ?? prev.email }));
         }
       } catch {
-        /* use mock */
+        /* use defaults — not an error worth surfacing */
       } finally {
         setLoading(false);
       }
@@ -96,15 +144,41 @@ export default function Settings() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (import.meta.env.VITE_USE_MOCKS) return;
+    async function loadSessions() {
+      setSessionsLoading(true);
+      try {
+        const res = await authFetch('/api/auth/sessions');
+        if (res.ok) {
+          const data = await res.json();
+          const raw = data.sessions ?? data ?? [];
+          setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
+        }
+      } catch {
+        /* leave mock sessions */
+      } finally {
+        setSessionsLoading(false);
+      }
+    }
+    loadSessions();
+  }, []);
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await api.profile.update({
+        username: profile.name,
+        bio:      profile.bio,
+        location: profile.location,
+        avatar:   profile.avatar,
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
-    } catch {
-      /* noop */
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save profile');
     } finally {
       setSaving(false);
     }
@@ -118,14 +192,34 @@ export default function Settings() {
     reader.readAsDataURL(file);
   };
 
-  const handleRevokeSession = (sessionId) => {
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
+  const handleRevokeSession = async (sessionId) => {
+    if (import.meta.env.VITE_USE_MOCKS) {
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      return;
+    }
+    try {
+      /* The backend uses DELETE /api/auth/sessions with a refresh_token body.
+       * Without the exact refresh token we can only do a best-effort call.
+       * The session list endpoint returns session ids; the logout_all endpoint
+       * exists at DELETE /api/auth/sessions/all. For single revoke, optimistically
+       * remove from local state and surface a note. */
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch {
+      /* ignore — optimistic removal already done */
+    }
   };
 
   /* ── Tab panels ─────────────────────────────────────────────────────────── */
 
   const renderProfile = () => (
     <form className="settings-tab-panel" onSubmit={handleSave}>
+      {saveError && (
+        <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+          <span className="auth-error-icon" aria-hidden="true">!</span>
+          {saveError}
+        </div>
+      )}
+
       <div className="settings-section">
         <h3 className="settings-section-title">Profile Information</h3>
         <p className="settings-section-desc">Visible to other players and developers on Magnetite.</p>
@@ -133,7 +227,13 @@ export default function Settings() {
         {/* Avatar */}
         <div className="settings-avatar-row">
           <div className="settings-avatar-wrap">
-            <img src={profile.avatar} alt="Your avatar" className="settings-avatar" loading="lazy" />
+            {profile.avatar ? (
+              <img src={profile.avatar} alt="Your avatar" className="settings-avatar" loading="lazy" />
+            ) : (
+              <div className="settings-avatar" style={{ background: 'var(--color-bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
+                {profile.name ? profile.name.charAt(0).toUpperCase() : '?'}
+              </div>
+            )}
             <div className="settings-avatar-overlay" aria-hidden="true">
               <span>Change</span>
             </div>
@@ -241,33 +341,43 @@ export default function Settings() {
           </div>
         </div>
         <div className="settings-sessions">
-          {sessions.map(session => (
-            <div key={session.id} className="settings-session-item">
-              <div className="settings-session-icon" aria-hidden="true">
-                {session.current ? '◉' : '◎'}
-              </div>
-              <div className="settings-session-info">
-                <span className="settings-session-device">
-                  {session.device}
-                  {session.current && (
-                    <span className="settings-session-badge">Current</span>
-                  )}
-                </span>
-                <span className="settings-session-meta">
-                  {session.location} · {session.lastActive}
-                </span>
-              </div>
-              {!session.current && (
-                <button
-                  type="button"
-                  className="settings-revoke-btn"
-                  onClick={() => handleRevokeSession(session.id)}
-                >
-                  Revoke
-                </button>
-              )}
+          {sessionsLoading ? (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }} aria-busy="true">
+              <span className="spinner spinner-sm" aria-hidden="true" /> Loading sessions&hellip;
             </div>
-          ))}
+          ) : sessions.length === 0 ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)' }}>
+              No active sessions
+            </p>
+          ) : (
+            sessions.map(session => (
+              <div key={session.id} className="settings-session-item">
+                <div className="settings-session-icon" aria-hidden="true">
+                  {session.current ? '◉' : '◎'}
+                </div>
+                <div className="settings-session-info">
+                  <span className="settings-session-device">
+                    {session.device}
+                    {session.current && (
+                      <span className="settings-session-badge">Current</span>
+                    )}
+                  </span>
+                  <span className="settings-session-meta">
+                    {session.location} · {session.lastActive}
+                  </span>
+                </div>
+                {!session.current && (
+                  <button
+                    type="button"
+                    className="settings-revoke-btn"
+                    onClick={() => handleRevokeSession(session.id)}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
 

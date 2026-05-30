@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { api } from '../api/client';
+import { useWebSocket } from '../hooks/useWebSocket';
 import './Matchmaking.css';
 
+// ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 const MOCK_GAMES = [
   { id: 'void-raiders',  name: 'Void Raiders',  players: 24 },
   { id: 'iron-siege',    name: 'Iron Siege',     players: 18 },
@@ -9,86 +12,133 @@ const MOCK_GAMES = [
   { id: 'orbital-chess', name: 'Orbital Chess',  players: 12 },
 ];
 
-const MOCK_OPPONENTS = [
-  { id: 2, username: 'ChessMaster99', rating: 1850 },
-  { id: 3, username: 'GoPlayer42',    rating: 2100 },
-  { id: 4, username: 'CardShark',     rating: 1650 },
-];
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+// Derive the WS base URL from the same env var used by the HTTP client.
+// Converts http(s):// → ws(s):// so there is never a hardcoded localhost.
+function getWsBase() {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+  return apiUrl.replace(/^http(s?):\/\//, (_, s) => `ws${s}://`);
+}
 
 export default function Matchmaking() {
   const [searchParams]    = useSearchParams();
-  const games              = MOCK_GAMES;
+  const [games, setGames]               = useState(USE_MOCKS ? MOCK_GAMES : []);
+  const [gamesLoading, setGamesLoading] = useState(!USE_MOCKS);
+  const [gamesError, setGamesError]     = useState(null);
   const [selectedGame, setSelectedGame] = useState(searchParams.get('game') || '');
   const [status, setStatus]             = useState('idle');
   const [queueInfo, setQueueInfo]       = useState({ waitTime: 0, playersInQueue: 0 });
   const [match, setMatch]               = useState(null);
 
-  const wsRef              = useRef(null);
-  const searchIntervalRef  = useRef(null);
+  // ── Fetch game list ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (USE_MOCKS) return;
 
-  const connectWebSocket = useCallback((gameId) => {
-    const ws = new WebSocket(`ws://localhost:3000/ws/game/${gameId}`);
-    wsRef.current = ws;
+    let cancelled = false;
+    setGamesLoading(true);
+    setGamesError(null);
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'join_queue' }));
-    };
+    api.games.list()
+      .then((data) => {
+        if (!cancelled) {
+          const list = Array.isArray(data?.games) ? data.games : (Array.isArray(data) ? data : []);
+          setGames(list);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setGamesError(err.message ?? 'Failed to load games');
+      })
+      .finally(() => {
+        if (!cancelled) setGamesLoading(false);
+      });
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'queue_update') {
-        setQueueInfo({ waitTime: data.waitTime, playersInQueue: data.playersInQueue });
-      } else if (data.type === 'match_found') {
-        setMatch(data.match);
-        setStatus('found');
-      }
-    };
-
-    ws.onclose = () => {
-      setStatus(prev => prev === 'searching' ? 'idle' : prev);
-    };
-
-    return ws;
+    return () => { cancelled = true; };
   }, []);
 
+  // ── Matchmaking status polling (while searching) ───────────────────────────
+  const statusIntervalRef = useRef(null);
+
+  // ── WebSocket for real-time matchmaking events ─────────────────────────────
+  // Only activate the WS hook when we have a selected game and are searching.
+  const wsPath = status === 'searching' && selectedGame
+    ? `${getWsBase()}/ws/matchmaking/${selectedGame}`
+    : null;
+
+  // We use the hook conditionally based on wsPath being set.
+  // Since hooks cannot be called conditionally, we pass an empty-ish URL
+  // when not searching and suppress the connection via the disabled pattern.
+  const {
+    isConnected: wsConnected,
+    lastMessage: wsMessage,
+    sendMessage: wsSend,
+  } = useWebSocket(wsPath ?? '/ws/matchmaking/_noop', {
+    autoReconnect: wsPath !== null,
+  });
+
+  // Send join_queue once connected
+  useEffect(() => {
+    if (wsConnected && status === 'searching') {
+      wsSend({ type: 'join_queue' });
+    }
+  }, [wsConnected, status, wsSend]);
+
+  // Handle WS messages from the matchmaking server
+  useEffect(() => {
+    if (!wsMessage) return;
+    if (wsMessage.type === 'queue_update') {
+      setQueueInfo({
+        waitTime: wsMessage.waitTime ?? wsMessage.wait_seconds ?? queueInfo.waitTime,
+        playersInQueue: wsMessage.playersInQueue ?? wsMessage.players_in_queue ?? queueInfo.playersInQueue,
+      });
+    } else if (wsMessage.type === 'match_found') {
+      setMatch(wsMessage.match);
+      setStatus('found');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsMessage]);
+
+  // Poll matchmaking status via REST as a complement to the WS
   useEffect(() => {
     if (status !== 'searching') return;
-    const ws = connectWebSocket(selectedGame);
-    searchIntervalRef.current = setInterval(() => {
-      setQueueInfo(prev => ({
-        waitTime: prev.waitTime + 1,
-        playersInQueue: Math.floor(Math.random() * 20) + 5,
-      }));
+
+    // Increment wait time locally; real queue count comes from WS/status API
+    statusIntervalRef.current = setInterval(async () => {
+      setQueueInfo(prev => ({ ...prev, waitTime: prev.waitTime + 1 }));
+
+      // Also poll the REST status endpoint to sync queue count
+      try {
+        const data = await api.matchmaking.status();
+        if (data?.players_in_queue != null) {
+          setQueueInfo(prev => ({ ...prev, playersInQueue: data.players_in_queue }));
+        }
+        if (data?.status === 'matched' && data?.match) {
+          setMatch(data.match);
+          setStatus('found');
+        }
+      } catch {
+        // Ignore polling errors — WS is the primary channel
+      }
     }, 1000);
 
-    return () => {
-      ws.close();
-      clearInterval(searchIntervalRef.current);
-    };
-  }, [status, selectedGame, connectWebSocket]);
+    return () => clearInterval(statusIntervalRef.current);
+  }, [status]);
 
   const handleFindMatch = () => {
     if (!selectedGame) return;
     setStatus('searching');
     setMatch(null);
     setQueueInfo({ waitTime: 0, playersInQueue: 0 });
+    // Join via REST as well (backend may require an explicit join call)
+    api.matchmaking.join(selectedGame).catch(() => {/* WS is primary, ignore */});
   };
 
   const handleCancel = () => {
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ type: 'leave_queue' }));
-      wsRef.current.close();
-    }
-    clearInterval(searchIntervalRef.current);
+    clearInterval(statusIntervalRef.current);
+    wsSend({ type: 'leave_queue' });
+    api.matchmaking.leave().catch(() => {});
     setStatus('idle');
     setQueueInfo({ waitTime: 0, playersInQueue: 0 });
-  };
-
-  const handleMockMatch = () => {
-    const opponent = MOCK_OPPONENTS[Math.floor(Math.random() * MOCK_OPPONENTS.length)];
-    const game     = games.find(g => g.id === selectedGame);
-    setMatch({ opponent, game, sessionId: `sess_${Date.now()}`, timeControl: '10 min' });
-    setStatus('found');
   };
 
   return (
@@ -103,36 +153,39 @@ export default function Matchmaking() {
             <label className="game-select-label" htmlFor="mm-game-select">
               // Select Game
             </label>
-            <select
-              id="mm-game-select"
-              value={selectedGame}
-              onChange={(e) => setSelectedGame(e.target.value)}
-              className="game-select"
-            >
-              <option value="">Choose a Rust game…</option>
-              {games.map(g => (
-                <option key={g.id} value={g.id}>
-                  {g.name} — {g.players} online
-                </option>
-              ))}
-            </select>
+
+            {gamesLoading && (
+              <p className="matchmaking-loading" aria-live="polite">Loading games…</p>
+            )}
+
+            {gamesError && !gamesLoading && (
+              <p className="matchmaking-error" role="alert">{gamesError}</p>
+            )}
+
+            {!gamesLoading && (
+              <select
+                id="mm-game-select"
+                value={selectedGame}
+                onChange={(e) => setSelectedGame(e.target.value)}
+                className="game-select"
+                disabled={gamesLoading}
+              >
+                <option value="">Choose a Rust game…</option>
+                {games.map(g => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}{g.players != null ? ` — ${g.players} online` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <button
             className="find-match-btn"
             onClick={handleFindMatch}
-            disabled={!selectedGame}
+            disabled={!selectedGame || gamesLoading}
           >
             Find Match
-          </button>
-
-          <button
-            className="cancel-btn"
-            onClick={handleMockMatch}
-            disabled={!selectedGame}
-            style={{ opacity: 0.5, fontSize: 'var(--text-xs)' }}
-          >
-            Simulate Match Found (Dev)
           </button>
         </div>
       )}
@@ -154,7 +207,9 @@ export default function Matchmaking() {
             </div>
             <div className="queue-stat">
               <span className="queue-stat-label">In Queue</span>
-              <span className="queue-stat-value" aria-live="off">{queueInfo.playersInQueue}</span>
+              <span className="queue-stat-value" aria-live="off">
+                {queueInfo.playersInQueue > 0 ? queueInfo.playersInQueue : '—'}
+              </span>
             </div>
           </div>
 
@@ -176,8 +231,8 @@ export default function Matchmaking() {
             <div>
               <span className="match-section-label">// Your Opponent</span>
               <div className="opponent-card">
-                <span className="opponent-name">{match.opponent.username}</span>
-                <span className="opponent-rating">Rating: {match.opponent.rating}</span>
+                <span className="opponent-name">{match.opponent?.username ?? match.opponent_username}</span>
+                <span className="opponent-rating">Rating: {match.opponent?.rating ?? match.opponent_rating ?? '—'}</span>
               </div>
             </div>
 
@@ -186,16 +241,18 @@ export default function Matchmaking() {
               <div className="session-card">
                 <div className="session-row">
                   <span className="session-key">Game</span>
-                  <span className="session-val">{match.game?.name}</span>
+                  <span className="session-val">{match.game?.name ?? match.game_name ?? selectedGame}</span>
                 </div>
                 <div className="session-row">
                   <span className="session-key">Session ID</span>
-                  <span className="session-val">{match.sessionId}</span>
+                  <span className="session-val">{match.sessionId ?? match.session_id}</span>
                 </div>
-                <div className="session-row">
-                  <span className="session-key">Time Control</span>
-                  <span className="session-val">{match.timeControl}</span>
-                </div>
+                {match.timeControl || match.time_control ? (
+                  <div className="session-row">
+                    <span className="session-key">Time Control</span>
+                    <span className="session-val">{match.timeControl ?? match.time_control}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

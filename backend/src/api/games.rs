@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     middleware::from_fn_with_state,
     routing::{delete, get, post, put},
     Json, Router,
@@ -78,15 +78,17 @@ pub async fn list_games(State(pool): State<PgPool>) -> Result<Json<PaginatedResp
 
 pub async fn create_game(
     State(pool): State<PgPool>,
+    Extension(developer_id): Extension<Uuid>,
     Json(payload): Json<CreateGameRequest>,
 ) -> Result<Json<crate::api::response::ApiResponse<Game>>> {
     let game_id = Uuid::new_v4();
     let game = sqlx::query_as::<_, Game>(
         "INSERT INTO games (id, developer_id, github_repo, title, description, status, active, created_at)
-         VALUES ($1, '00000000-0000-0000-0000-000000000000', $2, $3, $4, 'draft', true, NOW())
+         VALUES ($1, $2, $3, $4, $5, 'draft', true, NOW())
          RETURNING id, developer_id, github_repo, title, description, status, active, created_at",
     )
     .bind(game_id)
+    .bind(developer_id)
     .bind(&payload.github_repo)
     .bind(&payload.title)
     .bind(&payload.description)

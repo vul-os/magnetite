@@ -44,7 +44,10 @@ use crate::jobs::notification_cleanup;
 use crate::middleware::cors_layer;
 use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
+use crate::services::payment::SubscriptionService;
+use crate::services::payout::PayoutService;
 use crate::ws::comms;
+use crate::ws::game as ws_game;
 use crate::ws::voice;
 
 #[tokio::main]
@@ -119,6 +122,8 @@ async fn main() {
         notification_broadcaster,
     ));
 
+    let game_ws_handler = std::sync::Arc::new(ws_game::GameWsHandler::new());
+
     let app = Router::new()
         .nest("/api/v1", api_v1)
         .merge(health_metrics)
@@ -126,6 +131,8 @@ async fn main() {
         // Wave 6: real-time comms and voice signaling WebSocket endpoints
         .merge(comms::router(pool.clone()))
         .merge(voice::router(pool.clone()))
+        // Game WebSocket: mount the game loop router (was unmounted — now wired)
+        .merge(game_ws_handler.router())
         .layer(cors_layer())
         .layer(from_fn_with_state(
             rate_limiter.clone(),
@@ -136,7 +143,38 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     tracing::info!("Server running on {}", listener.local_addr().unwrap());
 
+    // ── Background jobs (same tokio::spawn + interval pattern as notification_cleanup) ──
     tokio::spawn(notification_cleanup::run_cleanup_job(pool.clone()));
+
+    // Payout batch: process pending developer payouts every hour.
+    let payout_pool = pool.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            ticker.tick().await;
+            let svc = PayoutService::new(payout_pool.clone());
+            match svc.process_pending_payouts().await {
+                Ok(n) if n > 0 => tracing::info!("Processed {} pending payouts", n),
+                Ok(_) => {}
+                Err(e) => tracing::error!("Payout batch failed: {}", e),
+            }
+        }
+    });
+
+    // Subscription renewal: process expired subscriptions every hour.
+    let renewal_pool = pool.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            ticker.tick().await;
+            let svc = SubscriptionService::new(renewal_pool.clone());
+            match svc.process_renewals().await {
+                Ok(n) if n > 0 => tracing::info!("Renewed {} subscriptions", n),
+                Ok(_) => {}
+                Err(e) => tracing::error!("Subscription renewal failed: {}", e),
+            }
+        }
+    });
 
     axum::serve(listener, app).await.unwrap();
 }

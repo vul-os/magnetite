@@ -38,14 +38,17 @@ describe('useMarketplace', () => {
   });
 
   it('starts loading then settles with mock store data', async () => {
+    // When the API rejects, the hook settles to empty state with an error set.
     const { result } = renderHook(() => useMarketplace());
 
     expect(result.current.loading).toBe(true);
 
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.stores.length).toBeGreaterThan(0);
-    expect(result.current.entitlements.length).toBeGreaterThan(0);
+    // stores empty (API failed, error set), entitlements empty (API failed)
+    expect(result.current.stores).toEqual([]);
+    expect(result.current.error).toBeTruthy();
+    expect(result.current.entitlements).toEqual([]);
   });
 
   it('uses API stores when backend returns valid data', async () => {
@@ -111,10 +114,16 @@ describe('useMarketplace', () => {
   });
 
   it('hasEntitlement: returns true for owned item IDs', async () => {
+    // Seed entitlements via the API mock so the hook populates them.
+    const fakeEntitlements = [
+      { id: 'e1', item_id: 'i1', item_name: 'Plasma Rifle Skin', game_title: 'Cosmic Raiders', purchased_at: '2026-05-20T10:00:00Z', currency: 'points' },
+    ];
+    api.stores.list.mockRejectedValue(new Error('no backend'));
+    api.stores.entitlements.mockResolvedValue({ entitlements: fakeEntitlements });
+
     const { result } = renderHook(() => useMarketplace());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    // Mock data includes entitlement for 'i1'
     expect(result.current.hasEntitlement('i1')).toBe(true);
   });
 

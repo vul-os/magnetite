@@ -1,4 +1,4 @@
-// Verification service — email/password-reset tokens, platform surface, not yet wired to auth flow.
+// Verification service — email/password-reset tokens, wired to auth flow.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Duration, Utc};

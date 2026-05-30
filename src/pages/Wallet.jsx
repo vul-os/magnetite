@@ -1,18 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Layout from '../components/Layout';
-import { api } from '../api/client';
+import { useWallet } from '../hooks/useWallet';
 import './Wallet.css';
-
-const MOCK_TRANSACTIONS = [
-  { id: 1, type: 'deposit', amount: 500.00, date: '2026-05-18T14:32:00', status: 'completed', description: 'Paystack Deposit' },
-  { id: 2, type: 'subscription', amount: -9.99, date: '2026-05-17T19:45:00', status: 'completed', description: 'Pro Plan - Monthly' },
-  { id: 3, type: 'deposit', amount: 100.00, date: '2026-05-15T10:00:00', status: 'completed', description: 'USDC Transfer' },
-  { id: 4, type: 'withdraw', amount: -75.00, date: '2026-05-14T16:30:00', status: 'completed', description: 'Bank Withdrawal' },
-  { id: 5, type: 'subscription', amount: -9.99, date: '2026-04-17T19:45:00', status: 'completed', description: 'Pro Plan - Monthly' },
-  { id: 6, type: 'deposit', amount: 200.00, date: '2026-03-15T10:00:00', status: 'completed', description: 'USDC Transfer' },
-];
-
-const WALLET_ADDRESS = '0x7a3d8c9e1f4b2a5d8e9f1a2b3c4d5e6f7a8b9c0d';
 
 const TIER_DISPLAY = {
   free: { name: 'Free' },
@@ -21,14 +10,16 @@ const TIER_DISPLAY = {
   unlimited: { name: 'Unlimited' },
 };
 
+const FALLBACK_ADDRESS = null; // no hardcoded address — shown as loading until API responds
+
 export default function Wallet() {
-  const [balance, setBalance] = useState(127.50);
-  const [transactions, setTransactions] = useState(MOCK_TRANSACTIONS);
+  const { balance, transactions, walletAddress, loading, error: walletError, deposit: hookDeposit } = useWallet();
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
   const [depositMethod, setDepositMethod] = useState('paystack');
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [depositError, setDepositError] = useState(null);
+  const [depositLoading, setDepositLoading] = useState(false);
   const [subscription] = useState({
     tier: 'pro',
     renewalDate: '2026-06-17',
@@ -36,27 +27,7 @@ export default function Wallet() {
     hoursTotal: 50,
   });
 
-  useEffect(() => {
-    async function loadWallet() {
-      try {
-        const [balanceData, txData] = await Promise.allSettled([
-          api.wallet.balance(),
-          api.wallet.transactions(),
-        ]);
-        if (balanceData.status === 'fulfilled' && balanceData.value?.balance != null) {
-          setBalance(balanceData.value.balance);
-        }
-        if (txData.status === 'fulfilled' && txData.value?.transactions) {
-          setTransactions(txData.value.transactions);
-        }
-      } catch {
-        /* use mock data */
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadWallet();
-  }, []);
+  const walletAddressDisplay = walletAddress || FALLBACK_ADDRESS;
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
@@ -83,8 +54,9 @@ export default function Wallet() {
   };
 
   const handleCopyAddress = async () => {
+    if (!walletAddressDisplay) return;
     try {
-      await navigator.clipboard.writeText(WALLET_ADDRESS);
+      await navigator.clipboard.writeText(walletAddressDisplay);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -96,11 +68,14 @@ export default function Wallet() {
     e.preventDefault();
     const amount = getAmount();
     if (!amount) return;
+    setDepositError(null);
+    setDepositLoading(true);
     try {
-      await api.wallet.deposit({ amount: parseFloat(amount), method: depositMethod });
-    } catch {
-      /* fallback: log only */
-      console.log(`Deposit $${amount} via ${depositMethod}`);
+      await hookDeposit(parseFloat(amount), depositMethod);
+    } catch (err) {
+      setDepositError(err.message || 'Deposit failed. Please try again.');
+    } finally {
+      setDepositLoading(false);
     }
   };
 
@@ -138,6 +113,12 @@ export default function Wallet() {
           <h1>Wallet</h1>
           <p className="wallet-subtitle">Manage your USDC balance, deposits, and subscription</p>
         </header>
+
+        {walletError && (
+          <div role="alert" style={{ padding: '0.75rem 1rem', marginBottom: '1.5rem', background: 'rgba(255,84,104,0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius)', color: 'var(--color-error)', fontSize: '0.875rem' }}>
+            {walletError}
+          </div>
+        )}
 
         <div className="wallet-grid">
           <div className="wallet-left">
@@ -189,7 +170,7 @@ export default function Wallet() {
                 <span className="balance-currency">$</span>
                 {loading
                   ? <span className="balance-loading">—</span>
-                  : <span className="balance-value">{balance.toFixed(2)}</span>
+                  : <span className="balance-value">{balance != null ? Number(balance).toFixed(2) : '—'}</span>
                 }
               </div>
               <div className="balance-actions">
@@ -279,12 +260,19 @@ export default function Wallet() {
                   </div>
                 </label>
               </div>
+              {depositError && (
+                <p style={{ color: 'var(--color-error)', fontSize: '0.875rem', marginTop: '0.5rem' }} role="alert">
+                  {depositError}
+                </p>
+              )}
               <button
                 className="btn btn-primary btn-deposit-submit"
                 onClick={handleDeposit}
-                disabled={!getAmount()}
+                disabled={!getAmount() || depositLoading}
               >
-                Deposit {getAmount() ? `$${getAmount()}` : ''} via {depositMethod === 'paystack' ? 'Paystack' : 'USDC'}
+                {depositLoading
+                  ? 'Processing…'
+                  : `Deposit ${getAmount() ? `$${getAmount()}` : ''} via ${depositMethod === 'paystack' ? 'Paystack' : 'USDC'}`}
               </button>
             </div>
 
@@ -299,7 +287,9 @@ export default function Wallet() {
                 <div className="address-details">
                   <div className="address-network-label">Ethereum (ERC-20)</div>
                   <div className="address-value-row">
-                    <code className="address-code">{WALLET_ADDRESS}</code>
+                    <code className="address-code">
+                      {walletAddressDisplay ?? (loading ? 'Loading…' : '—')}
+                    </code>
                   </div>
                   <button className="btn btn-copy-addr" onClick={handleCopyAddress}>
                     {copied ? '✓ Copied!' : 'Copy Address'}
