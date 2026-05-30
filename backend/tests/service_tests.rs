@@ -69,9 +69,15 @@ mod payment_provider_tests {
 
         // Restore env vars before asserting (so other tests are unaffected).
         unsafe {
-            if let Some(v) = saved_circle { std::env::set_var("CIRCLE_API_KEY", v); }
-            if let Some(v) = saved_paystack { std::env::set_var("PAYSTACK_SECRET_KEY", v); }
-            if let Some(v) = saved_sandbox { std::env::set_var("PAYMENTS_SANDBOX", v); }
+            if let Some(v) = saved_circle {
+                std::env::set_var("CIRCLE_API_KEY", v);
+            }
+            if let Some(v) = saved_paystack {
+                std::env::set_var("PAYSTACK_SECRET_KEY", v);
+            }
+            if let Some(v) = saved_sandbox {
+                std::env::set_var("PAYMENTS_SANDBOX", v);
+            }
         }
 
         assert!(
@@ -235,8 +241,16 @@ mod payout_fee_split_tests {
         let platform = revenue * platform_fee_percent();
         let developer = revenue * developer_share_percent();
 
-        assert_eq!(platform, dec!(300.00), "platform should get 300 on 1000 revenue");
-        assert_eq!(developer, dec!(700.00), "developer should get 700 on 1000 revenue");
+        assert_eq!(
+            platform,
+            dec!(300.00),
+            "platform should get 300 on 1000 revenue"
+        );
+        assert_eq!(
+            developer,
+            dec!(700.00),
+            "developer should get 700 on 1000 revenue"
+        );
         assert_eq!(platform + developer, revenue);
     }
 
@@ -265,14 +279,18 @@ mod zar_usdc_conversion_tests {
     async fn default_rate_275_zar_per_usdc() {
         // Without ZAR_USDC_RATE env, default is 275.0 ZAR/USDC.
         let saved = std::env::var("ZAR_USDC_RATE").ok();
-        unsafe { std::env::remove_var("ZAR_USDC_RATE"); }
+        unsafe {
+            std::env::remove_var("ZAR_USDC_RATE");
+        }
 
         let svc = PaymentService::mock();
         let zar = dec!(275.00);
         let result = svc.convert_zar_to_usdc(zar).await;
 
         unsafe {
-            if let Some(v) = saved { std::env::set_var("ZAR_USDC_RATE", v); }
+            if let Some(v) = saved {
+                std::env::set_var("ZAR_USDC_RATE", v);
+            }
         }
 
         assert!(result.is_ok());
@@ -290,7 +308,9 @@ mod zar_usdc_conversion_tests {
     async fn custom_rate_env_is_respected() {
         // When ZAR_USDC_RATE=550, 550 ZAR = 1 USDC (before fee).
         let saved = std::env::var("ZAR_USDC_RATE").ok();
-        unsafe { std::env::set_var("ZAR_USDC_RATE", "550.0"); }
+        unsafe {
+            std::env::set_var("ZAR_USDC_RATE", "550.0");
+        }
 
         let svc = PaymentService::mock();
         let zar = dec!(550.00);
@@ -471,7 +491,10 @@ mod skill_range_tests {
         };
         assert!(a.overlaps(&b), "overlapping ranges should return true");
         assert!(b.overlaps(&a), "overlap should be symmetric");
-        assert!(!a.overlaps(&c), "non-overlapping ranges should return false");
+        assert!(
+            !a.overlaps(&c),
+            "non-overlapping ranges should return false"
+        );
     }
 
     #[test]
@@ -660,7 +683,10 @@ mod payment_payout_tests {
         let result = svc
             .process_payout(&pool, user_id, dec!(100.00), "0xABC123")
             .await;
-        assert!(result.is_ok(), "sandbox process_payout should succeed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "sandbox process_payout should succeed: {result:?}"
+        );
         let payout = result.unwrap();
         assert!(
             payout.status.contains("sandbox"),
