@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Circuit Rush — Magnetite Motorsport Starter</title>
+  <style>
+    :root {
+      --bg:      #07070b;
+      --surface: #14141d;
+      --accent:  #38e1c8;
+      --amber:   #f5a524;
+      --text:    #f4f4f6;
+      --muted:   #a8a8b3;
+      --border:  #23232e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      gap: 0;
+    }
+    header {
+      width: 100%;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 {
+      font-family: 'Archivo', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+    }
+    header .badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    #hud {
+      width: 100%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      padding: 16px;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .stat-label {
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-value.amber { color: var(--amber); }
+    #canvas-wrap {
+      width: 900px;
+      max-width: 100vw;
+      aspect-ratio: 16/9;
+      background: #0a0a12;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    canvas#game-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #countdown-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(7,7,11,0.72);
+      font-family: 'Archivo', sans-serif;
+    }
+    #countdown-overlay h2 {
+      font-size: 5rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+      text-shadow: 0 0 40px rgba(56,225,200,0.6);
+    }
+    #countdown-overlay p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 8px;
+      font-family: monospace;
+    }
+    #finish-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(7,7,11,0.85);
+      font-family: 'Archivo', sans-serif;
+    }
+    #finish-overlay h2 {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--amber);
+      text-shadow: 0 0 40px rgba(245,165,36,0.6);
+    }
+    #finish-overlay .best-lap {
+      margin-top: 12px;
+      font-size: 1.4rem;
+      color: var(--text);
+    }
+    #controls-hint {
+      width: 100%;
+      max-width: 900px;
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      gap: 24px;
+    }
+    .key {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.7rem;
+      color: var(--text);
+    }
+    #log {
+      width: 100%;
+      max-width: 900px;
+      padding: 0 16px 24px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      min-height: 40px;
+    }
+    #loading-msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Circuit Rush</h1>
+    <span class="badge">Magnetite Motorsport Starter</span>
+  </header>
+
+  <div id="hud">
+    <div class="stat">
+      <div class="stat-label">Lap</div>
+      <div class="stat-value" id="stat-lap">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Speed</div>
+      <div class="stat-value" id="stat-speed">0 km/h</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Best Lap</div>
+      <div class="stat-value amber" id="stat-best">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Tick</div>
+      <div class="stat-value" id="stat-tick">0</div>
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="game-canvas"></canvas>
+    <div id="loading-msg">Loading Circuit Rush…</div>
+    <div id="countdown-overlay" style="display:none">
+      <h2 id="countdown-number">3</h2>
+      <p>// RACE STARTING</p>
+    </div>
+    <div id="finish-overlay">
+      <h2>RACE COMPLETE</h2>
+      <div class="best-lap" id="finish-best-lap"></div>
+    </div>
+  </div>
+
+  <div id="controls-hint">
+    <span><span class="key">W</span> throttle</span>
+    <span><span class="key">S</span> brake</span>
+    <span><span class="key">A</span>/<span class="key">D</span> steer</span>
+    <span><span class="key">Space</span> handbrake</span>
+    <span>| Gamepad: triggers + left stick</span>
+  </div>
+
+  <div id="log"></div>
+
+  <script type="module">
+    // ── WASM module import (generated by wasm-bindgen) ───────────────────
+    import init, { GameHandle } from './dist/game.js';
+
+    const $ = id => document.getElementById(id);
+
+    function formatMs(ms) {
+      if (!ms || ms === 0) return '—';
+      const m = Math.floor(ms / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      const cs = Math.floor((ms % 1000) / 10);
+      return `${m}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
+    }
+
+    function log(msg) {
+      $('log').textContent = `// ${msg}`;
+    }
+
+    async function run() {
+      await init();
+      $('loading-msg').style.display = 'none';
+
+      const game = new GameHandle();
+      let playerId = 0; // first player is always ID 0
+
+      // ── Canvas 2D renderer (simple top-down minimap) ──────────────────
+      const canvas = $('game-canvas');
+      const ctx = canvas.getContext('2d');
+
+      function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width  = rect.width;
+        canvas.height = rect.height;
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      // Track gates for minimap (world coords → canvas)
+      const TRACK_GATES = [
+        { x:   0, z:   0 },
+        { x:  90, z:   0 },
+        { x: 100, z: -35 },
+        { x:   0, z: -70 },
+        { x:-100, z: -35 },
+        { x: -90, z:   0 },
+      ];
+      const WORLD_SCALE = 1.8; // pixels per metre at canvas scale
+
+      function worldToCanvas(wx, wz) {
+        const cx = canvas.width  / 2 + wx * WORLD_SCALE;
+        const cy = canvas.height / 2 - wz * WORLD_SCALE; // Z is inverted in canvas
+        return [cx, cy];
+      }
+
+      function drawTrack() {
+        ctx.strokeStyle = '#33333f';
+        ctx.lineWidth = 24 * WORLD_SCALE * 0.12;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        TRACK_GATES.forEach((g, i) => {
+          const [cx, cy] = worldToCanvas(g.x, g.z);
+          if (i === 0) ctx.moveTo(cx, cy);
+          else ctx.lineTo(cx, cy);
+        });
+        ctx.closePath();
+        ctx.stroke();
+
+        // Gate markers
+        TRACK_GATES.forEach((g, i) => {
+          const [cx, cy] = worldToCanvas(g.x, g.z);
+          ctx.fillStyle = i === 0 ? '#38e1c8' : '#23232e';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      // ── Input state ────────────────────────────────────────────────────
+      const keys = {};
+      window.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
+      window.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+      // Gamepad polling
+      let gamepadIndex = -1;
+      window.addEventListener('gamepadconnected', e => {
+        gamepadIndex = e.gamepad.index;
+        log(`Gamepad connected: ${e.gamepad.id}`);
+      });
+      window.addEventListener('gamepaddisconnected', () => { gamepadIndex = -1; });
+
+      function buildInputJson(seq) {
+        // Keyboard
+        const fwd   = !!(keys['KeyW']   || keys['ArrowUp']);
+        const back  = !!(keys['KeyS']   || keys['ArrowDown']);
+        const left  = !!(keys['KeyA']   || keys['ArrowLeft']);
+        const right = !!(keys['KeyD']   || keys['ArrowRight']);
+        const jump  = !!(keys['Space']);
+
+        let scroll  = 0, delta_y = 0, delta_x = 0;
+
+        // Gamepad (analog triggers + stick)
+        if (gamepadIndex >= 0) {
+          const gp = navigator.getGamepads()[gamepadIndex];
+          if (gp) {
+            scroll  = Math.max(0, gp.axes[5] ?? 0);   // RT (axis 5 on standard mapping)
+            delta_y = -Math.max(0, gp.axes[4] ?? 0);  // LT  (axis 4, negate)
+            delta_x = gp.axes[0] ?? 0;                // Left stick X
+          }
+        }
+
+        return JSON.stringify({
+          keys: { forward: fwd, backward: back, left, right, jump,
+                  crouch: false, attack: false, secondary_attack: false,
+                  interact: false, sprint: false },
+          mouse: { x: 0, y: 0, delta_x, delta_y, scroll,
+                   left_button: false, right_button: false, middle_button: false },
+          sequence: seq,
+          timestamp_ms: Date.now(),
+        });
+      }
+
+      // ── Game loop ──────────────────────────────────────────────────────
+      let seq = 0;
+      let lastTime = 0;
+
+      function frame(ts) {
+        const dt = ts - lastTime;
+        if (dt >= 16) {         // ~60 Hz cap
+          lastTime = ts;
+          seq++;
+
+          const inputJson = buildInputJson(seq);
+          game.handle_input(playerId, inputJson);
+          game.tick();
+
+          // Read state
+          const state = JSON.parse(game.get_state());
+          const timers = JSON.parse(game.get_lap_times());
+          const tick = game.tick_count();
+          const raceStarted = game.race_started();
+          const raceFinished = game.race_finished();
+          const countdown = game.countdown_ticks();
+
+          // Update HUD
+          const player = state.players?.find(p => String(p.id) === String(playerId));
+          const timer = timers[String(playerId)];
+          const worldData = typeof state.world === 'object' ? state.world : null;
+          const vehicle = worldData?.vehicles?.[String(playerId)];
+
+          if (player) {
+            const laps = timer?.laps_done ?? 0;
+            const totalLaps = worldData?.track?.total_laps ?? 3;
+            $('stat-lap').textContent = `${Math.min(laps + 1, totalLaps)} / ${totalLaps}`;
+          }
+          if (vehicle) {
+            const kmh = Math.abs(vehicle.speed * 3.6).toFixed(0);
+            $('stat-speed').textContent = `${kmh} km/h`;
+          }
+          const bestMs = timer?.best_lap_ms;
+          $('stat-best').textContent = (bestMs && bestMs < Number.MAX_SAFE_INTEGER)
+            ? formatMs(bestMs) : '—';
+          $('stat-tick').textContent = tick.toFixed(0);
+
+          // Countdown overlay
+          const cdEl = $('countdown-overlay');
+          if (!raceStarted && countdown > 0) {
+            cdEl.style.display = 'flex';
+            const sec = Math.ceil(countdown / 60);
+            $('countdown-number').textContent = sec > 0 ? String(sec) : 'GO!';
+          } else if (!raceStarted && countdown === 0) {
+            cdEl.style.display = 'flex';
+            $('countdown-number').textContent = 'GO!';
+          } else {
+            cdEl.style.display = 'none';
+          }
+
+          // Finish overlay
+          if (raceFinished) {
+            const fin = $('finish-overlay');
+            fin.style.display = 'flex';
+            const bestMs = timer?.best_lap_ms;
+            $('finish-best-lap').textContent = bestMs && bestMs < Number.MAX_SAFE_INTEGER
+              ? `Best lap: ${formatMs(bestMs)}` : '';
+          }
+
+          // ── Render (simple 2D top-down) ──────────────────────────────
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Background
+          ctx.fillStyle = '#07070b';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          drawTrack();
+
+          // Vehicles
+          state.players?.forEach(p => {
+            const v = worldData?.vehicles?.[String(p.id)];
+            if (!v) return;
+            const [cx, cy] = worldToCanvas(v.position.x, v.position.z);
+            const isLocal = String(p.id) === String(playerId);
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(-v.yaw); // yaw is radians
+
+            // Car body
+            const w = 8, h = 18;
+            ctx.fillStyle = isLocal ? '#38e1c8' : '#5b9dff';
+            ctx.fillRect(-w/2, -h/2, w, h);
+
+            // Direction indicator
+            ctx.fillStyle = '#07070b';
+            ctx.fillRect(-w/4, -h/2 - 4, w/2, 4);
+
+            ctx.restore();
+          });
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      log('Circuit Rush loaded — waiting for race start…');
+      requestAnimationFrame(frame);
+    }
+
+    run().catch(err => {
+      document.getElementById('loading-msg').textContent = `Load error: ${err.message}`;
+      console.error(err);
+    });
+  </script>
+</body>
+</html>

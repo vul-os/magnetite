@@ -1,0 +1,74 @@
+[package]
+name = "magnetite-game-motorsport"
+version = "0.1.0"
+edition = "2021"
+description = "Motorsport / racing starter template for the Magnetite platform — Bevy + rapier3d vehicle physics, lap timing, gamepad input."
+license = "MIT"
+
+# Both a cdylib (WASM/wasm-bindgen) and rlib (tests/native).
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# ── Feature flags ───────────────────────────────────────────────────────────
+#
+# `native`  – full Bevy render/window/input + rapier3d physics debug render.
+#             cargo run --features native
+#
+# `wasm`    – WASM build: Bevy ECS + winit + WebGL2 + rapier3d (no debug render).
+#             cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+#
+# *(neither)* – SDK + game logic only; no Bevy/rapier compiled.
+#               Used by `cargo check --no-default-features` in CI for a fast pass.
+[features]
+native = [
+    "dep:bevy",
+    "bevy/default",
+    "dep:bevy_rapier3d",
+    "bevy_rapier3d/debug-render-3d",
+]
+wasm = [
+    "dep:bevy",
+    "bevy/bevy_winit",
+    "bevy/webgl2",
+    "dep:bevy_rapier3d",
+    "dep:console_error_panic_hook",
+    "dep:web-sys",
+]
+
+# ── Common dependencies ──────────────────────────────────────────────────────
+[dependencies]
+magnetite-sdk = { path = "../backend/magnetite-sdk" }
+
+# Bevy — optional; only compiled under `native` or `wasm`.
+bevy = { version = "0.14", default-features = false, optional = true }
+
+# bevy_rapier3d — physics; optional for same reason.
+# Use rapier3d 0.21 which ships with bevy_rapier3d 0.27 for Bevy 0.14.
+bevy_rapier3d = { version = "0.27", default-features = false, features = [
+    "dim3",
+    "async-collider",
+], optional = true }
+
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+wasm-bindgen = "0.2"
+getrandom   = { version = "0.2", features = ["js"] }
+
+# ── WASM-only dependencies ───────────────────────────────────────────────────
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = { version = "0.1", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "Window",
+    "Document",
+    "HtmlCanvasElement",
+] }
+
+# ── Build profiles ───────────────────────────────────────────────────────────
+[profile.release]
+lto           = true
+opt-level     = "z"
+codegen-units = 1
+panic         = "abort"
+
+[profile.dev]
+opt-level = 0

@@ -9,10 +9,12 @@
 //! | Module | Purpose |
 //! |---|---|
 //! | [`game`] | [`game::GameLogic`] trait — the entry point for every game |
-//! | [`input`] | Strongly-typed input frames and actions |
+//! | [`graphics`] | [`graphics::GraphicsTier`] + [`graphics::RenderConfig`] — declare your engine tier |
+//! | [`input`] | Strongly-typed input frames, actions, and controller/gamepad support |
 //! | [`state`] | Game state, snapshots, player state |
 //! | [`protocol`] | Versioned wire protocol (client ↔ server) |
 //! | [`networking`] | Server config, tick loop, prediction, interest management |
+//! | [`platform`] | Shared platform services (comms, points, marketplace, cloud saves) |
 //!
 //! ## Quick start
 //!
@@ -47,6 +49,40 @@
 //! export_game!(MyGame);
 //! ```
 //!
+//! ## Graphics / engine tiers
+//!
+//! Every game declares a [`graphics::GraphicsTier`] so the platform provisions
+//! the right runtime (Canvas2D → WebGPU/Vulkan):
+//!
+//! ```rust
+//! use magnetite_sdk::graphics::{GraphicsTier, RenderConfig};
+//!
+//! // Simple arcade game.
+//! let simple = RenderConfig::new(GraphicsTier::Lite2D);
+//!
+//! // Full FPS / motorsport.
+//! let advanced = RenderConfig::builder()
+//!     .tier(GraphicsTier::Advanced3D)
+//!     .hdr(true)
+//!     .physics_substeps(8)
+//!     .build();
+//! ```
+//!
+//! ## Controller / gamepad input
+//!
+//! Use [`input::gamepad`] for first-class controller support with a unified
+//! binding layer that covers gamepad + keyboard:
+//!
+//! ```rust
+//! use magnetite_sdk::input::gamepad::{GamepadButton, GamepadEvent, InputMap};
+//!
+//! let map = InputMap::default();
+//! let actions = map.process_gamepad(&GamepadEvent::ButtonPressed(GamepadButton::South));
+//! // Default layout: South (A) → Jump.
+//! use magnetite_sdk::input::gamepad::GameAction;
+//! assert!(actions.contains(&GameAction::Jump));
+//! ```
+//!
 //! ## Platform services
 //!
 //! The [`platform`] module exposes shared platform services that in-game code
@@ -56,6 +92,9 @@
 //! |---|---|
 //! | Chat + presence | [`platform::comms`] |
 //! | Voice signaling | [`platform::comms::VoiceSignal`] |
+//! | Points / XP economy | [`platform::points`] |
+//! | In-game marketplace | [`platform::marketplace`] |
+//! | Cloud saves | [`platform::cloud_save`] |
 //!
 //! ## Feature flags
 //!
@@ -71,6 +110,7 @@
 //! MIT — see the repository root.
 
 pub mod game;
+pub mod graphics;
 pub mod input;
 pub mod networking;
 pub mod platform;
@@ -79,14 +119,32 @@ pub mod state;
 
 // Convenience re-exports of the most commonly used types.
 pub use game::{GameLogic, GameMetadata};
+pub use graphics::{EngineCapability, GraphicsTier, RenderConfig, RenderConfigBuilder};
+pub use input::gamepad::{
+    GameAction, GamepadAxis, GamepadButton, GamepadEvent, GamepadState, InputBinding, InputMap,
+    InputSource,
+};
 pub use input::{Action, Direction, Input, InputEvent, KeyCode, KeyState, MouseState};
 pub use networking::{
     FullInterest, InterestManager, NetworkManager, PredictionBuffer, RadiusInterest, ServerConfig,
     ServerNetworkManager, StateSyncProtocol, TickLoop,
 };
+pub use platform::cloud_save::{
+    ClientCloudSaveMessage, CloudSaveClient, CloudSaveConfig, CloudSaveErrorCode, SaveRequest,
+    SaveSlot, SaveSlotMeta, ServerCloudSaveMessage,
+};
 pub use platform::comms::{
     ChatMessage, ClientCommsMessage, CommsClient, CommsConfig, CommsConnectionState,
     CommsErrorCode, CommsEvent, PresenceStatus, PresenceUpdate, ServerCommsMessage, VoiceSignal,
+};
+pub use platform::marketplace::{
+    ClientMarketplaceMessage, Entitlement, ItemType, MarketplaceClient, MarketplaceConfig,
+    MarketplaceErrorCode, PaymentMethod, PurchaseErrorCode, PurchaseRequest, PurchaseResult,
+    ServerMarketplaceMessage, StoreItem,
+};
+pub use platform::points::{
+    AwardPointsRequest, ClientPointsMessage, LedgerEntry, LedgerEntryKind, PointsBalance,
+    PointsClient, PointsConfig, PointsErrorCode, ServerPointsMessage, SpendPointsRequest,
 };
 pub use protocol::{ClientMessage, Envelope, ErrorCode, ServerMessage, PROTOCOL_VERSION};
 pub use state::{GameState, PlayerId, PlayerState, Position, Rotation, Snapshot};

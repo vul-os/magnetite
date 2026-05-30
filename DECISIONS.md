@@ -248,6 +248,19 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
   noted by agents (hardcoded CURRENT_USER_ID → wire to useAuth; VoicePanel prop pass-through) → Wave 9 polish.
   → next **Wave 8 (game-dev capabilities: controllers, graphics tiers, FPS/motorsport templates, points
   economy, dev marketplaces)**.
+- **Wave 8 (game-dev + economy) — DONE, verified:** Backend: migration `20260531_economy.sql` (seasons/
+  point_balances/points_ledger/point_rewards/dev_stores/store_items/store_purchases/entitlements), services +
+  api for points (atomic ledger, leaderboard, season reset) and marketplace (store/item CRUD, purchase via
+  USDC 70/30 or points, entitlements) — **0 warnings**. SDK: gamepad input (`GamepadState`/`InputMap`/
+  `GameAction`), graphics tiers (`Lite2D/Standard3D/Advanced3D` + `RenderConfig`), platform clients for points/
+  marketplace/cloud-saves — **240 tests pass**. New crates **game-template-fps** (Bevy+rapier3d FPS, gamepad
+  look/move/shoot; `cargo check --no-default-features` 0/0, 38 tests) and **game-template-motorsport** (vehicle,
+  analog throttle/brake/steer, lap→points; check 0/0, 26 tests). Frontend: Points dashboard, DevMarketplace
+  store mgmt, ControllerSettings (live Gamepad API + binding editor), InGameStore panel + hooks + routes
+  (/points, /developers/marketplace, /settings/controller). Build green, lint **0 errors**, tests 33/33.
+  Note: motorsport agent applied a trivial fix to SDK input/mod.rs (partition leak) — verified SDK still 240
+  tests green. → next **Wave 9 (close: RTMP egress + HLS watch, wire economy/store/overlay into play flow,
+  CURRENT_USER_ID→useAuth, full suite docs, e2e/a11y, FINAL verification)**.
 - **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline committed (`1f25602`).
 - **Wave 1 (foundation) — DONE, verified:**
   - Frontend design system: new `src/styles/tokens.css` + rewritten `src/index.css` (Industrial Magnetite tokens; legacy var names aliased so pages still compile); restyled all 17 `common/*` components + Navbar + Toast. `npm run build` green.

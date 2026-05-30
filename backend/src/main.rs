@@ -27,11 +27,13 @@ use crate::api::games;
 use crate::api::github;
 use crate::api::health;
 use crate::api::leaderboard;
+use crate::api::marketplace;
 use crate::api::matchmaking;
 use crate::api::messages;
 use crate::api::metrics;
 use crate::api::notifications;
 use crate::api::oauth;
+use crate::api::points;
 use crate::api::social;
 use crate::api::subscriptions;
 use crate::api::versioning;
@@ -82,6 +84,9 @@ async fn main() {
         .nest("/users", social::users_router(pool.clone()))
         .nest("/subscriptions", subscriptions::router(pool.clone()))
         .nest("/notifications", notifications::router(pool.clone()))
+        // Wave 8: points economy + developer marketplace
+        .nest("/points", points::router(pool.clone()))
+        .nest("/marketplace", marketplace::router(pool.clone()))
         // Wave 6: comms core — communities, channels, messages, DMs
         .nest("/communities", communities::router(pool.clone()))
         .nest(

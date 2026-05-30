@@ -67,6 +67,9 @@ const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 const Communities = lazy(() => import('./pages/Communities'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Streams = lazy(() => import('./pages/Streams'));
+const Points = lazy(() => import('./pages/Points'));
+const DevMarketplace = lazy(() => import('./pages/DevMarketplace'));
+const ControllerSettings = lazy(() => import('./pages/ControllerSettings'));
 
 function ToastContainer() {
   const { toasts, removeToast } = useToast();
@@ -178,6 +181,9 @@ function App() {
                       <Route path="/communities" element={<Communities />} />
                       <Route path="/messages" element={<Messages />} />
                       <Route path="/streams" element={<Streams />} />
+                      <Route path="/points" element={<Points />} />
+                      <Route path="/developers/marketplace" element={<DevMarketplace />} />
+                      <Route path="/settings/controller" element={<ControllerSettings />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>

@@ -4,6 +4,12 @@
 //! (what the game logic interprets). This design lets the server re-simulate
 //! a sequence of inputs for deterministic replay and client-side prediction.
 //!
+//! ## Sub-modules
+//!
+//! | Sub-module | Purpose |
+//! |---|---|
+//! | [`gamepad`] | Gamepad/controller input — [`gamepad::GamepadState`], buttons, axes, and the [`gamepad::InputMap`] binding layer |
+//!
 //! # Input pipeline
 //!
 //! ```text
@@ -28,6 +34,8 @@
 //! assert!(frame.keys.forward);
 //! assert!(frame.keys.jump);
 //! ```
+
+pub mod gamepad;
 
 use serde::{Deserialize, Serialize};
 

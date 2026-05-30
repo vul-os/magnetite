@@ -175,4 +175,69 @@ export const api = {
     goLive: (communityId, data) =>
       request(`/api/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) }),
   },
+
+  // ── Wave 8: Points / Score Economy ───────────────────────────────────────
+
+  points: {
+    /** Current user's point balance and season info. */
+    balance: () => request('/api/points/balance'),
+    /** Paginated points history. params: { limit?, offset? } */
+    history: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/points/history${qs ? `?${qs}` : ''}`);
+    },
+    /** Award points (admin / game-server). data: { user_id, amount, reason } */
+    award: (data) => request('/api/points/award', { method: 'POST', body: JSON.stringify(data) }),
+    /** Global points leaderboard. params: { limit?, game_id? } */
+    leaderboard: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/points/leaderboard${qs ? `?${qs}` : ''}`);
+    },
+    /** Redeemable rewards catalogue. */
+    rewards: () => request('/api/points/rewards'),
+    /** Redeem a reward. data: { reward_id } */
+    redeem: (data) => request('/api/points/redeem', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Wave 8: Marketplace Stores & Items ───────────────────────────────────
+
+  stores: {
+    /** List all public stores. params: { game_id?, limit?, offset? } */
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/stores${qs ? `?${qs}` : ''}`);
+    },
+    /** Fetch a single store. */
+    get: (storeId) => request(`/api/stores/${storeId}`),
+    /** Create a developer store. data: { name, game_id, description? } */
+    create: (data) => request('/api/stores', { method: 'POST', body: JSON.stringify(data) }),
+    /** Update store metadata. */
+    update: (storeId, data) => request(`/api/stores/${storeId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    /** Delete a store. */
+    delete: (storeId) => request(`/api/stores/${storeId}`, { method: 'DELETE' }),
+    /** List items in a store. */
+    items: (storeId) => request(`/api/stores/${storeId}/items`),
+    /** Add an item to a store. data: { name, description, price_points, price_usdc, item_type, metadata? } */
+    addItem: (storeId, data) =>
+      request(`/api/stores/${storeId}/items`, { method: 'POST', body: JSON.stringify(data) }),
+    /** Update a store item. */
+    updateItem: (storeId, itemId, data) =>
+      request(`/api/stores/${storeId}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    /** Remove an item from a store. */
+    removeItem: (storeId, itemId) =>
+      request(`/api/stores/${storeId}/items/${itemId}`, { method: 'DELETE' }),
+    /** Purchase an item. data: { currency: 'points' | 'usdc' } */
+    purchase: (storeId, itemId, data) =>
+      request(`/api/stores/${storeId}/items/${itemId}/purchase`, { method: 'POST', body: JSON.stringify(data) }),
+    /** Current user's entitlements (purchased items). */
+    entitlements: () => request('/api/stores/entitlements'),
+    /** Developer sales summary for owned stores. */
+    sales: (storeId) => request(`/api/stores/${storeId}/sales`),
+  },
 };

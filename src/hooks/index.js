@@ -31,3 +31,8 @@ export { useMessages } from './useMessages';
 export { usePresence } from './usePresence';
 export { useVoice } from './useVoice';
 export { useCommsSocket } from './useCommsSocket';
+
+// ── Wave 8: Economy + Marketplace + Input ────────────────────────────────
+export { usePoints } from './usePoints';
+export { useMarketplace } from './useMarketplace';
+export { useGamepad } from './useGamepad';

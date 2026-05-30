@@ -10,6 +10,16 @@ platform — games that scale from a weekend game jam to a COD-size AAA title.
   join/leave hooks.
 - **Strongly-typed input** — `KeyCode`, `InputEvent`, `KeyState`, `MouseState`,
   and `Input` frames separate raw hardware events from the game's action space.
+- **Gamepad / controller input** (`input::gamepad`) — first-class gamepad support
+  via `GamepadState`, `GamepadButton`, and `GamepadAxis`, plus a unified
+  `InputMap` / `InputBinding` layer that maps gamepad _and_ keyboard/mouse inputs
+  to high-level `GameAction`s (so a game reads intents, not raw buttons).
+  Platform binding: Web Gamepad API (WASM) / gilrs (native).
+- **Graphics / engine tiers** (`graphics`) — `GraphicsTier` (Lite2D, Standard3D,
+  Advanced3D) + `RenderConfig` so simple jam games stay lightweight and FPS /
+  motorsport titles scale up to WebGPU / Vulkan with HDR, rapier3d substeps, and
+  high-quality shadows. `RenderConfig::supports(EngineCapability)` for
+  compile-time / runtime assertions.
 - **Versioned wire protocol** — `Envelope<T>` wraps every message with a
   `PROTOCOL_VERSION` header, sequence number, and timestamp. `ClientMessage` /
   `ServerMessage` cover the full handshake and game loop.
@@ -17,6 +27,15 @@ platform — games that scale from a weekend game jam to a COD-size AAA title.
   snapshot cadence; `PredictionBuffer` supports GGPO-style client-side rollback;
   `InterestManager` trait enables area-of-interest culling for large worlds
   (built-in: `FullInterest`, `RadiusInterest`).
+- **Platform services** (`platform`) — typed clients for all shared platform
+  services:
+  - `platform::comms` — text chat, presence, and WebRTC voice signaling.
+  - `platform::points` — points / XP / score economy (award, spend, balance,
+    ledger); server-authoritative with idempotency keys.
+  - `platform::marketplace` — in-game store items, purchases (USDC / Paystack /
+    points), and entitlements with a local cache.
+  - `platform::cloud_save` — per-player named save slots (opaque blobs) with
+    optimistic version conflict detection.
 - **`export_game!` macro** — one line registers your game with the Magnetite
   runtime, emitting the C FFI glue needed for dynamic loading by the server and
   WASM host.
@@ -121,10 +140,178 @@ export_game!(MyGame);
 | Module | Key types |
 |---|---|
 | `game` | `GameLogic`, `GameMetadata` |
+| `graphics` | `GraphicsTier`, `RenderConfig`, `RenderConfigBuilder`, `EngineCapability` |
 | `input` | `Input`, `KeyState`, `MouseState`, `InputEvent`, `KeyCode`, `Action`, `Direction` |
+| `input::gamepad` | `GamepadState`, `GamepadButton`, `GamepadAxis`, `GamepadEvent`, `InputMap`, `InputBinding`, `InputSource`, `GameAction` |
 | `state` | `GameState`, `PlayerState`, `PlayerId`, `Position`, `Rotation`, `Snapshot` |
 | `protocol` | `Envelope`, `ClientMessage`, `ServerMessage`, `ErrorCode`, `PROTOCOL_VERSION` |
 | `networking` | `ServerConfig`, `TickLoop`, `PredictionBuffer`, `InterestManager`, `FullInterest`, `RadiusInterest`, `ServerNetworkManager`, `Codec`, `FramedTransport` |
+| `platform::comms` | `CommsClient`, `CommsConfig`, `ChatMessage`, `VoiceSignal`, `ClientCommsMessage`, `ServerCommsMessage`, `PresenceStatus` |
+| `platform::points` | `PointsClient`, `PointsConfig`, `AwardPointsRequest`, `SpendPointsRequest`, `PointsBalance`, `LedgerEntry`, `ClientPointsMessage`, `ServerPointsMessage` |
+| `platform::marketplace` | `MarketplaceClient`, `MarketplaceConfig`, `StoreItem`, `Entitlement`, `PurchaseRequest`, `PurchaseResult`, `PaymentMethod`, `ItemType` |
+| `platform::cloud_save` | `CloudSaveClient`, `CloudSaveConfig`, `SaveRequest`, `SaveSlot`, `SaveSlotMeta`, `ClientCloudSaveMessage`, `ServerCloudSaveMessage` |
+
+## Graphics / engine tiers
+
+Every game declares a tier so the platform can provision the right runtime:
+
+```rust
+use magnetite_sdk::graphics::{GraphicsTier, RenderConfig};
+
+// Weekend jam game — tiny WASM build, Canvas 2D.
+let simple = RenderConfig::new(GraphicsTier::Lite2D);
+
+// FPS starter — WebGL2/WebGPU, shadows, rapier3d.
+let fps = RenderConfig::builder()
+    .tier(GraphicsTier::Standard3D)
+    .target_fps(60)
+    .shadow_quality(2)
+    .build();
+
+// Motorsport AAA — WebGPU/Vulkan, HDR, 8 physics substeps.
+let motorsport = RenderConfig::builder()
+    .tier(GraphicsTier::Advanced3D)
+    .target_fps(120)
+    .hdr(true)
+    .post_processing(true)
+    .physics_substeps(8)
+    .build();
+```
+
+Use `RenderConfig::supports(EngineCapability)` for runtime assertions:
+
+```rust
+use magnetite_sdk::graphics::{EngineCapability, GraphicsTier, RenderConfig};
+
+let cfg = RenderConfig::new(GraphicsTier::Advanced3D);
+assert!(cfg.supports(EngineCapability::Hdr));
+assert!(cfg.supports(EngineCapability::VehiclePhysics));
+```
+
+## Gamepad / controller input
+
+`input::gamepad` provides first-class controller support with a unified binding
+layer — the same `InputMap` covers gamepad buttons/axes and keyboard/mouse keys,
+so games read `GameAction`s rather than raw hardware events.
+
+```rust
+use magnetite_sdk::input::gamepad::{
+    GameAction, GamepadButton, GamepadEvent, InputMap,
+    InputBinding, InputSource,
+};
+
+// Default Xbox-style map (South = Jump, RightBumper = Fire, …).
+let mut map = InputMap::default();
+
+// Process a gamepad event.
+let actions = map.process_gamepad(&GamepadEvent::ButtonPressed(GamepadButton::South));
+assert!(actions.contains(&GameAction::Jump));
+
+// Process a keyboard event (same map, same actions).
+use magnetite_sdk::input::{InputEvent, KeyCode};
+let kb_actions = map.process_input(&InputEvent::Press(KeyCode::Jump));
+assert!(kb_actions.contains(&GameAction::Jump));
+
+// Remap at runtime.
+map.bind(InputBinding {
+    source: InputSource::Gamepad(GamepadButton::South),
+    action: GameAction::Crouch,
+});
+```
+
+### Platform binding
+
+| Target | How to connect |
+|---|---|
+| **Browser (WASM)** | Poll `navigator.getGamepads()` each animation frame; convert button values → `GamepadEvent::ButtonPressed/Released` and axis values → `GamepadEvent::AxisMoved` |
+| **Native (desktop)** | Use [gilrs](https://crates.io/crates/gilrs): call `gilrs.next_event()` each tick and convert `gilrs::EventType` → `GamepadEvent` |
+
+The SDK keeps `gilrs` out of its dependencies so WASM builds stay light.
+
+## Platform services
+
+### Points / XP economy
+
+```rust
+use magnetite_sdk::platform::points::{
+    AwardPointsRequest, PointsClient, PointsConfig, SpendPointsRequest,
+};
+
+let mut client = PointsClient::new(PointsConfig {
+    user_id: "u-42".to_string(),
+    auth_token: "jwt".to_string(),
+});
+
+// (Server-side) award points after a match win.
+let msg = client.award_message(AwardPointsRequest {
+    amount: 500,
+    reason: "match_win".to_string(),
+    game_id: Some("fps-starter".to_string()),
+    idempotency_key: Some("match-42-win".to_string()),
+});
+
+// (Client-side) spend points on a cosmetic.
+let spend_msg = client.spend_message(SpendPointsRequest {
+    amount: 200,
+    reason: "cosmetic_unlock".to_string(),
+    item_id: Some("skin-neon".to_string()),
+});
+```
+
+### In-game marketplace
+
+```rust
+use magnetite_sdk::platform::marketplace::{
+    MarketplaceClient, MarketplaceConfig, PaymentMethod, PurchaseRequest,
+};
+
+let mut client = MarketplaceClient::new(MarketplaceConfig {
+    user_id: "u-42".to_string(),
+    game_id: "fps-starter".to_string(),
+    auth_token: "jwt".to_string(),
+});
+
+// List store items.
+let list_msg = client.list_items_message(None);
+
+// Purchase an item.
+let buy_msg = client.purchase_message(PurchaseRequest {
+    item_id: "skin-neon".to_string(),
+    payment_method: PaymentMethod::Usd,
+    idempotency_key: None,
+});
+
+// Check entitlement after server responds.
+assert!(!client.has_entitlement("skin-neon")); // not yet purchased
+```
+
+### Cloud saves
+
+```rust
+use magnetite_sdk::platform::cloud_save::{
+    CloudSaveClient, CloudSaveConfig, SaveRequest,
+};
+
+let mut client = CloudSaveClient::new(CloudSaveConfig {
+    user_id: "u-42".to_string(),
+    game_id: "fps-starter".to_string(),
+    auth_token: "jwt".to_string(),
+});
+
+// Save the current game state as a JSON blob.
+let save_data = serde_json::to_vec(&serde_json::json!({
+    "level": 3, "health": 80, "score": 9500,
+})).unwrap();
+
+let msg = client.save_message(SaveRequest {
+    slot: "autosave".to_string(),
+    data: save_data,
+    version: None, // force-overwrite; pass Some(n) for optimistic locking
+});
+
+// Load.
+let load_msg = client.load_message("autosave");
+```
 
 ## Snapshot / Restore (save, replay, prediction)
 
