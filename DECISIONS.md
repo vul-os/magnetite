@@ -343,6 +343,27 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
     tests pass**. KNOWN deferred to F2: `services/payout.rs` has the same `/100` share bug (prod + its test) —
     F2's first task. Committed.
 
+- **Fix Wave F2 — DONE, verified:** Real payments + matchmaking/game-WS + remaining de-mock + build honesty + config docs.
+  - **Payments:** `PaymentService::from_env()` with real Circle (`CIRCLE_API_KEY`) + Paystack
+    (`PAYSTACK_SECRET_KEY`) reqwest clients; unconfigured → explicit error (HTTP 500 "payments not configured")
+    unless `PAYMENTS_SANDBOX=true` (sandbox-labeled results). **`payout.rs` `/100` bug fixed** (+ test now
+    passes); `process_single_payout` calls real Circle `/v1/transfers` (or sandbox), marks `failed` on error
+    (no silent completed). Wallet deposit verifies Paystack before crediting; withdraw calls Circle before
+    debiting; subscription records real provider (not hardcoded `stripe`); Paystack uses the user's real email;
+    `ZAR_USDC_RATE` env (default kept). _Crossroad: reused `AppError::Internal` instead of a new error variant
+    to avoid touching the forbidden error.rs._
+  - **Matchmaking/game-WS/anti-cheat:** `start_game_session` sets `server_endpoint` from `GAME_SERVER_WS_BASE`
+    (`/ws/game/<session>`); region filter + queue-depth wait estimate (5–600s); game WS loop now does JWT
+    auth + room join + input + authoritative state broadcast + disconnect; anti-cheat velocity check wired into
+    the input path (`ANTICHEAT_MAX_VELOCITY`/`MAX_INPUT_RATE` config), `detect_anomalies` on session end.
+    _Known next step: anti-cheat DB writes (ban/replay) need a PgPool in the WS handler (constructed in main.rs)
+    — left documented._
+  - **Build pipeline honesty** + **remaining frontend de-mock** (Profile/Friends/Leaderboard/Achievements/
+    Wishlist/GameLobby/Playground/GameAccess/Onboarding) + **config docs** (.env.example with all new vars,
+    external-dependency doc) + **GAPS.md refreshed** with a Closed-in-F1/F2 section.
+  - Verify: backend **0 warnings + fmt + all tests pass**; frontend build clean, lint **0 errors**, **113
+    tests**. Committed.
+
 ## 7. CLOSING SUMMARY (2026-05-30)
 
 **The autonomous multi-wave rebuild is COMPLETE.** Magnetite went from a stale-doc'd, 341-warning, mock-data

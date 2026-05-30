@@ -12,6 +12,21 @@ use crate::api::middleware;
 use crate::api::response;
 use crate::error::{AppError, Result};
 
+/// Estimate wait time in seconds based on current queue depth for a game.
+/// Uses 30 s per position as a baseline (matches the service-layer heuristic).
+async fn estimate_wait_seconds(pool: &PgPool, game_id: Uuid) -> i32 {
+    let depth: i32 = sqlx::query_scalar::<_, i32>(
+        "SELECT COUNT(*) FROM matchmaking_queue WHERE game_id = $1 AND status = 'waiting'",
+    )
+    .bind(game_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(1);
+    // Each position in queue corresponds to ~30 s expected wait; clamp to a
+    // sensible range (5 s minimum, 10 min maximum) so the estimate is useful.
+    (depth.max(1) * 30).clamp(5, 600)
+}
+
 #[derive(Debug, Serialize)]
 pub struct MatchmakingStatus {
     pub in_queue: bool,
@@ -53,12 +68,13 @@ pub async fn join(
     .execute(&pool)
     .await?;
 
+    let wait = estimate_wait_seconds(&pool, payload.game_id).await;
     Ok(response::success_response(MatchmakingStatus {
         in_queue: true,
         queue_id: Some(queue_id),
         game_id: Some(payload.game_id),
         status: "waiting".to_string(),
-        estimated_wait_seconds: Some(30),
+        estimated_wait_seconds: Some(wait),
     }))
 }
 
@@ -94,13 +110,16 @@ pub async fn get_status(
     .await?;
 
     match queue_entry {
-        Some((queue_id, game_id, status)) => Ok(response::success_response(MatchmakingStatus {
-            in_queue: true,
-            queue_id: Some(queue_id),
-            game_id: Some(game_id),
-            status,
-            estimated_wait_seconds: Some(30),
-        })),
+        Some((queue_id, game_id, status)) => {
+            let wait = estimate_wait_seconds(&pool, game_id).await;
+            Ok(response::success_response(MatchmakingStatus {
+                in_queue: true,
+                queue_id: Some(queue_id),
+                game_id: Some(game_id),
+                status,
+                estimated_wait_seconds: Some(wait),
+            }))
+        }
         None => Ok(response::success_response(MatchmakingStatus {
             in_queue: false,
             queue_id: None,

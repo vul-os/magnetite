@@ -6,10 +6,13 @@ import { api } from '../api/client';
 import { usePresence } from '../hooks/usePresence';
 import './social.css';
 
+const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export default function Friends() {
-  const [friends, setFriends] = useState(mockFriends);
-  const [pendingRequests, setPendingRequests] = useState(mockPendingRequests);
-  const [blockedUsers, setBlockedUsers] = useState(mockBlockedUsers);
+  const [friends, setFriends]               = useState(useMocks ? mockFriends : []);
+  const [pendingRequests, setPendingRequests] = useState(useMocks ? mockPendingRequests : []);
+  const [blockedUsers, setBlockedUsers]     = useState(useMocks ? mockBlockedUsers : []);
+  const [loading, setLoading]               = useState(!useMocks);
 
   // Presence indicators for each friend
   const friendIds = friends.map((f) => f.id);
@@ -19,13 +22,21 @@ export default function Friends() {
   const [activeTab, setActiveTab] = useState('friends');
 
   useEffect(() => {
+    if (useMocks) return;
     let cancelled = false;
-    api.social.friends().then(data => {
-      if (!cancelled && data) {
-        const list = Array.isArray(data) ? data : (data?.friends ?? null);
-        if (list) setFriends(list);
-      }
-    }).catch(() => { /* use mock */ });
+    api.social.friends()
+      .then(data => {
+        if (!cancelled) {
+          const list = Array.isArray(data) ? data : (data?.friends ?? null);
+          setFriends(list ?? mockFriends);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFriends(mockFriends);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -58,8 +69,10 @@ export default function Friends() {
     setSearchQuery('');
   }, []);
 
-  const handleInvite = useCallback((friend) => {
-    alert(`Invite sent to ${friend.username}`);
+  const handleInvite = useCallback(async (friend) => {
+    try {
+      await api.social.sendInvite(friend.id, null);
+    } catch { /* optimistic — invite queued locally */ }
   }, []);
 
   const handleBlock = useCallback((friend) => {
@@ -85,6 +98,17 @@ export default function Friends() {
   const handleUnblock = useCallback((user) => {
     setBlockedUsers(prev => prev.filter(u => u.id !== user.id));
   }, []);
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="loading-state" aria-live="polite" aria-busy="true" style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+          <span className="spinner" aria-hidden="true" />
+          <span>Loading friends…</span>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

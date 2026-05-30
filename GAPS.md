@@ -223,3 +223,66 @@ _The magnetite-sdk platform clients (comms, points, marketplace, cloud-save, str
 | low | documented-only | SDK bevy integration helpers feature flag | backend/magnetite-sdk/src/lib.rs:108 — 'bevy \| Enable Bevy integration helpers' listed under 'Planned — not yet implemented'. No bevy dep or feature gate in magnetite-sdk/Cargo.toml. |
 | low | stub | game-template-fps Bevy HUD system | game-template-fps/src/bevy_client.rs:429 — '// HUD helpers (placeholder — a real game would use bevy_egui or a UI plugin)'. The `hud_text` function is `#[allow(dead_code)]` and just formats a string; no actual Bevy UI wiring exists. |
 | low | documented-only | Tournaments API | backend/src/api/tournaments.rs:1 — 'bracket management, match results, registration; platform surface, not yet wired'. `#![allow(dead_code)]`. |
+
+---
+
+## Closed in F1 / F2
+
+> Added 2026-05-30. F1 = correctness + security + email + frontend de-mock (committed).
+> F2 = real payments + matchmaking wiring + config/docs/gaps refresh (in progress).
+> Items marked **F1** are verified closed in the committed F1 wave. Items marked **F2** are
+> closed or substantially addressed in F2 (this wave). Remaining open items are listed at the
+> bottom; **Bucket D** items are documented as external infra dependencies, not faked.
+
+### Fixed in F1
+
+| Finding (original) | Fix |
+|---|---|
+| **Marketplace dev-share 0.7% instead of 70%** (services/marketplace.rs) | Removed erroneous `/ 100` divisor; 4 unit tests added and passing. |
+| **Payout fee split wrong** (services/payout.rs) | Same `/100` divisor bug fixed in payout service; `platform_fee_percent` and `developer_share_percent` now return correct values. |
+| **create_game / GitHub repo register hardcode nil UUID as developer_id** | Both handlers now extract the authenticated user ID from the Axum `Extension` extractor. |
+| **services/games.rs — all five functions are `todo!()` panics** | Replaced with real sqlx SQL implementations (or deleted if truly dead) so runtime panics are eliminated. |
+| **Admin analytics_performance queries non-existent tables** (api_request_logs, websocket_connections) | Endpoint rewritten to query existing tables (transactions, voice_participants) — no hollow migration added per §4c grounded crossroad. |
+| **OAuth CSRF state validation absent on Discord/GitHub/GitLab** | `state` parameter validation added matching the Google callback pattern. |
+| **Google ID token signature not verified (RS256 / JWKS)** | `decode_google_id_token` now fetches Google JWKS and verifies the RS256 signature using `jsonwebtoken`. |
+| **admin/* / points/award / points/season/reset — no admin role guard** | Admin-role check enforced on all three endpoint groups using the existing `is_admin` helper. |
+| **ws/game.rs router not mounted** | `GameWsHandler::router()` merged into the Axum app; game WebSocket connections now reachable. |
+| **Background jobs not spawned** (payout batch, subscription renewals) | Payout and subscription-renewal jobs spawned on 1-hour intervals in main.rs (no new deps). |
+| **EmailService::send_email() is a no-op stub** | `EmailProvider` trait added with two impls: `ResendProvider` (reqwest HTTPS) and `SesProvider` (lettre SMTP to SES endpoint, reusing existing lettre dep). Provider selected by `EMAIL_PROVIDER` env var; unconfigured → clear `Err`, not silent success. Wired to register, forgot-password, reset-password, and payout-notification flows. |
+| **useWebSocket always uses createMockSocket** | `useWebSocket` now opens a real browser WebSocket; mock substituted only when `VITE_USE_MOCK_WS=true`. |
+| **useAuth fabricates a JWT on login failure** | Fabricated-JWT-on-failure path removed; real error surfaced to the user. |
+| **~30 pages/hooks use mock data unconditionally** | All affected pages and hooks fetch real data with loading/empty/error states; mock data gated behind `VITE_USE_MOCKS=true` (default off). |
+| **Matchmaking WS hardcoded to `ws://localhost:3000`** | Endpoint derived from `VITE_API_URL` env var via `getWsBase()` helper. |
+
+### Fixed / addressed in F2
+
+| Finding (original) | Fix / status |
+|---|---|
+| **ENV vars for F1/F2 work missing from .env.example files** | `EMAIL_PROVIDER`, `EMAIL_FROM`, `RESEND_API_KEY`, `AWS_SES_SMTP_USER/PASSWORD/REGION`, `CIRCLE_API_KEY`, `PAYSTACK_SECRET_KEY`, `PAYMENTS_SANDBOX`, `ZAR_USDC_RATE`, `MEDIA_SERVER_BASE_URL`, `GAME_SERVER_WS_BASE`, `VITE_USE_MOCKS`, `VITE_USE_MOCK_WS` all documented with comments in root `.env.example` and `backend/.env.example`. |
+| **No configuration docs page** | `docs/self-hosting/environment-variables.md` updated to cover all new vars in grouped tables. |
+| **No external-dependencies docs page** | `docs/self-hosting/external-dependencies.md` created, documenting all Bucket-D items (MediaMTX, CI runners, game servers, Circle, Paystack, email) with honest absence behaviour. |
+
+### Remaining open (not closed in F1/F2)
+
+These findings are confirmed open after F1 + F2. They are not silently patched.
+
+| Finding | Reason open |
+|---|---|
+| **PaymentService Circle/Paystack — real HTTP calls** | F2 scope item: real reqwest clients with `ProviderUnconfigured` error path. Env vars are now documented; backend wiring tracked in F2 backend partition. |
+| **Wallet deposit/withdraw — no Circle verification** | Depends on PaymentService real clients (F2 backend). |
+| **Paystack create_paystack_subscription uses fabricated email** | Depends on real PaymentService wiring (F2 backend). |
+| **ZAR→USDC rate not env-configurable** | `ZAR_USDC_RATE` env var documented; backend code update tracked in F2 backend partition. |
+| **Subscription subscribe endpoint — no real payment provider call** | F2 backend partition. |
+| **Developer payout — no Circle disbursement** | F2 backend partition. |
+| **Matchmaking server_endpoint stays None** | `GAME_SERVER_WS_BASE` env var documented; full dedicated-server allocation is Bucket D. |
+| **MediaMTX not shipped — HLS watch returns 503** | Bucket D — documented in `docs/self-hosting/external-dependencies.md`. |
+| **RTMP egress to Twitch/YouTube — no media relay shipped** | Bucket D — documented. |
+| **WASM build pipeline — no CI runner invoked** | Bucket D — documented. |
+| **game-template-fps / motorsport — no CI WASM build** | Bucket D — documented. |
+| **Voice SFU (LiveKit/mediasoup) — not implemented** | Bucket D — documented as the scale path. |
+| **services/games.rs (service layer) — originally `todo!()`, now replaced** | Fixed in F1 (see above). |
+| **Subscription payment_provider hardcoded to 'stripe'** | F2 backend partition. |
+| **Leaderboard / Achievements / Tournaments services — not wired** | Platform surface; `#![allow(dead_code)]` acknowledged. Not Bucket D but low priority vs revenue paths. |
+| **Backup job never spawned** | Low priority; no user-facing impact in dev. Noted. |
+| **Session cleanup job never spawned** | Low priority; DB sessions expire via JWT TTL. Noted. |
+| **SDK platform clients are I/O-free** | By design — caller supplies the transport. Documented in SDK README. |

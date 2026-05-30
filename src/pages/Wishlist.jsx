@@ -7,6 +7,8 @@ import { mockGames } from '../data/mockGames';
 import { api } from '../api/client';
 import './social.css';
 
+const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+
 const WishlistEmptyIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -14,11 +16,15 @@ const WishlistEmptyIcon = (
 );
 
 export default function Wishlist() {
-  const [wishlistGames, setWishlistGames] = useState(mockGames.slice(0, 3));
+  const [wishlistGames, setWishlistGames] = useState(useMocks ? mockGames.slice(0, 3) : []);
   const [removingId, setRemovingId]       = useState(null);
   const [loading, setLoading]             = useState(true);
 
   useEffect(() => {
+    if (useMocks) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     async function loadWishlist() {
@@ -26,9 +32,9 @@ export default function Wishlist() {
         const data = await api.wishlist.list();
         if (!cancelled && data) {
           const list = Array.isArray(data) ? data : (data?.games ?? data?.items ?? null);
-          if (list) setWishlistGames(list);
+          if (list != null) setWishlistGames(list);
         }
-      } catch { /* use mock data */ } finally {
+      } catch { /* API unavailable — empty list is the honest state */ } finally {
         if (!cancelled) setLoading(false);
       }
     }

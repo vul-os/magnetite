@@ -3,16 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import Button from '../components/common/Button';
 import OnboardingProgress from '../components/OnboardingProgress';
 import GameCard from '../components/GameCard';
+import { api } from '../api/client';
 import './Onboarding.css';
 
 const ONBOARDING_STORAGE_KEY = 'magnetite_onboarding_completed';
 
 const STEPS = ['Welcome', 'Create Wallet', 'Add Funds', 'Browse Games'];
 
-const FEATURED_GAMES = [
-  { id: 1, title: 'Cosmic Raiders', developer: 'StarForge Studios', fee_per_session: 0.50, category: 'Action', thumbnail: 'https://picsum.photos/seed/game1/400/225' },
-  { id: 2, title: 'Puzzle Dimension', developer: 'MindBend Games', fee_per_session: 0.25, category: 'Puzzle', thumbnail: 'https://picsum.photos/seed/game2/400/225' },
-  { id: 3, title: 'Speed Legends', developer: 'Velocity Labs', fee_per_session: 0.75, category: 'Racing', thumbnail: 'https://picsum.photos/seed/game3/400/225' },
+// Placeholder featured games — replaced by real games if the API responds
+const FEATURED_GAMES_FALLBACK = [
+  { id: 1, title: 'Cosmic Raiders',   developer: 'StarForge Studios', fee_per_session: 0.50, category: 'Action',  thumbnail: 'https://picsum.photos/seed/game1/400/225' },
+  { id: 2, title: 'Puzzle Dimension', developer: 'MindBend Games',    fee_per_session: 0.25, category: 'Puzzle',  thumbnail: 'https://picsum.photos/seed/game2/400/225' },
+  { id: 3, title: 'Speed Legends',    developer: 'Velocity Labs',     fee_per_session: 0.75, category: 'Racing',  thumbnail: 'https://picsum.photos/seed/game3/400/225' },
 ];
 
 const FUND_AMOUNTS = [10, 25, 50, 100];
@@ -53,19 +55,33 @@ function WelcomeStep({ onNext }) {
 
 function WalletStep({ onNext, onSkip }) {
   const [walletAddress, setWalletAddress] = useState('');
-  const [_isGenerating, setIsGenerating] = useState(false);
-  const [showAddress, setShowAddress] = useState(false);
+  const [isGenerating, setIsGenerating]   = useState(false);
+  const [showAddress, setShowAddress]     = useState(false);
+  const [error, setError]                 = useState(null);
 
-  const generateWallet = () => {
+  const generateWallet = async () => {
     setIsGenerating(true);
-    setTimeout(() => {
-      const mockAddress = '0x' + Array.from({ length: 40 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      setWalletAddress(mockAddress);
-      setShowAddress(true);
+    setError(null);
+    try {
+      // POST to wallet API — backend creates/returns the user's wallet address
+      const data = await api.wallet.balance();
+      const address = data?.address ?? data?.wallet_address ?? null;
+      if (address) {
+        setWalletAddress(address);
+        setShowAddress(true);
+      } else {
+        // Backend didn't return an address yet (wallet auto-created on registration)
+        // Fetch balance which also initialises the wallet server-side
+        setWalletAddress('Wallet initialised — view full address in Settings');
+        setShowAddress(true);
+      }
+    } catch {
+      setError('Could not initialise wallet. You can set it up later in Settings.');
+      setShowAddress(true); // allow proceeding
+      setWalletAddress('');
+    } finally {
       setIsGenerating(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -73,36 +89,46 @@ function WalletStep({ onNext, onSkip }) {
       <h2>Set Up Your Wallet</h2>
       <p className="step-description">
         A USDC wallet lets you pay for game sessions and receive winnings.
-        Your wallet is stored securely on your device.
+        Your wallet is managed securely by Magnetite.
       </p>
+
+      {error && (
+        <div className="step-error" role="alert">{error}</div>
+      )}
 
       {!showAddress ? (
         <div className="wallet-options">
-          <div className="wallet-option primary" onClick={generateWallet}>
-            <div className="option-icon">✨</div>
-            <h3>Auto-Generate Wallet</h3>
-            <p>Create a new USDC wallet instantly</p>
-          </div>
-          <div className="wallet-option">
-            <div className="option-icon">🔗</div>
-            <h3>Connect Existing</h3>
-            <p>Link your existing wallet</p>
+          <div
+            className="wallet-option primary"
+            onClick={isGenerating ? undefined : generateWallet}
+            role="button"
+            tabIndex={0}
+            aria-disabled={isGenerating}
+            onKeyDown={(e) => e.key === 'Enter' && !isGenerating && generateWallet()}
+          >
+            <div className="option-icon" aria-hidden="true">{isGenerating ? '⏳' : '✨'}</div>
+            <h3>{isGenerating ? 'Initialising…' : 'Create Wallet'}</h3>
+            <p>Create your USDC wallet to start playing</p>
           </div>
         </div>
       ) : (
-        <div className="wallet-address-display">
-          <div className="address-label">Your Wallet Address</div>
-          <div className="address-value">{walletAddress}</div>
-          <div className="address-actions">
-            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(walletAddress)}>
-              Copy Address
-            </Button>
+        walletAddress && (
+          <div className="wallet-address-display">
+            <div className="address-label">Wallet Status</div>
+            <div className="address-value">{walletAddress}</div>
+            {walletAddress.startsWith('0x') && (
+              <div className="address-actions">
+                <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(walletAddress)}>
+                  Copy Address
+                </Button>
+              </div>
+            )}
           </div>
-        </div>
+        )
       )}
 
       <div className="step-actions">
-        <Button onClick={onNext} disabled={!showAddress && !walletAddress}>
+        <Button onClick={onNext} disabled={isGenerating && !showAddress}>
           Continue
         </Button>
         <Button variant="ghost" onClick={onSkip}>
@@ -115,28 +141,25 @@ function WalletStep({ onNext, onSkip }) {
 
 function FundsStep({ onNext, onSkip }) {
   const [selectedAmount, setSelectedAmount] = useState(null);
-  const [customAmount, setCustomAmount] = useState('');
-  const [_isProcessing, setIsProcessing] = useState(false);
-
-  const handlePaystackDeposit = () => {
-    if (!selectedAmount && !customAmount) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      onNext();
-    }, 2000);
-  };
-
-  const handleUSDCDeposit = () => {
-    if (!selectedAmount && !customAmount) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      onNext();
-    }, 2000);
-  };
+  const [customAmount, setCustomAmount]     = useState('');
+  const [isProcessing, setIsProcessing]     = useState(false);
+  const [depositError, setDepositError]     = useState(null);
 
   const amount = selectedAmount || parseFloat(customAmount) || 0;
+
+  const handleDeposit = async (method) => {
+    if (!amount) return;
+    setIsProcessing(true);
+    setDepositError(null);
+    try {
+      await api.wallet.deposit({ amount, payment_method: method });
+      onNext();
+    } catch (err) {
+      setDepositError(err.message || 'Deposit failed. You can add funds later in Wallet settings.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="onboarding-step funds-step">
@@ -144,6 +167,10 @@ function FundsStep({ onNext, onSkip }) {
       <p className="step-description">
         Add USDC to your wallet to start playing. You can skip this step and add funds later.
       </p>
+
+      {depositError && (
+        <div className="step-error" role="alert">{depositError}</div>
+      )}
 
       <div className="amount-selector">
         <div className="amount-label">Select Amount</div>
@@ -178,21 +205,35 @@ function FundsStep({ onNext, onSkip }) {
 
       {amount > 0 && (
         <div className="deposit-options">
-          <div className="deposit-option" onClick={handlePaystackDeposit}>
-            <div className="option-icon">💳</div>
+          <div
+            className={`deposit-option ${isProcessing ? 'loading' : ''}`}
+            onClick={() => !isProcessing && handleDeposit('paystack')}
+            role="button"
+            tabIndex={0}
+            aria-disabled={isProcessing}
+            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleDeposit('paystack')}
+          >
+            <div className="option-icon" aria-hidden="true">💳</div>
             <div className="option-info">
               <h4>Pay with Card</h4>
               <p>Visa, Mastercard via Paystack</p>
             </div>
-            <div className="option-arrow">→</div>
+            <div className="option-arrow" aria-hidden="true">→</div>
           </div>
-          <div className="deposit-option" onClick={handleUSDCDeposit}>
-            <div className="option-icon">🪙</div>
+          <div
+            className={`deposit-option ${isProcessing ? 'loading' : ''}`}
+            onClick={() => !isProcessing && handleDeposit('usdc')}
+            role="button"
+            tabIndex={0}
+            aria-disabled={isProcessing}
+            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleDeposit('usdc')}
+          >
+            <div className="option-icon" aria-hidden="true">🪙</div>
             <div className="option-info">
               <h4>Deposit USDC</h4>
               <p>Transfer from another wallet</p>
             </div>
-            <div className="option-arrow">→</div>
+            <div className="option-arrow" aria-hidden="true">→</div>
           </div>
         </div>
       )}
@@ -206,16 +247,16 @@ function FundsStep({ onNext, onSkip }) {
   );
 }
 
-function BrowseGamesStep({ onComplete }) {
+function BrowseGamesStep({ onComplete, featuredGames }) {
   return (
     <div className="onboarding-step browse-step">
       <h2>Discover Games</h2>
       <p className="step-description">
-        Browse our marketplace of open source games. Start with these featured titles.
+        Browse our marketplace of open-source Rust games. Start with these featured titles.
       </p>
 
       <div className="featured-games-grid">
-        {FEATURED_GAMES.map(game => (
+        {featuredGames.map(game => (
           <GameCard key={game.id} game={game} showPlayButton={false} />
         ))}
       </div>
@@ -233,7 +274,8 @@ function BrowseGamesStep({ onComplete }) {
 }
 
 export default function Onboarding() {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep]       = useState(0);
+  const [featuredGames, setFeaturedGames]   = useState(FEATURED_GAMES_FALLBACK);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -242,6 +284,18 @@ export default function Onboarding() {
       navigate('/');
     }
   }, [navigate]);
+
+  // Pre-fetch featured games so the last step looks real
+  useEffect(() => {
+    api.games.list()
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data?.games ?? null);
+        if (list && list.length > 0) {
+          setFeaturedGames(list.slice(0, 3));
+        }
+      })
+      .catch(() => { /* keep fallback */ });
+  }, []);
 
   const completeOnboarding = () => {
     localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
@@ -269,7 +323,7 @@ export default function Onboarding() {
       case 2:
         return <FundsStep onNext={handleNext} onSkip={handleSkip} />;
       case 3:
-        return <BrowseGamesStep onComplete={completeOnboarding} />;
+        return <BrowseGamesStep onComplete={completeOnboarding} featuredGames={featuredGames} />;
       default:
         return null;
     }

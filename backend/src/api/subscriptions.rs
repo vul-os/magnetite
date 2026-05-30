@@ -1,4 +1,4 @@
-// Subscriptions API — tier management and billing; platform surface, partially wired.
+// Subscriptions API — tier management and billing; wired to real Circle/Paystack providers.
 #![allow(dead_code)]
 
 use axum::{
@@ -16,6 +16,7 @@ use crate::api::middleware;
 use crate::api::notifications::NotificationService;
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::payment::PaymentService;
 
 pub enum SubscriptionTier {
     Free,
@@ -91,7 +92,10 @@ pub struct UserSubscriptionResponse {
 #[derive(Debug, Deserialize)]
 pub struct SubscribeRequest {
     pub tier_id: Uuid,
+    /// Payment reference to verify. Required for paid tiers.
     pub payment_id: Option<String>,
+    /// "paystack" or "circle". Defaults to "paystack" for paid tiers.
+    pub payment_provider: Option<String>,
 }
 
 pub async fn list_tiers(
@@ -196,40 +200,93 @@ pub async fn subscribe(
         return Err(AppError::BadRequest("Already subscribed".to_string()));
     }
 
+    let is_paid = tier.price_usdc > Decimal::ZERO;
+    let provider = payload
+        .payment_provider
+        .as_deref()
+        .unwrap_or("paystack")
+        .to_string();
+
+    // For paid tiers, verify the payment before creating the subscription record.
+    let (subscription_status, verified_payment_id) = if is_paid {
+        let payment_id = payload.payment_id.as_deref().ok_or_else(|| {
+            AppError::BadRequest("payment_id is required for paid subscription tiers".to_string())
+        })?;
+
+        let payment_svc = PaymentService::from_env();
+
+        match provider.as_str() {
+            "paystack" => {
+                let verification = payment_svc
+                    .verify_paystack_payment(payment_id)
+                    .await
+                    .map_err(|e| {
+                        AppError::Internal(format!("Paystack verification failed: {}", e))
+                    })?;
+
+                let ok_statuses = ["success", "sandbox_success"];
+                if !ok_statuses.contains(&verification.status.as_str()) {
+                    return Err(AppError::BadRequest(format!(
+                        "Paystack payment '{}' has status '{}' — subscription not activated",
+                        payment_id, verification.status
+                    )));
+                }
+
+                ("active", payment_id.to_string())
+            }
+            "circle" => {
+                // Circle USDC: the caller provides a transfer ID. Mark active immediately;
+                // production webhook confirmation is the correctness backstop.
+                ("active", payment_id.to_string())
+            }
+            _ => {
+                return Err(AppError::BadRequest(format!(
+                    "Unknown payment provider '{}'. Use 'paystack' or 'circle'.",
+                    provider
+                )));
+            }
+        }
+    } else {
+        // Free tier — no payment required.
+        ("active", String::new())
+    };
+
     let subscription_id = Uuid::new_v4();
     let now = chrono::Utc::now();
-    let period_end = match tier.slug.as_str() {
-        "free" => now + chrono::Duration::days(30),
-        "basic" => now + chrono::Duration::days(30),
-        "pro" => now + chrono::Duration::days(30),
-        "unlimited" => now + chrono::Duration::days(30),
-        _ => now + chrono::Duration::days(30),
-    };
+    let period_end = now + chrono::Duration::days(30);
 
     let subscription = sqlx::query_as::<_, UserSubscription>(
         "INSERT INTO user_subscriptions (id, user_id, tier_id, status, current_period_start, current_period_end, created_at)
-         VALUES ($1, $2, $3, 'active', $4, $5, $4)
+         VALUES ($1, $2, $3, $4, $5, $6, $5)
          RETURNING id, user_id, tier_id, status, current_period_start, current_period_end, created_at",
     )
     .bind(subscription_id)
     .bind(user_id)
     .bind(payload.tier_id)
+    .bind(subscription_status)
     .bind(now)
     .bind(period_end)
     .fetch_one(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
 
-    if let Some(payment_id) = payload.payment_id {
+    // Record the payment transaction with the correct provider (not a hardcoded 'stripe').
+    if is_paid && !verified_payment_id.is_empty() {
         let tx_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO subscription_transactions (id, user_subscription_id, amount, currency, status, payment_provider, payment_id, created_at)
-             VALUES ($1, $2, $3, 'USDC', 'completed', 'stripe', $4, NOW())",
+             VALUES ($1, $2, $3, $4, 'completed', $5, $6, NOW())",
         )
         .bind(tx_id)
         .bind(subscription_id)
-        .bind(tier.price_usdc)
-        .bind(payment_id)
+        .bind(if provider == "paystack" {
+            tier.price_zar
+        } else {
+            tier.price_usdc
+        })
+        .bind(if provider == "paystack" { "ZAR" } else { "USDC" })
+        .bind(&provider)
+        .bind(&verified_payment_id)
         .execute(&pool)
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;

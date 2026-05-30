@@ -1,4 +1,4 @@
-// Payment/subscription service — Circle + Paystack integration, platform surface, not yet wired.
+// Payment/subscription service — Circle + Paystack integration (real HTTP clients).
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
@@ -240,6 +240,14 @@ impl SubscriptionService {
             .as_ref()
             .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
 
+        // Look up the user's real email from the DB — never use a fabricated placeholder.
+        let user_email = sqlx::query_as::<_, (String,)>("SELECT email FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|r| r.0)
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
         let client = reqwest::Client::new();
         let reference = format!("PS_SUB_{}", Uuid::new_v4());
 
@@ -247,7 +255,7 @@ impl SubscriptionService {
             .post("https://api.paystack.co/transaction/initialize")
             .header("Authorization", format!("Bearer {}", secret_key))
             .json(&serde_json::json!({
-                "email": format!("{}@magnetite.local", user_id),
+                "email": user_email,
                 "amount": (tier.price_zar * Decimal::new(100, 0)).to_string(),
                 "currency": "ZAR",
                 "reference": reference,
@@ -774,8 +782,12 @@ impl SubscriptionService {
 }
 
 pub struct PaymentService {
-    api_key: String,
-    base_url: String,
+    /// Circle API key — None if CIRCLE_API_KEY is unset (triggers ProviderUnconfigured).
+    circle_api_key: Option<String>,
+    /// Paystack secret key — None if PAYSTACK_SECRET_KEY is unset.
+    paystack_secret_key: Option<String>,
+    /// When true, return clearly-labeled sandbox results instead of calling providers.
+    sandbox: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -841,127 +853,464 @@ pub struct EarningsBreakdown {
 }
 
 impl PaymentService {
-    pub fn new(api_key: String, base_url: String) -> Self {
-        Self { api_key, base_url }
-    }
-
-    pub fn mock() -> Self {
+    /// Construct from environment variables. Call this inside handlers.
+    pub fn from_env() -> Self {
         Self {
-            api_key: "mock_api_key".to_string(),
-            base_url: "https://api.mock.circle.com".to_string(),
+            circle_api_key: std::env::var("CIRCLE_API_KEY").ok(),
+            paystack_secret_key: std::env::var("PAYSTACK_SECRET_KEY").ok(),
+            sandbox: std::env::var("PAYMENTS_SANDBOX")
+                .map(|v| v == "true")
+                .unwrap_or(false),
         }
     }
 
+    /// Legacy constructor kept for call-sites that pass an explicit key.
+    /// Prefer `from_env()`.
+    pub fn new(api_key: String, base_url: String) -> Self {
+        // base_url is ignored — the real URLs are always api.circle.com / api.paystack.co.
+        let _ = base_url;
+        Self {
+            circle_api_key: if api_key.is_empty() || api_key == "mock_api_key" {
+                None
+            } else {
+                Some(api_key)
+            },
+            paystack_secret_key: std::env::var("PAYSTACK_SECRET_KEY").ok(),
+            sandbox: std::env::var("PAYMENTS_SANDBOX")
+                .map(|v| v == "true")
+                .unwrap_or(false),
+        }
+    }
+
+    /// Kept for tests only. In production use `from_env()`.
+    pub fn mock() -> Self {
+        Self {
+            circle_api_key: None,
+            paystack_secret_key: None,
+            sandbox: true, // mock always runs in sandbox mode
+        }
+    }
+
+    fn require_circle_key(&self) -> Result<&str> {
+        self.circle_api_key
+            .as_deref()
+            .ok_or_else(|| AppError::Internal(
+                "payments not configured: CIRCLE_API_KEY is unset (set PAYMENTS_SANDBOX=true for local dev)".to_string()
+            ))
+    }
+
+    fn require_paystack_key(&self) -> Result<&str> {
+        self.paystack_secret_key
+            .as_deref()
+            .ok_or_else(|| AppError::Internal(
+                "payments not configured: PAYSTACK_SECRET_KEY is unset (set PAYMENTS_SANDBOX=true for local dev)".to_string()
+            ))
+    }
+
+    /// Create a Circle USDC wallet for a user.
     pub async fn create_wallet(&self, user_id: Uuid) -> Result<WalletInfo> {
         tracing::info!("Creating USDC wallet for user: {}", user_id);
 
+        if self.sandbox {
+            tracing::info!("[SANDBOX] Returning sandbox wallet for user {}", user_id);
+            return Ok(WalletInfo {
+                wallet_id: format!("sandbox_wallet_{}", user_id),
+                address: Some(format!("sandbox_addr_{}", user_id)),
+                chain: "ETH-SANDBOX".to_string(),
+            });
+        }
+
+        let api_key = self.require_circle_key()?;
+        let idempotency_key = format!("wallet-{}", user_id);
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post("https://api.circle.com/v1/wallets")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&serde_json::json!({
+                "idempotencyKey": idempotency_key,
+                "description": format!("Magnetite user wallet for {}", user_id)
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle create_wallet failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Circle wallet creation failed: {}",
+                body
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle response parse error: {}", e)))?;
+
+        let wallet_id = body["data"]["walletId"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
+
         Ok(WalletInfo {
-            wallet_id: format!("wallet_{}", uuid::Uuid::new_v4()),
-            address: Some(format!("0x{:x}", rand::random::<u128>())),
+            wallet_id,
+            address: None, // Address is obtained separately via /wallets/{id}/addresses
             chain: "ETH".to_string(),
         })
     }
 
+    /// Get balance for a Circle wallet.
     pub async fn get_wallet_balance(&self, wallet_id: &str) -> Result<BalanceInfo> {
         tracing::info!("Checking balance for wallet: {}", wallet_id);
 
+        if self.sandbox {
+            return Ok(BalanceInfo {
+                wallet_id: wallet_id.to_string(),
+                balance: Decimal::ZERO,
+                currency: "USDC".to_string(),
+            });
+        }
+
+        let api_key = self.require_circle_key()?;
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .get(format!("https://api.circle.com/v1/wallets/{}", wallet_id))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle get_wallet failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Circle wallet lookup failed: {}",
+                body
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle response parse error: {}", e)))?;
+
+        let balances = body["data"]["balances"].as_array();
+        let usdc_balance = balances
+            .and_then(|arr| arr.iter().find(|b| b["currency"].as_str() == Some("USDC")))
+            .and_then(|b| b["amount"].as_str())
+            .and_then(|s| s.parse::<Decimal>().ok())
+            .unwrap_or(Decimal::ZERO);
+
         Ok(BalanceInfo {
             wallet_id: wallet_id.to_string(),
-            balance: Decimal::ZERO,
+            balance: usdc_balance,
             currency: "USDC".to_string(),
         })
     }
 
+    /// Initiate a Circle USDC transfer (deposit direction — from a source to this wallet).
     pub async fn deposit_funds(
         &self,
         wallet_id: &str,
         amount: Decimal,
     ) -> Result<TransferResponse> {
-        tracing::info!("Depositing {} to wallet: {}", amount, wallet_id);
+        tracing::info!("Depositing {} USDC to wallet: {}", amount, wallet_id);
+
+        if self.sandbox {
+            return Ok(TransferResponse {
+                transfer_id: format!("sandbox_transfer_{}", Uuid::new_v4()),
+                status: "sandbox_pending".to_string(),
+                destination_address: wallet_id.to_string(),
+                amount,
+            });
+        }
+
+        let api_key = self.require_circle_key()?;
+        let idempotency_key = Uuid::new_v4().to_string();
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post("https://api.circle.com/v1/transfers")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&serde_json::json!({
+                "idempotencyKey": idempotency_key,
+                "destination": {
+                    "type": "wallet",
+                    "id": wallet_id
+                },
+                "amount": {
+                    "amount": amount.to_string(),
+                    "currency": "USDC"
+                }
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle deposit failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Circle deposit failed: {}",
+                body
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle response parse error: {}", e)))?;
 
         Ok(TransferResponse {
-            transfer_id: format!("transfer_{}", uuid::Uuid::new_v4()),
-            status: "pending".to_string(),
+            transfer_id: body["data"]["id"].as_str().unwrap_or("unknown").to_string(),
+            status: body["data"]["status"]
+                .as_str()
+                .unwrap_or("pending")
+                .to_string(),
             destination_address: wallet_id.to_string(),
             amount,
         })
     }
 
+    /// Initiate a Circle USDC transfer to an on-chain address (withdrawal).
     pub async fn withdraw_funds(
         &self,
         to_address: &str,
         amount: Decimal,
     ) -> Result<TransferResponse> {
-        tracing::info!("Withdrawing {} to address: {}", amount, to_address);
+        tracing::info!("Withdrawing {} USDC to address: {}", amount, to_address);
+
+        if self.sandbox {
+            return Ok(TransferResponse {
+                transfer_id: format!("sandbox_transfer_{}", Uuid::new_v4()),
+                status: "sandbox_pending".to_string(),
+                destination_address: to_address.to_string(),
+                amount,
+            });
+        }
+
+        let api_key = self.require_circle_key()?;
+        let idempotency_key = Uuid::new_v4().to_string();
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post("https://api.circle.com/v1/transfers")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&serde_json::json!({
+                "idempotencyKey": idempotency_key,
+                "destination": {
+                    "type": "blockchain",
+                    "address": to_address,
+                    "chain": "ETH"
+                },
+                "amount": {
+                    "amount": amount.to_string(),
+                    "currency": "USDC"
+                }
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle withdrawal failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Circle withdrawal failed: {}",
+                body
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Circle response parse error: {}", e)))?;
 
         Ok(TransferResponse {
-            transfer_id: format!("transfer_{}", uuid::Uuid::new_v4()),
-            status: "pending".to_string(),
+            transfer_id: body["data"]["id"].as_str().unwrap_or("unknown").to_string(),
+            status: body["data"]["status"]
+                .as_str()
+                .unwrap_or("pending")
+                .to_string(),
             destination_address: to_address.to_string(),
             amount,
         })
     }
 
+    /// Create a Circle payment (on-chain USDC send).
     pub async fn create_payment(
         &self,
         to_address: &str,
         amount: Decimal,
     ) -> Result<TransferResponse> {
-        tracing::info!("Creating payment of {} to address: {}", amount, to_address);
-
-        Ok(TransferResponse {
-            transfer_id: format!("payment_{}", uuid::Uuid::new_v4()),
-            status: "completed".to_string(),
-            destination_address: to_address.to_string(),
+        tracing::info!(
+            "Creating Circle payment of {} USDC to address: {}",
             amount,
-        })
+            to_address
+        );
+        // Delegate to withdraw_funds which calls the same Circle /v1/transfers endpoint.
+        self.withdraw_funds(to_address, amount).await
     }
 
+    /// Create a Paystack payment session (fiat on-ramp).
+    /// `user_email` must be the user's REAL email — never a fabricated placeholder.
     pub async fn create_paystack_session(
         &self,
         user_id: Uuid,
         amount: Decimal,
-        _email: &str,
+        user_email: &str,
     ) -> Result<PaystackSession> {
         tracing::info!(
-            "Creating Paystack session for user: {}, amount: {}",
+            "Creating Paystack session for user: {}, amount: {} ZAR",
             user_id,
             amount
         );
 
-        let reference = format!("PS_{}", uuid::Uuid::new_v4());
+        if self.sandbox {
+            let reference = format!("sandbox_PS_{}", Uuid::new_v4());
+            return Ok(PaystackSession {
+                session_id: format!("sandbox_session_{}", Uuid::new_v4()),
+                checkout_url: format!("https://sandbox.paystack.com/pay/{}", reference),
+                reference,
+            });
+        }
+
+        let secret_key = self.require_paystack_key()?;
+        // Amount in Paystack is in kobo (ZAR cents = 100ths).
+        let amount_kobo = (amount * Decimal::new(100, 0))
+            .to_string()
+            .split('.')
+            .next()
+            .unwrap_or("0")
+            .to_string();
+
+        let reference = format!("PS_{}", Uuid::new_v4());
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .post("https://api.paystack.co/transaction/initialize")
+            .header("Authorization", format!("Bearer {}", secret_key))
+            .json(&serde_json::json!({
+                "email": user_email,
+                "amount": amount_kobo,
+                "currency": "ZAR",
+                "reference": reference,
+                "metadata": {
+                    "user_id": user_id.to_string()
+                },
+                "callback_url": format!("{}/payment/callback", std::env::var("APP_URL").unwrap_or_default())
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Paystack session creation failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Paystack session failed: {}",
+                body
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Paystack response parse error: {}", e)))?;
+
+        let checkout_url = body["data"]["authorization_url"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
 
         Ok(PaystackSession {
-            session_id: format!("session_{}", uuid::Uuid::new_v4()),
-            checkout_url: format!("https://paystack.com/pay/{}", reference),
+            session_id: format!("session_{}", Uuid::new_v4()),
+            checkout_url,
             reference,
         })
     }
 
+    /// Verify a Paystack payment by reference — calls the real Paystack API.
     pub async fn verify_paystack_payment(&self, reference: &str) -> Result<PaystackVerification> {
         tracing::info!("Verifying Paystack payment: {}", reference);
 
+        if self.sandbox {
+            return Ok(PaystackVerification {
+                status: "sandbox_success".to_string(),
+                reference: reference.to_string(),
+                amount: Decimal::new(100000, 2), // 1000.00 ZAR
+                currency: "ZAR".to_string(),
+            });
+        }
+
+        let secret_key = self.require_paystack_key()?;
+        let client = reqwest::Client::new();
+
+        let resp = client
+            .get(format!(
+                "https://api.paystack.co/transaction/verify/{}",
+                urlencoding::encode(reference)
+            ))
+            .header("Authorization", format!("Bearer {}", secret_key))
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("Paystack verify request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "Paystack verification failed: {}",
+                body
+            )));
+        }
+
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("Paystack response parse error: {}", e)))?;
+
+        let status = body["data"]["status"]
+            .as_str()
+            .unwrap_or("failed")
+            .to_string();
+        // Paystack returns amount in kobo (ZAR cents); divide by 100 for ZAR.
+        let amount_kobo = body["data"]["amount"].as_i64().unwrap_or(0);
+        let amount = Decimal::new(amount_kobo, 2); // kobo → ZAR with 2 decimal places
+
+        let currency = body["data"]["currency"]
+            .as_str()
+            .unwrap_or("ZAR")
+            .to_string();
+
         Ok(PaystackVerification {
-            status: "success".to_string(),
+            status,
             reference: reference.to_string(),
-            amount: Decimal::new(100000, 2),
-            currency: "ZAR".to_string(),
+            amount,
+            currency,
         })
     }
 
+    /// Convert ZAR to USDC using the ZAR_USDC_RATE env variable (default: 275.0 ZAR/USDC).
     pub async fn convert_zar_to_usdc(&self, zar_amount: Decimal) -> Result<Decimal> {
-        let exchange_rate = Decimal::new(2750, 1);
-        let platform_fee = Decimal::new(3, 2);
+        // Rate is env-configurable: ZAR_USDC_RATE=275.0 means 275 ZAR per 1 USDC.
+        let exchange_rate = std::env::var("ZAR_USDC_RATE")
+            .ok()
+            .and_then(|s| s.parse::<Decimal>().ok())
+            .unwrap_or_else(|| Decimal::new(2750, 1)); // default: 275.0
 
+        let platform_fee = Decimal::new(3, 2); // 3% conversion fee
         let usdc_amount = (zar_amount / exchange_rate) * (Decimal::ONE - platform_fee);
 
-        tracing::info!("Converted {} ZAR to {} USDC", zar_amount, usdc_amount);
+        tracing::info!(
+            "Converted {} ZAR to {} USDC (rate: {} ZAR/USDC)",
+            zar_amount,
+            usdc_amount,
+            exchange_rate
+        );
         Ok(usdc_amount)
     }
 
     pub fn calculate_earnings(&self, game_revenue: Decimal) -> EarningsBreakdown {
-        let platform_percentage = Decimal::new(15, 2);
-        let developer_percentage = Decimal::ONE - platform_percentage;
+        let platform_percentage = Decimal::new(15, 2); // 15%
+        let developer_percentage = Decimal::ONE - platform_percentage; // 85%
 
         let platform_share = game_revenue * platform_percentage;
         let developer_share = game_revenue * developer_percentage;
@@ -974,6 +1323,7 @@ impl PaymentService {
         }
     }
 
+    /// Disburse a payout to a user's Circle wallet address via the real Circle API.
     pub async fn process_payout(
         &self,
         _db: &sqlx::PgPool,
@@ -982,28 +1332,41 @@ impl PaymentService {
         destination: &str,
     ) -> Result<PayoutInfo> {
         tracing::info!(
-            "Processing payout for user: {}, amount: {}",
+            "Processing payout for user: {}, amount: {} USDC, dest: {}",
             user_id,
-            amount
+            amount,
+            destination
         );
 
-        let payout_id = Uuid::new_v4();
+        if self.sandbox {
+            return Ok(PayoutInfo {
+                payout_id: Uuid::new_v4(),
+                user_id,
+                amount,
+                destination: destination.to_string(),
+                status: "sandbox_pending".to_string(),
+                created_at: Utc::now(),
+            });
+        }
 
-        let payout = PayoutInfo {
-            payout_id,
+        // Call Circle /v1/transfers to disburse USDC.
+        let transfer = self.withdraw_funds(destination, amount).await?;
+
+        Ok(PayoutInfo {
+            payout_id: Uuid::new_v4(),
             user_id,
             amount,
             destination: destination.to_string(),
-            status: "pending".to_string(),
+            status: transfer.status,
             created_at: Utc::now(),
-        };
-
-        Ok(payout)
+        })
     }
 
     pub async fn process_weekly_payouts(&self, _db: &sqlx::PgPool) -> Result<Vec<PayoutInfo>> {
-        tracing::info!("Processing weekly auto-payouts");
-
+        tracing::info!(
+            "process_weekly_payouts: delegated to PayoutService::process_pending_payouts"
+        );
+        // Weekly batch processing is handled by PayoutService (spawned as a background job).
         Ok(vec![])
     }
 }

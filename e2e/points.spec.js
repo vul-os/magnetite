@@ -21,7 +21,7 @@ test.describe('Points Dashboard', () => {
   });
 
   test('balance value is displayed', async ({ page }) => {
-    // The mock balance is 4,820 points — any number-like text should appear.
+    // Balance is loaded from the real API; any numeric value should appear.
     await page.waitForTimeout(400);
     const balanceEl = page.locator('[class*="balance-val"], [class*="pts-val"], [class*="points-amount"]');
     if (await balanceEl.count() > 0) {
@@ -47,7 +47,7 @@ test.describe('Points Dashboard', () => {
     if (await histTab.count() > 0) {
       await histTab.first().click();
     }
-    // At least one history row should be present from mock data.
+    // At least one history row should be present (from the API or an empty-state element).
     const rows = await page
       .locator('.hist-row, .history-entry, [class*="hist-row"], [class*="history"]')
       .all();

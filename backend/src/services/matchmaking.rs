@@ -1,4 +1,4 @@
-// Matchmaking service — ELO, party matching, and session creation; platform surface, not yet wired.
+// Matchmaking service — ELO, party matching, and session creation.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Duration, Utc};
@@ -380,8 +380,27 @@ pub async fn get_user_region(db: &sqlx::PgPool, user_id: Uuid) -> Result<String>
     region.ok_or_else(|| AppError::NotFound("User not found".to_string()))
 }
 
+/// In-memory filter: passes all players through unchanged because the `QueuedPlayer`
+/// struct does not carry a `region` field.  Use `filter_by_region_db` for real
+/// per-player region lookups against the database.
 pub fn filter_by_region(players: Vec<QueuedPlayer>, _region: String) -> Vec<QueuedPlayer> {
     players
+}
+
+/// DB-aware version: fetch each player's region and keep only those that match.
+pub async fn filter_by_region_db(
+    db: &sqlx::PgPool,
+    players: Vec<QueuedPlayer>,
+    region: &str,
+) -> Vec<QueuedPlayer> {
+    let mut filtered = Vec::with_capacity(players.len());
+    for player in players {
+        match get_user_region(db, player.user_id).await {
+            Ok(r) if r == region => filtered.push(player),
+            _ => {} // exclude players whose region doesn't match or can't be fetched
+        }
+    }
+    filtered
 }
 
 pub async fn create_match(
@@ -456,6 +475,13 @@ pub async fn create_match(
     })
 }
 
+/// Start a game session for a matched group of players.
+///
+/// The `server_endpoint` is derived from `GAME_SERVER_WS_BASE` (read here from
+/// env so main.rs / services/mod.rs need no change) and points players at the
+/// `/ws/game/<session_id>` WebSocket on this platform server.  In a future
+/// multi-server deployment, a dedicated game-server allocator would pick a
+/// different host; for now the platform server itself hosts the game loop.
 pub async fn start_game_session(db: &sqlx::PgPool, r#match: &Match) -> Result<SessionInfo> {
     let session_id = Uuid::new_v4();
     let now = Utc::now();
@@ -478,13 +504,21 @@ pub async fn start_game_session(db: &sqlx::PgPool, r#match: &Match) -> Result<Se
             .fetch_all(db)
             .await?;
 
+    // Derive the WebSocket endpoint for this session.
+    // GAME_SERVER_WS_BASE defaults to ws://localhost:8080; in production set it to
+    // the public ws(s):// address of the game server (e.g. wss://api.magnetite.gg).
+    let ws_base =
+        std::env::var("GAME_SERVER_WS_BASE").unwrap_or_else(|_| "ws://localhost:8080".to_string());
+    let ws_base = ws_base.trim_end_matches('/');
+    let server_endpoint = Some(format!("{}/ws/game/{}", ws_base, session_id));
+
     Ok(SessionInfo {
         session_id,
         match_id: r#match.id,
         player_ids,
         region: r#match.region.clone(),
         started_at: now,
-        server_endpoint: None,
+        server_endpoint,
     })
 }
 

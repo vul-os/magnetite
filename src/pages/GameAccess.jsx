@@ -1,14 +1,18 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SubscriptionBadge from '../components/SubscriptionBadge';
+import { api } from '../api/client';
 import './GameAccess.css';
 
-const MOCK_GAMES = [
-  { id: 1, title: 'Cosmic Drift',  category: 'Racing',       tier: 'free',      players: 1247, image: 'https://images.unsplash.com/photo-1511882150382-421056c89033?w=400' },
-  { id: 2, title: 'Neon Strike',   category: 'Action',       tier: 'basic',     players: 892,  image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400' },
-  { id: 3, title: 'Cyber Arena',   category: 'Battle Royale', tier: 'pro',      players: 3421, image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400' },
-  { id: 4, title: 'Quantum Poker', category: 'Card Game',    tier: 'free',      players: 567,  image: 'https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=400' },
-  { id: 5, title: 'Void Hunters',  category: 'Adventure',    tier: 'pro',       players: 1823, image: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=400' },
-  { id: 6, title: 'Master Chess',  category: 'Strategy',     tier: 'unlimited', players: 4521, image: 'https://images.unsplash.com/photo-1529699211952-734e80c4d42b?w=400' },
+// Fallback shown when the API is unavailable (VITE_USE_MOCKS=true or backend down)
+const PLACEHOLDER_GAMES = [
+  { id: 1, title: 'Cosmic Drift',  category: 'Racing',        tier: 'free',      players: 1247, image: 'https://images.unsplash.com/photo-1511882150382-421056c89033?w=400' },
+  { id: 2, title: 'Neon Strike',   category: 'Action',        tier: 'basic',     players: 892,  image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400' },
+  { id: 3, title: 'Cyber Arena',   category: 'Battle Royale', tier: 'pro',       players: 3421, image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400' },
+  { id: 4, title: 'Quantum Poker', category: 'Card Game',     tier: 'free',      players: 567,  image: 'https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=400' },
+  { id: 5, title: 'Void Hunters',  category: 'Adventure',     tier: 'pro',       players: 1823, image: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=400' },
+  { id: 6, title: 'Master Chess',  category: 'Strategy',      tier: 'unlimited', players: 4521, image: 'https://images.unsplash.com/photo-1529699211952-734e80c4d42b?w=400' },
 ];
 
 const TIER_LABELS = {
@@ -40,20 +44,78 @@ function PlayersIcon() {
 }
 
 export default function GameAccess() {
-  const currentTier = 'basic';
+  const navigate = useNavigate();
+
+  const [games, setGames]           = useState(null);   // null = loading
+  const [currentTier, setCurrentTier] = useState(null); // null = loading
+  const [loadError, setLoadError]   = useState(null);
+
+  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+
+  useEffect(() => {
+    if (useMocks) {
+      setGames(PLACEHOLDER_GAMES);
+      setCurrentTier('free');
+      return;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [gamesData, subData] = await Promise.allSettled([
+          api.games.list(),
+          api.subscriptions.current(),
+        ]);
+
+        if (cancelled) return;
+
+        // Games
+        if (gamesData.status === 'fulfilled' && gamesData.value) {
+          const list = Array.isArray(gamesData.value)
+            ? gamesData.value
+            : (gamesData.value?.games ?? null);
+          setGames(list && list.length > 0 ? list : PLACEHOLDER_GAMES);
+        } else {
+          setGames(PLACEHOLDER_GAMES);
+        }
+
+        // Subscription tier
+        if (subData.status === 'fulfilled' && subData.value) {
+          const tier = subData.value?.plan ?? subData.value?.tier ?? subData.value?.plan_id ?? 'free';
+          setCurrentTier(tier);
+        } else {
+          setCurrentTier('free');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err.message);
+          setGames(PLACEHOLDER_GAMES);
+          setCurrentTier('free');
+        }
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [useMocks]);
+
+  const loading = games === null || currentTier === null;
 
   const getAccessStatus = (gameTier) => {
-    const gameTierIndex    = TIER_ORDER.indexOf(gameTier);
+    if (!currentTier) return 'locked';
+    const gameTierIndex    = TIER_ORDER.indexOf(gameTier ?? 'free');
     const currentTierIndex = TIER_ORDER.indexOf(currentTier);
     return gameTierIndex <= currentTierIndex ? 'granted' : 'locked';
   };
 
-  const getNextTier = () => {
-    const idx = TIER_ORDER.indexOf(currentTier);
-    return idx < TIER_ORDER.length - 1 ? TIER_ORDER[idx + 1] : null;
-  };
+  const nextTier = currentTier
+    ? (TIER_ORDER.indexOf(currentTier) < TIER_ORDER.length - 1
+        ? TIER_ORDER[TIER_ORDER.indexOf(currentTier) + 1]
+        : null)
+    : null;
 
-  const nextTier = getNextTier();
+  const displayGames = games ?? [];
 
   return (
     <Layout>
@@ -67,9 +129,19 @@ export default function GameAccess() {
           </div>
           <div className="header-badge">
             <span className="your-tier-label">// Current Tier</span>
-            <SubscriptionBadge tier={currentTier} size="lg" showIcon />
+            {loading
+              ? <span className="tier-loading" aria-busy="true">Loading…</span>
+              : <SubscriptionBadge tier={currentTier} size="lg" showIcon />
+            }
           </div>
         </header>
+
+        {/* ── Error banner ── */}
+        {loadError && (
+          <div className="game-access-error" role="alert">
+            Could not load your subscription data — showing free-tier access.
+          </div>
+        )}
 
         {/* ── Tier legend ── */}
         <div className="tier-legend" role="list" aria-label="Subscription tiers">
@@ -88,69 +160,86 @@ export default function GameAccess() {
 
         {/* ── Games grid ── */}
         <section className="games-section" aria-label="Available games">
-          <div className="games-grid">
-            {MOCK_GAMES.map((game) => {
-              const isLocked = getAccessStatus(game.tier) === 'locked';
+          {loading ? (
+            <div className="loading-state" aria-live="polite" aria-busy="true">
+              <span className="spinner" aria-hidden="true" />
+              <span>Loading games…</span>
+            </div>
+          ) : (
+            <div className="games-grid">
+              {displayGames.map((game) => {
+                const isLocked = getAccessStatus(game.tier) === 'locked';
+                const imgSrc   = game.image ?? game.thumbnail ?? game.cover_image;
 
-              return (
-                <article
-                  key={game.id}
-                  className={`game-access-card ${isLocked ? 'locked' : ''}`}
-                  aria-label={`${game.title}${isLocked ? ' — locked' : ''}`}
-                >
-                  <div className="game-image-wrapper">
-                    <img src={game.image} alt="" className="game-image" loading="lazy" aria-hidden="true" />
-                    {isLocked && (
-                      <div className="locked-overlay" aria-hidden="true">
-                        <LockIcon className="lock-icon-svg" />
-                        <span className="lock-tier">
-                          Requires <SubscriptionBadge tier={game.tier} size="sm" />
-                        </span>
+                return (
+                  <article
+                    key={game.id}
+                    className={`game-access-card ${isLocked ? 'locked' : ''}`}
+                    aria-label={`${game.title}${isLocked ? ' — locked' : ''}`}
+                  >
+                    <div className="game-image-wrapper">
+                      {imgSrc && (
+                        <img src={imgSrc} alt="" className="game-image" loading="lazy" aria-hidden="true" />
+                      )}
+                      {isLocked && (
+                        <div className="locked-overlay" aria-hidden="true">
+                          <LockIcon className="lock-icon-svg" />
+                          <span className="lock-tier">
+                            Requires <SubscriptionBadge tier={game.tier ?? 'pro'} size="sm" />
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="game-info">
+                      <div className="game-header-row">
+                        <h3 className="game-access-title">{game.title}</h3>
+                        <SubscriptionBadge tier={game.tier ?? 'free'} size="sm" />
                       </div>
-                    )}
-                  </div>
+                      <span className="game-access-category">{game.category}</span>
+                      {game.players != null && (
+                        <div className="game-meta">
+                          <span className="player-count-badge">
+                            <PlayersIcon />
+                            {Number(game.players).toLocaleString()} players
+                          </span>
+                        </div>
+                      )}
 
-                  <div className="game-info">
-                    <div className="game-header-row">
-                      <h3 className="game-access-title">{game.title}</h3>
-                      <SubscriptionBadge tier={game.tier} size="sm" />
+                      {isLocked && nextTier ? (
+                        <button
+                          className="btn-access-upgrade"
+                          onClick={() => navigate('/subscription')}
+                        >
+                          Upgrade to {nextTier.charAt(0).toUpperCase() + nextTier.slice(1)} to Unlock
+                        </button>
+                      ) : !isLocked ? (
+                        <button
+                          className="btn-access-play"
+                          onClick={() => navigate(`/matchmaking?game=${game.id}`)}
+                        >
+                          ▶  Play Now
+                        </button>
+                      ) : null}
                     </div>
-                    <span className="game-access-category">{game.category}</span>
-                    <div className="game-meta">
-                      <span className="player-count-badge">
-                        <PlayersIcon />
-                        {game.players.toLocaleString()} players
-                      </span>
-                    </div>
-
-                    {isLocked && nextTier ? (
-                      <button className="btn-access-upgrade">
-                        Upgrade to {nextTier.charAt(0).toUpperCase() + nextTier.slice(1)} to Unlock
-                      </button>
-                    ) : !isLocked ? (
-                      <button className="btn-access-play">
-                        ▶  Play Now
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* ── Upgrade CTA ── */}
-        {nextTier && (
+        {!loading && nextTier && (
           <section className="upgrade-prompt" aria-label="Upgrade your subscription">
             <span className="upgrade-kicker">// Unlock More</span>
             <div className="upgrade-content">
               <h2>More Games Await</h2>
               <p>
-                Upgrade to <SubscriptionBadge tier={nextTier} size="md" showIcon /> and unlock{' '}
-                {MOCK_GAMES.filter(g => g.tier === nextTier).length} additional Rust-powered games —
-                including <strong>{MOCK_GAMES.find(g => g.tier === nextTier)?.title}</strong> and more.
+                Upgrade to <SubscriptionBadge tier={nextTier} size="md" showIcon /> and unlock additional
+                Rust-powered games.
               </p>
-              <button className="btn-upgrade-cta">
+              <button className="btn-upgrade-cta" onClick={() => navigate('/subscription')}>
                 Upgrade Now →
               </button>
             </div>

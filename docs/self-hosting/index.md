@@ -41,6 +41,7 @@ including dev-only extras (MailHog email preview, pgAdmin).
 | [Quickstart](./quickstart.md) | Full stack up in three commands |
 | [Docker Deployment](./docker.md) | Complete Compose reference with backups |
 | [Environment Variables](./environment-variables.md) | All configuration options |
+| [External Dependencies](./external-dependencies.md) | Bucket-D items: MediaMTX, CI runners, game servers, payment keys |
 | [Database](./database.md) | PostgreSQL setup, migrations, backups |
 | [SSL/TLS](./ssl.md) | Let's Encrypt and HTTPS configuration |
 | [Fly.io](./fly-io.md) | Deploy to Fly.io with autoscaling |

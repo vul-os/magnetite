@@ -14,29 +14,21 @@ export function useGameSession(gameId) {
       setSessionStatus('invalid');
       return;
     }
-
     setSessionStatus('connecting');
-
-    const mockInit = setTimeout(() => {
-      setGameState({
-        turn: 1,
-        phase: 'playing',
-        board: Array(9).fill(null),
-        currentPlayer: 0,
-      });
-      setPlayers([
-        { id: 1, username: 'Player1', isReady: true, isHost: true },
-        { id: 2, username: 'Player2', isReady: true, isHost: false },
-      ]);
-      setSessionStatus('active');
-    }, 500);
-
-    return () => clearTimeout(mockInit);
   }, [gameId]);
 
+  // Transition to 'active' once the WS opens and request initial state
   useEffect(() => {
-    if (lastMessage?.type === 'game_state_update') {
-      setGameState(lastMessage.state);
+    if (isConnected && sessionStatus === 'connecting') {
+      setSessionStatus('active');
+      sendMessage({ type: 'join_game', gameId });
+    }
+  }, [isConnected, sessionStatus, sendMessage, gameId]);
+
+  useEffect(() => {
+    if (lastMessage?.type === 'game_state' || lastMessage?.type === 'game_state_update') {
+      if (lastMessage.state) setGameState(lastMessage.state);
+      if (Array.isArray(lastMessage.players)) setPlayers(lastMessage.players);
     }
     if (lastMessage?.type === 'player_joined') {
       setPlayers((p) => [...p, lastMessage.player]);

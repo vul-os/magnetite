@@ -110,10 +110,14 @@ export default function Leaderboard() {
 
   const currentUser = { username: 'PlayerOne' };
 
+  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+
   const leaderboardData = useMemo(() => {
     if (apiEntries && apiEntries.length > 0) return apiEntries;
-    return buildFallbackData(selectedGame, timeFilter);
-  }, [apiEntries, selectedGame, timeFilter]);
+    // Only show mock fallback when explicitly requested; otherwise show empty (real empty state)
+    if (useMocks) return buildFallbackData(selectedGame, timeFilter);
+    return [];
+  }, [apiEntries, selectedGame, timeFilter, useMocks]);
 
   const totalPages  = Math.ceil(leaderboardData.length / ITEMS_PER_PAGE);
   const startIndex  = (currentPage - 1) * ITEMS_PER_PAGE;

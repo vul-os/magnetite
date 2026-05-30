@@ -29,7 +29,7 @@ test.describe('Communities', () => {
   });
 
   test('channel items appear in the sidebar', async ({ page }) => {
-    // Wait briefly for mock data to hydrate.
+    // Wait briefly for data to load from the API.
     await page.waitForTimeout(500);
     const channels = await page
       .locator('.channel-btn, .channel-item, [class*="channel-item"]')
@@ -63,7 +63,7 @@ test.describe('Communities', () => {
 test.describe('Communities — server rail interaction', () => {
   test('clicking a community icon in the rail switches the active server', async ({ page }) => {
     await page.goto('/communities');
-    // Wait for mock data to load.
+    // Wait for data to load from the API.
     await page.waitForTimeout(500);
 
     const railItems = await page

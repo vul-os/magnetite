@@ -9,13 +9,6 @@ import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
 import './Playground.css';
 
-const MOCK_PLAYERS = [
-  { id: 1, username: 'PlayerOne',  score: 1250, kills: 5, deaths: 2, ping: 24 },
-  { id: 2, username: 'GameMaster', score: 1100, kills: 4, deaths: 3, ping: 31 },
-  { id: 3, username: 'ProGamer99', score:  980, kills: 3, deaths: 4, ping: 18 },
-  { id: 4, username: 'NoobMaster', score:  720, kills: 2, deaths: 5, ping: 45 },
-];
-
 function formatTime(seconds) {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -34,6 +27,9 @@ export default function Playground() {
   const comms                       = useComms();
   const { balance }                 = usePoints();
   const [showStore, setShowStore]   = useState(false);
+  // Stable ref for user id so connectWebSocket doesn't re-mount on user changes
+  const userIdRef = useRef(null);
+  userIdRef.current = user?.id ?? null;
 
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [latency, setLatency]                   = useState(0);
@@ -44,12 +40,10 @@ export default function Playground() {
     isGameOver: false,
     winner: null,
   });
-  const [players, setPlayers]         = useState(MOCK_PLAYERS);
+  // Players are populated from real WS game_state messages
+  const [players, setPlayers]         = useState([]);
   const [showPauseMenu, setShowPauseMenu] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { id: 1, player: 'System',    message: 'Game started!',        timestamp: 300000 },
-    { id: 2, player: 'PlayerOne', message: 'Good luck everyone!',  timestamp: 240000 },
-  ]);
+  const [chatMessages, setChatMessages] = useState([]);
   const [minimapData] = useState({ players: [], objectives: [] });
 
   const connectWebSocket = useCallback(() => {
@@ -59,7 +53,7 @@ export default function Playground() {
 
     ws.onopen = () => {
       setConnectionStatus('connected');
-      ws.send(JSON.stringify({ type: 'join_game', playerId: 1 }));
+      ws.send(JSON.stringify({ type: 'join_game', playerId: userIdRef.current }));
     };
 
     ws.onmessage = (event) => {

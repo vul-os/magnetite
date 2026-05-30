@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import PlayerList from '../components/PlayerList';
 import LobbyChat from '../components/LobbyChat';
 import ReadyButton from '../components/ReadyButton';
@@ -9,66 +9,67 @@ import InGameStore from '../components/store/InGameStore';
 import { useAuth } from '../hooks/useAuth';
 import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
+import { useGameLobby } from '../hooks/useGameLobby';
 import './GameLobby.css';
-
-const MOCK_PLAYERS = [
-  { id: 'user-2', username: 'ChessMaster99', avatar: null, ready: true  },
-  { id: 'user-3', username: 'GoPlayer42',    avatar: null, ready: true  },
-  { id: 'user-4', username: 'CardShark',     avatar: null, ready: false },
-];
-
-const MOCK_MESSAGES = [
-  { id: 1, senderId: 'user-2', senderName: 'ChessMaster99', content: 'Hey everyone! Ready to play?',         timestamp: Date.now() - 120000 },
-  { id: 2, senderId: 'user-3', senderName: 'GoPlayer42',    content: 'Ready when you are!',                  timestamp: Date.now() -  90000 },
-  { id: 3, senderId: 'user-4', senderName: 'CardShark',     content: 'Give me a minute to finish this hand', timestamp: Date.now() -  60000 },
-];
 
 export default function GameLobby() {
   const { id: _gameId } = useParams();
+  const navigate        = useNavigate();
 
-  // Real user from auth; fall back to a mock guest for dev convenience.
+  // Real user from auth; fall back to a guest stub for unauthenticated dev use.
   const { user }     = useAuth();
   const comms        = useComms();
   const { balance }  = usePoints();
 
   const currentUser = user
     ? { id: String(user.id), username: user.username ?? user.email ?? 'You', avatar: user.avatar_url ?? null }
-    : { id: 'user-1', username: 'PlayerOne', avatar: null };
+    : { id: 'guest', username: 'Guest', avatar: null };
 
   const [showStore, setShowStore] = useState(false);
 
-  // Seed player list — always include the current user as the first entry.
-  const selfEntry = { id: currentUser.id, username: currentUser.username, avatar: currentUser.avatar, ready: false };
-  const [players, setPlayers]   = useState([selfEntry, ...MOCK_PLAYERS]);
-  const [messages, setMessages] = useState(MOCK_MESSAGES);
-  const [hostId]                = useState(currentUser.id);
+  // Connect to the real lobby WebSocket via useGameLobby
+  const {
+    players,
+    chatMessages,
+    lobbyState,
+    countdown,
+    isHost,
+    allReady,
+    toggleReady,
+    kickPlayer,
+    sendChatMessage,
+    startGame,
+    isConnected,
+    error: lobbyError,
+  } = useGameLobby(_gameId, currentUser);
 
-  const isHost         = currentUser.id === hostId;
-  const allPlayersReady = players.every(p => p.ready);
-  const currentPlayer   = players.find(p => p.id === currentUser.id);
+  // Determine hostId: the first host in the player list, or self if no host yet
+  const hostId = players.find(p => p.isHost)?.id ?? currentUser.id;
 
-  const handleToggleReady = useCallback((ready) => {
-    setPlayers(prev => prev.map(p => p.id === currentUser.id ? { ...p, ready } : p));
-  }, [currentUser.id]);
+  const currentPlayer = players.find(p => p.id === currentUser.id);
+
+  const handleToggleReady = useCallback(() => {
+    toggleReady();
+  }, [toggleReady]);
 
   const handleKickPlayer = useCallback((playerId) => {
-    setPlayers(prev => prev.filter(p => p.id !== playerId));
-  }, []);
+    kickPlayer(playerId);
+  }, [kickPlayer]);
 
   const handleSendMessage = useCallback((content) => {
-    const newMsg = {
-      id: Date.now(),
-      senderId: currentUser.id,
-      senderName: currentUser.username,
-      content,
-      timestamp: Date.now(),
-    };
-    setMessages(prev => [...prev, newMsg]);
-  }, [currentUser.id, currentUser.username]);
+    sendChatMessage(content);
+  }, [sendChatMessage]);
 
   const handleStartGame = useCallback(() => {
-    console.log('Starting game...');
-  }, []);
+    startGame();
+  }, [startGame]);
+
+  // Navigate to the game session when the lobby transitions to 'starting'
+  useEffect(() => {
+    if (lobbyState === 'starting' && _gameId) {
+      navigate(`/play/${_gameId}`);
+    }
+  }, [lobbyState, _gameId, navigate]);
 
   // Derive a stable channel + voice room from the game/lobby id
   const overlayChannelId   = _gameId ? `lobby-${_gameId}` : 'lobby-default';
@@ -108,10 +109,35 @@ export default function GameLobby() {
               </button>
               <div className="lobby-code-block">
                 <span className="lobby-code-label">// Lobby Code</span>
-                <span className="lobby-code-value" aria-label="Lobby code XKCD42">XKCD42</span>
+                <span className="lobby-code-value" aria-label={`Lobby code ${_gameId ?? 'unknown'}`}>
+                  {_gameId ?? '—'}
+                </span>
+              </div>
+              <div
+                className={`lobby-conn-status ${isConnected ? 'connected' : 'disconnected'}`}
+                aria-live="polite"
+                aria-label={isConnected ? 'Connected to lobby' : 'Connecting to lobby…'}
+              >
+                <span className="status-dot" aria-hidden="true" />
+                {isConnected ? 'Connected' : 'Connecting…'}
               </div>
             </div>
           </header>
+
+          {/* Error banner */}
+          {lobbyError && (
+            <div className="lobby-error-banner" role="alert">
+              {lobbyError}
+            </div>
+          )}
+
+          {/* Countdown overlay */}
+          {countdown !== null && (
+            <div className="lobby-countdown" role="status" aria-live="assertive">
+              <span className="countdown-label">// Starting in</span>
+              <span className="countdown-value">{countdown}</span>
+            </div>
+          )}
 
           {/* In-game store panel */}
           {showStore && (
@@ -142,7 +168,7 @@ export default function GameLobby() {
               <div className="lobby-section-card">
                 <h3>// Ready Status</h3>
                 <ReadyButton
-                  isReady={currentPlayer?.ready || false}
+                  isReady={currentPlayer?.isReady || false}
                   isHost={isHost}
                   onToggleReady={handleToggleReady}
                 />
@@ -152,7 +178,7 @@ export default function GameLobby() {
                 <div className="lobby-section-card">
                   <h3>// Host Controls</h3>
                   <StartGameButton
-                    allPlayersReady={allPlayersReady}
+                    allReady={allReady}
                     playerCount={players.length}
                     minPlayers={2}
                     onStartGame={handleStartGame}
@@ -160,7 +186,7 @@ export default function GameLobby() {
                 </div>
               )}
 
-              {!isHost && !allPlayersReady && (
+              {!isHost && !allReady && (
                 <div className="waiting-state" aria-live="polite">
                   <div className="waiting-dot" aria-hidden="true" />
                   Waiting for all players to ready up…
@@ -171,7 +197,7 @@ export default function GameLobby() {
             {/* Chat */}
             <div className="lobby-chat-col">
               <LobbyChat
-                messages={messages}
+                messages={chatMessages}
                 currentUserId={currentUser.id}
                 onSendMessage={handleSendMessage}
               />

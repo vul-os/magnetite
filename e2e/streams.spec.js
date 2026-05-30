@@ -19,7 +19,8 @@ test.describe('Streams Browse', () => {
     await expect(page.locator('h1, h2').first()).toBeVisible();
   });
 
-  test('stream cards are displayed from mock data', async ({ page }) => {
+  test('stream cards are displayed', async ({ page }) => {
+    // Cards come from the real API; when the backend is unavailable an empty-state is shown.
     await page.waitForTimeout(500);
     const cards = await page.locator('.stream-card, [class*="stream-card"]').all();
     expect(cards.length).toBeGreaterThan(0);
@@ -57,7 +58,7 @@ test.describe('Streams Browse', () => {
 
   test('viewer count labels are present on stream cards', async ({ page }) => {
     await page.waitForTimeout(500);
-    // Stream cards show viewer counts in the mock data
+    // Stream cards show viewer counts from the API response
     const viewerEls = page.locator('[class*="viewer"], text=/\\d+ viewer/i');
     if (await viewerEls.count() > 0) {
       await expect(viewerEls.first()).toBeVisible();

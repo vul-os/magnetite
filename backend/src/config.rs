@@ -36,6 +36,16 @@ pub struct Config {
     pub app_env: String,
     pub app_url: String,
     pub redis_url: String,
+    /// Base URL for this server's own game WebSocket, e.g. `ws://api.magnetite.gg`.
+    /// Used by matchmaking to set `server_endpoint` on new sessions.
+    /// Defaults to `ws://localhost:8080`.
+    pub game_server_ws_base: String,
+    /// Anti-cheat: maximum speed (units/s) before a velocity violation is flagged.
+    /// Defaults to 50.0 (same as `MAX_VEHICLE_SPEED` in the detection logic).
+    pub anticheat_max_velocity: f64,
+    /// Anti-cheat: maximum input rate (inputs/second) before flagging high severity.
+    /// Defaults to 50.0.
+    pub anticheat_max_input_rate: f64,
 }
 
 impl Config {
@@ -87,6 +97,16 @@ impl Config {
             app_env,
             app_url: env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost".to_string()),
+            game_server_ws_base: env::var("GAME_SERVER_WS_BASE")
+                .unwrap_or_else(|_| "ws://localhost:8080".to_string()),
+            anticheat_max_velocity: env::var("ANTICHEAT_MAX_VELOCITY")
+                .unwrap_or_else(|_| "50.0".to_string())
+                .parse()
+                .unwrap_or(50.0),
+            anticheat_max_input_rate: env::var("ANTICHEAT_MAX_INPUT_RATE")
+                .unwrap_or_else(|_| "50.0".to_string())
+                .parse()
+                .unwrap_or(50.0),
         }
     }
 

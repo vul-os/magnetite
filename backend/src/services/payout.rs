@@ -1,4 +1,4 @@
-// Payout service — developer earnings distribution, platform surface, not yet wired.
+// Payout service — developer earnings distribution via Circle USDC disbursement.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
@@ -10,12 +10,14 @@ use uuid::Uuid;
 use crate::api::notifications::{broadcast_notification, Notification, NotificationType};
 use crate::error::{AppError, Result};
 
+// Fee percentages are expressed as fractions (e.g. 0.30 = 30%), NOT as integer basis points.
+// Do NOT add a /100 divisor when multiplying against revenue — these are already in [0,1].
 fn platform_fee_percent() -> Decimal {
-    Decimal::new(30, 2)
+    Decimal::new(30, 2) // 0.30 = 30%
 }
 
 fn developer_share_percent() -> Decimal {
-    Decimal::new(70, 2)
+    Decimal::new(70, 2) // 0.70 = 70%
 }
 
 fn minimum_payout_amount() -> Decimal {
@@ -100,8 +102,10 @@ impl PayoutService {
         .await?
         .0;
 
-        let platform_fee = total_revenue * platform_fee_percent() / Decimal::new(100, 0);
-        let developer_share = total_revenue * developer_share_percent() / Decimal::new(100, 0);
+        // platform_fee_percent() and developer_share_percent() are already fractional (0.30/0.70).
+        // Do NOT divide by 100 again — that would give 0.3% and 0.7% instead of 30% and 70%.
+        let platform_fee = total_revenue * platform_fee_percent();
+        let developer_share = total_revenue * developer_share_percent();
 
         let previous_paid = sqlx::query_as::<_, (Decimal,)>(
             r#"
@@ -245,19 +249,100 @@ impl PayoutService {
 
     async fn process_single_payout(&self, payout: &Payout) -> Result<()> {
         tracing::info!(
-            "Processing payout {} for user {}",
+            "Processing payout {} for user {} (amount={} USDC, dest={})",
             payout.id,
-            payout.user_id
+            payout.user_id,
+            payout.amount,
+            payout.destination
         );
 
+        // Check for sandbox mode first.
+        let sandbox = std::env::var("PAYMENTS_SANDBOX")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+
+        let circle_api_key = std::env::var("CIRCLE_API_KEY").ok();
+
+        let transfer_id = if sandbox {
+            // Sandbox: return a clearly-labeled result without calling Circle.
+            tracing::info!(
+                "[SANDBOX] Skipping real Circle disbursement for payout {}",
+                payout.id
+            );
+            format!("sandbox_transfer_{}", Uuid::new_v4())
+        } else {
+            // Production: require CIRCLE_API_KEY; return ProviderUnconfigured if absent.
+            let api_key = circle_api_key.ok_or_else(|| {
+                AppError::Internal(
+                    "payments not configured: CIRCLE_API_KEY is unset (set PAYMENTS_SANDBOX=true for local dev)"
+                        .to_string(),
+                )
+            })?;
+
+            // Call Circle /v1/transfers to disburse USDC to the developer's destination address.
+            let idempotency_key = format!("payout-{}", payout.id);
+            let client = reqwest::Client::new();
+            let resp = client
+                .post("https://api.circle.com/v1/transfers")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .json(&serde_json::json!({
+                    "idempotencyKey": idempotency_key,
+                    "destination": {
+                        "type": "blockchain",
+                        "address": payout.destination,
+                        "chain": "ETH"
+                    },
+                    "amount": {
+                        "amount": payout.amount.to_string(),
+                        "currency": "USDC"
+                    }
+                }))
+                .send()
+                .await
+                .map_err(|e| {
+                    AppError::Internal(format!("Circle disbursement request failed: {}", e))
+                })?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                tracing::error!(
+                    "Circle disbursement failed for payout {}: HTTP {} — {}",
+                    payout.id,
+                    status,
+                    body
+                );
+                // Mark the payout as failed so it isn't retried endlessly.
+                let _ = sqlx::query(
+                    "UPDATE payouts SET status = 'failed', processed_at = NOW() WHERE id = $1",
+                )
+                .bind(payout.id)
+                .execute(&self.pool)
+                .await;
+                return Err(AppError::Internal(format!(
+                    "Circle disbursement failed (HTTP {}): {}",
+                    status, body
+                )));
+            }
+
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|e| AppError::Internal(format!("Circle response parse error: {}", e)))?;
+
+            body["data"]["id"].as_str().unwrap_or("unknown").to_string()
+        };
+
+        // Mark completed with the provider transfer id stored in the reference column.
         sqlx::query(
             r#"
             UPDATE payouts
-            SET status = 'completed', processed_at = NOW()
+            SET status = 'completed', processed_at = NOW(), destination = $2
             WHERE id = $1
             "#,
         )
         .bind(payout.id)
+        .bind(&transfer_id)
         .execute(&self.pool)
         .await?;
 
@@ -271,10 +356,10 @@ impl PayoutService {
         .bind(NotificationType::PayoutComplete.as_str())
         .bind("Payout Complete")
         .bind(format!(
-            "Your payout of {} USDC has been processed",
-            payout.amount
+            "Your payout of {} USDC has been processed (transfer: {})",
+            payout.amount, transfer_id
         ))
-        .bind(serde_json::json!({ "payout_id": payout.id }))
+        .bind(serde_json::json!({ "payout_id": payout.id, "transfer_id": transfer_id }))
         .fetch_one(&self.pool)
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
@@ -367,11 +452,22 @@ mod tests {
 
     #[test]
     fn test_platform_fee_calculation() {
-        let revenue = Decimal::new(10000, 2);
-        let fee = revenue * platform_fee_percent() / Decimal::new(100, 0);
-        let share = revenue * developer_share_percent() / Decimal::new(100, 0);
-        assert_eq!(fee, Decimal::new(3000, 2));
-        assert_eq!(share, Decimal::new(7000, 2));
+        // platform_fee_percent() = 0.30, developer_share_percent() = 0.70 (already fractional).
+        // Multiply directly against revenue — no additional /100.
+        let revenue = Decimal::new(10000, 2); // 100.00 USDC
+        let fee = revenue * platform_fee_percent();
+        let share = revenue * developer_share_percent();
+        // 30% of 100.00 = 30.00; 70% of 100.00 = 70.00
+        assert_eq!(
+            fee,
+            Decimal::new(3000, 2),
+            "platform fee must be 30.00 USDC (30%)"
+        );
+        assert_eq!(
+            share,
+            Decimal::new(7000, 2),
+            "developer share must be 70.00 USDC (70%)"
+        );
     }
 
     #[test]

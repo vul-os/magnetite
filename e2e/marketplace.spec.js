@@ -23,7 +23,7 @@ test.describe('Marketplace', () => {
 
   test('game card elements visible', async ({ page }) => {
     await marketplacePage.waitForLoading();
-    // Each .game-card should be present after mock data loads
+    // Each .game-card should be present after data loads from the API
     await expect(page.locator('.game-card').first()).toBeVisible();
   });
 

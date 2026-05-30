@@ -8,6 +8,8 @@ import { mockAchievements, recentUnlocks } from '../data/mockAchievements';
 import { api } from '../api/client';
 import './social.css';
 
+const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+
 const TrophyIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
     <path d="M8 21h8" />
@@ -26,13 +28,14 @@ const CATEGORIES = [
 ];
 
 export default function Achievements() {
-  const [category, setCategory]       = useState('all');
+  const [category, setCategory]         = useState('all');
   const [showUnlocked, setShowUnlocked] = useState(true);
-  const [achievements, setAchievements] = useState(mockAchievements);
-  const [recent, setRecent]           = useState(recentUnlocks);
-  const [loading, setLoading]         = useState(true);
+  const [achievements, setAchievements] = useState(useMocks ? mockAchievements : []);
+  const [recent, setRecent]             = useState(useMocks ? recentUnlocks : []);
+  const [loading, setLoading]           = useState(!useMocks);
 
   useEffect(() => {
+    if (useMocks) return;
     let cancelled = false;
 
     async function loadAchievements() {
@@ -60,7 +63,10 @@ export default function Achievements() {
           setLoading(false);
         }
       } catch {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          // Show empty state on API failure — do not silently inject mock data
+          setLoading(false);
+        }
       }
     }
 

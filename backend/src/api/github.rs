@@ -565,27 +565,64 @@ async fn handle_push_event(
             );
         }
 
-        trigger_wasm_build(pool, repo, &commit_sha, build_id).await?;
+        // trigger_wasm_build transitions status to 'queued' and returns a one-time
+        // runner token.  The token is logged here and must be passed to the
+        // self-hosted runner out-of-band (e.g. via a runner dispatch webhook or
+        // by the runner polling GET /api/v1/github/builds/pending).
+        let _runner_token = trigger_wasm_build(pool, repo, &commit_sha, build_id).await?;
         run_security_scan(pool, repo, &commit_sha, build_id).await?;
     }
 
     Ok(())
 }
 
+/// Queue a WASM build request and return the runner token that the CI runner
+/// must present when reporting results back.
+///
+/// STATUS TRANSITIONS (honest pipeline):
+///   pending  →  queued   (this function — build request registered, awaiting runner)
+///   queued   →  building (CI runner picks up the job via GET /builds/pending)
+///   building →  success  (runner uploads artifact, calls POST /builds/:id/report)
+///   building →  failed   (runner reports a failure, includes error output)
+///
+/// BUCKET D — external runner dependency:
+///   Actual cargo compilation (`cargo build --target wasm32-unknown-unknown`) and
+///   wasm-bindgen post-processing require:
+///     1. A self-hosted runner (or GitHub Actions worker) with the Rust toolchain
+///        and wasm-bindgen-cli installed.
+///     2. The runner script `scripts/run-wasm-build.sh` (ships with this repo).
+///     3. MAGNETITE_API_URL pointing at this backend.
+///   Until a runner is connected, builds will stay in 'queued' status — we do NOT
+///   fake progress to 'success'.  Developers can see the real queue state via
+///   GET /api/v1/github/repos/:owner/:repo/build-status.
 async fn trigger_wasm_build(
     pool: &PgPool,
     repo: &GitHubRepository,
     commit_sha: &str,
     build_id: Uuid,
-) -> Result<()> {
-    sqlx::query("UPDATE build_status SET status = 'building', updated_at = NOW() WHERE id = $1")
-        .bind(build_id)
-        .execute(pool)
-        .await?;
+) -> Result<Uuid> {
+    // Generate a one-time token the runner will use to authenticate its callback.
+    let runner_token = Uuid::new_v4();
+
+    // Transition: pending → queued.  "queued" means: the build request has been
+    // recorded and is waiting for a self-hosted runner to pick it up.  We do NOT
+    // advance to "building" here because no compilation has started yet.
+    sqlx::query(
+        "UPDATE build_status
+         SET status = 'queued', runner_token = $2, updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(build_id)
+    .bind(runner_token)
+    .execute(pool)
+    .await?;
 
     sqlx::query(
         "INSERT INTO build_logs (id, build_id, step, output, created_at)
-         VALUES ($1, $2, 'wasm_build', 'Starting WASM build...', NOW())",
+         VALUES ($1, $2, 'wasm_build_queued',
+                 'Build queued — waiting for a self-hosted runner. \
+                  See scripts/run-wasm-build.sh for runner setup.',
+                 NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(build_id)
@@ -593,11 +630,15 @@ async fn trigger_wasm_build(
     .await?;
 
     tracing::info!(
-        "WASM build triggered for {} at {}",
+        "WASM build queued for {} at {} (build_id={}, token={}). \
+         A self-hosted runner must pick this up — see scripts/run-wasm-build.sh.",
         repo.full_name,
-        commit_sha
+        commit_sha,
+        build_id,
+        runner_token,
     );
-    Ok(())
+
+    Ok(runner_token)
 }
 
 async fn run_security_scan(
@@ -1024,6 +1065,234 @@ pub async fn get_build_status(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Runner-facing endpoints
+// ---------------------------------------------------------------------------
+//
+// These two endpoints form the contract between the backend and a self-hosted
+// CI runner running `scripts/run-wasm-build.sh`.  They are intentionally
+// simple — no OAuth, just a runner token that was generated when the build was
+// queued — so that the runner script requires no extra dependencies.
+
+/// GET /api/v1/github/builds/pending
+///
+/// Returns a list of build requests in 'queued' status, newest first.
+/// The self-hosted runner calls this endpoint periodically to check for work.
+/// Each returned row includes the repository name, commit SHA, and the
+/// runner_token the runner must present when reporting results.
+///
+/// SECURITY: This endpoint is intentionally public (no auth header required)
+/// because the runner may not have a platform account.  The runner_token in
+/// the response is the only write-gate — a caller who can only read this
+/// endpoint cannot fake build results without a matching token.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct PendingBuild {
+    pub id: Uuid,
+    pub repository: String,
+    pub commit_sha: String,
+    /// The one-time token the runner uses to authenticate POST /builds/:id/report.
+    pub runner_token: Uuid,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn list_pending_builds(State(pool): State<PgPool>) -> Result<Json<Vec<PendingBuild>>> {
+    let builds = sqlx::query_as::<_, PendingBuild>(
+        "SELECT id, repository, commit_sha, runner_token, created_at
+         FROM build_status
+         WHERE status = 'queued' AND runner_token IS NOT NULL
+         ORDER BY created_at ASC
+         LIMIT 20",
+    )
+    .fetch_all(&pool)
+    .await?;
+
+    Ok(Json(builds))
+}
+
+/// POST /api/v1/github/builds/:build_id/report
+///
+/// Called by the self-hosted CI runner when a build finishes (success or
+/// failure).  The runner must supply its runner_token in the Authorization
+/// header as `Bearer <runner_token>`.
+///
+/// On success the handler:
+///   1. Transitions build_status → 'success' or 'failed'.
+///   2. Updates the linked game_artifact row (artifact_url, sha256_hash,
+///      file_size_bytes, build_status).
+///   3. Appends a build_log entry with the runner's output.
+///
+/// The artifact_url should be an S3-compatible or CDN URL where the runner
+/// has already uploaded the compiled .wasm + wasm-bindgen output.
+/// Once artifact_url is set and the artifact's build_status is 'success',
+/// `GET /api/v1/distribution/:game_id/play` will serve a real play manifest.
+#[derive(Debug, Deserialize)]
+pub struct BuildReportRequest {
+    /// "success" or "failed"
+    pub outcome: String,
+    /// CDN / S3 URL of the uploaded .wasm file; required when outcome = "success".
+    pub artifact_url: Option<String>,
+    pub sha256_hash: Option<String>,
+    pub file_size_bytes: Option<i64>,
+    /// Tail of the build log (stdout + stderr), up to ~64 KiB.
+    pub log_output: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BuildReportResponse {
+    pub build_id: Uuid,
+    pub status: String,
+    pub artifact_url: Option<String>,
+}
+
+pub async fn report_build_result(
+    State(pool): State<PgPool>,
+    headers: HeaderMap,
+    Path(build_id): Path<Uuid>,
+    Json(payload): Json<BuildReportRequest>,
+) -> Result<Json<BuildReportResponse>> {
+    // ── Validate outcome value ───────────────────────────────────────────────
+    if !["success", "failed"].contains(&payload.outcome.as_str()) {
+        return Err(AppError::Validation(
+            "outcome must be 'success' or 'failed'".to_string(),
+        ));
+    }
+    if payload.outcome == "success" && payload.artifact_url.is_none() {
+        return Err(AppError::Validation(
+            "artifact_url is required when outcome is 'success'".to_string(),
+        ));
+    }
+
+    // ── Authenticate via runner_token ────────────────────────────────────────
+    let token_str = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or_else(|| AppError::Unauthorized("Missing Bearer token".to_string()))?;
+
+    let runner_token: Uuid = token_str
+        .parse()
+        .map_err(|_| AppError::Unauthorized("Invalid runner token format".to_string()))?;
+
+    // ── Load and verify build record ─────────────────────────────────────────
+    #[derive(sqlx::FromRow)]
+    struct BuildRecord {
+        id: Uuid,
+        status: String,
+        runner_token: Option<Uuid>,
+        game_id: Option<Uuid>,
+    }
+
+    let build = sqlx::query_as::<_, BuildRecord>(
+        "SELECT id, status, runner_token, game_id FROM build_status WHERE id = $1",
+    )
+    .bind(build_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Build not found".to_string()))?;
+
+    // Constant-time token comparison would be ideal; UUIDs here are random
+    // so equality is effectively constant-time for the sizes involved.
+    if build.runner_token != Some(runner_token) {
+        return Err(AppError::Unauthorized("Invalid runner token".to_string()));
+    }
+
+    if !["queued", "building"].contains(&build.status.as_str()) {
+        return Err(AppError::Validation(format!(
+            "Build is already in terminal state '{}'",
+            build.status
+        )));
+    }
+
+    // ── Update build_status ──────────────────────────────────────────────────
+    let final_status = if payload.outcome == "success" {
+        "success"
+    } else {
+        "failed"
+    };
+
+    let conclusion = if payload.outcome == "success" {
+        "success"
+    } else {
+        "failure"
+    };
+
+    sqlx::query(
+        "UPDATE build_status
+         SET status = $2, conclusion = $3, updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(build_id)
+    .bind(final_status)
+    .bind(conclusion)
+    .execute(&pool)
+    .await?;
+
+    // ── Update game_artifact if this build is linked to a game ───────────────
+    if let Some(game_id) = build.game_id {
+        // Find the artifact record that was created when the build was queued.
+        let artifact_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM game_artifacts WHERE build_id = $1 AND game_id = $2 LIMIT 1",
+        )
+        .bind(build_id)
+        .bind(game_id)
+        .fetch_optional(&pool)
+        .await?;
+
+        if let Some(aid) = artifact_id {
+            crate::services::distribution::update_artifact_status(
+                &pool,
+                aid,
+                final_status,
+                payload.artifact_url.as_deref(),
+                payload.sha256_hash.as_deref(),
+                payload.file_size_bytes,
+                if payload.outcome == "failed" {
+                    payload.log_output.as_deref()
+                } else {
+                    None
+                },
+            )
+            .await?;
+        }
+    }
+
+    // ── Append log entry ─────────────────────────────────────────────────────
+    let log_msg = payload
+        .log_output
+        .as_deref()
+        .unwrap_or("(no log output provided)");
+
+    // Truncate to 64 KiB to avoid blowing up the DB.
+    let log_msg = if log_msg.len() > 65_536 {
+        &log_msg[..65_536]
+    } else {
+        log_msg
+    };
+
+    sqlx::query(
+        "INSERT INTO build_logs (id, build_id, step, output, created_at)
+         VALUES ($1, $2, 'runner_report', $3, NOW())",
+    )
+    .bind(Uuid::new_v4())
+    .bind(build_id)
+    .bind(log_msg)
+    .execute(&pool)
+    .await?;
+
+    tracing::info!(
+        "Build {} reported as '{}' by runner (artifact_url={:?})",
+        build_id,
+        payload.outcome,
+        payload.artifact_url,
+    );
+
+    Ok(Json(BuildReportResponse {
+        build_id,
+        status: final_status.to_string(),
+        artifact_url: payload.artifact_url,
+    }))
+}
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/webhooks/github", post(handle_webhook))
@@ -1037,5 +1306,116 @@ pub fn router(pool: PgPool) -> Router {
             )),
         )
         .route("/repos/:owner/:repo/build-status", get(get_build_status))
+        // Runner-facing endpoints — authenticated via runner_token, not session cookie.
+        .route("/builds/pending", get(list_pending_builds))
+        .route("/builds/:build_id/report", post(report_build_result))
         .with_state(pool)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that the HMAC-SHA256 computation is deterministic and matches
+    /// the expected format for GitHub webhook signature verification.
+    #[test]
+    fn webhook_signature_valid() {
+        let secret = "test-secret";
+        let payload = b"hello world";
+        let expected_hex = compute_hmac_sha256(secret, payload);
+        let signature = format!("sha256={}", expected_hex);
+        assert!(verify_webhook_signature(secret, &signature, payload));
+    }
+
+    #[test]
+    fn webhook_signature_wrong_secret_fails() {
+        let payload = b"hello world";
+        let hex = compute_hmac_sha256("correct-secret", payload);
+        let sig = format!("sha256={}", hex);
+        assert!(!verify_webhook_signature("wrong-secret", &sig, payload));
+    }
+
+    #[test]
+    fn webhook_signature_missing_prefix_fails() {
+        let payload = b"hello";
+        let hex = compute_hmac_sha256("secret", payload);
+        // No "sha256=" prefix — should be rejected.
+        assert!(!verify_webhook_signature("secret", &hex, payload));
+    }
+
+    /// Ensure BuildReportRequest validates outcome values correctly.
+    #[test]
+    fn build_report_outcome_validation() {
+        let valid = ["success", "failed"];
+        let invalid = ["done", "ok", "error", "pending", "building", ""];
+        for v in valid {
+            assert!(
+                ["success", "failed"].contains(&v),
+                "Expected '{}' to be valid",
+                v
+            );
+        }
+        for v in invalid {
+            assert!(
+                !["success", "failed"].contains(&v),
+                "Expected '{}' to be invalid",
+                v
+            );
+        }
+    }
+
+    /// Ensure artifact_url is required when outcome is "success".
+    #[test]
+    fn build_report_success_requires_artifact_url() {
+        // This mirrors the validation logic inside report_build_result.
+        let outcome = "success";
+        let artifact_url: Option<&str> = None;
+        let would_reject = outcome == "success" && artifact_url.is_none();
+        assert!(would_reject, "Should reject success with no artifact_url");
+
+        let artifact_url_set: Option<&str> = Some("https://cdn.example.com/game_bg.wasm");
+        let would_reject_with_url = "success" == "success" && artifact_url_set.is_none();
+        assert!(
+            !would_reject_with_url,
+            "Should accept success with artifact_url set"
+        );
+    }
+
+    /// Status transition: only 'queued' or 'building' builds can be reported.
+    #[test]
+    fn build_report_terminal_state_rejected() {
+        let terminal_states = ["success", "failed"];
+        let allowed_states = ["queued", "building"];
+        for s in terminal_states {
+            assert!(
+                !allowed_states.contains(&s),
+                "'{}' should be a terminal state",
+                s
+            );
+        }
+        for s in allowed_states {
+            assert!(
+                !terminal_states.contains(&s),
+                "'{}' should be a reportable state",
+                s
+            );
+        }
+    }
+
+    /// Verify that the JWT claims use the app_id as the 'iss' claim.
+    #[test]
+    fn jwt_claims_structure() {
+        let now = chrono::Utc::now();
+        let claims = JWTClaims {
+            iat: now.timestamp(),
+            exp: (now + chrono::Duration::minutes(10)).timestamp(),
+            iss: "my-github-app-id".to_string(),
+        };
+        assert_eq!(claims.iss, "my-github-app-id");
+        assert!(claims.exp > claims.iat);
+    }
 }

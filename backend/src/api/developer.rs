@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::api::middleware;
 use crate::error::{AppError, Result};
+use crate::services::payout::PayoutService;
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeveloperRequest {
@@ -88,6 +89,8 @@ pub struct PayoutRequest {
 #[derive(Debug, Deserialize)]
 pub struct CreatePayoutRequest {
     pub amount: Decimal,
+    /// USDC/ETH destination address for Circle disbursement. Required.
+    pub destination: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -350,53 +353,27 @@ pub async fn request_payout(
         return Err(AppError::Validation("Amount must be positive".to_string()));
     }
 
-    let available: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM game_revenue WHERE developer_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await?;
-
-    let pending: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM payouts WHERE user_id = $1 AND status = 'pending'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await?;
-
-    let payout_total: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM payouts WHERE user_id = $1 AND status = 'completed'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await?;
-
-    let balance = available - pending - payout_total;
-    if payload.amount > balance {
-        return Err(AppError::InsufficientFunds(
-            "Insufficient earnings balance".to_string(),
+    // Require a destination address for the USDC transfer.
+    let destination = payload.destination.as_deref().unwrap_or("").trim();
+    if destination.is_empty() {
+        return Err(AppError::Validation(
+            "destination (USDC/ETH address) is required for payouts".to_string(),
         ));
     }
 
-    let payout_id = Uuid::new_v4();
-    let payout =
-        sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
-            "INSERT INTO payouts (id, user_id, amount, status, requested_at)
-         VALUES ($1, $2, $3, 'pending', NOW())
-         RETURNING id, amount, status, requested_at, processed_at",
-        )
-        .bind(payout_id)
-        .bind(user_id)
-        .bind(payload.amount)
-        .fetch_one(&pool)
+    // Use PayoutService which validates balance, inserts the DB record, and calls
+    // the real Circle disbursement path (or returns ProviderUnconfigured if unset).
+    let payout_svc = PayoutService::new(pool.clone());
+    let payout_req = payout_svc
+        .request_payout(user_id, payload.amount, destination)
         .await?;
 
     Ok(Json(PayoutRequest {
-        id: payout.0,
-        amount: payout.1,
-        status: payout.2,
-        requested_at: payout.3,
-        processed_at: payout.4,
+        id: payout_req.id,
+        amount: payout_req.amount,
+        status: payout_req.status,
+        requested_at: payout_req.created_at,
+        processed_at: None,
     }))
 }
 
@@ -406,9 +383,9 @@ pub async fn get_payout_history(
 ) -> Result<Json<PayoutHistory>> {
     let payouts =
         sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
-            "SELECT id, amount, status, requested_at, processed_at
+            "SELECT id, amount, status, created_at, processed_at
          FROM payouts WHERE user_id = $1
-         ORDER BY requested_at DESC",
+         ORDER BY created_at DESC",
         )
         .bind(user_id)
         .fetch_all(&pool)

@@ -80,7 +80,8 @@ Leave unused providers blank. At least one is required for social login.
 
 ## GitHub App (CI integration)
 
-Required for the build pipeline (push webhooks + build status reporting).
+Required only for the WASM build pipeline (push webhooks + build status reporting).
+Leave blank to disable the GitHub App integration in development.
 
 | Variable | Description |
 |----------|-------------|
@@ -92,46 +93,77 @@ Required for the build pipeline (push webhooks + build status reporting).
 
 ## Payments
 
-| Variable | Description |
-|----------|-------------|
-| `CIRCLE_API_KEY` | Circle API key for USDC payments |
-| `PAYSTACK_SECRET_KEY` | Paystack secret key for fiat on-ramp (Africa) |
+All payment variables are optional. If a provider key is absent, the corresponding
+endpoints return HTTP 502 (`ProviderUnconfigured`) instead of fabricating a successful
+transfer. Set `PAYMENTS_SANDBOX=true` in local dev to receive labelled sandbox responses
+without real credentials.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CIRCLE_API_KEY` | — | Circle API key for USDC wallets, transfers, and developer payouts |
+| `PAYSTACK_SECRET_KEY` | — | Paystack secret key for ZAR fiat on-ramp (Africa region) |
+| `PAYMENTS_SANDBOX` | `false` | `true` enables sandbox mode: labelled placeholder results, no real money moves |
+| `ZAR_USDC_RATE` | `275.0` | ZAR-to-USDC conversion rate used by the fiat on-ramp helper |
 
 ---
 
 ## Email
 
-Set `EMAIL_PROVIDER` to choose a backend. Leave all three empty to disable outbound email.
+Set `EMAIL_PROVIDER` to choose a transport. Leave all credentials blank to disable
+outbound email (verification and notification emails will not be sent — a clear error
+is returned rather than silent no-op).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EMAIL_PROVIDER` | `resend` | `resend`, `smtp`, or `ses` |
-| `EMAIL_FROM_ADDRESS` | `noreply@example.com` | Sender address |
-| `EMAIL_FROM_NAME` | `Magnetite` | Sender display name |
+| `EMAIL_PROVIDER` | `resend` | `resend` or `ses` |
+| `EMAIL_FROM` | `Magnetite <noreply@magnetite.gg>` | Full sender address shown in the From header |
 
-**Resend:**
+**Resend** (recommended — one API key, no SMTP setup):
 
 | Variable | Description |
 |----------|-------------|
-| `RESEND_API_KEY` | Resend API key |
+| `RESEND_API_KEY` | Resend API key from resend.com |
 
-**SMTP:**
+**AWS SES via SMTP** (`EMAIL_PROVIDER=ses`):
+
+Uses lettre SMTP transport to `email-smtp.<AWS_SES_REGION>.amazonaws.com:587`.
+Generate SES SMTP credentials in the AWS console under **IAM → SES SMTP credentials**
+(these are different from standard IAM access keys).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SMTP_HOST` | — | SMTP hostname |
-| `SMTP_USERNAME` | — | SMTP user |
-| `SMTP_PASSWORD` | — | SMTP password |
-| `SMTP_PORT` | `587` | SMTP port |
+| `AWS_SES_SMTP_USER` | — | SES SMTP username |
+| `AWS_SES_SMTP_PASSWORD` | — | SES SMTP password |
+| `AWS_SES_REGION` | `us-east-1` | AWS region for the SES SMTP endpoint |
 
-**AWS SES:**
+---
 
-| Variable | Description |
-|----------|-------------|
-| `AWS_REGION` | AWS region (e.g. `us-east-1`) |
-| `AWS_ACCESS_KEY_ID` | IAM access key |
-| `AWS_SECRET_ACCESS_KEY` | IAM secret key |
-| `AWS_SES_FROM_ARN` | Verified SES sender ARN |
+## Media / Streaming
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MEDIA_SERVER_BASE_URL` | — | Base URL of the external MediaMTX media server (e.g. `http://mediamtx:8888`). The backend proxies `/streams/:id/hls.m3u8` to this URL. If unset, the watch endpoint returns HTTP 503. **Bucket-D external dependency** — requires a separately deployed MediaMTX instance. |
+
+---
+
+## Game Server WebSocket
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GAME_SERVER_WS_BASE` | `ws://localhost:8080` | WebSocket base URL used by matchmaking to set `server_endpoint` on new game sessions. In single-server dev mode this defaults to the backend's own host. **Bucket-D**: dedicated or auto-scaled game servers require a separate deployment and this URL. |
+
+---
+
+## Frontend (Vite build-time)
+
+These variables are injected at build time by Vite and available as `import.meta.env.*`
+in the frontend bundle. They must be set before running `npm run build`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:8080` | Backend API base URL (no trailing slash). WebSocket connections are derived from this by replacing `http` with `ws`. |
+| `VITE_USE_MOCKS` | `false` | `true` — all hooks fall back to static mock data; useful for UI-only development without a running backend. **Production: must be `false` or absent.** |
+| `VITE_USE_MOCK_WS` | `false` | `true` — `useWebSocket` substitutes a local mock socket (no real WebSocket). **Production: must be `false` or absent.** |
 
 ---
 

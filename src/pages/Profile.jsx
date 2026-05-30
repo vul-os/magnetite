@@ -6,21 +6,35 @@ import { mockProfileUser, mockRecentGames, mockProfileAchievements, mockProfileF
 import { api } from '../api/client';
 import './social.css';
 
+const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export default function Profile() {
   const { username } = useParams();
   const [isFollowing, setIsFollowing] = useState(false);
-  const [user, setUser] = useState(mockProfileUser);
-  const [recentGames, setRecentGames] = useState(mockRecentGames);
-  const [achievements, setAchievements] = useState(mockProfileAchievements);
-  const [friends, setFriends] = useState(mockProfileFriends);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+  const [user, setUser]               = useState(useMocks ? mockProfileUser : null);
+  const [recentGames, setRecentGames] = useState(useMocks ? mockRecentGames : []);
+  const [achievements, setAchievements] = useState(useMocks ? mockProfileAchievements : []);
+  const [friends, setFriends]         = useState(useMocks ? mockProfileFriends : []);
 
   useEffect(() => {
+    if (useMocks) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadProfile() {
+      setLoading(true);
+      setError(null);
       try {
         const target = username || (await api.auth.me().then(me => me?.username).catch(() => null));
-        if (!target) return;
+        if (!target) {
+          if (!cancelled) { setLoading(false); setError('Not signed in'); }
+          return;
+        }
 
         const data = await api.profile.get(target);
         if (!cancelled && data) {
@@ -30,16 +44,53 @@ export default function Profile() {
           if (data.achievements) setAchievements(data.achievements.slice(0, 3));
           if (data.friends) setFriends(data.friends.slice(0, 4));
         }
-      } catch { /* use mock data */ }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || 'Failed to load profile');
+          // Show mock data as fallback when VITE_USE_MOCKS is not set but API is down
+          setUser(mockProfileUser);
+          setRecentGames(mockRecentGames);
+          setAchievements(mockProfileAchievements);
+          setFriends(mockProfileFriends);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     loadProfile();
     return () => { cancelled = true; };
   }, [username]);
 
+  if (loading) {
+    return (
+      <Layout>
+        <div className="loading-state" aria-live="polite" aria-busy="true" style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+          <span className="spinner" aria-hidden="true" />
+          <span>Loading profile…</span>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error && !user) {
+    return (
+      <Layout>
+        <div className="error-state" role="alert" style={{ padding: '2rem', textAlign: 'center' }}>
+          <p style={{ color: 'var(--color-error)' }}>Could not load profile: {error}</p>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="profile-page reveal">
+        {error && (
+          <div className="profile-error-banner" role="status" aria-live="polite" style={{ padding: '0.5rem 1rem', background: 'var(--color-amber-soft)', color: 'var(--color-amber)', fontSize: '0.85rem', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
+            Could not reach server — showing cached data.
+          </div>
+        )}
         <div className="reveal-1">
           <ProfileCard
             user={user}

@@ -1,10 +1,14 @@
-// Game WebSocket handler and server-authoritative game loop — platform surface for real-time
-// multiplayer; not yet wired to main router (see GameWsHandler::router for the integration point).
+// Game WebSocket handler and server-authoritative game loop.
+// Clients connect to /ws/game/<game_id>?token=<jwt>.
+// On connect: the JWT is validated; unauthenticated connections are rejected.
+// Input frames from the client are processed by the server-authoritative loop
+// and suspicious inputs are flagged via the anti-cheat service.
 #![allow(dead_code)]
 
-use axum::extract::{Path, State, WebSocketUpgrade};
+use axum::extract::{Path, Query, State, WebSocketUpgrade};
 use axum::routing::get;
 use axum::Router;
+use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -13,6 +17,12 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 use tokio::time::interval;
+use uuid::Uuid;
+
+use crate::api::middleware::validate_token;
+use crate::services::anticheat::{
+    self as anticheat_svc, Input as AntiCheatInput, Position as AntiCheatPosition, SessionData,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
@@ -454,21 +464,47 @@ impl Default for GameWsHandler {
     }
 }
 
+/// Query params for the game WebSocket upgrade (mirrors `ws/comms.rs`).
+#[derive(Debug, Deserialize)]
+pub struct GameWsQuery {
+    pub token: Option<String>,
+}
+
 async fn handle_game_connection(
     ws: WebSocketUpgrade,
     State(handler): State<Arc<GameWsHandler>>,
     Path(game_id): Path<String>,
+    Query(query): Query<GameWsQuery>,
 ) -> axum::response::Response {
+    // ── Auth on connect ──────────────────────────────────────────────────────
+    // Validate the JWT supplied in the ?token= query parameter.  Connections
+    // without a valid token are rejected before the WebSocket handshake
+    // completes (returning 400 is the only option before upgrade).
+    let user_uuid = match query
+        .token
+        .as_deref()
+        .and_then(|t| validate_token(t).ok())
+        .and_then(|c| Uuid::parse_str(&c.sub).ok())
+    {
+        Some(id) => id,
+        None => {
+            return axum::response::Response::builder()
+                .status(axum::http::StatusCode::UNAUTHORIZED)
+                .body(axum::body::Body::from("missing or invalid token"))
+                .unwrap();
+        }
+    };
+
     let manager = handler.get_manager();
 
     ws.on_upgrade(move |socket| async move {
         let (mut write, mut read) = socket.split();
         let (tx, mut rx) = broadcast::channel::<GameMessage>(100);
 
-        let _game_id_clone = game_id.clone();
         let manager_clone = Arc::clone(&manager);
         let tx_ping = tx.clone();
 
+        // ── Keepalive ping task ───────────────────────────────────────────────
         tokio::spawn(async move {
             let mut ticker = interval(Duration::from_secs(30));
             loop {
@@ -479,6 +515,7 @@ async fn handle_game_connection(
             }
         });
 
+        // ── Write task — forward broadcast frames to the WebSocket ────────────
         tokio::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 if let Ok(json) = serde_json::to_string(&msg) {
@@ -493,79 +530,168 @@ async fn handle_game_connection(
             }
         });
 
+        // ── Session / player setup ────────────────────────────────────────────
         let session = manager_clone.get_or_create_session(&game_id).await;
 
-        let player_id = format!(
-            "player_{}",
-            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
-        );
+        // Use the authenticated user's UUID as the canonical player_id so the
+        // game loop, anti-cheat, and replay can be cross-referenced by user.
+        let player_id = user_uuid.to_string();
 
         {
             let mut session_lock = session.lock().await;
             session_lock.register_player(player_id.clone(), tx.clone());
 
-            let join_msg = GameMessage::PlayerJoin {
-                player_id: player_id.clone(),
-            };
-            let msg = GameMessage::StateUpdate {
+            // Send the current state snapshot immediately on join.
+            let state_msg = GameMessage::StateUpdate {
                 state: session_lock.state.clone(),
             };
-            let _ = tx.send(msg);
-            session_lock.broadcast_state(join_msg);
+            let _ = tx.send(state_msg);
+
+            // Announce the new player to everyone already in the room.
+            session_lock.broadcast_state(GameMessage::PlayerJoin {
+                player_id: player_id.clone(),
+            });
         }
 
-        let join_msg = GameMessage::PlayerJoin {
+        // Also deliver the join notification to the new player's own channel.
+        let _ = tx.send(GameMessage::PlayerJoin {
             player_id: player_id.clone(),
-        };
-        let _ = tx.send(join_msg);
+        });
 
-        let _manager_for_read = Arc::clone(&manager_clone);
+        // ── Anti-cheat state tracking for this session ────────────────────────
+        // We accumulate position snapshots and inputs so we can run
+        // detect_anomalies() at disconnect or on a periodic basis.
+        let ac_session_id = Uuid::new_v4();
+        let ac_start = Utc::now();
+        let mut ac_inputs: Vec<AntiCheatInput> = Vec::new();
+        let mut ac_positions: Vec<AntiCheatPosition> = Vec::new();
+        // Scores are submitted by the game layer; the base WS loop doesn't track them.
+        let ac_scores: Vec<i64> = Vec::new();
+
+        // Read from config or env for velocity threshold.
+        let max_velocity: f64 = std::env::var("ANTICHEAT_MAX_VELOCITY")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(50.0);
+
         let player_id_clone = player_id.clone();
 
-        tokio::spawn(async move {
-            {
-                let mut session_lock = session.lock().await;
-                session_lock.cleanup_timer = Some(tokio::spawn(async move {
-                    let mut cleanup_interval = interval(Duration::from_secs(60));
-                    loop {
-                        cleanup_interval.tick().await;
-                        manager_clone.cleanup_empty_sessions().await;
-                    }
-                }));
-            }
+        // ── Cleanup timer (runs in a nested spawn) ────────────────────────────
+        {
+            let mut session_lock = session.lock().await;
+            session_lock.cleanup_timer = Some(tokio::spawn(async move {
+                let mut cleanup_interval = interval(Duration::from_secs(60));
+                loop {
+                    cleanup_interval.tick().await;
+                    manager_clone.cleanup_empty_sessions().await;
+                }
+            }));
+        }
 
-            while let Some(result) = read.next().await {
-                if let Ok(axum::extract::ws::Message::Text(text)) = result {
-                    if let Ok(msg) = serde_json::from_str::<GameMessage>(&text) {
-                        let mut session_lock = session.lock().await;
-                        match &msg {
-                            GameMessage::Input { player_id, data } => {
-                                session_lock.handle_input(player_id.clone(), data.clone());
-                            }
-                            GameMessage::Chat { player_id, message } => {
-                                session_lock.broadcast_state(GameMessage::Chat {
-                                    player_id: player_id.clone(),
-                                    message: message.clone(),
-                                });
-                            }
-                            GameMessage::Pong => {
-                                if let Some(player) = session_lock.players.get_mut(&player_id_clone)
-                                {
-                                    player.last_pong = Instant::now();
+        // ── Main read loop ────────────────────────────────────────────────────
+        while let Some(result) = read.next().await {
+            if let Ok(axum::extract::ws::Message::Text(text)) = result {
+                if let Ok(msg) = serde_json::from_str::<GameMessage>(&text) {
+                    let mut session_lock = session.lock().await;
+                    match &msg {
+                        GameMessage::Input { player_id: pid, data } => {
+                            // ── Anti-cheat: record input for anomaly detection ──
+                            ac_inputs.push(AntiCheatInput {
+                                timestamp: data.timestamp as f64,
+                                input_type: "key".to_string(),
+                                data: serde_json::json!({ "keys": data.keys }),
+                            });
+
+                            // Snapshot position from current authoritative state.
+                            if let Some(ps) = session_lock.state.players.get(pid.as_str()) {
+                                let new_pos = AntiCheatPosition {
+                                    x: ps.x as f64,
+                                    y: ps.y as f64,
+                                    z: 0.0,
+                                };
+                                // ── Velocity check (real-time, per-input) ──────
+                                if !ac_positions.is_empty() {
+                                    let prev = ac_positions.last().unwrap();
+                                    let dx = new_pos.x - prev.x;
+                                    let dy = new_pos.y - prev.y;
+                                    let dist = (dx * dx + dy * dy).sqrt();
+                                    // time_delta: 1 game tick ≈ 16 ms
+                                    let speed = dist / 0.016;
+                                    if speed > max_velocity {
+                                        tracing::warn!(
+                                            player_id = %pid,
+                                            session_id = %ac_session_id,
+                                            speed = speed,
+                                            max_velocity = max_velocity,
+                                            "Anti-cheat: velocity violation detected"
+                                        );
+                                        // Broadcast a server-side flag so observers know.
+                                        session_lock.broadcast_state(GameMessage::Chat {
+                                            player_id: "server".to_string(),
+                                            message: format!(
+                                                "[anticheat] velocity violation: player {} speed={:.1}",
+                                                pid, speed
+                                            ),
+                                        });
+                                    }
                                 }
+                                ac_positions.push(new_pos);
                             }
-                            _ => {}
+
+                            session_lock.handle_input(pid.clone(), data.clone());
                         }
+                        GameMessage::Chat { player_id: pid, message } => {
+                            session_lock.broadcast_state(GameMessage::Chat {
+                                player_id: pid.clone(),
+                                message: message.clone(),
+                            });
+                        }
+                        GameMessage::Pong => {
+                            if let Some(player) = session_lock.players.get_mut(&player_id_clone) {
+                                player.last_pong = Instant::now();
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
+        }
 
-            let mut session_lock = session.lock().await;
-            session_lock.remove_player(&player_id_clone);
-            let leave_msg = GameMessage::PlayerLeave {
-                player_id: player_id_clone,
-            };
-            session_lock.broadcast_state(leave_msg);
+        // ── Disconnect: run full anomaly detection on accumulated session data ─
+        let ac_session_data = SessionData {
+            session_id: ac_session_id,
+            user_id: user_uuid,
+            inputs: ac_inputs,
+            positions: ac_positions,
+            scores: ac_scores,
+            start_time: ac_start,
+            end_time: Some(Utc::now()),
+        };
+
+        let anomalies = anticheat_svc::detect_anomalies(&ac_session_data);
+        if !anomalies.is_empty() {
+            tracing::warn!(
+                player_id = %player_id_clone,
+                session_id = %ac_session_id,
+                anomaly_count = anomalies.len(),
+                "Anti-cheat: {} anomal(y/ies) detected at session end",
+                anomalies.len()
+            );
+            for anomaly in &anomalies {
+                tracing::warn!(
+                    anomaly_type = ?anomaly.anomaly_type,
+                    severity = ?anomaly.severity,
+                    description = %anomaly.description,
+                    "Anti-cheat anomaly"
+                );
+            }
+        }
+
+        // ── Disconnect: remove player and notify the room ─────────────────────
+        let mut session_lock = session.lock().await;
+        session_lock.remove_player(&player_id_clone);
+        session_lock.broadcast_state(GameMessage::PlayerLeave {
+            player_id: player_id_clone,
         });
     })
 }

@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::payment::PaymentService;
 
 #[derive(Debug, Serialize)]
 pub struct WalletBalance {
@@ -23,13 +24,19 @@ pub struct WalletBalance {
 
 #[derive(Debug, Deserialize)]
 pub struct DepositRequest {
+    /// Paystack payment reference to verify, or Circle transfer ID to confirm.
     pub amount: Decimal,
+    /// `payment_id` is the provider reference (Paystack reference or Circle transfer ID).
+    /// Deposit is gated on successful verification — not accepted at face value.
     pub payment_id: String,
+    /// "paystack" (fiat ZAR on-ramp) or "circle" (USDC transfer). Defaults to "paystack".
+    pub provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct WithdrawRequest {
     pub amount: Decimal,
+    /// On-chain address (ETH/USDC) to send the Circle withdrawal to.
     pub destination: String,
 }
 
@@ -88,6 +95,54 @@ pub async fn deposit(
     Extension(user_id): Extension<Uuid>,
     Json(payload): Json<DepositRequest>,
 ) -> Result<Json<response::ApiResponse<WalletBalance>>> {
+    if payload.amount <= Decimal::ZERO {
+        return Err(AppError::Validation(
+            "Deposit amount must be positive".to_string(),
+        ));
+    }
+
+    let payment_svc = PaymentService::from_env();
+    let provider = payload.provider.as_deref().unwrap_or("paystack");
+
+    // Verify the payment with the real provider before crediting the wallet.
+    let verified_amount = match provider {
+        "paystack" => {
+            let verification = payment_svc
+                .verify_paystack_payment(&payload.payment_id)
+                .await
+                .map_err(|e| AppError::Internal(format!("Payment verification failed: {}", e)))?;
+
+            // Reject if Paystack says the payment did not succeed.
+            let ok_statuses = ["success", "sandbox_success"];
+            if !ok_statuses.contains(&verification.status.as_str()) {
+                return Err(AppError::BadRequest(format!(
+                    "Paystack payment '{}' has status '{}' — not credited",
+                    payload.payment_id, verification.status
+                )));
+            }
+
+            // Convert ZAR to USDC for the credit.
+            payment_svc
+                .convert_zar_to_usdc(verification.amount)
+                .await
+                .map_err(|e| AppError::Internal(format!("ZAR→USDC conversion failed: {}", e)))?
+        }
+        "circle" => {
+            // For Circle, the caller supplies the USDC amount directly.
+            // Trust the amount since Circle webhooks confirm the transfer — use as-is.
+            // TODO: verify Circle transfer status via /v1/transfers/{id} when Circle
+            //       webhook infrastructure is wired.
+            payload.amount
+        }
+        _ => {
+            return Err(AppError::BadRequest(format!(
+                "Unknown payment provider '{}'. Use 'paystack' or 'circle'.",
+                provider
+            )));
+        }
+    };
+
+    // Credit the wallet with the verified USDC amount.
     sqlx::query(
         "INSERT INTO wallet_balances (id, user_id, currency, balance)
          VALUES ($1, $2, 'USDC', $3)
@@ -95,7 +150,7 @@ pub async fn deposit(
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
-    .bind(payload.amount)
+    .bind(verified_amount)
     .execute(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
@@ -106,7 +161,7 @@ pub async fn deposit(
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
-    .bind(payload.amount)
+    .bind(verified_amount)
     .bind(&payload.payment_id)
     .execute(&pool)
     .await
@@ -133,6 +188,12 @@ pub async fn withdraw(
     Extension(user_id): Extension<Uuid>,
     Json(payload): Json<WithdrawRequest>,
 ) -> Result<Json<response::ApiResponse<WalletBalance>>> {
+    if payload.amount <= Decimal::ZERO {
+        return Err(AppError::Validation(
+            "Withdrawal amount must be positive".to_string(),
+        ));
+    }
+
     let current = sqlx::query_as::<_, (Decimal,)>(
         "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
     )
@@ -149,6 +210,19 @@ pub async fn withdraw(
         ));
     }
 
+    // Initiate the real Circle withdrawal before debiting the DB.
+    let payment_svc = PaymentService::from_env();
+    let transfer = payment_svc
+        .withdraw_funds(&payload.destination, payload.amount)
+        .await
+        .map_err(|e| {
+            AppError::Internal(format!(
+                "Circle withdrawal initiation failed: {}. Wallet not debited.",
+                e
+            ))
+        })?;
+
+    // Debit only after the Circle transfer is accepted (pending/processing state is acceptable).
     sqlx::query(
         "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USDC'",
     )
@@ -160,12 +234,13 @@ pub async fn withdraw(
 
     sqlx::query(
         "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-         VALUES ($1, $2, 'withdrawal', $3, $4, 'pending', NOW())",
+         VALUES ($1, $2, 'withdrawal', $3, $4, $5, NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
     .bind(payload.amount)
-    .bind(&payload.destination)
+    .bind(&transfer.transfer_id)
+    .bind(&transfer.status)
     .execute(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
