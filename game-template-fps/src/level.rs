@@ -70,73 +70,121 @@ pub fn level_descriptor() -> LevelDescriptor {
             // ── Outer walls ──────────────────────────────────────────────────
             // North wall (+Z)
             BoxCollider {
-                center: Position { x: 0.0, y: wall_center_y, z: h },
+                center: Position {
+                    x: 0.0,
+                    y: wall_center_y,
+                    z: h,
+                },
                 half_extents: [h + wall_thickness, wall_half_y, wall_thickness],
                 is_wall: true,
             },
             // South wall (-Z)
             BoxCollider {
-                center: Position { x: 0.0, y: wall_center_y, z: -h },
+                center: Position {
+                    x: 0.0,
+                    y: wall_center_y,
+                    z: -h,
+                },
                 half_extents: [h + wall_thickness, wall_half_y, wall_thickness],
                 is_wall: true,
             },
             // East wall (+X)
             BoxCollider {
-                center: Position { x: h, y: wall_center_y, z: 0.0 },
+                center: Position {
+                    x: h,
+                    y: wall_center_y,
+                    z: 0.0,
+                },
                 half_extents: [wall_thickness, wall_half_y, h + wall_thickness],
                 is_wall: true,
             },
             // West wall (-X)
             BoxCollider {
-                center: Position { x: -h, y: wall_center_y, z: 0.0 },
+                center: Position {
+                    x: -h,
+                    y: wall_center_y,
+                    z: 0.0,
+                },
                 half_extents: [wall_thickness, wall_half_y, h + wall_thickness],
                 is_wall: true,
             },
             // ── Floor ────────────────────────────────────────────────────────
             BoxCollider {
-                center: Position { x: 0.0, y: floor_y - 0.25, z: 0.0 },
+                center: Position {
+                    x: 0.0,
+                    y: floor_y - 0.25,
+                    z: 0.0,
+                },
                 half_extents: [h, 0.25, h],
                 is_wall: false,
             },
             // ── Cover boxes (symmetrical for fair spawning) ──────────────────
             // Centre block
             BoxCollider {
-                center: Position { x: 0.0, y: 1.0, z: 0.0 },
+                center: Position {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                },
                 half_extents: [2.5, 1.0, 2.5],
                 is_wall: true,
             },
             // NE quad box
             BoxCollider {
-                center: Position { x: 15.0, y: 0.75, z: 15.0 },
+                center: Position {
+                    x: 15.0,
+                    y: 0.75,
+                    z: 15.0,
+                },
                 half_extents: [3.0, 0.75, 1.5],
                 is_wall: true,
             },
             // NW quad box
             BoxCollider {
-                center: Position { x: -15.0, y: 0.75, z: 15.0 },
+                center: Position {
+                    x: -15.0,
+                    y: 0.75,
+                    z: 15.0,
+                },
                 half_extents: [3.0, 0.75, 1.5],
                 is_wall: true,
             },
             // SE quad box
             BoxCollider {
-                center: Position { x: 15.0, y: 0.75, z: -15.0 },
+                center: Position {
+                    x: 15.0,
+                    y: 0.75,
+                    z: -15.0,
+                },
                 half_extents: [1.5, 0.75, 3.0],
                 is_wall: true,
             },
             // SW quad box
             BoxCollider {
-                center: Position { x: -15.0, y: 0.75, z: -15.0 },
+                center: Position {
+                    x: -15.0,
+                    y: 0.75,
+                    z: -15.0,
+                },
                 half_extents: [1.5, 0.75, 3.0],
                 is_wall: true,
             },
             // Mid-lane pillars
             BoxCollider {
-                center: Position { x: 8.0, y: 1.5, z: 0.0 },
+                center: Position {
+                    x: 8.0,
+                    y: 1.5,
+                    z: 0.0,
+                },
                 half_extents: [0.5, 1.5, 0.5],
                 is_wall: true,
             },
             BoxCollider {
-                center: Position { x: -8.0, y: 1.5, z: 0.0 },
+                center: Position {
+                    x: -8.0,
+                    y: 1.5,
+                    z: 0.0,
+                },
                 half_extents: [0.5, 1.5, 0.5],
                 is_wall: true,
             },
@@ -151,14 +199,46 @@ pub fn level_descriptor() -> LevelDescriptor {
 
 /// Pre-defined spawn points (alternating between team A and team B sides).
 const SPAWN_POINTS: [Position; 8] = [
-    Position { x: -30.0, y: 0.0, z: -30.0 },
-    Position { x: 30.0, y: 0.0, z: 30.0 },
-    Position { x: -30.0, y: 0.0, z: 30.0 },
-    Position { x: 30.0, y: 0.0, z: -30.0 },
-    Position { x: -20.0, y: 0.0, z: 0.0 },
-    Position { x: 20.0, y: 0.0, z: 0.0 },
-    Position { x: 0.0, y: 0.0, z: -20.0 },
-    Position { x: 0.0, y: 0.0, z: 20.0 },
+    Position {
+        x: -30.0,
+        y: 0.0,
+        z: -30.0,
+    },
+    Position {
+        x: 30.0,
+        y: 0.0,
+        z: 30.0,
+    },
+    Position {
+        x: -30.0,
+        y: 0.0,
+        z: 30.0,
+    },
+    Position {
+        x: 30.0,
+        y: 0.0,
+        z: -30.0,
+    },
+    Position {
+        x: -20.0,
+        y: 0.0,
+        z: 0.0,
+    },
+    Position {
+        x: 20.0,
+        y: 0.0,
+        z: 0.0,
+    },
+    Position {
+        x: 0.0,
+        y: 0.0,
+        z: -20.0,
+    },
+    Position {
+        x: 0.0,
+        y: 0.0,
+        z: 20.0,
+    },
 ];
 
 /// Choose a spawn point for `player_id` that is furthest from any alive enemy.
@@ -186,7 +266,9 @@ pub fn spawn_point_for(player_id: PlayerId, state: &GameState) -> Position {
         .max_by(|a, b| {
             let score_a = min_dist_to_enemies(*a, &enemies);
             let score_b = min_dist_to_enemies(*b, &enemies);
-            score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+            score_a
+                .partial_cmp(&score_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
         .copied()
         .unwrap_or(SPAWN_POINTS[idx])
@@ -250,7 +332,10 @@ mod tests {
     fn level_descriptor_has_colliders_and_spawns() {
         let desc = level_descriptor();
         assert!(!desc.colliders.is_empty(), "level must have colliders");
-        assert!(!desc.spawn_points.is_empty(), "level must have spawn points");
+        assert!(
+            !desc.spawn_points.is_empty(),
+            "level must have spawn points"
+        );
     }
 
     #[test]
@@ -279,14 +364,25 @@ mod tests {
         state.players.push(make_alive_player(99, -30.0, -30.0));
         let sp = spawn_point_for(PlayerId::new(1), &state);
         // The chosen spawn should be far from the enemy.
-        let enemy_pos = Position { x: -30.0, y: 0.0, z: -30.0 };
+        let enemy_pos = Position {
+            x: -30.0,
+            y: 0.0,
+            z: -30.0,
+        };
         let dist = sp.distance_to(enemy_pos);
-        assert!(dist > 20.0, "should spawn far from the enemy; got dist={dist}");
+        assert!(
+            dist > 20.0,
+            "should spawn far from the enemy; got dist={dist}"
+        );
     }
 
     #[test]
     fn floor_at_always_returns_floor_y() {
-        let pos = Position { x: 5.0, y: 100.0, z: -5.0 };
+        let pos = Position {
+            x: 5.0,
+            y: 100.0,
+            z: -5.0,
+        };
         assert!((floor_at(pos) - FLOOR_Y).abs() < f32::EPSILON);
     }
 
@@ -294,7 +390,11 @@ mod tests {
     fn clamp_position_keeps_player_inside_bounds() {
         let mut ps = PlayerState {
             id: PlayerId::new(0),
-            position: Position { x: 999.0, y: -5.0, z: -999.0 },
+            position: Position {
+                x: 999.0,
+                y: -5.0,
+                z: -999.0,
+            },
             rotation: Rotation::default(),
             health: 100.0,
             max_health: 100.0,

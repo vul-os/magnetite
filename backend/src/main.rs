@@ -35,6 +35,7 @@ use crate::api::notifications;
 use crate::api::oauth;
 use crate::api::points;
 use crate::api::social;
+use crate::api::streaming;
 use crate::api::subscriptions;
 use crate::api::versioning;
 use crate::api::wallet;
@@ -98,6 +99,8 @@ async fn main() {
             messages::channel_messages_router(pool.clone()),
         )
         .nest("/dms", messages::dms_router(pool.clone()))
+        // Wave 9: streaming egress + HLS watch
+        .nest("/streams", streaming::router(pool.clone()))
         .route("/health", get(health_check))
         .layer(axum::middleware::from_fn_with_state(
             versioning_state.clone(),

@@ -188,7 +188,7 @@
   padding: 0 4px;
   background: var(--color-accent);
   border-radius: var(--radius-full);
-  color: #000;
+  color: var(--color-bg-primary);
   font-size: 9px;
   font-weight: 700;
   display: flex;
@@ -446,7 +446,7 @@
 .overlay-chat-send-btn:hover {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: #000;
+  color: var(--color-bg-primary);
   box-shadow: 0 0 10px rgba(56, 225, 200, 0.25);
 }
 
@@ -662,7 +662,7 @@
 .overlay-participant-mute-badge svg {
   width: 7px;
   height: 7px;
-  color: #fff;
+  color: var(--color-text-primary);
 }
 
 .overlay-participant-info {

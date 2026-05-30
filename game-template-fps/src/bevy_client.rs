@@ -50,7 +50,10 @@ impl Default for LocalGameState {
         let mut game = FpsGame::new();
         let local_player_id = PlayerId::new(0);
         game.on_player_join(local_player_id);
-        Self { game, local_player_id }
+        Self {
+            game,
+            local_player_id,
+        }
     }
 }
 
@@ -171,7 +174,11 @@ fn spawn_level(
     for col in &desc.colliders {
         let [hx, hy, hz] = col.half_extents;
         let mesh = meshes.add(Cuboid::new(hx * 2.0, hy * 2.0, hz * 2.0));
-        let mat = if col.is_wall { wall_mat.clone() } else { floor_mat.clone() };
+        let mat = if col.is_wall {
+            wall_mat.clone()
+        } else {
+            floor_mat.clone()
+        };
         let transform = Transform::from_xyz(col.center.x, col.center.y, col.center.z);
 
         let entity = commands
@@ -241,10 +248,16 @@ fn collect_gamepad_input(
     for gamepad in gamepads.iter() {
         // ── Left stick — movement ────────────────────────────────────────────
         let lx = axes
-            .get(GamepadAxis { gamepad, axis_type: GamepadAxisType::LeftStickX })
+            .get(GamepadAxis {
+                gamepad,
+                axis_type: GamepadAxisType::LeftStickX,
+            })
             .unwrap_or(0.0);
         let ly = axes
-            .get(GamepadAxis { gamepad, axis_type: GamepadAxisType::LeftStickY })
+            .get(GamepadAxis {
+                gamepad,
+                axis_type: GamepadAxisType::LeftStickY,
+            })
             .unwrap_or(0.0);
 
         // Dead-zone 0.15.
@@ -257,14 +270,20 @@ fn collect_gamepad_input(
 
         // ── Right stick — look ───────────────────────────────────────────────
         let rx = axes
-            .get(GamepadAxis { gamepad, axis_type: GamepadAxisType::RightStickX })
+            .get(GamepadAxis {
+                gamepad,
+                axis_type: GamepadAxisType::RightStickX,
+            })
             .unwrap_or(0.0);
         let ry = axes
-            .get(GamepadAxis { gamepad, axis_type: GamepadAxisType::RightStickY })
+            .get(GamepadAxis {
+                gamepad,
+                axis_type: GamepadAxisType::RightStickY,
+            })
             .unwrap_or(0.0);
 
         const LOOK_SENSITIVITY: f64 = 120.0; // pixels/s equivalent
-        // Accumulate into mouse delta (FpsGame::handle_input reads these).
+                                             // Accumulate into mouse delta (FpsGame::handle_input reads these).
         if rx.abs() > 0.15 {
             pending.mouse.delta_x += rx as f64 * LOOK_SENSITIVITY;
         }
@@ -273,22 +292,40 @@ fn collect_gamepad_input(
         }
 
         // ── Buttons ──────────────────────────────────────────────────────────
-        if buttons.pressed(GamepadButton { gamepad, button_type: GamepadButtonType::South }) {
+        if buttons.pressed(GamepadButton {
+            gamepad,
+            button_type: GamepadButtonType::South,
+        }) {
             pending.keys.jump = true;
         }
-        if buttons.pressed(GamepadButton { gamepad, button_type: GamepadButtonType::East }) {
+        if buttons.pressed(GamepadButton {
+            gamepad,
+            button_type: GamepadButtonType::East,
+        }) {
             pending.keys.crouch = true;
         }
-        if buttons.pressed(GamepadButton { gamepad, button_type: GamepadButtonType::RightTrigger2 }) {
+        if buttons.pressed(GamepadButton {
+            gamepad,
+            button_type: GamepadButtonType::RightTrigger2,
+        }) {
             pending.keys.attack = true; // fire
         }
-        if buttons.pressed(GamepadButton { gamepad, button_type: GamepadButtonType::LeftTrigger2 }) {
+        if buttons.pressed(GamepadButton {
+            gamepad,
+            button_type: GamepadButtonType::LeftTrigger2,
+        }) {
             pending.keys.secondary_attack = true; // aim
         }
-        if buttons.pressed(GamepadButton { gamepad, button_type: GamepadButtonType::LeftThumb }) {
+        if buttons.pressed(GamepadButton {
+            gamepad,
+            button_type: GamepadButtonType::LeftThumb,
+        }) {
             pending.keys.sprint = true;
         }
-        if buttons.pressed(GamepadButton { gamepad, button_type: GamepadButtonType::West }) {
+        if buttons.pressed(GamepadButton {
+            gamepad,
+            button_type: GamepadButtonType::West,
+        }) {
             // X/West = interact (also reload in some games).
             pending.keys.interact = true;
         }
@@ -300,10 +337,7 @@ fn collect_gamepad_input(
 // ===========================================================================
 
 /// Drive the local [`FpsGame`] one tick, feeding the assembled [`PendingInput`].
-fn run_local_game_tick(
-    mut gs: ResMut<LocalGameState>,
-    pending: Res<PendingInput>,
-) {
+fn run_local_game_tick(mut gs: ResMut<LocalGameState>, pending: Res<PendingInput>) {
     let input = Input {
         keys: pending.keys,
         mouse: pending.mouse,

@@ -347,9 +347,11 @@ impl GameLogic for FpsGame {
             // Mouse look
             let mouse_sensitivity = 0.003_f32;
             ps.rotation.yaw += input.mouse.delta_x as f32 * mouse_sensitivity;
-            ps.rotation.pitch = (ps.rotation.pitch
-                - input.mouse.delta_y as f32 * mouse_sensitivity)
-                .clamp(-std::f32::consts::FRAC_PI_2 + 0.01, std::f32::consts::FRAC_PI_2 - 0.01);
+            ps.rotation.pitch =
+                (ps.rotation.pitch - input.mouse.delta_y as f32 * mouse_sensitivity).clamp(
+                    -std::f32::consts::FRAC_PI_2 + 0.01,
+                    std::f32::consts::FRAC_PI_2 - 0.01,
+                );
 
             // Gamepad right-stick look (stored in mouse deltas by InputMap)
             // (already folded into delta_x/delta_y by InputMap::resolve)
@@ -375,7 +377,11 @@ impl GameLogic for FpsGame {
         match &action {
             FpsAction::MoveForward { sprinting } => {
                 custom.sprinting = *sprinting;
-                let spd = if *sprinting { WALK_SPEED * SPRINT_MULT } else { WALK_SPEED };
+                let spd = if *sprinting {
+                    WALK_SPEED * SPRINT_MULT
+                } else {
+                    WALK_SPEED
+                };
                 ps.position.x += forward_x * spd * DT;
                 ps.position.z += forward_z * spd * DT;
             }
@@ -396,7 +402,11 @@ impl GameLogic for FpsGame {
             }
             FpsAction::MoveAnalog { x, z, sprinting } => {
                 custom.sprinting = *sprinting;
-                let spd = if *sprinting { WALK_SPEED * SPRINT_MULT } else { WALK_SPEED };
+                let spd = if *sprinting {
+                    WALK_SPEED * SPRINT_MULT
+                } else {
+                    WALK_SPEED
+                };
                 // x/z are normalised [-1, 1] from the left thumbstick.
                 ps.position.x += (forward_x * z + right_x * x) * spd * DT;
                 ps.position.z += (forward_z * z + right_z * x) * spd * DT;
@@ -511,10 +521,9 @@ impl GameLogic for FpsGame {
             max_players: 16,
             min_players: 1,
             tick_rate: 60,
-            description:
-                "Advanced 3-D FPS starter built on the Magnetite SDK + Bevy + rapier3d. \
+            description: "Advanced 3-D FPS starter built on the Magnetite SDK + Bevy + rapier3d. \
                  Controller-ready, multiplayer-authoritative, snapshot/rollback netcode."
-                    .to_string(),
+                .to_string(),
         }
     }
 
@@ -643,9 +652,7 @@ pub fn run_native() {
     use bevy::prelude::*;
     use bevy_client::FpsPlugin;
 
-    App::new()
-        .add_plugins((DefaultPlugins, FpsPlugin))
-        .run();
+    App::new().add_plugins((DefaultPlugins, FpsPlugin)).run();
 }
 
 // ===========================================================================
@@ -775,8 +782,14 @@ mod tests {
         }
 
         let ammo_after = FpsPlayerCustom::from_player(&game.state().players[0]).ammo;
-        assert!(ammo_after > ammo_before, "reload should increase ammo: {ammo_before} → {ammo_after}");
-        assert_eq!(ammo_after, 30, "after reload ammo should be full magazine (30)");
+        assert!(
+            ammo_after > ammo_before,
+            "reload should increase ammo: {ammo_before} → {ammo_after}"
+        );
+        assert_eq!(
+            ammo_after, 30,
+            "after reload ammo should be full magazine (30)"
+        );
     }
 
     #[test]
@@ -801,7 +814,10 @@ mod tests {
 
         game.restore(snap);
         assert_eq!(game.state().tick, 1, "rollback must rewind to tick 1");
-        assert!(game.state().players.len() == 1, "players must be preserved in snapshot");
+        assert!(
+            game.state().players.len() == 1,
+            "players must be preserved in snapshot"
+        );
     }
 
     #[test]
@@ -824,7 +840,10 @@ mod tests {
         let rot = game.state().players[0].rotation;
         let result = game.process_hitscan(pid, origin, rot);
 
-        assert!(result.hit_player.is_none(), "hitscan with no targets must miss");
+        assert!(
+            result.hit_player.is_none(),
+            "hitscan with no targets must miss"
+        );
         assert!((result.damage).abs() < f32::EPSILON);
     }
 
@@ -837,12 +856,28 @@ mod tests {
         game.on_player_join(target);
 
         // Place shooter at origin, target directly in front (-Z).
-        game.state.players[0].position = Position { x: 0.0, y: 0.0, z: 0.0 };
-        game.state.players[1].position = Position { x: 0.0, y: 0.0, z: -5.0 };
+        game.state.players[0].position = Position {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        game.state.players[1].position = Position {
+            x: 0.0,
+            y: 0.0,
+            z: -5.0,
+        };
 
         // Shoot from body-center height (0.9m) aimed horizontally — aligns with target's body center.
-        let origin = Position { x: 0.0, y: hitscan::BODY_CENTER_Y, z: 0.0 };
-        let rot = Rotation { pitch: 0.0, yaw: 0.0, roll: 0.0 }; // looking -Z
+        let origin = Position {
+            x: 0.0,
+            y: hitscan::BODY_CENTER_Y,
+            z: 0.0,
+        };
+        let rot = Rotation {
+            pitch: 0.0,
+            yaw: 0.0,
+            roll: 0.0,
+        }; // looking -Z
 
         let result = game.process_hitscan(shooter, origin, rot);
         assert!(

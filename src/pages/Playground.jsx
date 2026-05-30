@@ -3,6 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import GameHUD from '../components/GameHUD';
 import Modal from '../components/Modal';
 import GameOverlay from '../components/GameOverlay';
+import InGameStore from '../components/store/InGameStore';
+import { useAuth } from '../hooks/useAuth';
+import { useComms } from '../context/CommsContext';
+import { usePoints } from '../hooks/usePoints';
 import './Playground.css';
 
 const MOCK_PLAYERS = [
@@ -24,6 +28,12 @@ export default function Playground() {
   const canvasRef       = useRef(null);
   const wsRef           = useRef(null);
   const gameLoopRef     = useRef(null);
+
+  // Auth + economy
+  const { user }                    = useAuth();
+  const comms                       = useComms();
+  const { balance }                 = usePoints();
+  const [showStore, setShowStore]   = useState(false);
 
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [latency, setLatency]                   = useState(0);
@@ -231,6 +241,39 @@ export default function Playground() {
           <span className="score-value">{gameState.score}</span>
         </div>
 
+        {/* Points HUD */}
+        <div className="points-hud" aria-label={`Points balance: ${balance.points}`}>
+          <span className="points-hud-icon" aria-hidden="true">⬡</span>
+          <span className="points-hud-value">{(balance.points ?? 0).toLocaleString()}</span>
+          <span className="points-hud-label">pts</span>
+        </div>
+
+        {/* Player badge */}
+        {user && (
+          <div className="player-hud" aria-label={`Signed in as ${user.username ?? user.email}`}>
+            <span className="player-hud-avatar" aria-hidden="true">
+              {(user.username ?? user.email ?? 'P').charAt(0).toUpperCase()}
+            </span>
+            <span className="player-hud-name">{user.username ?? user.email}</span>
+          </div>
+        )}
+
+        {/* In-game store toggle */}
+        <button
+          className="store-hud-btn"
+          onClick={() => setShowStore((v) => !v)}
+          aria-expanded={showStore}
+          aria-label="Toggle in-game store"
+          title="Store"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+            <line x1="3" x2="21" y1="6" y2="6" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
+          Store
+        </button>
+
         <button className="exit-btn" onClick={handleExit} aria-label="Exit game">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M10 11l3-3-3-3M6 8h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -238,6 +281,18 @@ export default function Playground() {
           Exit
         </button>
       </div>
+
+      {/* In-game store panel */}
+      {showStore && (
+        <div className="ingame-store-overlay" role="region" aria-label="In-game store">
+          <InGameStore
+            storeId={gameId ? `game-${gameId}` : undefined}
+            gameTitle="Match Store"
+            onClose={() => setShowStore(false)}
+            pointBalance={balance.points ?? 0}
+          />
+        </div>
+      )}
 
       {/* Pause modal */}
       <Modal isOpen={showPauseMenu} onClose={handleResume} title="// Game Paused" size="sm">
@@ -276,6 +331,7 @@ export default function Playground() {
         label="Match Chat"
         channelId={gameId ? `match-${gameId}` : null}
         voiceRoomId={gameId ? `match-voice-${gameId}` : null}
+        comms={comms}
       />
     </div>
   );

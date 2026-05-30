@@ -227,3 +227,89 @@
   .lobby-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
   .lobby-code-block { align-items: flex-start; }
 }
+
+/* ─── Header right-side group ──────────────────────────────────────────────── */
+.lobby-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ─── Points HUD ────────────────────────────────────────────────────────────── */
+.lobby-points-hud {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.lobby-points-icon {
+  color: var(--color-amber);
+  font-size: 0.9rem;
+}
+
+.lobby-points-value {
+  color: var(--color-amber);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lobby-points-label {
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+}
+
+/* ─── Lobby store toggle button ─────────────────────────────────────────────── */
+.lobby-store-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.45rem 0.875rem;
+  background: var(--color-accent-soft);
+  border: 1px solid rgba(56, 225, 200, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.lobby-store-btn:hover {
+  background: rgba(56, 225, 200, 0.18);
+  border-color: rgba(56, 225, 200, 0.45);
+  box-shadow: 0 0 12px rgba(56, 225, 200, 0.12);
+}
+
+.lobby-store-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ─── Lobby in-game store panel ─────────────────────────────────────────────── */
+.lobby-store-panel {
+  margin: -1rem 0 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  animation: storeSlideDown var(--t) var(--ease-out) both;
+  border: 1px solid var(--color-border);
+}
+
+@keyframes storeSlideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-store-panel { animation: none; }
+}

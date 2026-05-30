@@ -261,7 +261,11 @@ export function InGameStore({
                         className={`btn btn-sm ${canAfford ? 'btn-primary' : 'btn-secondary'} igs-buy-btn`}
                         onClick={() => handleBuy(item)}
                         disabled={purchasing || !canAfford}
-                        aria-label={`Buy ${item.name} for ${priceLabel}`}
+                        aria-label={
+                          !canAfford
+                            ? `Not Enough ${currency === 'points' ? 'pts' : 'USDC'} to buy ${item.name}`
+                            : `Buy ${item.name} for ${priceLabel}`
+                        }
                       >
                         {purchasing ? '…' : canAfford ? 'Buy' : 'Not Enough'}
                       </button>

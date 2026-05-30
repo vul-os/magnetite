@@ -81,10 +81,10 @@ pub enum GamepadAxis {
 /// Named gamepad buttons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GamepadButton {
-    South,  // A (Xbox), Cross (PlayStation)
-    East,   // B, Circle
-    West,   // X, Square
-    North,  // Y, Triangle
+    South, // A (Xbox), Cross (PlayStation)
+    East,  // B, Circle
+    West,  // X, Square
+    North, // Y, Triangle
     LeftTrigger,
     RightTrigger,
     LeftBumper,
@@ -103,12 +103,18 @@ pub enum GamepadButton {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FpsAction {
     /// Move forward; `sprinting` when the sprint key/button is held.
-    MoveForward { sprinting: bool },
+    MoveForward {
+        sprinting: bool,
+    },
     MoveBackward,
     MoveLeft,
     MoveRight,
     /// Analog stick movement: `x` ∈ [-1, 1] (strafe), `z` ∈ [-1, 1] (forward).
-    MoveAnalog { x: f32, z: f32, sprinting: bool },
+    MoveAnalog {
+        x: f32,
+        z: f32,
+        sprinting: bool,
+    },
     Jump,
     Crouch,
     /// Primary fire.
@@ -128,14 +134,22 @@ impl FpsAction {
     /// `Action::Custom` with a JSON payload.
     pub fn into_sdk_action(self) -> Action {
         match self {
-            FpsAction::MoveForward { sprinting } => {
-                Action::Move { direction: Direction::Forward, sprint: sprinting }
-            }
-            FpsAction::MoveBackward => {
-                Action::Move { direction: Direction::Backward, sprint: false }
-            }
-            FpsAction::MoveLeft => Action::Move { direction: Direction::Left, sprint: false },
-            FpsAction::MoveRight => Action::Move { direction: Direction::Right, sprint: false },
+            FpsAction::MoveForward { sprinting } => Action::Move {
+                direction: Direction::Forward,
+                sprint: sprinting,
+            },
+            FpsAction::MoveBackward => Action::Move {
+                direction: Direction::Backward,
+                sprint: false,
+            },
+            FpsAction::MoveLeft => Action::Move {
+                direction: Direction::Left,
+                sprint: false,
+            },
+            FpsAction::MoveRight => Action::Move {
+                direction: Direction::Right,
+                sprint: false,
+            },
             FpsAction::MoveAnalog { x, z, sprinting } => Action::Custom {
                 name: "move_analog".into(),
                 payload: serde_json::json!({ "x": x, "z": z, "sprint": sprinting }),
@@ -181,7 +195,11 @@ impl InputMap {
         let ly = Self::analog_axis(input, GAMEPAD_LEFT_Y);
         // Dead-zone: ignore tiny stick deflections.
         if lx.hypot(ly) > 0.15 {
-            return FpsAction::MoveAnalog { x: lx, z: ly, sprinting };
+            return FpsAction::MoveAnalog {
+                x: lx,
+                z: ly,
+                sprinting,
+            };
         }
 
         // ── 2. Digital buttons / keys ────────────────────────────────────────
@@ -316,12 +334,20 @@ mod tests {
     use magnetite_sdk::input::{Input, KeyState, MouseState};
 
     fn make(keys: KeyState) -> Input {
-        Input { keys, mouse: MouseState::default(), sequence: 1, timestamp_ms: 0 }
+        Input {
+            keys,
+            mouse: MouseState::default(),
+            sequence: 1,
+            timestamp_ms: 0,
+        }
     }
 
     #[test]
     fn forward_key_resolves_to_move_forward() {
-        let input = make(KeyState { forward: true, ..Default::default() });
+        let input = make(KeyState {
+            forward: true,
+            ..Default::default()
+        });
         assert!(matches!(
             InputMap::resolve(&input),
             FpsAction::MoveForward { sprinting: false }
@@ -330,7 +356,11 @@ mod tests {
 
     #[test]
     fn sprint_modifier_sets_sprinting() {
-        let input = make(KeyState { forward: true, sprint: true, ..Default::default() });
+        let input = make(KeyState {
+            forward: true,
+            sprint: true,
+            ..Default::default()
+        });
         assert!(matches!(
             InputMap::resolve(&input),
             FpsAction::MoveForward { sprinting: true }
@@ -339,37 +369,55 @@ mod tests {
 
     #[test]
     fn backward_key_resolves_correctly() {
-        let input = make(KeyState { backward: true, ..Default::default() });
+        let input = make(KeyState {
+            backward: true,
+            ..Default::default()
+        });
         assert_eq!(InputMap::resolve(&input), FpsAction::MoveBackward);
     }
 
     #[test]
     fn attack_key_resolves_to_fire() {
-        let input = make(KeyState { attack: true, ..Default::default() });
+        let input = make(KeyState {
+            attack: true,
+            ..Default::default()
+        });
         assert_eq!(InputMap::resolve(&input), FpsAction::Fire);
     }
 
     #[test]
     fn secondary_attack_resolves_to_aim() {
-        let input = make(KeyState { secondary_attack: true, ..Default::default() });
+        let input = make(KeyState {
+            secondary_attack: true,
+            ..Default::default()
+        });
         assert_eq!(InputMap::resolve(&input), FpsAction::Aim);
     }
 
     #[test]
     fn jump_key_resolves_to_jump() {
-        let input = make(KeyState { jump: true, ..Default::default() });
+        let input = make(KeyState {
+            jump: true,
+            ..Default::default()
+        });
         assert_eq!(InputMap::resolve(&input), FpsAction::Jump);
     }
 
     #[test]
     fn crouch_key_resolves_to_crouch() {
-        let input = make(KeyState { crouch: true, ..Default::default() });
+        let input = make(KeyState {
+            crouch: true,
+            ..Default::default()
+        });
         assert_eq!(InputMap::resolve(&input), FpsAction::Crouch);
     }
 
     #[test]
     fn interact_key_resolves_to_interact() {
-        let input = make(KeyState { interact: true, ..Default::default() });
+        let input = make(KeyState {
+            interact: true,
+            ..Default::default()
+        });
         assert_eq!(InputMap::resolve(&input), FpsAction::Interact);
     }
 
@@ -387,7 +435,12 @@ mod tests {
 
     #[test]
     fn fps_action_into_sdk_action_move_analog() {
-        let sdk = FpsAction::MoveAnalog { x: 0.5, z: 0.8, sprinting: false }.into_sdk_action();
+        let sdk = FpsAction::MoveAnalog {
+            x: 0.5,
+            z: 0.8,
+            sprinting: false,
+        }
+        .into_sdk_action();
         assert!(matches!(sdk, Action::Custom { ref name, .. } if name == "move_analog"));
     }
 }

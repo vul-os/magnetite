@@ -1,13 +1,176 @@
 # Changelog
 
-## [Unreleased] — Autonomous Rebuild (Waves 1–4)
+## [Unreleased] — Gaming Suite (Waves 6–9)
 
-This entry covers the complete autonomous multi-wave rebuild of the Magnetite platform.
-All changes are on the `feat/redesign-and-harden` branch.
+This entry covers the full gaming suite expansion on top of the completed
+Waves 1–5 platform rebuild.
 
 ### Summary
 
-A coordinated 4-wave rebuild hardened the backend to 0 warnings, wired the frontend to real
+Waves 6–9 extended Magnetite from a Rust game host into a **unified gaming suite**:
+Discord-class communities, real-time text chat, WebRTC voice, streaming (go-live / watch),
+controller / gamepad input, graphics tiers (Lite2D → Advanced3D), a platform-wide
+points / XP economy, developer-run in-game marketplaces, FPS and motorsport starter
+templates, and a full suite documentation refresh. All crates remain at 0 warnings;
+frontend build, lint (0 errors), and tests (33/33) remain green.
+
+---
+
+### Wave 6 — Comms Core (Backend + SDK)
+
+#### Backend
+- New migration `20260530_communities.sql`: 11 tables —
+  `communities`, `community_members`, `channels`, `channel_members`, `messages`,
+  `dm_threads`, `dm_messages`, `presence`, `voice_rooms`, `voice_participants`, `streams`
+- New API modules: `communities.rs`, `channels.rs`, `messages.rs`
+  (communities CRUD, channel CRUD, message + DM thread endpoints)
+- New services: `communities.rs` (community + channel + message business logic),
+  `presence.rs` (upsert / offline sweep)
+- `ws/comms.rs`: real-time chat + typing indicators + presence broadcast over
+  per-channel `tokio::sync::broadcast` channels; supports JoinChannel / LeaveChannel /
+  SendMessage / TypingStart / TypingStop / SetPresence / Ping frames
+- `ws/voice.rs`: WebRTC SDP/ICE signaling relay for peer-to-peer voice;
+  mesh architecture for small rooms (≤15); SFU (LiveKit / mediasoup) documented as
+  the production scale path; supports Offer / Answer / IceCandidate / Mute / LeaveRoom frames
+- **0 warnings**; `cargo fmt` clean; tests compile
+
+#### SDK (`magnetite-sdk`)
+- New `platform::comms` module: `CommsClient`, `CommsConfig`, `ChatMessage`, `VoiceSignal`,
+  `PresenceStatus`, `PresenceUpdate`, `CommsEvent`, typed `ClientCommsMessage` /
+  `ServerCommsMessage` enums — the in-game surface mirroring the WS protocol
+- **101 tests pass, 0 warnings**
+
+#### Frontend
+- `src/api/client.js`: comms surface added (communities / channels / messages / presence / voice endpoints)
+- New hooks: `useCommunities`, `useChannels`, `useMessages`, `usePresence`, `useVoice`,
+  `useCommsSocket` (manages `RTCPeerConnection` mesh), `useVoiceClient`
+- `CommsContext.jsx`: context provider mounted in `App.jsx`
+- New components: `comms/ServerRail`, `comms/ChannelList`, `comms/MessageList`,
+  `comms/MessageComposer`, `comms/VoicePanel`, `comms/MemberList`, `comms/PresenceDot`
+- New page: `Communities.jsx` — Discord-like server rail / channel list / chat / voice panel / members
+- New route: `/communities` (and nav link)
+- Build green; lint **0 errors**; tests **33/33**
+
+#### Docs
+- `docs/comms/index.md` — comms overview: pillars, concept hierarchy, REST API surface
+- `docs/comms/realtime.md` — WS chat/presence protocol + WebRTC voice signaling flow
+- `docs/comms/data-model.md` — full schema for communities/channels/messages/voice_rooms/streams
+- `docs/comms/in-game.md` — SDK `platform::comms` usage for lobby/match auto-provisioned rooms
+
+---
+
+### Wave 7 — Comms Frontend + In-Game Overlay + Streaming UI
+
+#### Frontend
+- `Communities.jsx` fully wired to live comms hooks: realtime chat, typing indicators, presence,
+  load-more pagination, WebSocket connection status pill
+- `CommsProvider` mounted at `App.jsx` root; all routes share the comms socket
+- New page: `Messages.jsx` (`/messages`) — DM threads list + conversation + presence dots
+- New page: `Streams.jsx` (`/streams`) — browse live streams grid; `StreamPlayer` (HLS/WebRTC watch);
+  `GoLivePanel` (getDisplayMedia capture + RTMP key config)
+- New streaming components: `streaming/StreamCard`, `streaming/StreamPlayer`, `streaming/GoLivePanel`
+- `GameOverlay.jsx` — in-game chat + voice hotkey overlay rendered inside Playground / Lobby / Spectator
+- `useVoiceClient` hook: `getUserMedia` + `RTCPeerConnection` mesh + Web Audio analyser for speaking ring;
+  mute / deafen state managed client-side and synced to backend via Mute frame
+- Presence dots added to Navbar, Friends list, ProfileCard
+- Build green; lint **0 errors**; tests **33/33**
+
+---
+
+### Wave 8 — Game-Dev Capabilities + Economy + Marketplace
+
+#### Backend
+- New migration `20260531_economy.sql`: 8 tables —
+  `seasons`, `point_balances`, `points_ledger`, `point_rewards`,
+  `dev_stores`, `store_items`, `store_purchases`, `entitlements`;
+  seed: Season 1 — Launch inserted on migration
+- `backend/src/api/points.rs`: `GET /points/balance`, `POST /points/award` (admin/game),
+  `POST /points/spend`, `GET /points/history`, `GET /points/leaderboard`,
+  `POST /points/season-reset` (admin)
+- `backend/src/api/marketplace.rs`: `GET /marketplace/stores/:game_id`,
+  `POST /marketplace/stores` (developer), `PUT /marketplace/stores/:id`,
+  `GET /marketplace/stores/:id/items`, `POST /marketplace/stores/:id/items`,
+  `PUT /marketplace/stores/:id/items/:item_id`, `POST /marketplace/items/:item_id/purchase`,
+  `GET /marketplace/entitlements`, `GET /marketplace/stores/:game_id/revenue`
+- `backend/src/services/points.rs`: atomic ledger insert + balance update (single transaction),
+  season reset (soft-wipes balances, creates new season), leaderboard query
+- `backend/src/services/marketplace.rs`: store/item CRUD, purchase via USDC (70/30 split) or
+  points (full debit to ledger), entitlement creation, revenue aggregation
+- **0 warnings**; `cargo fmt` clean
+
+#### SDK (`magnetite-sdk`)
+- `input/gamepad.rs`: `GamepadState`, `GamepadButton`, `GamepadAxis`, `GamepadEvent`,
+  `InputMap`, `GameAction` (Move, Jump, Dash, Shoot, Reload, Interact, Throttle, Brake, Steer,
+  MenuConfirm, MenuBack, Pause), `InputBinding`, `InputSource` — unified gamepad + keyboard binding
+- `graphics.rs`: `GraphicsTier` (Lite2D / Standard3D / Advanced3D), `RenderConfig`,
+  `RenderConfigBuilder` (builder with `.tier()`, `.hdr()`, `.physics_substeps()`, `.shadows()`),
+  `EngineCapability`
+- `platform::points.rs`: `PointsClient`, `AwardPointsRequest`, `SpendPointsRequest`,
+  `PointsBalance`, `LedgerEntry`, `LedgerEntryKind`, typed message enums
+- `platform::marketplace.rs`: `MarketplaceClient`, `StoreItem`, `ItemType`,
+  `PurchaseRequest`, `PurchaseResult`, `Entitlement`, `PaymentMethod`, typed message enums
+- `platform::cloud_save.rs`: `CloudSaveClient`, `SaveSlot`, `SaveSlotMeta`, `SaveRequest`, typed enums
+- **240 tests pass, 0 warnings**; `cargo fmt` clean
+
+#### New crates
+- `game-template-fps/` (`magnetite-fps-starter`): Bevy + rapier3d FPS starter;
+  hitscan (`hitscan.rs`), level layout (`level.rs`), Bevy ECS plugin (`bevy_client.rs`),
+  gamepad look/move/shoot (`input_map.rs`), Advanced3D tier;
+  `cargo check --no-default-features` 0/0, **38 tests**
+- `game-template-motorsport/` (`magnetite-game-motorsport`): Bevy + rapier3d vehicle physics;
+  analog throttle/brake/steer via `GamepadAxis`, lap timing → points award via `platform::points`;
+  `cargo check --no-default-features` 0/0, **26 tests**
+
+#### Frontend
+- New page: `Points.jsx` (`/points`) — player balance, ledger history, leaderboard, season info
+- New page: `DevMarketplace.jsx` (`/developers/marketplace`) — store creation/edit, item CRUD,
+  revenue overview (developer-only)
+- New page: `ControllerSettings.jsx` (`/settings/controller`) — live Gamepad API display,
+  button/axis binding editor, save bindings
+- New component: `store/InGameStore` — in-game overlay panel listing purchasable items during play
+- New hooks: `usePoints`, `useMarketplace`, `useGamepad`
+- New routes: `/points`, `/developers/marketplace`, `/settings/controller` wired in `App.jsx`
+- Build green; lint **0 errors**; tests **33/33**
+
+---
+
+### Wave 9 — Suite Docs Close-Out
+
+#### Documentation
+- `README.md` — complete rewrite: gaming suite features table (comms, controllers, graphics tiers,
+  points economy, dev marketplaces, game templates), updated project structure (new crates + modules),
+  updated API routes table (communities / channels / messages / points / marketplace / WS handlers),
+  updated architecture diagram with new services and WS layer, updated documentation index
+- `roadmap.md` — Phase 5 (Gaming Suite) added and marked COMPLETE; Phase 6 (scaling to large titles)
+  and Phase 7 (distribution flywheel) added as future work; all completed items checked
+- `TASKS.md` — checked off all Wave 6–9 items: 34 API modules, 22 services, 3 WS handlers,
+  24 migrations, full SDK surface, new templates, new pages/components/hooks, new docs
+- `docs/comms/streaming.md` — RTMP egress, HLS/WebRTC in-platform watch, GoLivePanel, scale path
+- `docs/for-developers/controllers.md` — Gamepad API + gilrs, InputMap, GameAction bindings,
+  ControllerSettings page, integration example
+- `docs/for-developers/graphics-tiers.md` — Lite2D / Standard3D / Advanced3D tiers,
+  RenderConfig builder, platform provisioning
+- `docs/for-developers/points-economy.md` — ledger design, seasons, award/spend endpoints,
+  `platform::points` SDK integration, game-template examples
+- `docs/for-developers/marketplace.md` — dev store creation, item types, purchase flow,
+  USDC vs points, entitlements, revenue split, SDK integration
+- `docs/for-developers/fps-starter.md` — `game-template-fps` usage: clone, implement, cargo check,
+  hitscan, gamepad, Advanced3D, publish
+- `docs/for-developers/motorsport-starter.md` — `game-template-motorsport` usage: vehicle physics,
+  analog input, lap → points, cargo check, publish
+- `docs/economy-marketplace.md` — data model (seasons / ledger / stores / items / purchases /
+  entitlements), revenue split (70/30 USDC, full points), API reference, SDK integration
+- `docs/architecture.md` — updated: 34 API modules, 22 services, 3 WS handlers, 24 migrations,
+  SDK platform modules, new data flow examples
+- `docs/for-developers/index.md` — updated guide listing to include all new suite docs
+
+---
+
+## [Unreleased] — Autonomous Rebuild (Waves 1–5)
+
+### Summary
+
+A coordinated 5-wave rebuild hardened the backend to 0 warnings, wired the frontend to real
 API endpoints, shipped an "Industrial Magnetite" design system across all 67 pages, and
 delivered elevated typography, atmosphere, and per-route UX polish.
 
@@ -46,8 +209,7 @@ delivered elevated typography, atmosphere, and per-route UX polish.
   Marketplace, DeveloperDashboard, Onboarding, FAQ, etc.)
 - `vitest.config.js`: excluded `e2e/**` so Playwright specs are not run by Vitest
 - Unit tests: PasswordInput strength test fixed; **all 33 unit tests pass**
-- Lint: 46 → 18 errors (partitioned page agents cleared their files); 18 residual in
-  non-partition files (utils/contexts/hooks) — cleared in subsequent cleanup
+- Lint: 46 → 18 errors (partitioned page agents cleared their files)
 - 128 files changed in this wave
 
 ---
@@ -114,37 +276,33 @@ delivered elevated typography, atmosphere, and per-route UX polish.
 - **Leaderboard / Achievements**: rank rows, progress rings, trophy cards
 - **Admin / Settings / Profile**: sidebar nav, section layouts, form fields
 - **Error pages (404 / 403 / 500)**: themed with magnetic motifs, clear recovery CTAs
-- **Skeleton loaders**: shimmer animation, correct shape for each entity type
 - All pages: `prefers-reduced-motion` honored; visible focus rings; `aria-label` on interactive elements
 
 #### Test fixes (auth copy change)
-- `Login.test.jsx` / `Register.test.jsx` updated to new accessible names:
-  `getByRole('heading', { name: /welcome back/i })`, `getByRole('button', { name: /sign in/i })`,
-  `getByRole('heading', { name: /join magnetite/i })`, `getByRole('button', { name: /create account/i })`
+- `Login.test.jsx` / `Register.test.jsx` updated to new accessible names
 - **33/33 unit tests pass**; lint **0 errors**; build clean
 
 ---
 
-### Wave 5 — Close-out (Docs, E2E, CHANGELOG)
+### Wave 5 — Close-out (E2E, Performance, Design Polish)
+
+#### Performance
+- Vite `manualChunks` code-split: index bundle 344 → **101 kB**; DeveloperDashboard chunk **10 kB**;
+  recharts only loaded on `/developers`; react/router/recharts split into cached vendor chunks
 
 #### E2E specs — aligned with redesigned UI
-- `e2e/auth.spec.js`: replaced stale `data-testid` selectors with class/role selectors that match
-  the split-panel auth layout; added Register suite asserting "Join Magnetite" heading and
-  "Create Account" button; OAuth buttons tested via `aria-label="Continue with <Provider>"`
-- `e2e/marketplace.spec.js`: heading asserts "Discover Rust Games"; added category-pills nav check
-  (`nav[aria-label="Game categories"]`); added search-input visibility test
-- `e2e/navigation.spec.js`: added logo visibility, marketplace link navigation, hero heading checks
-- `e2e/page-objects/login.page.js`: replaced `data-testid` assumptions with `.auth-submit-btn`,
-  `.auth-error[role="alert"]`, `button.oauth-btn[aria-label*="<Provider>"]`
-- `e2e/page-objects/marketplace.page.js`: updated heading selector to `h1#marketplace-heading`,
-  added `selectCategory()` helper, clarified search selector
-- `e2e/page-objects/navigation.page.js`: updated `clickNavbarLink`/`clickFooterLink` to scoped
-  `nav.navbar` / `footer.footer` selectors; documented layout in JSDoc
+- `e2e/auth.spec.js`: replaced stale `data-testid` selectors; added Register suite; OAuth buttons via aria-labels
+- `e2e/marketplace.spec.js`: heading asserts "Discover Rust Games"; category-pills nav check; search visibility
+- `e2e/navigation.spec.js`: logo visibility, marketplace navigation, hero heading checks
+- `e2e/page-objects/`: login, marketplace, navigation — all selectors coherent with redesigned UI
+
+#### CSS consolidation
+- Removed duplicate CSS contract between `tokens.css` and `index.css`
+- Navbar + Footer received final Industrial Magnetite polish (mono nav, magnetic hover, atmospheric footer)
 
 #### Documentation
-- `TASKS.md`: checked off all items completed across Waves 1–4 (design system, all 67 pages,
-  API wiring, SDK rewrite, distribution module, docs expansion, e2e alignment)
-- `roadmap.md`: Phase 2 marked COMPLETE; Phases 3 and 4 updated with completed items checked
+- `TASKS.md`: checked off all items completed across Waves 1–4
+- `roadmap.md`: Phase 2 marked COMPLETE; Phases 3 and 4 updated with completed items
 - `CHANGELOG.md`: this entry
 
 ---

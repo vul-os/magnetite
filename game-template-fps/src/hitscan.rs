@@ -74,7 +74,10 @@ impl Ray {
         let dy = pitch.sin();
         let dz = -yaw.cos() * cp;
         // Already normalised given unit pitch/yaw.
-        Self { origin, direction: [dx, dy, dz] }
+        Self {
+            origin,
+            direction: [dx, dy, dz],
+        }
     }
 
     /// Point on the ray at parameter `t`.
@@ -96,10 +99,9 @@ impl Ray {
         let t = ox * self.direction[0] + oy * self.direction[1] + oz * self.direction[2];
         let t = t.max(0.0); // only forward along the ray
         let closest = self.at(t);
-        let dist = ((closest.x - p.x).powi(2)
-            + (closest.y - p.y).powi(2)
-            + (closest.z - p.z).powi(2))
-        .sqrt();
+        let dist =
+            ((closest.x - p.x).powi(2) + (closest.y - p.y).powi(2) + (closest.z - p.z).powi(2))
+                .sqrt();
         (dist, t)
     }
 }
@@ -309,8 +311,16 @@ mod tests {
     fn ray_direction_zero_yaw_zero_pitch() {
         // yaw=0, pitch=0 → looking -Z.
         let ray = Ray::from_rotation(
-            Position { x: 0.0, y: 0.0, z: 0.0 },
-            Rotation { yaw: 0.0, pitch: 0.0, roll: 0.0 },
+            Position {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            Rotation {
+                yaw: 0.0,
+                pitch: 0.0,
+                roll: 0.0,
+            },
         );
         assert!((ray.direction[0]).abs() < 1e-5, "dx should be ~0");
         assert!((ray.direction[1]).abs() < 1e-5, "dy should be ~0");
@@ -320,7 +330,11 @@ mod tests {
     #[test]
     fn ray_at_zero_is_origin() {
         let ray = Ray::from_rotation(
-            Position { x: 1.0, y: 2.0, z: 3.0 },
+            Position {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0,
+            },
             Rotation::default(),
         );
         let p = ray.at(0.0);
@@ -333,8 +347,16 @@ mod tests {
     fn hitscan_misses_when_no_enemies() {
         let mut state = GameState::default();
         state.players.push(make_player(0, 0.0, 0.0, 0.0));
-        let origin = Position { x: 0.0, y: 1.7, z: 0.0 };
-        let rot = Rotation { yaw: 0.0, pitch: 0.0, roll: 0.0 };
+        let origin = Position {
+            x: 0.0,
+            y: 1.7,
+            z: 0.0,
+        };
+        let rot = Rotation {
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+        };
         let result = cast(origin, rot, &state, PlayerId::new(0));
         assert!(result.hit_player.is_none());
         assert!((result.damage).abs() < f32::EPSILON);
@@ -350,8 +372,16 @@ mod tests {
         state.players.push(make_player(1, 0.0, 0.0, -5.0));
 
         // Origin at body-center height (0.9m), aimed horizontally (-Z).
-        let origin = Position { x: 0.0, y: BODY_CENTER_Y, z: 0.0 };
-        let rot = Rotation { yaw: 0.0, pitch: 0.0, roll: 0.0 };
+        let origin = Position {
+            x: 0.0,
+            y: BODY_CENTER_Y,
+            z: 0.0,
+        };
+        let rot = Rotation {
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+        };
         let result = cast(origin, rot, &state, PlayerId::new(0));
 
         assert_eq!(result.hit_player, Some(PlayerId::new(1)));
@@ -366,8 +396,16 @@ mod tests {
         dead.alive = false;
         state.players.push(dead);
 
-        let origin = Position { x: 0.0, y: BODY_CENTER_Y, z: 0.0 };
-        let rot = Rotation { yaw: 0.0, pitch: 0.0, roll: 0.0 };
+        let origin = Position {
+            x: 0.0,
+            y: BODY_CENTER_Y,
+            z: 0.0,
+        };
+        let rot = Rotation {
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+        };
         let result = cast(origin, rot, &state, PlayerId::new(0));
         assert!(result.hit_player.is_none(), "dead player must not be hit");
     }
@@ -379,8 +417,16 @@ mod tests {
         state.players.push(make_player(1, 0.0, 0.0, -5.0));
         state.players.push(make_player(2, 0.0, 0.0, -3.0)); // closer
 
-        let origin = Position { x: 0.0, y: BODY_CENTER_Y, z: 0.0 };
-        let rot = Rotation { yaw: 0.0, pitch: 0.0, roll: 0.0 };
+        let origin = Position {
+            x: 0.0,
+            y: BODY_CENTER_Y,
+            z: 0.0,
+        };
+        let rot = Rotation {
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+        };
         let result = cast(origin, rot, &state, PlayerId::new(0));
 
         // Should hit player 2 (closer, only 3m away vs 5m).
@@ -392,7 +438,11 @@ mod tests {
         let shooter = PlayerId::new(0);
         let mut proj = Projectile::new(
             shooter,
-            Position { x: 0.0, y: 1.0, z: 0.0 },
+            Position {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            },
             [0.0, 0.0, -1.0],
             10.0,
             50.0,
@@ -401,7 +451,10 @@ mod tests {
         );
         let state = GameState::default();
         proj.step(&state);
-        assert!(proj.position.z < 0.0, "projectile should move in -Z direction");
+        assert!(
+            proj.position.z < 0.0,
+            "projectile should move in -Z direction"
+        );
         assert!(proj.alive());
     }
 
@@ -410,7 +463,11 @@ mod tests {
         let shooter = PlayerId::new(0);
         let mut proj = Projectile::new(
             shooter,
-            Position { x: 0.0, y: 1.0, z: 0.0 },
+            Position {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            },
             [0.0, 0.0, -1.0],
             1.0,
             25.0,

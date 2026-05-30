@@ -14,7 +14,7 @@
 //! | [`state`] | Game state, snapshots, player state |
 //! | [`protocol`] | Versioned wire protocol (client ↔ server) |
 //! | [`networking`] | Server config, tick loop, prediction, interest management |
-//! | [`platform`] | Shared platform services (comms, points, marketplace, cloud saves) |
+//! | [`platform`] | Shared platform services (comms, points, marketplace, cloud saves, streaming) |
 //!
 //! ## Quick start
 //!
@@ -93,8 +93,10 @@
 //! | Chat + presence | [`platform::comms`] |
 //! | Voice signaling | [`platform::comms::VoiceSignal`] |
 //! | Points / XP economy | [`platform::points`] |
+//! | Score / match submission | [`platform::points::ScoreSubmission`] |
 //! | In-game marketplace | [`platform::marketplace`] |
 //! | Cloud saves | [`platform::cloud_save`] |
+//! | Streaming (go-live/watch) | [`platform::streaming`] |
 //!
 //! ## Feature flags
 //!
@@ -144,7 +146,12 @@ pub use platform::marketplace::{
 };
 pub use platform::points::{
     AwardPointsRequest, ClientPointsMessage, LedgerEntry, LedgerEntryKind, PointsBalance,
-    PointsClient, PointsConfig, PointsErrorCode, ServerPointsMessage, SpendPointsRequest,
+    PointsClient, PointsConfig, PointsErrorCode, ScoreSubmission, ServerPointsMessage,
+    SpendPointsRequest,
+};
+pub use platform::streaming::{
+    ClientStreamMessage, ExternalRtmpTarget, GoLiveRequest, ServerStreamMessage, StreamClient,
+    StreamConfig, StreamErrorCode, StreamEvent, StreamId, StreamInfo, StreamStatus,
 };
 pub use protocol::{ClientMessage, Envelope, ErrorCode, ServerMessage, PROTOCOL_VERSION};
 pub use state::{GameState, PlayerId, PlayerState, Position, Rotation, Snapshot};

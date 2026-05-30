@@ -6,9 +6,10 @@
 //! | Module | Purpose |
 //! |---|---|
 //! | [`comms`] | Text chat, presence, and WebRTC voice signaling |
-//! | [`points`] | Points / XP / score economy — award, spend, balance |
+//! | [`points`] | Points / XP / score economy — award, spend, balance, and match score submission |
 //! | [`marketplace`] | In-game store items, purchases, and entitlements |
 //! | [`cloud_save`] | Per-player cloud save slots (opaque blobs) |
+//! | [`streaming`] | Go-live broadcasting, spectator watch, viewer management, and RTMP egress |
 //!
 //! # Example
 //!
@@ -28,6 +29,7 @@ pub mod cloud_save;
 pub mod comms;
 pub mod marketplace;
 pub mod points;
+pub mod streaming;
 
 /// Shared primitive type — platform user identifier (opaque string).
 ///
@@ -44,7 +46,14 @@ pub use comms::{
 // Re-export key points types.
 pub use points::{
     AwardPointsRequest, ClientPointsMessage, LedgerEntry, LedgerEntryKind, PointsBalance,
-    PointsClient, PointsConfig, PointsErrorCode, ServerPointsMessage, SpendPointsRequest,
+    PointsClient, PointsConfig, PointsErrorCode, ScoreSubmission, ServerPointsMessage,
+    SpendPointsRequest,
+};
+
+// Re-export key streaming types.
+pub use streaming::{
+    ClientStreamMessage, ExternalRtmpTarget, GoLiveRequest, ServerStreamMessage, StreamClient,
+    StreamConfig, StreamErrorCode, StreamEvent, StreamId, StreamInfo, StreamStatus,
 };
 
 // Re-export key marketplace types.

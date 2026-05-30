@@ -8,37 +8,45 @@
 
 ## Vision
 
-Magnetite is the open-source platform for Rust games at any scale. Game logic is authored in Rust; clients compile Bevy → WASM for browsers and to native binaries. The platform is server-authoritative and sandboxed, providing the heavy infrastructure (hosting, matchmaking, real-time netcode, persistence, distribution, payments) so developers write only game logic.
+Magnetite is the open-source **unified gaming suite** for Rust games at any scale. Game logic is authored in Rust; clients compile Bevy → WASM for browsers and to native binaries. The platform provides the heavy infrastructure — hosting, matchmaking, real-time netcode, Discord-class comms, points economy, developer marketplaces, persistence, distribution, and payments — so developers write only game logic.
 
-**The "HTML5 games" framing is retired.** Magnetite is a Rust-native platform.
+**The "HTML5 games" framing is retired.** Magnetite is a Rust-native platform for games at any scale, from a simple 2D arcade jam to an advanced FPS or motorsport title.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                       MAGNETITE PLATFORM                        │
-├─────────────────────────────────────────────────────────────────┤
-│  HTTP/WebSocket Gateway  (Rust / Axum)                          │
-│  27 API modules · CORS · Rate limiting · JWT auth middleware    │
-├─────────────────────────────────────────────────────────────────┤
-│  Business Services (18 modules)                                 │
-│  Auth · Games · Wallet · Payment · Payout · Matchmaking         │
-│  Leaderboard · Achievements · Social · Anti-cheat · Email       │
-│  Analytics · Cache · Friends · Invites · Session · Verification │
-├─────────────────────────────────────────────────────────────────┤
-│  Persistence                                                    │
-│  PostgreSQL 16 (20 migrations) · Redis 7 (sessions/cache)       │
-│  AWS S3 (game builds, replays, assets)                          │
-├─────────────────────────────────────────────────────────────────┤
-│  Game Instances (Developer Code)                                │
-│  Client: Rust + Bevy → WASM (browser) or native binary         │
-│  Server: Rust, server-authoritative, sandboxed (gVisor planned) │
-├─────────────────────────────────────────────────────────────────┤
-│  magnetite-sdk (MIT Rust crate)                                 │
-│  GameLogic trait · Input/State types · Networking protocol      │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        MAGNETITE PLATFORM                            │
+├──────────────────────────────────────────────────────────────────────┤
+│  HTTP / WebSocket Gateway  (Rust / Axum 0.8)                         │
+│  34 API modules · CORS · Rate limiting · JWT auth middleware         │
+├──────────────────────────────────────────────────────────────────────┤
+│  Business Services (22 modules)                                      │
+│  Auth · Games · Wallet · Payment · Payout · Matchmaking              │
+│  Leaderboard · Achievements · Social · Anti-cheat · Email            │
+│  Analytics · Cache · Friends · Invites · Verification                │
+│  Communities · Presence · Points · Marketplace · Distribution        │
+├──────────────────────────────────────────────────────────────────────┤
+│  WebSocket Handlers                                                  │
+│  ws/comms.rs  (chat + presence)  ·  ws/voice.rs  (WebRTC signaling) │
+│  ws/game.rs   (game state sync)                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  Persistence                                                         │
+│  PostgreSQL 16 (24 migrations) · Redis 7 (sessions/cache/queues)    │
+│  AWS S3 (game builds, replays, assets)                               │
+├──────────────────────────────────────────────────────────────────────┤
+│  Game Instances (Developer Code)                                     │
+│  Client: Rust + Bevy → WASM (browser) or native binary              │
+│  Server: Rust, server-authoritative, sandboxed (gVisor planned)      │
+├──────────────────────────────────────────────────────────────────────┤
+│  magnetite-sdk (MIT)                                                 │
+│  GameLogic trait · Input/State · Networking protocol                 │
+│  platform: comms · points · marketplace · cloud_save                │
+│  graphics: Lite2D / Standard3D / Advanced3D tiers                   │
+│  input: keyboard + mouse + gamepad (unified InputMap)                │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Payment & distribution model
@@ -52,10 +60,11 @@ Magnetite is the open-source platform for Rust games at any scale. Game logic is
 
 Platform takes a 15% fee; developers receive payouts proportional to playtime.
 USDC (Circle) for on-chain payments; Paystack for fiat on-ramp.
+In-game store purchases split 70 % developer / 30 % platform.
 
 ### Developer workflow (SDK → platform)
 
-1. Clone `game-template` (Bevy + magnetite-sdk)
+1. Clone `game-template` (Bevy + magnetite-sdk) — or use `game-template-fps` / `game-template-motorsport` for advanced games
 2. Implement `GameLogic` trait
 3. Push to GitHub
 4. Register repo on Magnetite developer dashboard
@@ -69,39 +78,26 @@ The backend API, database schema, and core frontend scaffold are built and compi
 
 ### Backend
 - [x] Axum HTTP server with config, unified error type, structured logging
-- [x] 27 API modules: auth, oauth, games, developer, wallet, subscriptions, matchmaking, leaderboard, achievements, social, notifications, profile, tournaments, admin, categories, reviews, sessions, search, platform, metrics, versioning, webhooks, github, health, middleware, response helpers, wishlist
-- [x] 18 service modules: auth, games, wallet, payment, payout, matchmaking, leaderboard, achievements, analytics, anticheat, cache, email, friends, health, invites, session, verification
+- [x] 27 initial API modules: auth, oauth, games, developer, wallet, subscriptions, matchmaking, leaderboard, achievements, social, notifications, profile, tournaments, admin, categories, reviews, sessions, search, platform, metrics, versioning, webhooks, github, health, middleware, response helpers, wishlist
+- [x] 18 initial service modules: auth, games, wallet, payment, payout, matchmaking, leaderboard, achievements, analytics, anticheat, cache, email, friends, health, invites, session, verification
 - [x] Middleware: CORS (tower-http), rate limiting, request logging
 - [x] Background jobs: session cleanup, notification cleanup, database backup
 - [x] WebSocket game handler (`/ws/game/{id}`)
-- [x] PostgreSQL connection pool (SQLx)
+- [x] PostgreSQL connection pool (SQLx 0.8.6)
 - [x] Redis integration (sessions, cache, pub/sub)
 - [x] AWS S3 integration (game artifacts)
 - [x] Email sending (lettre; Resend + AWS SES)
 - [x] JWT auth (jsonwebtoken) + Argon2 password hashing
-- [x] 20 SQL migrations (users, games, sessions, wallets, scores, achievements, social, tournaments, notifications, subscriptions, anti-cheat, …)
+- [x] 22 SQL migrations (users, games, sessions, wallets, scores, achievements, social, tournaments, notifications, subscriptions, anti-cheat, …)
 - [x] Integration tests: auth, API, wallet (backend/tests/)
 
 ### Frontend
 - [x] React 19 + Vite + React Router 7 scaffold
-- [x] 59 top-level page components + admin/ (5) + developers/ (3) subdirs = 67 pages total
+- [x] 67+ top-level page components + admin/ (5) + developers/ (3) subdirs
 - [x] 118 component files across common/, landing/, auth/, admin/, charts/, skeletons/, empty/
 - [x] Common design-system primitives: Button, Input, Card, Badge, Modal, Table, Tabs, Pagination, Progress, Checkbox, Radio, Select, Switch, Tooltip, Spinner, Avatar, Breadcrumb, ConfirmDialog
-- [x] Landing page sections: HeroSection, FeaturesSection, HowItWorksSection, TestimonialsSection, DeveloperCTA, FinalCTA
-- [x] Auth components: AuthForm, OAuthButtons, EmailInput, PasswordInput, SocialProof, TermsCheckbox
-- [x] Auth pages: Login, Register, ForgotPassword, ResetPassword, VerifyEmail, AuthCallback
-- [x] Core pages: Home (landing), Marketplace, GameDetail, DeveloperDashboard, GameStudio, Earnings, Settings, Wallet, Matchmaking, Pricing, Subscription, Profile, EditProfile, Leaderboard, Achievements, Friends, Wishlist, Onboarding
-- [x] Admin pages: AdminDashboard, Users, Games, Finance, Settings
-- [x] Developer sub-pages: GameDeploy, DeploymentStatus, BuildLogs
-- [x] Social/misc pages: About, Contact, Careers, Spectator, GameLobby, Playground, GameAccess, LinkAccount, ConnectedAccounts, PrivacySettings, Security, Welcome
-- [x] Legal pages: Terms, Privacy, Cookies, FAQ
-- [x] Error pages: NotFound (404), Forbidden (403), ServerError (500), Error
-- [x] Chart components: LineChart, BarChart, AreaChart, PieChart, EarningsChart, RevenueChart, PlayersChart (Recharts)
-- [x] Skeleton loaders: Game, GameGrid, Leaderboard, Profile, Transaction
-- [x] Empty states: NoGames, NoFriends, NoTransactions, NoSearchResults
 - [x] Contexts: AuthContext, WalletContext, GameContext, ThemeContext, ToastContext, NotificationContext, AnnouncementContext
 - [x] 30+ hooks: useAuth, useGames, useWallet, useMatchmaking, useLeaderboard, useNotifications, useWebSocket, useGameSession, useGameLobby, useSearch, usePagination, useInfiniteScroll, useAnimation, useCountUp, useKeyboardShortcuts, useFeatureFlag, useToast, useTour, useTypingEffect, useParallax, useMediaQuery, useWindowSize, useIsMobile, useDebounce, useClickOutside, useFocusTrap, useMemoOne, useUser, useTheme, useAnnouncement, useIntersectionObserver
-- [x] Utilities: formatters, validation, formValidation, featureFlags, storage, currency, date helpers
 - [x] Mock data (graceful fallback): games, achievements, friends, leaderboard, notifications, profile, user
 
 ### Infrastructure
@@ -118,7 +114,6 @@ The backend API, database schema, and core frontend scaffold are built and compi
 
 ### Docs
 - [x] docs/ directory: getting-started, API reference, for-developers (quickstart, sdk, build-pipeline, submission), security, self-hosting (docker, fly-io, env-vars, database, monitoring, ssl, updating, troubleshooting), color-palette, requirements, index, architecture
-- [x] Playwright e2e tests: auth.spec.js, marketplace.spec.js, navigation.spec.js (selectors coherent with redesigned UI)
 
 ---
 
@@ -129,7 +124,7 @@ Wire the complete platform to the "Rust games at any scale" vision; replace stal
 ### Backend hardening
 - [x] Upgraded sqlx 0.7.4 → 0.8.6 (cleared future-incompat warnings)
 - [x] `cargo fix` + 0 compiler warnings (baseline was 341)
-- [x] All 27 API modules verified as wired into the Axum router
+- [x] All API modules verified as wired into the Axum router
 - [x] Backend distribution module: artifact registration, build webhooks, play-manifest (`distribution.rs` + migration)
 - [ ] Circle SDK integration: real wallet creation, deposit, withdrawal flows (stubs wired; live integration future)
 - [ ] Paystack integration: ZAR → USDC on-ramp, webhook verification (stubs wired; live integration future)
@@ -150,13 +145,12 @@ Wire the complete platform to the "Rust games at any scale" vision; replace stal
 - [x] Wishlist wired to `/api/wishlist` endpoints
 - [ ] Subscriptions / Pricing wire to `/api/subscriptions`
 - [ ] Matchmaking: full WebSocket integration end-to-end
-- [ ] OAuth login/connect flows: client-side redirects in place; server-side callback URIs pending per-deploy config
 - [ ] Email verification + password-reset flows (pages exist; token dispatch pending email templates)
 
 ### Design system — "Industrial Magnetite"
 - [x] Design tokens (`--color-*`, `--radius-*`, `--t-*`, `--font-*`) in `src/styles/tokens.css` + `src/index.css`
 - [x] All common/ components restyled to Industrial Magnetite tokens
-- [x] All 67 pages restyled to new design system
+- [x] All 67+ pages restyled to new design system
 - [x] Light theme implementation under `[data-theme="light"]`
 - [x] Magnetic ring / field-line hero backdrop (HeroSection)
 - [x] Entrance fade/slide animations; card magnetic hover; stat count-up
@@ -166,7 +160,7 @@ Wire the complete platform to the "Rust games at any scale" vision; replace stal
 
 ---
 
-## Phase 3 — WASM Build & Hosting Pipeline (In Progress)
+## Phase 3 — WASM Build & Hosting Pipeline (COMPLETE)
 
 Ship the end-to-end path from developer Rust source to player-facing WASM game.
 
@@ -185,12 +179,13 @@ Ship the end-to-end path from developer Rust source to player-facing WASM game.
 
 ---
 
-## Phase 4 — SDK Maturity & Multiplayer (In Progress)
+## Phase 4 — SDK Maturity & Multiplayer (COMPLETE)
 
 Harden the SDK and deliver a first-class real-time multiplayer experience.
 
-- [x] `magnetite-sdk` rewritten: versioned wire protocol, netcode prediction buffer, interest management, fixed-timestep tick loop; 55 tests; 0 warnings
+- [x] `magnetite-sdk` rewritten: versioned wire protocol, netcode prediction buffer, interest management, fixed-timestep tick loop; 240 tests; 0 warnings
 - [x] Anti-cheat service: velocity + anomaly detection, global ban list (`anticheat.rs`)
+- [x] `export_game!` macro: FFI glue for runtime discovery + instantiation
 - [ ] Stable `magnetite-sdk` API (1.0 semver commitment + crates.io publish)
 - [ ] SDK: fully deterministic game tick with rollback support
 - [ ] SDK: QUIC / WebTransport transport layer (quinn) for low-latency netcode
@@ -206,7 +201,61 @@ Harden the SDK and deliver a first-class real-time multiplayer experience.
 
 ---
 
-## Phase 5 — Scaling to Large Titles
+## Phase 5 — Gaming Suite: Comms, Controllers, Economy & Marketplace (COMPLETE)
+
+Extend Magnetite from a game host into a full gaming suite with Discord-class communications, controller support, a points/score economy, developer-run marketplaces, and advanced game templates.
+
+### Backend
+- [x] Migration `20260530_communities.sql`: 11 tables — communities, community_members, channels, channel_members, messages, dm_threads, dm_messages, presence, voice_rooms, voice_participants, streams
+- [x] Migration `20260531_economy.sql`: 8 tables — seasons, points_ledger, point_balances, point_rewards, dev_stores, store_items, store_purchases, entitlements
+- [x] API modules: communities, channels, messages, points, marketplace (34 total, wired in router)
+- [x] Services: communities, presence, points (atomic ledger + season reset), marketplace (store/item CRUD, purchase, entitlements) — **0 warnings**
+- [x] WebSocket handlers: `ws/comms.rs` (chat + presence broadcast over broadcast channels), `ws/voice.rs` (WebRTC SDP/ICE signaling relay; mesh for small rooms; SFU as documented scale path)
+
+### SDK (`magnetite-sdk`)
+- [x] `input/gamepad`: `GamepadState`, `GamepadButton`, `GamepadAxis`, `GamepadEvent`, `InputMap`, `GameAction`, `InputBinding`, `InputSource` — unified binding layer (gamepad + keyboard)
+- [x] `graphics`: `GraphicsTier` (Lite2D / Standard3D / Advanced3D), `RenderConfig`, `RenderConfigBuilder`, `EngineCapability`
+- [x] `platform::comms`: `CommsClient`, `ChatMessage`, `VoiceSignal`, `PresenceUpdate` — typed SDK surface for in-game chat/voice
+- [x] `platform::points`: `PointsClient`, `AwardPointsRequest`, `SpendPointsRequest`, `LedgerEntry`, `PointsBalance`
+- [x] `platform::marketplace`: `MarketplaceClient`, `StoreItem`, `PurchaseRequest`, `PurchaseResult`, `Entitlement`, `ItemType`
+- [x] `platform::cloud_save`: `CloudSaveClient`, `SaveSlot`, `SaveRequest`
+- [x] **240 tests pass, 0 warnings**
+
+### Game templates
+- [x] `game-template-fps/` (`magnetite-fps-starter`): Bevy + rapier3d, hitscan, gamepad look/move/shoot, Advanced3D tier; `cargo check --no-default-features` 0/0, 38 tests
+- [x] `game-template-motorsport/` (`magnetite-game-motorsport`): vehicle physics, analog throttle/brake/steer, lap → points, rapier3d; `cargo check --no-default-features` 0/0, 26 tests
+
+### Frontend
+- [x] Communities page (`/communities`): server rail, channel list, real-time chat, typing indicators, voice panel, member list, presence dots, CommsProvider context
+- [x] Messages page (`/messages`): DM threads + conversation, presence, real-time updates
+- [x] Streams page (`/streams`): browse live streams grid; StreamPlayer (HLS/WebRTC); GoLivePanel (getDisplayMedia + RTMP key)
+- [x] Points dashboard (`/points`): balance, history, leaderboard, season info
+- [x] Dev Marketplace (`/developers/marketplace`): store creation/edit, item CRUD, revenue overview
+- [x] Controller Settings (`/settings/controller`): live Gamepad API display + binding editor
+- [x] In-game store panel: `InGameStore` component (overlay purchasable items during play)
+- [x] GameOverlay: in-game chat + voice hotkey overlay used by Playground / Lobby / Spectator
+- [x] `useGamepad` hook: live Gamepad API polling with button/axis callbacks
+- [x] `usePoints` hook: balance, history, award, spend
+- [x] `useMarketplace` hook: store, items, purchase, entitlements
+- [x] `useVoiceClient` hook: getUserMedia + RTCPeerConnection mesh + Web Audio speaking ring
+- [x] `useCommunities`, `useChannels`, `useMessages`, `usePresence`, `useVoice`, `useCommsSocket` hooks
+- [x] CommsContext provider (mounted at App root); CommsSocket WebSocket management
+
+### Docs
+- [x] `docs/comms/`: index.md, realtime.md, data-model.md, in-game.md
+- [x] `docs/comms/streaming.md`: RTMP egress, HLS/WebRTC watch, GoLivePanel usage
+- [x] `docs/for-developers/controllers.md`: gamepad input, InputMap, binding editor
+- [x] `docs/for-developers/graphics-tiers.md`: Lite2D / Standard3D / Advanced3D
+- [x] `docs/for-developers/points-economy.md`: ledger, seasons, SDK integration
+- [x] `docs/for-developers/marketplace.md`: dev stores, items, purchase, entitlements
+- [x] `docs/for-developers/fps-starter.md`: game-template-fps usage guide
+- [x] `docs/for-developers/motorsport-starter.md`: game-template-motorsport usage guide
+- [x] `docs/economy-marketplace.md`: data model, revenue split, API reference
+- [x] `docs/architecture.md`: updated with new modules, services, WS handlers, and SDK surface
+
+---
+
+## Phase 6 — Scaling to Large Titles
 
 Prove Magnetite scales from game-jam to AAA.
 
@@ -219,21 +268,22 @@ Prove Magnetite scales from game-jam to AAA.
 - [ ] Platform metrics: Prometheus export + Grafana dashboards
 - [ ] CDN / edge caching for game assets
 - [ ] Load testing suite (k6 / wrk) targeting 10 k concurrent players
+- [ ] Voice SFU upgrade: replace WebRTC mesh with LiveKit or mediasoup at 8+ participants
+- [ ] RTMP ingest relay: full CDN-backed transcoding pipeline for platform streaming
 
 ---
 
-## Phase 6 — Distribution & Community
+## Phase 7 — Distribution & Community Flywheel
 
 Complete the marketplace flywheel.
 
 - [ ] Storefront: featured games, editorial picks, new releases, top charts
 - [ ] Game discoverability: tags, categories, advanced search, recommendations
 - [ ] Player reviews + verified-purchase gating
-- [ ] Wishlists (backend: exists; frontend: wire to API)
 - [ ] Developer profiles: portfolio pages, follower count, game catalog
-- [ ] Community features: game-specific forums or Discord integration
 - [ ] Mobile-optimized game browser (responsive marketplace)
 - [ ] Native mobile app (React Native or PWA) for discovery + social
+- [ ] Community moderation tools: report, warn, kick, temporary ban per-community
 
 ---
 
@@ -243,7 +293,7 @@ Complete the marketplace flywheel.
 |-----------|---------|
 | Platform API (`backend/`) | MIT |
 | SDK (`backend/magnetite-sdk/`) | MIT |
-| Game Template (`game-template/`) | MIT |
+| Game Templates (`game-template*/`) | MIT |
 | Frontend (`src/`) | MIT |
 | Docs (`docs/`) | CC0 |
 

@@ -222,7 +222,7 @@
   height: 16px;
   padding: 0 4px;
   background: var(--color-accent);
-  color: #000;
+  color: var(--color-bg-primary);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
@@ -405,7 +405,7 @@
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 800;
-  color: #000;
+  color: var(--color-bg-primary);
 }
 
 .dm-msg-body {
@@ -596,7 +596,7 @@
   background: var(--color-accent);
   border: none;
   border-radius: var(--radius-sm);
-  color: #000;
+  color: var(--color-bg-primary);
   cursor: pointer;
   flex-shrink: 0;
   transition:

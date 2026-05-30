@@ -100,22 +100,25 @@ export default function ControllerSettings() {
         )}
 
         {/* ── Tab bar ── */}
-        <nav className="controller-tabs reveal-2" aria-label="Controller sections">
+        <div className="controller-tabs reveal-2" role="tablist" aria-label="Controller sections">
           {TABS.map(t => (
             <button
               key={t}
+              role="tab"
               className={`ctrl-tab${tab === t ? ' active' : ''}`}
               onClick={() => setTab(t)}
-              aria-current={tab === t ? 'page' : undefined}
+              aria-selected={tab === t}
+              aria-controls={`ctrl-panel-${t.toLowerCase().replace(/ /g, '-')}`}
+              id={`ctrl-tab-${t.toLowerCase().replace(/ /g, '-')}`}
             >
               {t}
             </button>
           ))}
-        </nav>
+        </div>
 
         {/* ─── TAB: Gamepads ─── */}
         {tab === 'Gamepads' && (
-          <section className="controller-section reveal-3" aria-label="Connected gamepads">
+          <section id="ctrl-panel-gamepads" className="controller-section reveal-3" role="tabpanel" aria-labelledby="ctrl-tab-gamepads" aria-label="Connected gamepads">
             {gamepads.length === 0 ? (
               <div className="controller-no-gamepad">
                 <span className="ctrl-no-gp-icon" aria-hidden="true"><GamepadIcon /></span>
@@ -129,6 +132,8 @@ export default function ControllerSettings() {
                     <button
                       className={`gamepad-card${activeGamepad === gp.index ? ' active' : ''}`}
                       onClick={() => setActiveGamepad(gp.index)}
+                      aria-label={`Select ${gp.id || `Gamepad ${gp.index + 1}`}${activeGamepad === gp.index ? ' (active)' : ''}`}
+                      aria-pressed={activeGamepad === gp.index}
                     >
                       <div className="gp-icon" aria-hidden="true"><GamepadIcon /></div>
                       <div className="gp-info">
@@ -151,7 +156,7 @@ export default function ControllerSettings() {
 
         {/* ─── TAB: Button Test ─── */}
         {tab === 'Button Test' && (
-          <section className="controller-section reveal-3" aria-label="Button and axis tester">
+          <section id="ctrl-panel-button-test" className="controller-section reveal-3" role="tabpanel" aria-labelledby="ctrl-tab-button-test" aria-label="Button and axis tester">
             {gamepads.length === 0 ? (
               <div className="controller-no-gamepad">
                 <p>Connect a gamepad to test inputs.</p>
@@ -210,7 +215,7 @@ export default function ControllerSettings() {
 
         {/* ─── TAB: Input Bindings ─── */}
         {tab === 'Input Bindings' && (
-          <section className="controller-section reveal-3" aria-label="Input binding editor">
+          <section id="ctrl-panel-input-bindings" className="controller-section reveal-3" role="tabpanel" aria-labelledby="ctrl-tab-input-bindings" aria-label="Input binding editor">
             <div className="bindings-toolbar">
               <h3 className="section-sub-heading">Input Bindings</h3>
               <div className="bindings-toolbar-actions">

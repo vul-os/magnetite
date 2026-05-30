@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMessages } from '../hooks/useMessages';
 import { usePresence } from '../hooks/usePresence';
 import { useCommsSocket } from '../hooks/useCommsSocket';
+import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
 import './Messages.css';
 
@@ -217,7 +218,7 @@ function DmComposer({ onSend, disabled, recipientName }) {
 }
 
 // ── Conversation view ─────────────────────────────────────────────────────
-function DmConversation({ thread, isConnected }) {
+function DmConversation({ thread, isConnected, currentUserId }) {
   const { user } = thread;
   const { presenceMap } = usePresence([user.id]);
   const presence = presenceMap[user.id] ?? { status: 'offline' };
@@ -291,7 +292,7 @@ function DmConversation({ thread, isConnected }) {
           {user.avatar ? (
             <img src={user.avatar} alt={`${user.username} avatar`} className="dm-conv-avatar-img" />
           ) : (
-            <div className="dm-conv-avatar-img" aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#000', background: 'var(--gradient-primary)' }}>
+            <div className="dm-conv-avatar-img" aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--color-bg-primary)', background: 'var(--gradient-primary)' }}>
               {getInitials(user.display_name ?? user.username)}
             </div>
           )}
@@ -336,7 +337,11 @@ function DmConversation({ thread, isConnected }) {
             <DmMessage
               key={item.key}
               message={item.msg}
-              isMine={item.msg.author?.id === 'me'}
+              isMine={
+                item.msg.author?.id === currentUserId ||
+                item.msg.sender_id === currentUserId ||
+                item.msg.author?.id === 'me'
+              }
             />
           )
         )}
@@ -379,7 +384,7 @@ function DmThreadItem({ thread, active, presence, onClick }) {
         {user.avatar ? (
           <img src={user.avatar} alt="" className="dm-thread-avatar-img" />
         ) : (
-          <div className="dm-thread-avatar-img" aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#000', background: 'var(--gradient-primary)' }}>
+          <div className="dm-thread-avatar-img" aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--color-bg-primary)', background: 'var(--gradient-primary)' }}>
             {getInitials(user.display_name ?? user.username)}
           </div>
         )}
@@ -399,6 +404,9 @@ function DmThreadItem({ thread, active, presence, onClick }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function Messages() {
+  const { user } = useAuth();
+  const currentUserId = user?.id ? String(user.id) : 'me';
+
   const [threads, setThreads] = useState(MOCK_THREADS);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -508,6 +516,7 @@ export default function Messages() {
             key={activeThread.id}
             thread={activeThread}
             isConnected={isConnected}
+            currentUserId={currentUserId}
           />
         ) : (
           <div className="dm-no-conversation">

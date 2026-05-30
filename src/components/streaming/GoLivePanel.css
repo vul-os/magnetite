@@ -315,7 +315,7 @@
 .golive-preview {
   width: 100%;
   border-radius: var(--radius-sm);
-  background: #000;
+  background: var(--color-bg-primary);
   display: block;
   max-height: 200px;
   object-fit: contain;
@@ -425,7 +425,7 @@
   width: 100%;
   border-radius: var(--radius);
   overflow: hidden;
-  background: #000;
+  background: var(--color-bg-primary);
 }
 
 /* ── sr-only (accessibility) ── */

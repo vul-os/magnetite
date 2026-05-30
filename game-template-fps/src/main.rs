@@ -18,7 +18,9 @@ fn main() {
 
     #[cfg(not(feature = "native"))]
     {
-        eprintln!("magnetite-fps-starter: the native desktop entry point requires the `native` feature.");
+        eprintln!(
+            "magnetite-fps-starter: the native desktop entry point requires the `native` feature."
+        );
         eprintln!("  Run with:  cargo run --features native");
         std::process::exit(1);
     }

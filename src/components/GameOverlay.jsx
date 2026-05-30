@@ -176,7 +176,7 @@ function MuteBadge() {
   return (
     <span className="overlay-participant-mute-badge" aria-hidden="true">
       <svg viewBox="0 0 16 16" fill="none">
-        <path d="M2 2l12 12M8 1v8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M2 2l12 12M8 1v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     </span>
   );

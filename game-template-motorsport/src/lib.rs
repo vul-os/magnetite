@@ -93,17 +93,47 @@ impl Track {
         Self {
             gates: vec![
                 // Sector 0 — start/finish line (also the finish gate)
-                TrackGate { x:   0.0, z:   0.0, radius: 8.0, sector: 0 },
+                TrackGate {
+                    x: 0.0,
+                    z: 0.0,
+                    radius: 8.0,
+                    sector: 0,
+                },
                 // Sector 1 — entry of turn 1 (right side)
-                TrackGate { x:  90.0, z:   0.0, radius: 8.0, sector: 1 },
+                TrackGate {
+                    x: 90.0,
+                    z: 0.0,
+                    radius: 8.0,
+                    sector: 1,
+                },
                 // Sector 2 — turn 1 apex
-                TrackGate { x: 100.0, z: -35.0, radius: 8.0, sector: 2 },
+                TrackGate {
+                    x: 100.0,
+                    z: -35.0,
+                    radius: 8.0,
+                    sector: 2,
+                },
                 // Sector 3 — back straight
-                TrackGate { x:   0.0, z: -70.0, radius: 8.0, sector: 3 },
+                TrackGate {
+                    x: 0.0,
+                    z: -70.0,
+                    radius: 8.0,
+                    sector: 3,
+                },
                 // Sector 4 — turn 3 apex
-                TrackGate { x:-100.0, z: -35.0, radius: 8.0, sector: 4 },
+                TrackGate {
+                    x: -100.0,
+                    z: -35.0,
+                    radius: 8.0,
+                    sector: 4,
+                },
                 // Sector 5 — turn 4 exit (returns to start/finish)
-                TrackGate { x: -90.0, z:   0.0, radius: 8.0, sector: 5 },
+                TrackGate {
+                    x: -90.0,
+                    z: 0.0,
+                    radius: 8.0,
+                    sector: 5,
+                },
             ],
             total_laps: 3,
         }
@@ -264,20 +294,30 @@ impl VehicleControls {
             let steer = (input.mouse.delta_x as f32).clamp(-1.0, 1.0);
             let handbrake = input.keys.jump; // South button / A
 
-            return Self { throttle, brake, steer, handbrake };
+            return Self {
+                throttle,
+                brake,
+                steer,
+                handbrake,
+            };
         }
 
         // ── Keyboard / digital ───────────────────────────────────────────
         let throttle = if input.keys.forward { 1.0 } else { 0.0 };
         let brake = if input.keys.backward { 1.0 } else { 0.0 };
         let steer = match (input.keys.left, input.keys.right) {
-            (true, false)  => -1.0,
-            (false, true)  =>  1.0,
-            _              =>  0.0,
+            (true, false) => -1.0,
+            (false, true) => 1.0,
+            _ => 0.0,
         };
         let handbrake = input.keys.jump;
 
-        Self { throttle, brake, steer, handbrake }
+        Self {
+            throttle,
+            brake,
+            steer,
+            handbrake,
+        }
     }
 }
 
@@ -339,14 +379,14 @@ impl Vehicle {
         self.controls = controls;
 
         // ── Longitudinal ────────────────────────────────────────────────
-        const MAX_SPEED: f32     = 80.0;  // m/s ≈ 288 km/h
-        const ACCEL: f32         = 22.0;  // m/s²
-        const BRAKE_DECEL: f32   = 40.0;  // m/s² (braking harder than engine drag)
-        const DRAG: f32          =  0.6;  // rolling resistance coefficient
+        const MAX_SPEED: f32 = 80.0; // m/s ≈ 288 km/h
+        const ACCEL: f32 = 22.0; // m/s²
+        const BRAKE_DECEL: f32 = 40.0; // m/s² (braking harder than engine drag)
+        const DRAG: f32 = 0.6; // rolling resistance coefficient
 
-        let drive_force   = controls.throttle * ACCEL;
-        let brake_force   = controls.brake * BRAKE_DECEL;
-        let drag_force    = self.speed * DRAG;
+        let drive_force = controls.throttle * ACCEL;
+        let brake_force = controls.brake * BRAKE_DECEL;
+        let drag_force = self.speed * DRAG;
 
         let net_accel = drive_force - brake_force - drag_force;
         self.speed = (self.speed + net_accel * dt).clamp(-MAX_SPEED * 0.3, MAX_SPEED);
@@ -360,8 +400,8 @@ impl Vehicle {
         // At low speed the car pivots freely; at high speed lateral grip limits turn rate.
         const MAX_STEER_RATE: f32 = std::f32::consts::PI * 0.9; // rad/s at low speed
         let speed_factor = (self.speed.abs() / MAX_SPEED).clamp(0.0, 1.0);
-        let grip_factor  = 1.0 - speed_factor * 0.55; // [0.45, 1.0] grip range
-        let yaw_rate     = controls.steer * MAX_STEER_RATE * grip_factor;
+        let grip_factor = 1.0 - speed_factor * 0.55; // [0.45, 1.0] grip range
+        let yaw_rate = controls.steer * MAX_STEER_RATE * grip_factor;
 
         self.yaw += yaw_rate * dt;
 
@@ -448,7 +488,9 @@ impl RacingGame {
             custom: serde_json::Value::Null,
         });
         let key = player_id.as_u64().to_string();
-        self.world.vehicles.insert(key.clone(), Vehicle::spawn(slot));
+        self.world
+            .vehicles
+            .insert(key.clone(), Vehicle::spawn(slot));
         self.world.lap_timers.insert(key, LapTimer::new());
     }
 
@@ -466,15 +508,19 @@ impl RacingGame {
 
     /// Bake `world` into `GameState::world`.
     fn sync_world(&mut self) {
-        self.state.world = serde_json::to_value(&self.world)
-            .unwrap_or(serde_json::Value::Null);
+        self.state.world = serde_json::to_value(&self.world).unwrap_or(serde_json::Value::Null);
     }
 
     /// Tick-level lap-gate detection for a single player.
     ///
     /// Checks every gate; triggers at most one gate per tick (avoids
     /// teleportation exploits).
-    fn update_lap_timer(world: &mut RaceWorld, player_id: PlayerId, current_tick: u64, tick_rate: u32) -> Option<u64> {
+    fn update_lap_timer(
+        world: &mut RaceWorld,
+        player_id: PlayerId,
+        current_tick: u64,
+        tick_rate: u32,
+    ) -> Option<u64> {
         let key = player_id.as_u64().to_string();
         let vehicle = world.vehicles.get(&key)?.clone();
         let timer = world.lap_timers.get_mut(&key)?;
@@ -559,7 +605,9 @@ impl GameLogic for RacingGame {
         // ── Lap gate detection ─────────────────────────────────────────────
         let player_ids: Vec<PlayerId> = self.state.players.iter().map(|p| p.id).collect();
         for &pid in &player_ids {
-            if let Some(lap_ms) = Self::update_lap_timer(&mut self.world, pid, current_tick, TICK_RATE) {
+            if let Some(lap_ms) =
+                Self::update_lap_timer(&mut self.world, pid, current_tick, TICK_RATE)
+            {
                 let key = pid.as_u64().to_string();
                 let timer = self.world.lap_timers.get(&key).cloned();
 
@@ -849,10 +897,7 @@ pub mod bevy_client {
             app.init_resource::<LocalGameState>()
                 .init_resource::<PendingInput>()
                 .add_systems(Startup, setup_scene)
-                .add_systems(Update, (
-                    collect_input,
-                    sync_car_entities,
-                ));
+                .add_systems(Update, (collect_input, sync_car_entities));
         }
     }
 
@@ -915,13 +960,18 @@ pub mod bevy_client {
             keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft),
             keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight),
         ) {
-            (true, false)  => -1.0,
-            (false, true)  =>  1.0,
-            _              =>  0.0,
+            (true, false) => -1.0,
+            (false, true) => 1.0,
+            _ => 0.0,
         };
         let handbrake = keys.pressed(KeyCode::Space);
 
-        pending.controls = VehicleControls { throttle, brake, steer, handbrake };
+        pending.controls = VehicleControls {
+            throttle,
+            brake,
+            steer,
+            handbrake,
+        };
     }
 
     /// Reconcile Bevy car entities with the latest game snapshot.
@@ -952,7 +1002,9 @@ pub mod bevy_client {
             }
             if !found {
                 commands.spawn((
-                    CarEntity { player_id: player_state.id },
+                    CarEntity {
+                        player_id: player_state.id,
+                    },
                     Mesh3d::default(),
                     MeshMaterial3d::<StandardMaterial>::default(),
                     Transform {
@@ -977,9 +1029,7 @@ pub fn run_native() {
     use bevy::prelude::*;
     use bevy_client::GamePlugin;
 
-    App::new()
-        .add_plugins((DefaultPlugins, GamePlugin))
-        .run();
+    App::new().add_plugins((DefaultPlugins, GamePlugin)).run();
 }
 
 // ===========================================================================
@@ -1012,9 +1062,9 @@ mod tests {
         Input {
             keys: magnetite_sdk::KeyState::default(),
             mouse: magnetite_sdk::MouseState {
-                scroll:  throttle,       // right trigger
-                delta_y: -brake,         // left trigger (negative)
-                delta_x: steer,          // left stick X
+                scroll: throttle, // right trigger
+                delta_y: -brake,  // left trigger (negative)
+                delta_x: steer,   // left stick X
                 ..Default::default()
             },
             sequence: 1,
@@ -1057,7 +1107,11 @@ mod tests {
     fn gamepad_throttle_maps_correctly() {
         let input = make_gamepad_input(0.85, 0.0, 0.0);
         let controls = VehicleControls::from_input(&input);
-        assert!((controls.throttle - 0.85).abs() < 0.01, "throttle = {}", controls.throttle);
+        assert!(
+            (controls.throttle - 0.85).abs() < 0.01,
+            "throttle = {}",
+            controls.throttle
+        );
         assert!(controls.brake < 0.01);
     }
 
@@ -1066,14 +1120,22 @@ mod tests {
         let input = make_gamepad_input(0.0, 0.7, 0.0);
         let controls = VehicleControls::from_input(&input);
         assert!(controls.throttle < 0.01);
-        assert!((controls.brake - 0.7).abs() < 0.01, "brake = {}", controls.brake);
+        assert!(
+            (controls.brake - 0.7).abs() < 0.01,
+            "brake = {}",
+            controls.brake
+        );
     }
 
     #[test]
     fn gamepad_steer_maps_correctly() {
         let input = make_gamepad_input(0.5, 0.0, -0.6);
         let controls = VehicleControls::from_input(&input);
-        assert!((controls.steer - (-0.6)).abs() < 0.01, "steer = {}", controls.steer);
+        assert!(
+            (controls.steer - (-0.6)).abs() < 0.01,
+            "steer = {}",
+            controls.steer
+        );
     }
 
     // ── Vehicle physics tests ────────────────────────────────────────────
@@ -1081,20 +1143,39 @@ mod tests {
     #[test]
     fn vehicle_accelerates_with_throttle() {
         let mut v = Vehicle::spawn(0);
-        let controls = VehicleControls { throttle: 1.0, brake: 0.0, steer: 0.0, handbrake: false };
+        let controls = VehicleControls {
+            throttle: 1.0,
+            brake: 0.0,
+            steer: 0.0,
+            handbrake: false,
+        };
         let dt = 1.0 / 60.0;
         v.step(controls, dt);
-        assert!(v.speed > 0.0, "vehicle should accelerate: speed = {}", v.speed);
+        assert!(
+            v.speed > 0.0,
+            "vehicle should accelerate: speed = {}",
+            v.speed
+        );
     }
 
     #[test]
     fn vehicle_brakes() {
         let mut v = Vehicle::spawn(0);
         v.speed = 30.0; // pre-set cruising speed
-        let controls = VehicleControls { throttle: 0.0, brake: 1.0, steer: 0.0, handbrake: false };
+        let controls = VehicleControls {
+            throttle: 0.0,
+            brake: 1.0,
+            steer: 0.0,
+            handbrake: false,
+        };
         let initial_speed = v.speed;
         v.step(controls, 1.0 / 60.0);
-        assert!(v.speed < initial_speed, "speed should decrease: {} → {}", initial_speed, v.speed);
+        assert!(
+            v.speed < initial_speed,
+            "speed should decrease: {} → {}",
+            initial_speed,
+            v.speed
+        );
     }
 
     #[test]
@@ -1102,7 +1183,12 @@ mod tests {
         let mut v = Vehicle::spawn(0);
         v.speed = 20.0;
         let initial_yaw = v.yaw;
-        let controls = VehicleControls { throttle: 0.5, brake: 0.0, steer: 1.0, handbrake: false };
+        let controls = VehicleControls {
+            throttle: 0.5,
+            brake: 0.0,
+            steer: 1.0,
+            handbrake: false,
+        };
         v.step(controls, 1.0 / 60.0);
         assert!(v.yaw != initial_yaw, "yaw should change when steering");
     }
@@ -1111,7 +1197,12 @@ mod tests {
     fn vehicle_handbrake_reduces_speed() {
         let mut v = Vehicle::spawn(0);
         v.speed = 40.0;
-        let controls = VehicleControls { throttle: 0.0, brake: 0.0, steer: 0.0, handbrake: true };
+        let controls = VehicleControls {
+            throttle: 0.0,
+            brake: 0.0,
+            steer: 0.0,
+            handbrake: true,
+        };
         v.step(controls, 1.0 / 60.0);
         assert!(v.speed < 40.0, "handbrake should reduce speed");
     }
@@ -1126,14 +1217,24 @@ mod tests {
 
     #[test]
     fn track_passes_gate_true_when_close() {
-        let gate = TrackGate { x: 0.0, z: 0.0, radius: 8.0, sector: 0 };
+        let gate = TrackGate {
+            x: 0.0,
+            z: 0.0,
+            radius: 8.0,
+            sector: 0,
+        };
         assert!(Track::passes_gate(&gate, 0.0, 0.0));
         assert!(Track::passes_gate(&gate, 5.0, 5.0)); // within radius
     }
 
     #[test]
     fn track_passes_gate_false_when_far() {
-        let gate = TrackGate { x: 0.0, z: 0.0, radius: 8.0, sector: 0 };
+        let gate = TrackGate {
+            x: 0.0,
+            z: 0.0,
+            radius: 8.0,
+            sector: 0,
+        };
         assert!(!Track::passes_gate(&gate, 20.0, 20.0));
     }
 
@@ -1157,7 +1258,10 @@ mod tests {
 
         // Back through gate 0 — this should complete the lap
         let lap_result = timer.on_gate(&track.gates[0], 1800, TICK_RATE);
-        assert!(lap_result.is_some(), "lap should complete when returning to sector 0");
+        assert!(
+            lap_result.is_some(),
+            "lap should complete when returning to sector 0"
+        );
         assert_eq!(timer.laps_done, 1);
     }
 
@@ -1187,7 +1291,10 @@ mod tests {
     #[test]
     fn countdown_prevents_movement() {
         let mut game = RacingGame::new();
-        assert!(!game.world.race_started, "race should not be started initially");
+        assert!(
+            !game.world.race_started,
+            "race should not be started initially"
+        );
         let pid = game.players()[0];
 
         let initial_pos = game.state().players[0].position;
@@ -1278,7 +1385,10 @@ mod tests {
         let game = RacingGame::new();
         let world: RaceWorld = serde_json::from_value(game.state().world.clone())
             .expect("world payload must deserialise to RaceWorld");
-        assert!(!world.vehicles.is_empty(), "world must contain at least one vehicle");
+        assert!(
+            !world.vehicles.is_empty(),
+            "world must contain at least one vehicle"
+        );
         assert_eq!(world.track.gates.len(), 6, "track must have 6 gates");
     }
 
@@ -1329,6 +1439,10 @@ mod tests {
 
         // After completing a lap, score should be non-zero (negative best lap ms)
         let player = game.state().players.iter().find(|p| p.id == pid).unwrap();
-        assert!(player.score < 0, "score should be negative best-lap-ms; got {}", player.score);
+        assert!(
+            player.score < 0,
+            "score should be negative best-lap-ms; got {}",
+            player.score
+        );
     }
 }

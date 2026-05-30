@@ -261,6 +261,45 @@ lint(0 errors)/tests green; heavy media/netcode infra documented as the scale pa
   Note: motorsport agent applied a trivial fix to SDK input/mod.rs (partition leak) — verified SDK still 240
   tests green. → next **Wave 9 (close: RTMP egress + HLS watch, wire economy/store/overlay into play flow,
   CURRENT_USER_ID→useAuth, full suite docs, e2e/a11y, FINAL verification)**.
+- **Wave 9 (final close) — DONE, verified:** Backend streaming lifecycle (go-live/stop/list/watch + HLS
+  manifest endpoint, WebRTC ingest reusing voice signaling, RTMP egress to Twitch/YouTube; media server
+  MediaMTX documented as the deploy dependency, not faked) + migration `20260601_streaming.sql` — 0 warnings.
+  SDK `platform::streaming` + score submission (203 unit + 82 doc tests). Frontend: CURRENT_USER_ID→useAuth
+  in Communities/Messages, GameOverlay + InGameStore + points HUD wired into Playground/GameLobby, Streams
+  wired to real endpoints w/ HLS, a11y pass (tablist/tabpanel roles, aria-labels, tokens-only). Suite docs +
+  CHANGELOG. Tests expanded to **113 passing (11 files)**. Formatted the 3 template crates.
+
+---
+
+## 7. CLOSING SUMMARY (2026-05-30)
+
+**The autonomous multi-wave rebuild is COMPLETE.** Magnetite went from a stale-doc'd, 341-warning, mock-data
+React+Rust codebase to a polished, coherent, open-source **gaming suite** for Rust games at any scale.
+
+**Final state — all green:**
+- Frontend: `npm run build` clean (code-split: main 344→101kB), `npm run lint` **0 errors**, `npm test` **113
+  tests pass** (11 files). Every route restyled to the distinctive "Industrial Magnetite" system (Archivo /
+  Hanken Grotesk / JetBrains Mono, atmosphere + orchestrated motion).
+- Rust: **6 crates, all `cargo check` 0 warnings + `cargo fmt` clean** — backend (sqlx 0.8), magnetite-sdk
+  (~285 tests), game-template, game-template-fps, game-template-motorsport.
+
+**Shipped across 9 waves (10 commits on `feat/redesign-and-harden`):**
+1. Design system + docs + backend hardening (341→0 warnings, sqlx 0.8).
+2. All 69 pages + components restyled.
+3. Mock→real API wiring, mature SDK, WASM pipeline, game-distribution backend, docs.
+4. UI/UX polish (frontend-design skill: distinctive type, atmosphere, per-route quality bar).
+5. CSS consolidation, chrome polish, perf code-split, completeness, close-out docs.
+6. Discord-class comms core — chat/presence + WebRTC voice signaling (backend + SDK).
+7. Comms frontend — live communities, DMs, voice client, in-game overlay, streaming UI.
+8. Game-dev capabilities — controllers, graphics tiers, FPS + motorsport templates, points economy, dev marketplace.
+9. Streaming egress + HLS, play-flow integration, a11y, suite docs, expanded tests.
+
+**Documented as scale path (working foundations shipped, heavy infra is a deploy concern, not faked):**
+voice/stream media = WebRTC mesh now + SFU/MediaMTX for scale; RTMP egress needs a media server; full Bevy
+WASM builds for the FPS/motorsport templates (verified via `cargo check --no-default-features`).
+
+**Orchestration:** 9 waves × 5 Sonnet agents on strictly disjoint file partitions; orchestrator verified +
+committed each wave; 30-min audit heartbeat. Loop STOPS here (DoD met). Future work lives in roadmap.md/TASKS.md.
 - **Wave 0 (setup):** Reviewed repo (69 pages, 100 components, 27 API modules, 18 services; both build). Confirmed stale docs, 341 backend warnings, HTML5/Rust copy mismatch, mock-data pages. Created branch, gitignore for `target`, this file. Baseline committed (`1f25602`).
 - **Wave 1 (foundation) — DONE, verified:**
   - Frontend design system: new `src/styles/tokens.css` + rewritten `src/index.css` (Industrial Magnetite tokens; legacy var names aliased so pages still compile); restyled all 17 `common/*` components + Navbar + Toast. `npm run build` green.

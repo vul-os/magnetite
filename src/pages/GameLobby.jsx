@@ -5,18 +5,15 @@ import LobbyChat from '../components/LobbyChat';
 import ReadyButton from '../components/ReadyButton';
 import StartGameButton from '../components/StartGameButton';
 import GameOverlay from '../components/GameOverlay';
+import InGameStore from '../components/store/InGameStore';
+import { useAuth } from '../hooks/useAuth';
+import { useComms } from '../context/CommsContext';
+import { usePoints } from '../hooks/usePoints';
 import './GameLobby.css';
 
-const MOCK_CURRENT_USER = {
-  id: 'user-1',
-  username: 'PlayerOne',
-  avatar: null,
-};
-
 const MOCK_PLAYERS = [
-  { id: 'user-1', username: 'PlayerOne',    avatar: null, ready: false },
-  { id: 'user-2', username: 'ChessMaster99', avatar: null, ready: true },
-  { id: 'user-3', username: 'GoPlayer42',    avatar: null, ready: true },
+  { id: 'user-2', username: 'ChessMaster99', avatar: null, ready: true  },
+  { id: 'user-3', username: 'GoPlayer42',    avatar: null, ready: true  },
   { id: 'user-4', username: 'CardShark',     avatar: null, ready: false },
 ];
 
@@ -28,10 +25,23 @@ const MOCK_MESSAGES = [
 
 export default function GameLobby() {
   const { id: _gameId } = useParams();
-  const [players, setPlayers]   = useState(MOCK_PLAYERS);
+
+  // Real user from auth; fall back to a mock guest for dev convenience.
+  const { user }     = useAuth();
+  const comms        = useComms();
+  const { balance }  = usePoints();
+
+  const currentUser = user
+    ? { id: String(user.id), username: user.username ?? user.email ?? 'You', avatar: user.avatar_url ?? null }
+    : { id: 'user-1', username: 'PlayerOne', avatar: null };
+
+  const [showStore, setShowStore] = useState(false);
+
+  // Seed player list — always include the current user as the first entry.
+  const selfEntry = { id: currentUser.id, username: currentUser.username, avatar: currentUser.avatar, ready: false };
+  const [players, setPlayers]   = useState([selfEntry, ...MOCK_PLAYERS]);
   const [messages, setMessages] = useState(MOCK_MESSAGES);
-  const [hostId]                = useState('user-1');
-  const currentUser              = MOCK_CURRENT_USER;
+  const [hostId]                = useState(currentUser.id);
 
   const isHost         = currentUser.id === hostId;
   const allPlayersReady = players.every(p => p.ready);
@@ -75,11 +85,45 @@ export default function GameLobby() {
               <h1 className="lobby-title">Rust Match</h1>
               <p className="lobby-game-name">Chess — Server-Authoritative</p>
             </div>
-            <div className="lobby-code-block">
-              <span className="lobby-code-label">// Lobby Code</span>
-              <span className="lobby-code-value" aria-label="Lobby code XKCD42">XKCD42</span>
+            <div className="lobby-header-right">
+              {/* Points HUD */}
+              <div className="lobby-points-hud" aria-label={`Points: ${balance.points ?? 0}`}>
+                <span className="lobby-points-icon" aria-hidden="true">⬡</span>
+                <span className="lobby-points-value">{(balance.points ?? 0).toLocaleString()}</span>
+                <span className="lobby-points-label">pts</span>
+              </div>
+              {/* In-game store toggle */}
+              <button
+                className="lobby-store-btn"
+                onClick={() => setShowStore((v) => !v)}
+                aria-expanded={showStore}
+                aria-label="Toggle in-game store"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+                  <line x1="3" x2="21" y1="6" y2="6" />
+                  <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                Store
+              </button>
+              <div className="lobby-code-block">
+                <span className="lobby-code-label">// Lobby Code</span>
+                <span className="lobby-code-value" aria-label="Lobby code XKCD42">XKCD42</span>
+              </div>
             </div>
           </header>
+
+          {/* In-game store panel */}
+          {showStore && (
+            <div className="lobby-store-panel" role="region" aria-label="In-game store">
+              <InGameStore
+                storeId={_gameId ? `game-${_gameId}` : undefined}
+                gameTitle="Lobby Store"
+                onClose={() => setShowStore(false)}
+                pointBalance={balance.points ?? 0}
+              />
+            </div>
+          )}
 
           {/* ── Three-column layout ── */}
           <div className="lobby-content">
@@ -141,6 +185,7 @@ export default function GameLobby() {
         label="Lobby"
         channelId={overlayChannelId}
         voiceRoomId={overlayVoiceRoomId}
+        comms={comms}
       />
     </div>
   );

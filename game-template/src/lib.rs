@@ -24,8 +24,8 @@
 use std::collections::HashMap;
 
 use magnetite_sdk::{
-    Action, Direction, GameLogic, GameMetadata, GameState, Input, PlayerId,
-    PlayerState, Position, Rotation, Snapshot,
+    Action, Direction, GameLogic, GameMetadata, GameState, Input, PlayerId, PlayerState, Position,
+    Rotation, Snapshot,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -103,8 +103,8 @@ impl DotCollector {
 
     /// Bake `coins` into `GameState::world` so clients can read them.
     fn sync_world(&mut self) {
-        self.state.world = serde_json::to_value(&self.coins)
-            .unwrap_or(serde_json::Value::Array(vec![]));
+        self.state.world =
+            serde_json::to_value(&self.coins).unwrap_or(serde_json::Value::Array(vec![]));
     }
 
     /// Add a new player; returns the assigned [`PlayerId`].
@@ -156,19 +156,31 @@ impl GameLogic for DotCollector {
         // Movement — WASD / arrow keys
         if input.keys.forward {
             player.position.z -= speed;
-            action = Action::Move { direction: Direction::Forward, sprint: sprinting };
+            action = Action::Move {
+                direction: Direction::Forward,
+                sprint: sprinting,
+            };
         }
         if input.keys.backward {
             player.position.z += speed;
-            action = Action::Move { direction: Direction::Backward, sprint: sprinting };
+            action = Action::Move {
+                direction: Direction::Backward,
+                sprint: sprinting,
+            };
         }
         if input.keys.left {
             player.position.x -= speed;
-            action = Action::Move { direction: Direction::Left, sprint: sprinting };
+            action = Action::Move {
+                direction: Direction::Left,
+                sprint: sprinting,
+            };
         }
         if input.keys.right {
             player.position.x += speed;
-            action = Action::Move { direction: Direction::Right, sprint: sprinting };
+            action = Action::Move {
+                direction: Direction::Right,
+                sprint: sprinting,
+            };
         }
 
         // Clamp to arena bounds
@@ -176,10 +188,9 @@ impl GameLogic for DotCollector {
         player.position.z = player.position.z.clamp(-ARENA, ARENA);
 
         // Look direction from mouse delta
-        player.rotation.yaw   += input.mouse.delta_x as f32 * 0.005;
-        player.rotation.pitch  = (player.rotation.pitch
-            + input.mouse.delta_y as f32 * 0.005)
-            .clamp(-1.4, 1.4);
+        player.rotation.yaw += input.mouse.delta_x as f32 * 0.005;
+        player.rotation.pitch =
+            (player.rotation.pitch + input.mouse.delta_y as f32 * 0.005).clamp(-1.4, 1.4);
 
         // Jump / crouch (adjust Y; clamped to ground + modest ceiling)
         if input.keys.jump {
@@ -276,8 +287,7 @@ impl GameLogic for DotCollector {
     /// Restore from a previously captured snapshot.
     fn restore(&mut self, snapshot: Snapshot) {
         // Re-derive coins from the world payload stored in the snapshot.
-        self.coins = serde_json::from_value(snapshot.state.world.clone())
-            .unwrap_or_default();
+        self.coins = serde_json::from_value(snapshot.state.world.clone()).unwrap_or_default();
         self.state = snapshot.state;
     }
 
@@ -459,10 +469,7 @@ pub mod bevy_client {
             app.init_resource::<LocalGameState>()
                 .init_resource::<PendingInput>()
                 .add_systems(Startup, setup_scene)
-                .add_systems(Update, (
-                    collect_keyboard_input,
-                    sync_player_entities,
-                ));
+                .add_systems(Update, (collect_keyboard_input, sync_player_entities));
         }
     }
 
@@ -482,22 +489,19 @@ pub mod bevy_client {
     }
 
     /// Map Bevy keyboard input to `magnetite_sdk::KeyState` each frame.
-    fn collect_keyboard_input(
-        keys: Res<ButtonInput<KeyCode>>,
-        mut pending: ResMut<PendingInput>,
-    ) {
+    fn collect_keyboard_input(keys: Res<ButtonInput<KeyCode>>, mut pending: ResMut<PendingInput>) {
         pending.sequence += 1;
         pending.keys = magnetite_sdk::KeyState {
-            forward:          keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp),
-            backward:         keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown),
-            left:             keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft),
-            right:            keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight),
-            jump:             keys.pressed(KeyCode::Space),
-            crouch:           keys.pressed(KeyCode::ControlLeft),
-            attack:           keys.pressed(KeyCode::KeyZ),
+            forward: keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp),
+            backward: keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown),
+            left: keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft),
+            right: keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight),
+            jump: keys.pressed(KeyCode::Space),
+            crouch: keys.pressed(KeyCode::ControlLeft),
+            attack: keys.pressed(KeyCode::KeyZ),
             secondary_attack: keys.pressed(KeyCode::KeyX),
-            interact:         keys.pressed(KeyCode::KeyE),
-            sprint:           keys.pressed(KeyCode::ShiftLeft),
+            interact: keys.pressed(KeyCode::KeyE),
+            sprint: keys.pressed(KeyCode::ShiftLeft),
         };
     }
 
@@ -529,7 +533,9 @@ pub mod bevy_client {
             // Spawn a new entity when there is none yet for this player.
             if !found {
                 commands.spawn((
-                    PlayerDot { id: player_state.id },
+                    PlayerDot {
+                        id: player_state.id,
+                    },
                     Transform::from_translation(pos),
                     GlobalTransform::default(),
                 ));
@@ -552,9 +558,7 @@ pub fn run_native() {
     use bevy::prelude::*;
     use bevy_client::GamePlugin;
 
-    App::new()
-        .add_plugins((DefaultPlugins, GamePlugin))
-        .run();
+    App::new().add_plugins((DefaultPlugins, GamePlugin)).run();
 }
 
 // ===========================================================================
@@ -583,8 +587,15 @@ mod tests {
     #[test]
     fn new_game_has_one_player_and_coins() {
         let game = DotCollector::new();
-        assert_eq!(game.players().len(), 1, "should start with exactly one player");
-        assert!(!game.coins.is_empty(), "should start with coins on the field");
+        assert_eq!(
+            game.players().len(),
+            1,
+            "should start with exactly one player"
+        );
+        assert!(
+            !game.coins.is_empty(),
+            "should start with coins on the field"
+        );
     }
 
     #[test]
@@ -596,7 +607,10 @@ mod tests {
         game.handle_input(player_id, make_input(true, false, false, false));
 
         let new_z = game.state().players[0].position.z;
-        assert!(new_z < initial_z, "forward input should decrease Z (right-hand Y-up)");
+        assert!(
+            new_z < initial_z,
+            "forward input should decrease Z (right-hand Y-up)"
+        );
     }
 
     #[test]
@@ -606,7 +620,13 @@ mod tests {
 
         let action = game.handle_input(player_id, make_input(true, false, false, false));
         assert!(
-            matches!(action, Action::Move { direction: Direction::Forward, .. }),
+            matches!(
+                action,
+                Action::Move {
+                    direction: Direction::Forward,
+                    ..
+                }
+            ),
             "forward key must produce Move(Forward)"
         );
     }
@@ -625,7 +645,11 @@ mod tests {
         let mut game = DotCollector::new();
         game.add_player();
         game.add_player();
-        assert_eq!(game.state().players.len(), 3, "snapshot should include all 3 players");
+        assert_eq!(
+            game.state().players.len(),
+            3,
+            "snapshot should include all 3 players"
+        );
     }
 
     #[test]

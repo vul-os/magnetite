@@ -1,7 +1,7 @@
 # Architecture Overview
 
 Magnetite is a server-authoritative Rust game platform. This page describes the real
-backend modules as they exist in the codebase.
+backend modules as they exist in the codebase — updated through Wave 9 (full gaming suite).
 
 ---
 
@@ -9,54 +9,58 @@ backend modules as they exist in the codebase.
 
 ```
 Browser / Native Client
-        │  HTTPS REST          WebSocket
-        │  /api/v1/…           /ws/notifications
-        ▼                      ▼
-┌───────────────────────────────────────────────────────┐
-│            Axum HTTP Server  (0.0.0.0:8080)           │
-│                                                       │
-│  Rate limiter (Redis)  ──►  Request logger            │
-│                                                       │
-│  ┌──────────────────────────────────────────────┐     │
-│  │                  API Layer                   │     │
-│  │  auth  games  wallet  developer  admin       │     │
-│  │  matchmaking  leaderboard  achievements      │     │
-│  │  social  subscriptions  notifications        │     │
-│  │  oauth  github  webhooks  distribution       │     │
-│  │  categories  health  metrics  versioning     │     │
-│  └──────────────────────┬───────────────────────┘     │
-│                         │                             │
-│  ┌──────────────────────▼───────────────────────┐     │
-│  │               Services Layer                 │     │
-│  │  auth  games  wallet  payment  payout        │     │
-│  │  session  leaderboard  matchmaking           │     │
-│  │  achievements  friends  invites              │     │
-│  │  analytics  anticheat  cache  email          │     │
-│  │  health  verification  distribution          │     │
-│  └──────────────────────┬───────────────────────┘     │
-│                         │                             │
-│  ┌──────────────────────▼───────────────────────┐     │
-│  │  Background Jobs  │  WebSocket Handler        │     │
-│  │  session_cleanup  │  ws/game.rs               │     │
-│  │  notification_gc  │  ws/mod.rs                │     │
-│  │  backup           │                           │     │
-│  └──────────────────────┬───────────────────────┘     │
-└────────────────────────┼──────────────────────────────┘
+        │  HTTPS REST                WebSocket
+        │  /api/v1/…                 /ws/comms  /ws/voice  /ws/game/{id}
+        ▼                            ▼
+┌────────────────────────────────────────────────────────────────┐
+│               Axum HTTP Server  (0.0.0.0:8080)                 │
+│                                                                │
+│  Rate limiter (Redis)  ──►  Request logger                     │
+│                                                                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                      API Layer (34 modules)             │   │
+│  │  auth  games  wallet  developer  admin                  │   │
+│  │  matchmaking  leaderboard  achievements  social         │   │
+│  │  subscriptions  notifications  profile  tournaments     │   │
+│  │  oauth  github  webhooks  distribution                  │   │
+│  │  communities  channels  messages                        │   │
+│  │  points  marketplace                                    │   │
+│  │  categories  health  metrics  versioning  wishlist      │   │
+│  └──────────────────────┬──────────────────────────────────┘   │
+│                         │                                      │
+│  ┌──────────────────────▼──────────────────────────────────┐   │
+│  │               Services Layer (22 modules)               │   │
+│  │  auth  games  wallet  payment  payout                   │   │
+│  │  session  leaderboard  matchmaking                      │   │
+│  │  achievements  friends  invites                         │   │
+│  │  analytics  anticheat  cache  email                     │   │
+│  │  health  verification  distribution                     │   │
+│  │  communities  presence  points  marketplace             │   │
+│  └──────────────────────┬──────────────────────────────────┘   │
+│                         │                                      │
+│  ┌──────────────────────▼──────────────────────────────────┐   │
+│  │  Background Jobs   │  WebSocket Handlers                 │   │
+│  │  session_cleanup   │  ws/comms.rs  (chat + presence)    │   │
+│  │  notification_gc   │  ws/voice.rs  (WebRTC signaling)   │   │
+│  │  backup            │  ws/game.rs   (game state sync)    │   │
+│  └──────────────────────┬──────────────────────────────────┘   │
+└────────────────────────┼───────────────────────────────────────┘
                          │
             ┌────────────┴──────────────┐
             │                           │
      PostgreSQL 16                   Redis 7
-     (primary store)              (rate limiting,
-                                   sessions, cache)
+     (24 migrations)              (rate limiting,
+                                   sessions, cache,
+                                   pub/sub)
 ```
 
 ---
 
 ## Backend module reference
 
-### `src/api/` — HTTP route modules
+### `src/api/` — HTTP route modules (34 total)
 
-Each module exports a `router(pool: PgPool) -> Router` function that is nested under
+Each module exports a `router(pool: PgPool) -> Router` function nested under
 `/api/v1/<prefix>` in `main.rs`.
 
 | Module | Base path | Key routes |
@@ -64,24 +68,29 @@ Each module exports a `router(pool: PgPool) -> Router` function that is nested u
 | `auth` | `/auth` | `POST /login`, `POST /register`, `POST /refresh`, `DELETE /logout`, `DELETE /logout-all`, `GET /sessions`, `GET /me` |
 | `wallet` | `/wallet` | `GET /balance`, `POST /deposit`, `POST /withdraw`, `GET /transactions` |
 | `games` | `/games` | `GET /`, `POST /`, `GET /:id`, `PUT /:id`, `DELETE /:id`, `GET /:id/leaderboard` |
-| `distribution` | `/distribution` | `GET /:game_id/play`, `GET /:game_id/build-status`, `GET /:game_id/artifacts`, `GET /:game_id/artifacts/:artifact_id`, `GET /:game_id/versions`, `POST /:game_id/versions`, `PUT /:game_id/versions/:version_id/promote`, `PUT /:game_id/artifacts/:artifact_id` |
+| `distribution` | `/distribution` | `GET /:game_id/play`, `GET /:game_id/build-status`, `GET /:game_id/artifacts`, `POST /:game_id/versions`, `PUT /:game_id/versions/:version_id/promote` |
+| `communities` | `/communities` | `GET /`, `POST /`, `GET /:id`, `PUT /:id`, `DELETE /:id`, `GET /:id/members`, `POST /:id/join`, `DELETE /:id/leave` |
+| `channels` | `/channels` | `GET /communities/:id/channels`, `POST /communities/:id/channels`, `PUT /:id`, `DELETE /:id` |
+| `messages` | `/messages` | Channel messages: `GET /channels/:id/messages`, `POST /channels/:id/messages`. DMs: `GET /dms`, `GET /dms/:thread_id/messages`, `POST /dms/:thread_id/messages` |
+| `points` | `/points` | `GET /balance`, `GET /balance/:user_id`, `POST /award`, `POST /spend`, `GET /history`, `GET /leaderboard`, `POST /season-reset` |
+| `marketplace` | `/marketplace` | `GET /stores/:game_id`, `POST /stores`, `PUT /stores/:id`, `GET /stores/:id/items`, `POST /stores/:id/items`, `PUT /stores/:id/items/:item_id`, `POST /items/:item_id/purchase`, `GET /entitlements`, `GET /stores/:game_id/revenue` |
 | `categories` | `/categories` | game category listing |
 | `leaderboard` | `/leaderboard` | `GET /:game_id`, `POST /:game_id/scores`, `GET /:game_id/me`, `GET /:game_id/friends` |
 | `matchmaking` | `/matchmaking` | `POST /join`, `DELETE /leave`, `GET /status` |
 | `developer` | `/developer` | `POST /register`, `GET /dashboard`, `GET /games`, `PUT /games/:id/status`, `DELETE /games/:id`, `GET /earnings`, `GET /payouts`, `POST /payouts`, `GET /games/:id/players` |
-| `admin` | `/admin` | Users: `GET /users`, `GET /users/:id`, `PUT /users/:id/role`, `PUT /users/:id/ban`. Games: `GET /games`, `PUT /games/:id/review`, `PUT /games/:id/approve`, `PUT /games/:id/feature`. Finance: `GET /revenue`, `GET /transactions`, `POST /payouts/process`, `POST /payouts/:id/cancel`. Analytics: `GET /analytics/overview`, `GET /analytics/revenue`, `GET /analytics/users`, `GET /analytics/games`, `GET /analytics/performance`. Misc: `GET /health`, `GET /metrics`, `POST /seed` |
-| `oauth` | `/oauth` | `GET /google`, `GET /google/callback`, `GET /discord`, `GET /discord/callback`, `GET /github`, `GET /github/callback`, `GET /gitlab`, `GET /gitlab/callback` |
-| `github` | `/github` | `POST /webhooks/github`, `GET /installations`, `GET /repos`, `POST /repos/register`, `GET /repos/:owner/:repo/build-status` |
-| `webhooks` | `/webhooks` | `POST /paystack`, `POST /circle`, `POST /game`, `GET /endpoints`, `POST /endpoints`, `DELETE /endpoints/:id` |
-| `achievements` | `/achievements` | `GET /:user_id`, `GET /:user_id/:id`, `POST /:user_id/:id/progress`, `GET /leaderboard` |
-| `social` (friends) | `/friends` | `GET /`, `POST /request`, `POST /accept/:id`, `POST /reject/:id`, `DELETE /:id`, `POST /block/:id` |
-| `social` (invites) | `/invites` | `GET /`, `POST /:id/accept`, `POST /:id/decline` |
-| `social` (users) | `/users` | `GET /search`, `GET /:id` |
-| `subscriptions` | `/subscriptions` | `GET /` (list tiers), subscribe, cancel, status |
-| `notifications` | `/notifications` | `GET /`, `GET /count`, `PUT /read-all`, `PUT /:id/read`, `DELETE /:id`, `POST /` + `GET /ws/notifications` (WebSocket) |
-| `health` | `/health/ready`, `/health/live` | Kubernetes-style readiness / liveness probes |
+| `admin` | `/admin` | Users, games moderation, finance, analytics, health, metrics, seed |
+| `oauth` | `/oauth` | Google, Discord, GitHub, GitLab; `/callback` per provider |
+| `github` | `/github` | `POST /webhooks/github`, `GET /installations`, `GET /repos`, `POST /repos/register` |
+| `webhooks` | `/webhooks` | `POST /paystack`, `POST /circle`, `POST /game`, endpoint CRUD |
+| `achievements` | `/achievements` | `GET /:user_id`, `POST /:user_id/:id/progress`, `GET /leaderboard` |
+| `social` | `/friends`, `/invites`, `/users` | Friends, invites, user search |
+| `subscriptions` | `/subscriptions` | list tiers, subscribe, cancel, status |
+| `notifications` | `/notifications` | list, mark read, WS push channel |
+| `health` | `/health/ready`, `/health/live` | Readiness / liveness probes |
 | `metrics` | `/metrics` | Prometheus-format metrics |
 | `versioning` | middleware | API version header negotiation |
+| `wishlist` | `/wishlist` | per-user game wishlists |
+| (remaining) | | `profile`, `tournaments`, `reviews`, `sessions`, `search`, `platform` |
 
 > **Note:** All routes requiring authentication pass through `middleware::auth_middleware`
 > (JWT Bearer token validation). Admin routes additionally require the `admin` role
@@ -89,13 +98,13 @@ Each module exports a `router(pool: PgPool) -> Router` function that is nested u
 
 ---
 
-### `src/services/` — Business logic
+### `src/services/` — Business logic (22 modules)
 
 Pure Rust functions that contain no HTTP concerns. Called by API handlers.
 
 | Service | Responsibility |
 |---------|---------------|
-| `auth` | Password hashing (bcrypt), credential verification |
+| `auth` | Password hashing (Argon2), credential verification |
 | `session` | JWT issuance/validation, refresh tokens, session table management |
 | `games` | Game record CRUD, status transitions |
 | `wallet` | USDC balance management, deposit/withdrawal validation |
@@ -113,6 +122,10 @@ Pure Rust functions that contain no HTTP concerns. Called by API handlers.
 | `health` | Database and Redis connectivity checks |
 | `verification` | Email verification token issuance and validation |
 | `distribution` | Game artifact and version record management, play manifest resolution |
+| `communities` | Community + channel + message service; DM thread management |
+| `presence` | Presence upsert on WS connect/disconnect; offline sweep |
+| `points` | Atomic ledger insert + balance update (single TX); season reset; leaderboard |
+| `marketplace` | Store/item CRUD; USDC purchase (70/30 split); points purchase; entitlements |
 
 ---
 
@@ -132,7 +145,9 @@ Launched as `tokio::spawn` tasks at startup.
 
 | Module | Endpoint | Purpose |
 |--------|----------|---------|
-| `ws/game.rs` | (internal) | Real-time game state sync — receives `Input` messages, calls `GameLogic::tick`, broadcasts `GameState` snapshots |
+| `ws/game.rs` | `/ws/game/{id}` | Real-time game state sync — receives `Input` messages, calls `GameLogic::tick`, broadcasts `GameState` snapshots |
+| `ws/comms.rs` | `/ws/comms?token=<jwt>` | Real-time chat + typing indicators + presence broadcast; per-channel `tokio::sync::broadcast` |
+| `ws/voice.rs` | `/ws/voice?token=<jwt>&room=<token>` | WebRTC SDP/ICE signaling relay; mesh for ≤15 participants; SFU (LiveKit/mediasoup) documented as scale path |
 | `ws/mod.rs` | `/ws/notifications` | Per-user notification push channel |
 
 ---
@@ -161,7 +176,23 @@ Launched as `tokio::spawn` tasks at startup.
 ### `magnetite-sdk/` — Rust SDK
 
 A pure Rust library with no async runtime or HTTP dependencies — compiles to native
-and WASM alike. See the [SDK Reference](./for-developers/sdk.md).
+and WASM alike.
+
+| Module | Key types |
+|--------|-----------|
+| `game` | `GameLogic` trait, `GameMetadata`, `export_game!` macro |
+| `state` | `GameState`, `Snapshot`, `PlayerId`, `PlayerState`, `Position`, `Rotation` |
+| `input` | `Input`, `Action`, `KeyCode`, `MouseState`; `input::gamepad`: `InputMap`, `GameAction`, `GamepadButton`, `GamepadAxis` |
+| `graphics` | `GraphicsTier` (Lite2D / Standard3D / Advanced3D), `RenderConfig`, `EngineCapability` |
+| `protocol` | `Envelope`, `ClientMessage`, `ServerMessage`, `PROTOCOL_VERSION` |
+| `networking` | `ServerConfig`, `TickLoop`, `PredictionBuffer`, `InterestManager`, `NetworkManager` |
+| `platform::comms` | `CommsClient`, `ChatMessage`, `VoiceSignal`, `PresenceUpdate` |
+| `platform::points` | `PointsClient`, `AwardPointsRequest`, `SpendPointsRequest`, `LedgerEntry` |
+| `platform::marketplace` | `MarketplaceClient`, `StoreItem`, `PurchaseRequest`, `Entitlement` |
+| `platform::cloud_save` | `CloudSaveClient`, `SaveSlot`, `SaveRequest` |
+| `platform::streaming` | `StreamClient`, `GoLiveRequest`, `StreamInfo`, `StreamStatus`, `ExternalRtmpTarget` |
+
+240 tests pass; 0 warnings. See the [SDK Reference](./for-developers/sdk.md).
 
 ---
 

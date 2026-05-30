@@ -14,5 +14,7 @@ fn main() {
 fn main() {
     eprintln!("Circuit Rush: run with --features native for the desktop client.");
     eprintln!("For WASM: use build.sh or:");
-    eprintln!("  cargo build --target wasm32-unknown-unknown --no-default-features --features wasm");
+    eprintln!(
+        "  cargo build --target wasm32-unknown-unknown --no-default-features --features wasm"
+    );
 }

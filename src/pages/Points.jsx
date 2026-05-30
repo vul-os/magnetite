@@ -46,13 +46,16 @@ function TrophySmIcon() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TIER_COLORS = {
-  Bronze:   '#cd7f32',
-  Silver:   '#a8a8b3',
-  Gold:     '#f5a524',
-  Platinum: '#38e1c8',
-  Diamond:  '#5b9dff',
+// Map tier names to CSS variable tokens (no hardcoded hex).
+const TIER_CSS_VARS = {
+  Bronze:   'var(--color-tier-bronze,  #cd7f32)',
+  Silver:   'var(--color-tier-silver,  var(--color-text-secondary))',
+  Gold:     'var(--color-tier-gold,    var(--color-amber))',
+  Platinum: 'var(--color-tier-platinum,var(--color-accent))',
+  Diamond:  'var(--color-tier-diamond, var(--color-info))',
 };
+// Alias kept as TIER_COLORS so all downstream references remain valid.
+const TIER_COLORS = TIER_CSS_VARS;
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -158,23 +161,26 @@ export default function Points() {
         )}
 
         {/* ── Tab bar ── */}
-        <nav className="points-tabs reveal-3" aria-label="Points sections">
+        <div className="points-tabs reveal-3" role="tablist" aria-label="Points sections">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              role="tab"
               className={`points-tab${tab === key ? ' active' : ''}`}
               onClick={() => setTab(key)}
-              aria-current={tab === key ? 'page' : undefined}
+              aria-selected={tab === key}
+              aria-controls={`points-panel-${key}`}
+              id={`points-tab-${key}`}
             >
               <span className="points-tab-icon" aria-hidden="true"><Icon /></span>
               {label}
             </button>
           ))}
-        </nav>
+        </div>
 
         {/* ── Overview ── */}
         {tab === 'overview' && (
-          <section className="points-section reveal-4" aria-label="Points overview">
+          <section id="points-panel-overview" className="points-section reveal-4" role="tabpanel" aria-labelledby="points-tab-overview" aria-label="Points overview">
             <div className="points-stat-grid">
               {[
                 { label: 'Balance',        value: formatPts(balance.points),           unit: 'pts'  },
@@ -224,7 +230,7 @@ export default function Points() {
 
         {/* ── History ── */}
         {tab === 'history' && (
-          <section className="points-section reveal-4" aria-label="Points history">
+          <section id="points-panel-history" className="points-section reveal-4" role="tabpanel" aria-labelledby="points-tab-history" aria-label="Points history">
             <h3 className="section-sub-heading">Transaction History</h3>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
@@ -266,7 +272,7 @@ export default function Points() {
 
         {/* ── Rewards ── */}
         {tab === 'rewards' && (
-          <section className="points-section reveal-4" aria-label="Rewards shop">
+          <section id="points-panel-rewards" className="points-section reveal-4" role="tabpanel" aria-labelledby="points-tab-rewards" aria-label="Rewards shop">
             <h3 className="section-sub-heading">Redeem Rewards</h3>
             <p className="section-desc">Spend your points on cosmetics, boosts, and currency credits.</p>
             <div className="rewards-grid" role="list">
@@ -308,7 +314,7 @@ export default function Points() {
 
         {/* ── Leaderboard ── */}
         {tab === 'leaderboard' && (
-          <section className="points-section reveal-4" aria-label="Points leaderboard">
+          <section id="points-panel-leaderboard" className="points-section reveal-4" role="tabpanel" aria-labelledby="points-tab-leaderboard" aria-label="Points leaderboard">
             <h3 className="section-sub-heading">Top Point Earners</h3>
             <div
               className="points-lb-table"

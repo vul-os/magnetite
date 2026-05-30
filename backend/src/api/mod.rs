@@ -22,6 +22,7 @@ pub mod points;
 pub mod profile;
 pub mod response;
 pub mod social;
+pub mod streaming;
 pub mod subscriptions;
 pub mod tournaments;
 pub mod versioning;

@@ -31,11 +31,14 @@ platform — games that scale from a weekend game jam to a COD-size AAA title.
   services:
   - `platform::comms` — text chat, presence, and WebRTC voice signaling.
   - `platform::points` — points / XP / score economy (award, spend, balance,
-    ledger); server-authoritative with idempotency keys.
+    ledger, **match score submission**); server-authoritative with idempotency keys.
   - `platform::marketplace` — in-game store items, purchases (USDC / Paystack /
     points), and entitlements with a local cache.
   - `platform::cloud_save` — per-player named save slots (opaque blobs) with
     optimistic version conflict detection.
+  - `platform::streaming` — **go-live broadcasting** (RTMP ingest key + HLS
+    distribution), **spectator watch** (HLS player URL + live viewer count),
+    stream discovery (list / get), and external RTMP egress to Twitch / YouTube.
 - **`export_game!` macro** — one line registers your game with the Magnetite
   runtime, emitting the C FFI glue needed for dynamic loading by the server and
   WASM host.
@@ -147,9 +150,10 @@ export_game!(MyGame);
 | `protocol` | `Envelope`, `ClientMessage`, `ServerMessage`, `ErrorCode`, `PROTOCOL_VERSION` |
 | `networking` | `ServerConfig`, `TickLoop`, `PredictionBuffer`, `InterestManager`, `FullInterest`, `RadiusInterest`, `ServerNetworkManager`, `Codec`, `FramedTransport` |
 | `platform::comms` | `CommsClient`, `CommsConfig`, `ChatMessage`, `VoiceSignal`, `ClientCommsMessage`, `ServerCommsMessage`, `PresenceStatus` |
-| `platform::points` | `PointsClient`, `PointsConfig`, `AwardPointsRequest`, `SpendPointsRequest`, `PointsBalance`, `LedgerEntry`, `ClientPointsMessage`, `ServerPointsMessage` |
+| `platform::points` | `PointsClient`, `PointsConfig`, `AwardPointsRequest`, `SpendPointsRequest`, `ScoreSubmission`, `PointsBalance`, `LedgerEntry`, `ClientPointsMessage`, `ServerPointsMessage` |
 | `platform::marketplace` | `MarketplaceClient`, `MarketplaceConfig`, `StoreItem`, `Entitlement`, `PurchaseRequest`, `PurchaseResult`, `PaymentMethod`, `ItemType` |
 | `platform::cloud_save` | `CloudSaveClient`, `CloudSaveConfig`, `SaveRequest`, `SaveSlot`, `SaveSlotMeta`, `ClientCloudSaveMessage`, `ServerCloudSaveMessage` |
+| `platform::streaming` | `StreamClient`, `StreamConfig`, `GoLiveRequest`, `ExternalRtmpTarget`, `StreamInfo`, `StreamStatus`, `ClientStreamMessage`, `ServerStreamMessage`, `StreamEvent`, `StreamErrorCode` |
 
 ## Graphics / engine tiers
 
@@ -311,6 +315,84 @@ let msg = client.save_message(SaveRequest {
 
 // Load.
 let load_msg = client.load_message("autosave");
+```
+
+### Streaming (go-live / spectator)
+
+```rust
+use magnetite_sdk::platform::streaming::{
+    ExternalRtmpTarget, GoLiveRequest, ServerStreamMessage, StreamClient, StreamConfig,
+    StreamEvent,
+};
+
+// --- Broadcaster side ---
+let mut broadcaster = StreamClient::new(StreamConfig {
+    user_id: "u-caster".to_string(),
+    auth_token: "jwt".to_string(),
+});
+
+let go_live_msg = broadcaster.go_live(GoLiveRequest {
+    title: "FPS Ranked Stream".to_string(),
+    game_id: Some("fps-starter".to_string()),
+    community_id: None,
+    channel_id: None,
+    // Forward to Twitch as well.
+    external_rtmp: Some(ExternalRtmpTarget {
+        platform: "twitch".to_string(),
+        rtmp_url: "rtmp://live.twitch.tv/live".to_string(),
+    }),
+});
+// Send go_live_msg over the platform WebSocket.
+
+// The platform responds with StreamStarted — hand the bytes to handle_server_message:
+let event = broadcaster
+    .handle_server_message(ServerStreamMessage::StreamStarted {
+        stream_id: "s-42".to_string(),
+        rtmp_key: "live-key-abc".to_string(),
+        hls_url: Some("https://cdn.magnetite.gg/hls/s-42.m3u8".to_string()),
+    })
+    .unwrap();
+// Push RTMP to rtmp://ingest.magnetite.gg/live/<rtmp_key>
+assert!(broadcaster.is_live());
+
+// --- Spectator side ---
+let mut spectator = StreamClient::new(StreamConfig {
+    user_id: "u-viewer".to_string(),
+    auth_token: "jwt".to_string(),
+});
+
+let watch_msg = spectator.watch("s-42");
+// Send watch_msg; receive WatchReady with the HLS URL → open the media player.
+assert!(spectator.is_watching("s-42"));
+```
+
+### Score / match submission
+
+```rust
+use magnetite_sdk::platform::points::{
+    ClientPointsMessage, PointsClient, PointsConfig, ScoreSubmission,
+};
+
+let client = PointsClient::new(PointsConfig {
+    user_id: "u-42".to_string(),
+    auth_token: "jwt".to_string(),
+});
+
+// Submit at the end of a match (server-side game logic only).
+let msg = client.submit_score_message(ScoreSubmission {
+    match_id: "match-101".to_string(),
+    game_id: "fps-starter".to_string(),
+    score: 12_000,
+    placement: Some(1),
+    kills: Some(25),
+    deaths: Some(2),
+    assists: Some(7),
+    duration_secs: Some(600),
+    extra: None,
+    idempotency_key: Some("match-101-p1".to_string()),
+});
+// Send msg over the platform WebSocket.
+// Platform responds with ServerPointsMessage::ScoreSubmitted { bonus_points, season_rank, … }
 ```
 
 ## Snapshot / Restore (save, replay, prediction)

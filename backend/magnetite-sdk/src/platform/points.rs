@@ -109,6 +109,60 @@ pub struct AwardPointsRequest {
     pub idempotency_key: Option<String>,
 }
 
+/// A score / match-result event submitted by the game server at the end of a
+/// match (or at a checkpoint).  The platform records the score, updates the
+/// player's leaderboard entry for the current season, and optionally awards
+/// bonus points according to the configured reward rules.
+///
+/// **This must be sent by the server-side game logic** — client-submitted
+/// scores are rejected.
+///
+/// ```rust
+/// use magnetite_sdk::platform::points::ScoreSubmission;
+///
+/// let sub = ScoreSubmission {
+///     match_id: "match-42".to_string(),
+///     game_id: "fps-starter".to_string(),
+///     score: 9_500,
+///     placement: Some(1),
+///     kills: Some(18),
+///     deaths: Some(3),
+///     assists: Some(5),
+///     duration_secs: Some(480),
+///     extra: None,
+///     idempotency_key: Some("match-42-result".to_string()),
+/// };
+/// assert_eq!(sub.score, 9_500);
+/// let json = serde_json::to_string(&sub).unwrap();
+/// let back: ScoreSubmission = serde_json::from_str(&json).unwrap();
+/// assert_eq!(sub, back);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScoreSubmission {
+    /// Unique identifier for the match / game session this score belongs to.
+    pub match_id: String,
+    /// The platform game ID (for per-game leaderboards and analytics).
+    pub game_id: String,
+    /// Raw score value (higher is better).
+    pub score: u64,
+    /// Final placement in the match (1 = winner; `None` for non-competitive modes).
+    pub placement: Option<u32>,
+    /// Kills / eliminations (for shooter / combat games).
+    pub kills: Option<u32>,
+    /// Deaths (for shooter / combat games).
+    pub deaths: Option<u32>,
+    /// Assists (for team games).
+    pub assists: Option<u32>,
+    /// Match duration in seconds.
+    pub duration_secs: Option<u32>,
+    /// Arbitrary game-specific data serialised as a JSON string (kept opaque
+    /// so the platform doesn't need to understand game-specific fields).
+    pub extra: Option<String>,
+    /// Optional idempotency key — the same key is never recorded twice, making
+    /// it safe to retry on transient failures.
+    pub idempotency_key: Option<String>,
+}
+
 /// Request to spend points from the authenticated player's balance.
 ///
 /// ```rust
@@ -237,6 +291,31 @@ pub enum ClientPointsMessage {
         /// Maximum number of entries to return (default 20).
         limit: Option<u32>,
     },
+    /// Submit a match score / result event for the current player.
+    ///
+    /// **Server-side only.** The platform records the score, updates the
+    /// leaderboard, and may award bonus points per configured reward rules.
+    ///
+    /// ```rust
+    /// use magnetite_sdk::platform::points::{ClientPointsMessage, ScoreSubmission};
+    ///
+    /// let msg = ClientPointsMessage::SubmitScore(ScoreSubmission {
+    ///     match_id: "match-1".to_string(),
+    ///     game_id: "fps-starter".to_string(),
+    ///     score: 7_500,
+    ///     placement: Some(2),
+    ///     kills: Some(12),
+    ///     deaths: Some(4),
+    ///     assists: Some(3),
+    ///     duration_secs: Some(300),
+    ///     extra: None,
+    ///     idempotency_key: None,
+    /// });
+    /// let json = serde_json::to_string(&msg).unwrap();
+    /// let back: ClientPointsMessage = serde_json::from_str(&json).unwrap();
+    /// assert_eq!(msg, back);
+    /// ```
+    SubmitScore(ScoreSubmission),
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +357,19 @@ pub enum ServerPointsMessage {
     Ledger {
         /// Entries, newest first.
         entries: Vec<LedgerEntry>,
+    },
+    /// Match score was recorded and the leaderboard was updated.
+    ScoreSubmitted {
+        /// The match whose score was recorded.
+        match_id: String,
+        /// The player's final score as persisted.
+        score: u64,
+        /// Points awarded as a bonus for this match result (may be 0).
+        bonus_points: u64,
+        /// Running balance after the bonus (if any) was applied.
+        balance_after: u64,
+        /// The player's updated rank for the current season (if available).
+        season_rank: Option<u64>,
     },
     /// Insufficient balance for a spend request.
     InsufficientBalance {
@@ -411,10 +503,44 @@ impl PointsClient {
         ClientPointsMessage::GetLedger { limit }
     }
 
+    /// Build a [`ClientPointsMessage::SubmitScore`] message.
+    ///
+    /// This is the canonical way for server-side game logic to report a match
+    /// result.  The platform records the score, updates the seasonal
+    /// leaderboard, and may award bonus points per the configured reward rules.
+    ///
+    /// ```rust
+    /// use magnetite_sdk::platform::points::{
+    ///     ClientPointsMessage, PointsClient, PointsConfig, ScoreSubmission,
+    /// };
+    ///
+    /// let client = PointsClient::new(PointsConfig {
+    ///     user_id: "u-1".to_string(),
+    ///     auth_token: "tok".to_string(),
+    /// });
+    ///
+    /// let msg = client.submit_score_message(ScoreSubmission {
+    ///     match_id: "match-101".to_string(),
+    ///     game_id: "fps-starter".to_string(),
+    ///     score: 12_000,
+    ///     placement: Some(1),
+    ///     kills: Some(25),
+    ///     deaths: Some(2),
+    ///     assists: Some(7),
+    ///     duration_secs: Some(600),
+    ///     extra: None,
+    ///     idempotency_key: Some("match-101-p1".to_string()),
+    /// });
+    /// assert!(matches!(msg, ClientPointsMessage::SubmitScore(_)));
+    /// ```
+    pub fn submit_score_message(&self, submission: ScoreSubmission) -> ClientPointsMessage {
+        ClientPointsMessage::SubmitScore(submission)
+    }
+
     /// Process a [`ServerPointsMessage`] and update local state.
     ///
-    /// Updates [`PointsClient::cached_balance`] when a balance or awarded/spent
-    /// message is received.
+    /// Updates [`PointsClient::cached_balance`] when a balance, awarded/spent,
+    /// or score-submitted message is received.
     pub fn handle_server_message(&mut self, msg: ServerPointsMessage) {
         match &msg {
             ServerPointsMessage::Balance(b) => {
@@ -425,6 +551,9 @@ impl PointsClient {
             }
             ServerPointsMessage::Spent { entry } => {
                 self.cached_balance = Some(entry.balance_after);
+            }
+            ServerPointsMessage::ScoreSubmitted { balance_after, .. } => {
+                self.cached_balance = Some(*balance_after);
             }
             _ => {}
         }
@@ -507,6 +636,29 @@ mod tests {
         assert_eq!(entry, back);
     }
 
+    fn test_score_submission() -> ScoreSubmission {
+        ScoreSubmission {
+            match_id: "match-99".to_string(),
+            game_id: "fps-starter".to_string(),
+            score: 9_500,
+            placement: Some(1),
+            kills: Some(18),
+            deaths: Some(3),
+            assists: Some(5),
+            duration_secs: Some(480),
+            extra: None,
+            idempotency_key: Some("match-99-p1".to_string()),
+        }
+    }
+
+    #[test]
+    fn score_submission_serde() {
+        let sub = test_score_submission();
+        let json = serde_json::to_string(&sub).unwrap();
+        let back: ScoreSubmission = serde_json::from_str(&json).unwrap();
+        assert_eq!(sub, back);
+    }
+
     #[test]
     fn client_points_message_all_variants_serde() {
         let msgs: Vec<ClientPointsMessage> = vec![
@@ -523,6 +675,7 @@ mod tests {
             }),
             ClientPointsMessage::GetBalance,
             ClientPointsMessage::GetLedger { limit: Some(10) },
+            ClientPointsMessage::SubmitScore(test_score_submission()),
         ];
         for msg in &msgs {
             let json = serde_json::to_string(msg).unwrap();
@@ -547,6 +700,13 @@ mod tests {
                 lifetime_spent: 50,
             }),
             ServerPointsMessage::Ledger { entries: vec![] },
+            ServerPointsMessage::ScoreSubmitted {
+                match_id: "match-99".to_string(),
+                score: 9_500,
+                bonus_points: 250,
+                balance_after: 2_750,
+                season_rank: Some(3),
+            },
             ServerPointsMessage::InsufficientBalance {
                 current: 10,
                 requested: 100,
@@ -655,5 +815,57 @@ mod tests {
             client.get_ledger_message(Some(5)),
             ClientPointsMessage::GetLedger { limit: Some(5) }
         ));
+
+        // Score submission message.
+        let score_msg = client.submit_score_message(test_score_submission());
+        assert!(matches!(score_msg, ClientPointsMessage::SubmitScore(_)));
+    }
+
+    #[test]
+    fn client_balance_updated_on_score_submitted() {
+        let mut client = test_client();
+        client.handle_server_message(ServerPointsMessage::ScoreSubmitted {
+            match_id: "match-1".to_string(),
+            score: 5_000,
+            bonus_points: 500,
+            balance_after: 3_000,
+            season_rank: Some(10),
+        });
+        assert_eq!(client.cached_balance(), Some(3_000));
+    }
+
+    #[test]
+    fn submit_score_message_roundtrip() {
+        let client = test_client();
+        let sub = ScoreSubmission {
+            match_id: "match-xyz".to_string(),
+            game_id: "motorsport-starter".to_string(),
+            score: 15_000,
+            placement: Some(1),
+            kills: None,
+            deaths: None,
+            assists: None,
+            duration_secs: Some(180),
+            extra: Some(r#"{"lap_record_ms":62000}"#.to_string()),
+            idempotency_key: Some("match-xyz-result".to_string()),
+        };
+        let msg = client.submit_score_message(sub.clone());
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: ClientPointsMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, ClientPointsMessage::SubmitScore(ref s) if s == &sub));
+    }
+
+    #[test]
+    fn score_submitted_server_message_serde() {
+        let msg = ServerPointsMessage::ScoreSubmitted {
+            match_id: "match-77".to_string(),
+            score: 8_000,
+            bonus_points: 400,
+            balance_after: 4_400,
+            season_rank: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: ServerPointsMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, back);
     }
 }

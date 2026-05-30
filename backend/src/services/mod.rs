@@ -16,5 +16,6 @@ pub mod payout;
 pub mod points;
 pub mod presence;
 pub mod session;
+pub mod streaming;
 pub mod verification;
 pub mod wallet;

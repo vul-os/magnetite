@@ -169,11 +169,39 @@ export const api = {
   },
 
   streams: {
-    /** List active streams in a community. */
-    list: (communityId) => request(`/api/communities/${communityId}/streams`),
-    /** Start streaming in a channel. data: { channel_id, title? } */
+    /**
+     * List live streams.
+     * communityId = 'global' → platform-wide listing (/api/streams/live)
+     * communityId = specific id → community-scoped listing (/api/communities/:id/streams)
+     */
+    list: (communityId) =>
+      communityId === 'global'
+        ? request('/api/streams/live').catch(() => request('/api/streams'))
+        : request(`/api/communities/${communityId}/streams`),
+
+    /** Start streaming. Tries community-scoped endpoint first; falls back to /api/streams */
     goLive: (communityId, data) =>
-      request(`/api/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) }),
+      communityId && communityId !== 'global'
+        ? request(`/api/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) })
+        : request('/api/streams', { method: 'POST', body: JSON.stringify(data) }),
+
+    /** Stop / end a stream by id. */
+    end: (streamId) => request(`/api/streams/${streamId}`, { method: 'DELETE' }),
+
+    /**
+     * Get a watch token / HLS manifest URL for a stream.
+     * Returns { hls_url, watch_url, token? }
+     */
+    watch: (streamId) => request(`/api/streams/${streamId}/watch`),
+
+    /**
+     * Get the HLS playlist URL for embedding.
+     * Returns the URL as a string or { url } object.
+     */
+    hlsUrl: (streamId) => {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+      return `${base}/api/streams/${streamId}/hls/index.m3u8`;
+    },
   },
 
   // ── Wave 8: Points / Score Economy ───────────────────────────────────────

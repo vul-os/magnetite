@@ -147,10 +147,27 @@ export default function Streams() {
   }, []);
 
   // ── Watch stream ──────────────────────────────────────────────────────────────
-  const handleWatch = useCallback((stream) => {
+  const handleWatch = useCallback(async (stream) => {
     setWatching(stream);
     setShowGoLive(false);
     setChatMessages(makeMockChatMessages(stream.streamer));
+
+    // Try to resolve the real HLS/watch URL from the backend.
+    try {
+      const watchData = await api.streams.watch(stream.id).catch(() => null);
+      if (watchData?.hls_url || watchData?.watch_url) {
+        setWatching((prev) => prev
+          ? { ...prev, hlsUrl: watchData.hls_url ?? watchData.watch_url }
+          : prev
+        );
+      } else if (!stream.hlsUrl) {
+        // Derive an HLS URL from the backend convention.
+        const derivedUrl = api.streams.hlsUrl(stream.id);
+        setWatching((prev) => prev ? { ...prev, hlsUrl: derivedUrl } : prev);
+      }
+    } catch {
+      // Graceful — StreamPlayer shows a placeholder if hlsUrl is absent.
+    }
   }, []);
 
   const handleCloseWatch = useCallback(() => {

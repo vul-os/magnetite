@@ -8,6 +8,7 @@ import MemberList from '../components/comms/MemberList';
 import VoicePanel from '../components/comms/VoicePanel';
 import { useComms } from '../context/CommsContext';
 import { useCommunityMembers } from '../hooks/useCommunities';
+import { useAuth } from '../hooks/useAuth';
 import './Communities.css';
 
 // ─── Normalise API data shapes to what the visual components expect ───────────
@@ -43,9 +44,6 @@ function normaliseMember(m) {
     game: m.activity ?? m.game ?? null,
   };
 }
-
-// Current user id — in production pulled from auth; mock fallback here.
-const CURRENT_USER_ID = 'u-100';
 
 // ─── Typing indicator banner ──────────────────────────────────────────────────
 
@@ -142,6 +140,10 @@ function NoCommunities({ onCreate }) {
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function Communities() {
+  // Real user from auth; fall back to a stable guest ID if not logged in.
+  const { user } = useAuth();
+  const currentUserId = user?.id ? String(user.id) : 'guest';
+
   const {
     // Communities
     communities,
@@ -415,7 +417,7 @@ export default function Communities() {
 
               <MessageList
                 messages={messages}
-                currentUserId={CURRENT_USER_ID}
+                currentUserId={currentUserId}
                 loading={messagesLoading && messages.length === 0}
               />
 
@@ -456,7 +458,7 @@ export default function Communities() {
         {/* 4. Member list */}
         <MemberList
           members={members}
-          currentUserId={CURRENT_USER_ID}
+          currentUserId={currentUserId}
           presenceMap={presenceMap}
         />
       </main>
