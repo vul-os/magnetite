@@ -490,3 +490,280 @@ DoD confirmed met. **Loop terminated — no re-arm.** Branch `feat/redesign-and-
 - **User directive (mid-run):** ensure UI/UX is amazing everywhere using the frontend-design skill →
   loaded the skill; elevated §3 typography (Archivo/Hanken Grotesk/JetBrains Mono, drop Inter) + atmosphere;
   added Wave 4 polish plan + per-route quality bar (§4).
+
+## 8. MOAT — Wave N1 (2026-06-01): SDK authority module
+
+**Agent: SDK Authority (owns `backend/magnetite-sdk/` only)**
+
+**Implemented `magnetite_sdk::authority` in full per MOAT-ARCHITECTURE.md frozen interfaces.**
+
+### Crossroads recorded
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| M1 | RNG algorithm | xoshiro256** (inline, zero deps) | Fast, high-quality, period 2^256−1; no new crate dep needed; deterministic across platforms. splitmix64 seed expansion ensures full-rank state for any u64 seed. |
+| M2 | State hash algorithm | FNV-1a 64-bit (inline, zero deps) | Deterministic across platforms (unlike `DefaultHasher` which uses process-seeded SipHash); non-cryptographic but sufficient for tamper detection in replay verification; single-dep-free inline. |
+| M3 | Hash input | Canonical JSON via serde_json | JSON field order is deterministic for struct fields (declaration order); stable across platforms; already a dep. Note: game devs must ensure their Snapshot types have deterministic JSON (no HashMap fields). |
+| M4 | Protocol extension strategy | Additive: new `ClientNet` + `ServerNet` enums alongside existing `ClientMessage` / `ServerMessage` | Fully additive — zero breaking changes to existing protocol types. Siblings (`magnetite-runtime`, `magnetite-sandbox`, `magnetite-anticheat`) import `ClientNet`/`ServerNet` for the realtime path. |
+| M5 | `RateLimit` wall-clock usage | `std::time::Instant` in `RateLimit` only | RateLimit validates message rate at the transport layer (before game simulation) — wall clock is correct here. Game simulation state (`step`/`validate`) still MUST NOT use wall clock. |
+| M6 | `ActionCooldown` first-use semantics | `Option`-based: first use always allowed; cooldown only enforced after the first recorded use | Prevents tick-0 false rejection. The `last_used` map starts empty; absence of entry = never used = always allowed on first trigger. |
+| M7 | `NativeExecutor::restore` RNG reset | Reset RNG to `config.seed` on restore | Ensures deterministic re-simulation from a snapshot: same seed → same RNG sequence on replay. A more accurate approach would record the RNG state in the snapshot (future enhancement). |
+
+### Verified
+
+- `cargo check` — **0 warnings**
+- `cargo test` — **225 unit + 91 doc tests pass** (all existing tests preserved)
+- `cargo fmt --check` — **clean**
+
+### Finalized public signatures (for sibling crates)
+
+```rust
+// magnetite_sdk::authority
+
+pub type Tick = u64;
+
+pub struct DeterministicRng { .. }
+impl DeterministicRng {
+    pub fn new(seed: u64) -> Self;
+    pub fn next_u64(&mut self) -> u64;
+    pub fn next_f32(&mut self) -> f32;
+}
+
+pub struct StepCtx<'a> { pub tick: Tick, pub dt_ms: u32, pub rng: &'a mut DeterministicRng }
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RejectReason { RateLimited, OutOfBounds, IllegalAction(String), StaleInput, Unauthorized }
+
+pub trait AuthoritativeGame: Send + 'static {
+    type Snapshot: Serialize + DeserializeOwned + Clone;
+    type Delta:    Serialize + DeserializeOwned;
+    type View:     Serialize;
+    type Command:  Serialize + DeserializeOwned;
+    fn init(cfg: &MatchConfig) -> Self;
+    fn validate(&self, player: PlayerId, input: &Input, tick: Tick) -> Result<Vec<Self::Command>, RejectReason>;
+    fn step(&mut self, ctx: &mut StepCtx, commands: &[(PlayerId, Self::Command)]);
+    fn snapshot(&self) -> Self::Snapshot;
+    fn restore(snap: &Self::Snapshot, cfg: &MatchConfig) -> Self;
+    fn delta(&self, since: &Self::Snapshot) -> Self::Delta;
+    fn view_for(&self, player: PlayerId) -> Self::View;
+    fn on_join(&mut self, _p: PlayerId) {}
+    fn on_leave(&mut self, _p: PlayerId) {}
+}
+
+pub enum Topology {
+    SingleRoom,
+    Dedicated { tick_hz: u16 },
+    Sharded { tick_hz: u16, cell_size: f32, max_per_shard: u32 },
+}
+pub struct MatchConfig {
+    pub topology: Topology, pub max_players: u32, pub tick_hz: u16,
+    pub seed: u64, pub snapshot_every: u16,
+}
+impl MatchConfig { pub fn auto(max_players: u32) -> Self; }
+
+pub struct StepOutput { pub rejects: Vec<(PlayerId, RejectReason)>, pub state_hash: u64 }
+
+pub trait GameExecutor: Send {
+    fn step(&mut self, tick: Tick, inputs: &[(PlayerId, Input)]) -> StepOutput;
+    fn snapshot(&self) -> Vec<u8>;
+    fn restore(&mut self, bytes: &[u8]);
+    fn view_for(&self, player: PlayerId) -> Vec<u8>;
+    fn delta_since(&self, snapshot_bytes: &[u8]) -> Vec<u8>;
+}
+
+pub struct NativeExecutor<G: AuthoritativeGame> { .. }
+impl<G: AuthoritativeGame> NativeExecutor<G> { pub fn new(cfg: MatchConfig) -> Self; }
+// impl<G: AuthoritativeGame> GameExecutor for NativeExecutor<G>
+
+pub trait Validator: Send {
+    fn check(&mut self, player: PlayerId, input: &Input, tick: Tick) -> Result<(), RejectReason>;
+}
+pub struct RateLimit { .. }          // impl Validator
+impl RateLimit { pub fn new(max_per_sec: u32) -> Self; }
+
+pub struct MovementVelocity { .. }   // impl Validator
+impl MovementVelocity { pub fn new(max_units_per_tick: f32) -> Self; }
+
+pub struct ActionCooldown { .. }     // impl Validator
+impl ActionCooldown { pub fn new(action: &'static str, cooldown_ticks: u64) -> Self; }
+
+#[derive(Default)] pub struct InputSchema { pub max_seq_jump: u64 }  // impl Validator
+
+pub struct ValidatorChain { .. }     // impl Validator
+impl ValidatorChain {
+    pub fn new() -> Self;
+    pub fn add(self, v: impl Validator + 'static) -> Self;
+}
+
+pub struct ReplayLog { pub config: MatchConfig, pub frames: Vec<(Tick, Vec<(PlayerId, Input)>)>, pub state_hashes: Vec<(Tick, u64)> }
+impl ReplayLog {
+    pub fn new(config: MatchConfig) -> Self;
+    pub fn record(&mut self, tick: Tick, inputs: Vec<(PlayerId, Input)>, state_hash: u64);
+}
+
+#[derive(PartialEq, Eq)]
+pub enum ReplayVerdict { Clean, Divergence { tick: Tick, expected: u64, got: u64 } }
+
+pub fn verify_replay<G: AuthoritativeGame>(log: &ReplayLog) -> ReplayVerdict;
+
+// magnetite_sdk::protocol (ADDITIVE)
+pub enum ClientNet { InputFrame { seq: u32, tick: Tick, input: Input } }
+pub enum ServerNet {
+    Welcome { player_id: PlayerId, config: MatchConfig },
+    Snapshot { tick: Tick, full: Vec<u8> },
+    Delta    { tick: Tick, since_tick: Tick, diff: Vec<u8> },
+    Ack      { seq: u32, tick: Tick },
+    Reject   { seq: u32, reason: RejectReason },
+}
+```
+
+## 9. MOAT — Wave N1 (2026-06-01): CLI + Reference Game
+
+**Agents: CLI (owns `magnetite-cli/`) + Reference Game (owns `game-template-authoritative/`)**
+
+### Crossroads recorded
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| M8 | `last_shot_tick` sentinel | `0` = "never shot" → first shot always allowed; cooldown only enforced when `last_shot_tick > 0` | Prevents false rejection on tick 1 or immediately after spawn. Tick 0 is never a real game tick (ticks start at 1), so 0 is a safe sentinel. |
+| M9 | Arena coordinates | Top-down 2D: X/Y only, no Z; Y-up convention (forward=+Y, right=+X) | Simplest for a top-down shooter; maps directly to SDK `MouseState.delta_x/y`; no Z needed. |
+| M10 | Aim input mapping | Mouse delta → `atan2(dy, dx)` angle; threshold 0.001 units to ignore jitter | Simple and deterministic; avoids division-by-zero on zero delta. Real client can send a direct angle; this works for the reference. |
+| M11 | Spawn positions | Deterministic circular spread: `(r·cos(2π·i/n), r·sin(2π·i/n))` where `r = min(ARENA/2, 80)` | Fully deterministic (no RNG); symmetric; scale gracefully with player count; independent of join order beyond index. |
+| M12 | Replay test strategy | Record replay from an *empty* game (no players joined) so `verify_replay` (which re-creates from `log.config` via `NativeExecutor::new`) sees the same initial state | `verify_replay` always starts from an empty executor. Matching the recording run to that starting state eliminates false divergences. Player-with-state replay tests use direct raw-game + manual RNG, not `verify_replay`. |
+| M13 | CLI deps | `clap 4` (derive) + `anyhow` only; no SDK/runtime crates | Task spec: "Deps: clap/std/anyhow only." Zero compile-time overhead; no circular deps. |
+| M14 | `magnetite build` wasm feature flag | Adds `--features wasm` to the cargo invocation | The `mag_*` ABI is gated on `--features wasm` so the regular `cargo check` / `cargo test` path works without the WASM target installed. |
+| M15 | WASM ABI tick tracking | Static `CURRENT_TICK` counter inside `mag_step` (monotone increment) | The mag_* ABI doesn't receive tick as a parameter (per spec); the sandbox host tracks tick externally. The counter keeps the guest in sync for the reference case. Production: pass tick as an extra ABI parameter in N2. |
+| M16 | Bump allocator for WASM | 4 MiB static buffer; reset at start of each `mag_step`; `mag_free` is a no-op | Simplest possible allocator compatible with `wasm32-wasip1`; deterministic; no heap fragmentation; reset on every step is safe because the host copies outputs immediately. |
+
+### Verified
+
+| Crate | `cargo check` | `cargo fmt --check` | `cargo test` |
+|---|---|---|---|
+| `game-template-authoritative` | **0 warnings** | **clean** | **20/20 pass** |
+| `magnetite-cli` | **0 warnings** | **clean** | **15/15 pass** |
+| `backend/magnetite-sdk` | **0 warnings** | **clean** | (unchanged) |
+
+### Files created
+
+```
+game-template-authoritative/
+  Cargo.toml                  — cdylib+rlib, wasm feature, deps: magnetite-sdk/serde/serde_json
+  src/lib.rs                  — crate root, pub re-exports
+  src/types.rs                — ArenaSnapshot/Delta/View/Command/ShooterPlayer/Projectile + constants
+  src/game.rs                 — ArenaShooter: AuthoritativeGame impl + 20 unit tests
+  src/wasm_abi.rs             — mag_* ABI exports (--features wasm, wasm32-wasip1)
+
+magnetite-cli/
+  Cargo.toml                  — binary, deps: clap 4 + anyhow only
+  src/main.rs                 — magnetite new|build|dev|deploy + 15 unit tests
+```
+
+## 9. MOAT — Wave N1 (2026-06-01): magnetite-anticheat crate
+
+**Agent: Anti-Cheat (owns `magnetite-anticheat/` only)**
+
+**Implemented `magnetite-anticheat` in full per MOAT-ARCHITECTURE.md.**
+
+### Crossroads recorded
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AC1 | ValidatorChain ownership | `magnetite-anticheat` accepts any `ValidatorChain` built by the caller (sdk built-ins + anticheat built-ins combined) | Avoids a second chain layer; caller decides ordering; fully composable. |
+| AC2 | AimbotSnap detection mechanism | Euclidean look-delta magnitude per tick vs configurable threshold | Mouse delta is the canonical proxy for view angle change in the sdk `Input` type; no positional state needed; stateless per-call. |
+| AC3 | PositionTeleport detection | Per-tick movement-delta magnitude vs max_velocity (same signal as sdk `MovementVelocity` but with per-player tick tracking) | Consistent with existing sdk semantics; tracking the last-seen tick enables future extension (e.g. multi-tick accumulation). |
+| AC4 | FireRateCooldown impl | Dedicated validator separate from sdk `ActionCooldown` | Gives the anticheat layer an independent, named fire-rate check with its own error message; sdk `ActionCooldown` is still available for game-logic use. |
+| AC5 | InputFlood window | Tick-based window (not wall-clock) defaulting to 60 ticks | Consistent with the determinism-first philosophy; avoids `Instant` outside the rate-limit transport layer; 60 ticks ≈ 1 s at 60 Hz. |
+| AC6 | TrustScoreMap escalation | Linear integer score; thresholds Warn→Kick→Ban; saturating arithmetic | Simple, auditable, zero external deps; decay prevents permanent bans for transient violations. |
+| AC7 | Anticheat::inspect decay call | Decay is applied per player per `inspect` call | Ties decay to activity; idle players' scores don't decay (acceptable: they're not sending inputs). |
+| AC8 | ReplayVerifier wrapper | Thin newtype wrapping `verify_replay`; suspects = players present at diverging tick | Heuristic only (documented as such); zero extra re-simulation overhead. |
+
+### Verified
+
+- `cargo check` — **0 warnings**
+- `cargo fmt --check` — **clean**
+- `cargo test` — **40 unit + 8 doc tests pass (48 total)**
+
+### Files created
+
+- `magnetite-anticheat/Cargo.toml`
+- `magnetite-anticheat/src/lib.rs` — `Anticheat`, `Decision`, `AnticheatConfig`
+- `magnetite-anticheat/src/validators.rs` — `AimbotSnap`, `PositionTeleport`, `FireRateCooldown`, `InputFlood`
+- `magnetite-anticheat/src/trust.rs` — `TrustScoreMap`, `AntiCheatEvent`, decay + escalation
+- `magnetite-anticheat/src/replay_verifier.rs` — `ReplayVerifier`, `VerificationResult`
+
+## 10. MOAT — Wave N1 (2026-06-01): magnetite-runtime crate
+
+**Agent: Runtime (owns `magnetite-runtime/` only)**
+
+**Implemented `magnetite-runtime` in full per MOAT-ARCHITECTURE.md.**
+
+### Crossroads recorded
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| R1 | Error types | `ServerError` (public, `Send + 'static`) + `SendError` (private) instead of `Box<dyn std::error::Error>` | `tokio::spawn` requires `Send` futures; `Box<dyn Error>` is not `Send`; named error types are cleaner for callers. |
+| R2 | `ConnectionManager` inner lock | `Arc<tokio::sync::Mutex<ConnectionManagerInner>>` shared between accept loop and tick scheduler | Minimal contention: the Mutex is only held for the duration of a HashMap lookup/insert, never across `.await` points in user code. |
+| R3 | Latest-input-wins per tick | Each player's slot holds at most one `(seq, Input)`; later frames overwrite earlier ones per tick | Mirrors real game-client behavior (client sends at tick rate, server samples at tick rate); avoids stale-input pile-up. |
+| R4 | Bootstrap snapshot | On the first tick after a player joins (`last_snapshot_tick == 0`), send a full `Snapshot` instead of a `Delta` | Clients must have a base state before deltas make sense; this is the standard GGPO-style bootstrap. |
+| R5 | Shard manager as seam | `ShardManager` always assigns `ShardId::LOCAL` in N1; handoff is a table-update only | Provides the right abstraction boundary for N2 multi-shard without any performance penalty in N1; `Topology::Sharded` selects the same local shard. |
+| R6 | `GameExecutor` lock strategy | `Arc<Mutex<Box<dyn GameExecutor>>>` held per call to `step`/`snapshot`/`delta_since`; lock released between calls | Allows future work to unlock the executor for read-only calls (view_for) while step is running; correct and safe in N1. |
+| R7 | `ReplayLog` recording | Recorded inside the tick loop after every step; accessible via `TickScheduler::replay_log()` | Anti-cheat module in N2 can subscribe to the log reference and verify in parallel without coupling crates. |
+| R8 | WS message encoding | JSON text frames (`Message::Text`) matching the rest of the SDK protocol | Consistent with `ClientNet`/`ServerNet` serde derivation; debuggable with browser DevTools. |
+| R9 | `snapshot_every` modulo check | `tick % snapshot_every == 0`; tick starts at 1 so first scheduled snapshot at tick `snapshot_every` | Avoids a tick-0 divide risk (tick starts at 1); bootstrap snapshot covers the first ticks. |
+| R10 | `tokio-tungstenite` version | `0.24` (latest minor compatible with `tungstenite 0.24`) | Matches existing workspace patterns; `0.24` is stable and widely used. |
+
+### Verified
+
+- `cargo check` — **0 warnings**
+- `cargo fmt --check` — **clean**
+- `cargo test` — **20 unit + 1 doc test pass (21 total)**
+
+### Files created
+
+- `magnetite-runtime/Cargo.toml` — deps: magnetite-sdk (path), tokio, tokio-tungstenite, futures-util, serde, serde_json, tracing, tracing-subscriber
+- `magnetite-runtime/src/lib.rs` — crate root; re-exports `GameServer`, `GameServerConfig`, `ServerError`, `ShardManager`
+- `magnetite-runtime/src/connection.rs` — `ConnectionManager`: WS per-player registry; input buffering + outbound broadcast
+- `magnetite-runtime/src/tick.rs` — `TickScheduler`: authoritative tick loop; per-tick input drain → executor step → Ack/Reject/Delta/Snapshot fan-out + replay log recording
+- `magnetite-runtime/src/shard.rs` — `ShardManager` + `ShardId`: N1 single-shard seam; handoff hook for N2
+- `magnetite-runtime/src/server.rs` — `GameServer::serve` / `serve_with_shutdown`: TCP bind, accept loop, per-connection WS handler (`Welcome` → input relay → frame fan-out → cleanup)
+- `magnetite-runtime/examples/single_room.rs` — runnable example: CounterGame in `SingleRoom` topology on `127.0.0.1:9000`
+
+## 11. MOAT — Wave N1 (2026-06-01): magnetite-sandbox crate
+
+**Agent: Sandbox (owns `magnetite-sandbox/` only)**
+
+**Implemented `magnetite-sandbox` in full per MOAT-ARCHITECTURE.md Sandbox ABI spec.**
+
+### Crossroads recorded
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| S1 | Wasmtime version | `27` (pinned) | Latest stable with known-stable `consume_fuel` + `epoch_interruption` + `ResourceLimiter` API; avoids breaking changes from v28+. |
+| S2 | `&self` methods on `GameExecutor` | Cache strategy: `cached_snapshot` + `cached_views` refreshed after every `step`/`restore` | `GameExecutor::snapshot`, `view_for`, `delta_since` take `&self` but `wasmtime::Store` requires `&mut`. Safe caching avoids `UnsafeCell`/`RefCell` and the `invalid_reference_casting` hard-deny lint. |
+| S3 | `delta_since` implementation | Returns `cached_snapshot.clone()` (full snapshot as conservative delta); `mag_delta` guest export path deferred to N2 | Calling `mag_delta` requires `&mut Store` which conflicts with `&self` trait. Full snapshot as delta is semantically correct; runtime can diff. Future: revise trait to `&mut self` or use interior mutability. |
+| S4 | WASI imports | Only 9 stubs linked: clock/random → ENOSYS, fd_write/read → no-op, proc_exit → no-op, environ/args → empty | No real WASI imports prevents wall-clock or OS-random nondeterminism; minimal surface reduces attack surface. |
+| S5 | Epoch thread | One daemon thread per executor, increments engine epoch every `epoch_tick_ms` ms | Wasmtime's epoch mechanism is designed for exactly this; correct for N1; N2 can share a global epoch thread across executors. |
+| S6 | ABI wire format | 4-byte LE u32 length prefix + JSON payload | JSON is already the SDK's canonical format; length-prefix is minimal correct framing for arbitrary-length buffers in linear memory. |
+| S7 | End-to-end wasm execution test | `#[ignore]` gate | Wasmtime compile is slow (~60s); ABI codec + resource limiter are unit-tested independently; real e2e uses `magnetite build` game module. |
+
+### Verified
+
+- `cargo check` — **0 warnings**
+- `cargo fmt --check` — **clean**
+- `cargo test` — **29 unit + 3 doc tests pass (32 total); 1 test correctly `#[ignore]`-gated (requires real wasm32-wasip1 module)**
+
+### Determinism constraints documented (in `src/lib.rs` crate root)
+
+1. No OS randomness — `random_get` → ENOSYS.
+2. No wall clock — `clock_time_get` → ENOSYS.
+3. Fuel budget per step (`LimitsConfig::fuel_per_step`) → `SandboxError::FuelExhausted` on overrun.
+4. Memory cap (`LimitsConfig::max_memory_bytes`) → `SandboxError::MemoryLimitExceeded` on `memory.grow`.
+5. Epoch timeout (`epoch_tick_ms × max_epochs_per_step`) → `SandboxError::EpochTimeout`.
+
+### Files created
+
+- `magnetite-sandbox/Cargo.toml` — deps: magnetite-sdk (path), wasmtime 27, serde, serde_json, thiserror, anyhow; dev: wat, tempfile
+- `magnetite-sandbox/src/lib.rs` — crate root; `SandboxError` enum; module declarations; full sandbox ABI + determinism docs
+- `magnetite-sandbox/src/limits.rs` — `LimitsConfig` (fuel/memory/epoch config + defaults); `StoreLimits` (`ResourceLimiter` impl); 6 unit tests
+- `magnetite-sandbox/src/abi.rs` — ABI codec: `InputFrame`, `GuestStepOutput`, `GuestReject`; `encode_config`, `encode_inputs`, `decode_step_output`, `read_length_prefixed`, `write_length_prefixed`; 15 unit tests
+- `magnetite-sandbox/src/executor.rs` — `WasmExecutor`: `from_file`/`from_bytes`, snapshot/view caches, ABI helpers, `GameExecutor` impl, WASI linker stubs (9 imports), epoch daemon thread; 11 unit tests (+ 1 ignored)

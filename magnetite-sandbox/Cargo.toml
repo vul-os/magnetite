@@ -1,0 +1,20 @@
+[package]
+name = "magnetite-sandbox"
+version = "0.1.0"
+edition = "2021"
+description = "Wasmtime sandbox host for Magnetite game modules — implements GameExecutor as WasmExecutor."
+license = "MIT"
+keywords = ["game", "wasm", "sandbox", "wasmtime", "magnetite"]
+categories = ["game-engines", "wasm"]
+
+[dependencies]
+magnetite-sdk = { path = "../backend/magnetite-sdk" }
+wasmtime = "27"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+
+[dev-dependencies]
+wat = "1"
+tempfile = "3"

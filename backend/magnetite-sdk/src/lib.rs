@@ -111,6 +111,7 @@
 //!
 //! MIT — see the repository root.
 
+pub mod authority;
 pub mod game;
 pub mod graphics;
 pub mod input;
@@ -120,6 +121,11 @@ pub mod protocol;
 pub mod state;
 
 // Convenience re-exports of the most commonly used types.
+pub use authority::{
+    verify_replay, ActionCooldown, AuthoritativeGame, DeterministicRng, GameExecutor, InputSchema,
+    MatchConfig, MovementVelocity, NativeExecutor, RateLimit, RejectReason, ReplayLog,
+    ReplayVerdict, StepCtx, StepOutput, Tick, Topology, Validator, ValidatorChain,
+};
 pub use game::{GameLogic, GameMetadata};
 pub use graphics::{EngineCapability, GraphicsTier, RenderConfig, RenderConfigBuilder};
 pub use input::gamepad::{
@@ -153,7 +159,9 @@ pub use platform::streaming::{
     ClientStreamMessage, ExternalRtmpTarget, GoLiveRequest, ServerStreamMessage, StreamClient,
     StreamConfig, StreamErrorCode, StreamEvent, StreamId, StreamInfo, StreamStatus,
 };
-pub use protocol::{ClientMessage, Envelope, ErrorCode, ServerMessage, PROTOCOL_VERSION};
+pub use protocol::{
+    ClientMessage, ClientNet, Envelope, ErrorCode, ServerMessage, ServerNet, PROTOCOL_VERSION,
+};
 pub use state::{GameState, PlayerId, PlayerState, Position, Rotation, Snapshot};
 
 // ---------------------------------------------------------------------------

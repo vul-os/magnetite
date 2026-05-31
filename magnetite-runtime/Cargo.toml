@@ -1,0 +1,21 @@
+[package]
+name = "magnetite-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Authoritative game-server host for Magnetite — tick loop, WS connection manager, interest-filtered delta broadcast, topology implementations."
+license = "MIT"
+keywords = ["game", "multiplayer", "authoritative", "server", "magnetite"]
+categories = ["game-engines", "network-programming"]
+
+[dependencies]
+magnetite-sdk = { path = "../backend/magnetite-sdk" }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.24", features = [] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

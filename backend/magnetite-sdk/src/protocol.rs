@@ -222,6 +222,112 @@ pub enum ErrorCode {
     BadRequest,
 }
 
+// ---------------------------------------------------------------------------
+// Authoritative netcode frames  (MOAT — additive, does not break existing API)
+// ---------------------------------------------------------------------------
+
+use crate::authority::{MatchConfig, RejectReason, Tick};
+
+/// Messages from the game client to the authoritative server.
+///
+/// These frames are the **low-latency realtime path** layered on top of the
+/// existing handshake messages in [`ClientMessage`]. The runtime sends and
+/// receives these at the tick rate; the existing `Connect` / `Disconnect`
+/// messages in [`ClientMessage`] remain the control-plane path.
+///
+/// # Wire encoding
+///
+/// Tagged with `"type"` (snake_case) — same convention as [`ClientMessage`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ClientNet {
+    /// One tick's worth of authoritative input.
+    ///
+    /// `seq` is a monotonically increasing client-local counter used by the
+    /// server to match `Ack` / `Reject` responses and by the client to drive
+    /// [`crate::networking::PredictionBuffer`] reconciliation.
+    InputFrame {
+        /// Client-local sequence number (monotonically increasing).
+        seq: u32,
+        /// The authoritative tick this input targets.
+        tick: Tick,
+        /// The raw input frame.
+        input: Input,
+    },
+}
+
+/// Messages from the authoritative server to game clients.
+///
+/// Sent every tick (or on the snapshot cadence for full snapshots).
+/// The client uses these to drive [`crate::networking::PredictionBuffer`]
+/// reconciliation and interest-filtered rendering.
+///
+/// # Wire encoding
+///
+/// Tagged with `"type"` (snake_case).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ServerNet {
+    /// Sent once when a client successfully joins a match.
+    ///
+    /// Contains the player's authoritative id and the full match configuration
+    /// so the client can initialise its local prediction state.
+    Welcome {
+        /// The authoritative player id assigned to this client.
+        player_id: PlayerId,
+        /// Full match configuration (topology, tick rate, seed, …).
+        config: MatchConfig,
+    },
+
+    /// A full serialised snapshot of the authoritative game state.
+    ///
+    /// Broadcast every [`MatchConfig::snapshot_every`] ticks. Clients use this
+    /// as a rollback point for prediction reconciliation.
+    Snapshot {
+        /// The tick this snapshot was captured at.
+        tick: Tick,
+        /// Canonical serialisation of the game snapshot (opaque bytes —
+        /// the format is determined by [`crate::authority::AuthoritativeGame::Snapshot`]).
+        full: Vec<u8>,
+    },
+
+    /// A compact interest-filtered delta for this player.
+    ///
+    /// Sent every tick. The client applies the delta on top of the last
+    /// acknowledged snapshot. The format is game-defined (JSON by default).
+    Delta {
+        /// The current authoritative tick.
+        tick: Tick,
+        /// The tick the delta is relative to.
+        since_tick: Tick,
+        /// Serialised delta bytes (game-specific format).
+        diff: Vec<u8>,
+    },
+
+    /// Acknowledgement: the server processed the client's input at `seq` and
+    /// it resulted in authoritative tick `tick`.
+    ///
+    /// The client discards all prediction frames with sequence ≤ `seq` from
+    /// [`crate::networking::PredictionBuffer`].
+    Ack {
+        /// The client-local sequence number that was processed.
+        seq: u32,
+        /// The authoritative tick the input contributed to.
+        tick: Tick,
+    },
+
+    /// The server rejected the client's input at `seq`.
+    ///
+    /// The client should discard the corresponding prediction frame and
+    /// reconcile on the next snapshot.
+    Reject {
+        /// The client-local sequence number that was rejected.
+        seq: u32,
+        /// Why the input was rejected.
+        reason: RejectReason,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
