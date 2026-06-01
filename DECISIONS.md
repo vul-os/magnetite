@@ -1138,3 +1138,32 @@ Commits: decisions `6763c21` → core `a1a3d0a` → cleanup `d2782c6`.
 descriptive comment); frontend build clean, lint 0 errors, 157 tests; `subscription_tiers.price_usdc` left as
 an internal column name (value is USD; renaming would break the frontend that reads it). Bucket D now: live
 `WISE_API_TOKEN` + Paystack keys (code real, honest 502 without them).
+
+---
+
+## §7b — AUDIT FIX + GAME-DEV PROGRAM (2026-06-01)
+
+Audit (AUDIT.md): 16 critical, 36 high. Fix program + the user's "develop games in Magnetite" request:
+- **AX1 — Wiring + auth/payment security:** client.js `/api`→`/api/v1` prefix shim + all REST path/body fixes;
+  WS `?token=` + snake_case frame tags + room/lobby params; backend route gaps (wishlist/search/contact/
+  subscriptions/profile-by-username/stores/voice/streams); auth security (enforce TOTP + email-verify AT LOGIN,
+  encrypt TOTP secret, refresh-token DoS); resource integrity (validate deposit vs Paystack amount, deposit
+  idempotency/no-replay, IDOR ownership on games PUT/DELETE, points/history admin gate, webhook auth +
+  constant-time HMAC, fix admin_middleware); frontend security (CSP headers, OAuth state + open-redirect,
+  sanitize user-rendered content).
+- **AX2 — Missing features:** subscription upgrade/downgrade/proration; real-time notification WS delivery;
+  review-report moderation admin surface; leaderboard seasons wired to points/seasons; friend pending/incoming
+  requests + cancel; Wise IBAN payouts; full-text search + genre/tag filter; enforce email verification.
+- **GDS — GAME DEV IN MAGNETITE (new feature track):** (1) **magnetite-web-client** — a NEW lightweight JS/TS
+  canvas client speaking the authoritative ServerNet/ClientNet protocol (connect, send InputFrame, apply
+  Snapshot/Delta, reconcile on Ack, render the View) so Magnetite games are PLAYABLE + TESTABLE in a browser
+  tab (closes the audit's "no JS client for the moat protocol" gap — the player half of the moat). (2) **Web
+  Game Studio** — dashboard flow: create project (pick template tier) → scaffold (backend returns starter +
+  `magnetite new` instructions / git template) → connect repo → build (distribution/github trigger) → view
+  build logs → version/promote/rollback → **Preview/Play in browser** via the web client → publish. (3)
+  scaffold + template-gallery backend endpoint; in-app SDK quickstart.
+  Decision: web client is canvas/2D + protocol-faithful (not Bevy) for a light browser footprint; the Rust
+  Bevy client (game-client-bevy) remains the native/advanced path. Local preview connects to a `magnetite dev`
+  or a provisioned runtime instance via the play manifest.
+Each wave: ≤5 Sonnet agents, strictly disjoint files (ONE owns backend main.rs/mod.rs/config.rs; ONE runs the
+frontend build). Verify green after each; commit; loop until critical/high fixed + game-dev shipped.
