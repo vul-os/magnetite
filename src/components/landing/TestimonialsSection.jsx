@@ -21,11 +21,11 @@ const testimonials = [
   },
   {
     quote:
-      'USDC payouts every week. No payment processors, no chargebacks, no waiting 60 days. It\'s the financial infrastructure I always wished existed for game developers.',
+      'Wise payouts every week, straight to my bank account. No chargebacks, no waiting 60 days. It\'s the financial infrastructure I always wished existed for game developers.',
     name: 'Yuki Tanaka',
     role: 'Solo Developer',
     avatar: 'YT',
-    tech: 'USDC Payouts',
+    tech: 'Wise Payouts',
   },
   {
     quote:

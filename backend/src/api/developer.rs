@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::error::{AppError, Result};
 use crate::services::payout::PayoutService;
+use crate::services::wise::{RecipientDetails, WiseClient};
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeveloperRequest {
@@ -89,8 +90,6 @@ pub struct PayoutRequest {
 #[derive(Debug, Deserialize)]
 pub struct CreatePayoutRequest {
     pub amount: Decimal,
-    /// USDC/ETH destination address for Circle disbursement. Required.
-    pub destination: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -128,6 +127,45 @@ pub struct RevenueBreakdown {
     pub developer_earnings: Decimal,
     pub session_count: i64,
 }
+
+// ---------------------------------------------------------------------------
+// Wise recipient request/response types
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/developer/wise-recipient body.
+#[derive(Debug, Deserialize)]
+pub struct CreateWiseRecipientRequest {
+    pub account_holder_name: String,
+    pub currency: String,
+    pub country: String,
+    /// "checking" or "savings" — for ACH bank accounts.
+    #[serde(default)]
+    pub account_type: Option<String>,
+    /// US ABA routing number — for ACH bank accounts.
+    #[serde(default)]
+    pub routing_number: Option<String>,
+    /// Bank account number — for ACH bank accounts.
+    #[serde(default)]
+    pub account_number: Option<String>,
+    /// Email address — for email/PayPal payouts.
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
+/// Stored Wise recipient row returned to clients (no sensitive bank details).
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct WiseRecipientRow {
+    pub id: Uuid,
+    pub developer_id: Uuid,
+    pub wise_recipient_id: String,
+    pub currency: String,
+    pub account_holder_name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
 
 pub async fn register_developer(
     State(pool): State<PgPool>,
@@ -344,6 +382,8 @@ pub async fn get_earnings_summary(
     }))
 }
 
+/// POST /api/v1/developer/payouts — insert a payout request row.
+/// The actual Wise disbursement is handled by the spawned payout job in main.rs.
 pub async fn request_payout(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
@@ -353,19 +393,24 @@ pub async fn request_payout(
         return Err(AppError::Validation("Amount must be positive".to_string()));
     }
 
-    // Require a destination address for the USDC transfer.
-    let destination = payload.destination.as_deref().unwrap_or("").trim();
-    if destination.is_empty() {
+    // Require the developer to have registered a Wise recipient before requesting a payout.
+    let has_recipient: Option<(i64,)> =
+        sqlx::query_as("SELECT COUNT(*) FROM wise_recipients WHERE developer_id = $1")
+            .bind(user_id)
+            .fetch_optional(&pool)
+            .await?;
+
+    let count = has_recipient.map(|(c,)| c).unwrap_or(0);
+    if count == 0 {
         return Err(AppError::Validation(
-            "destination (USDC/ETH address) is required for payouts".to_string(),
+            "Please register a Wise payout recipient before requesting a payout".to_string(),
         ));
     }
 
-    // Use PayoutService which validates balance, inserts the DB record, and calls
-    // the real Circle disbursement path (or returns ProviderUnconfigured if unset).
     let payout_svc = PayoutService::new(pool.clone());
+    // Use user_id as the destination placeholder; the real Wise recipient id is looked up by the job.
     let payout_req = payout_svc
-        .request_payout(user_id, payload.amount, destination)
+        .request_payout(user_id, payload.amount, &user_id.to_string())
         .await?;
 
     Ok(Json(PayoutRequest {
@@ -498,6 +543,114 @@ pub async fn get_game_analytics(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Wise recipient handlers
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/developer/wise-recipient
+/// Register (or update) the developer's Wise payout recipient. Calls Wise API to create
+/// the recipient, then stores the Wise-assigned id alongside the non-sensitive details.
+pub async fn create_wise_recipient(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<CreateWiseRecipientRequest>,
+) -> Result<Json<WiseRecipientRow>> {
+    if payload.account_holder_name.trim().is_empty() {
+        return Err(AppError::Validation(
+            "account_holder_name is required".to_string(),
+        ));
+    }
+    if payload.currency.trim().is_empty() {
+        return Err(AppError::Validation("currency is required".to_string()));
+    }
+
+    let details = RecipientDetails {
+        account_holder_name: payload.account_holder_name.clone(),
+        country: payload.country.clone(),
+        currency: payload.currency.clone(),
+        account_type: payload.account_type.clone(),
+        routing_number: payload.routing_number.clone(),
+        account_number: payload.account_number.clone(),
+        email: payload.email.clone(),
+    };
+
+    let wise = WiseClient::from_env();
+    let wise_recipient_id = wise.create_recipient(&details).await?;
+
+    // Store the details as JSONB (sanitised — no raw account numbers returned to clients).
+    let detail_json = serde_json::json!({
+        "country": payload.country,
+        "account_type": payload.account_type,
+        "has_routing_number": payload.routing_number.is_some(),
+        "has_account_number": payload.account_number.is_some(),
+        "email": payload.email,
+    });
+
+    let row = sqlx::query_as::<_, WiseRecipientRow>(
+        r#"
+        INSERT INTO wise_recipients (id, developer_id, wise_recipient_id, currency, account_holder_name, detail, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING id, developer_id, wise_recipient_id, currency, account_holder_name, created_at
+        "#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(user_id)
+    .bind(&wise_recipient_id)
+    .bind(&payload.currency)
+    .bind(&payload.account_holder_name)
+    .bind(&detail_json)
+    .fetch_one(&pool)
+    .await?;
+
+    Ok(Json(row))
+}
+
+/// GET /api/v1/developer/wise-recipient
+/// Return the current (most recently registered) Wise recipient for this developer.
+pub async fn get_wise_recipient(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<Option<WiseRecipientRow>>> {
+    let row = sqlx::query_as::<_, WiseRecipientRow>(
+        r#"
+        SELECT id, developer_id, wise_recipient_id, currency, account_holder_name, created_at
+        FROM wise_recipients
+        WHERE developer_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?;
+
+    Ok(Json(row))
+}
+
+/// DELETE /api/v1/developer/wise-recipient
+/// Remove the developer's current Wise recipient (all stored rows for this developer).
+pub async fn delete_wise_recipient(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let result = sqlx::query("DELETE FROM wise_recipients WHERE developer_id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound(
+            "No Wise recipient found for this developer".to_string(),
+        ));
+    }
+
+    Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route(
@@ -559,6 +712,28 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/games/:id/players",
             get(get_game_analytics).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // Wise recipient management
+        .route(
+            "/wise-recipient",
+            post(create_wise_recipient).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/wise-recipient",
+            get(get_wise_recipient).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/wise-recipient",
+            delete(delete_wise_recipient).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

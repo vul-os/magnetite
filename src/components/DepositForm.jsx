@@ -13,8 +13,6 @@ const SUBSCRIPTION_PLANS = [
 
 export default function DepositForm({ onSuccess, onError }) {
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('paystack');
-  const [walletAddress] = useState('0x1234...5678');
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState('deposit');
@@ -27,7 +25,7 @@ export default function DepositForm({ onSuccess, onError }) {
       const handler = window.PaystackPop && window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         amount: parseFloat(amount) * 100,
-        currency: 'ZAR',
+        currency: 'USD',
         email: 'user@example.com',
         callback: (response) => {
           setStatus('success');
@@ -38,28 +36,20 @@ export default function DepositForm({ onSuccess, onError }) {
           setIsProcessing(false);
         },
       });
-      if (handler) handler.openIframe();
+      if (handler) {
+        handler.openIframe();
+      } else {
+        // Fallback: call the backend deposit endpoint directly
+        await api.wallet.deposit({ amount: parseFloat(amount), method: 'paystack' });
+        setStatus('success');
+        onSuccess?.({ reference: `PAY-${Date.now()}` });
+        setAmount('');
+        setTimeout(() => setStatus(null), 3000);
+      }
     } catch (err) {
       setStatus('error');
       onError?.(err);
       setTimeout(() => setStatus(null), 3000);
-    }
-    setIsProcessing(false);
-  };
-
-  const handleDirectTransfer = async () => {
-    if (!amount || parseFloat(amount) <= 0) return;
-
-    setIsProcessing(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setStatus('success');
-      onSuccess?.({ reference: `TX-${Date.now()}` });
-      setAmount('');
-      setTimeout(() => setStatus(null), 3000);
-    } catch (err) {
-      setStatus('error');
-      onError?.(err);
     }
     setIsProcessing(false);
   };
@@ -81,11 +71,7 @@ export default function DepositForm({ onSuccess, onError }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (paymentMethod === 'paystack') {
-      handlePaystackPayment();
-    } else {
-      handleDirectTransfer();
-    }
+    handlePaystackPayment();
   };
 
   return (
@@ -108,7 +94,7 @@ export default function DepositForm({ onSuccess, onError }) {
       {mode === 'deposit' ? (
         <form onSubmit={handleSubmit} className="deposit-form">
           <Input
-            label="Amount (USDC)"
+            label="Amount (USD)"
             type="number"
             placeholder="0.00"
             value={amount}
@@ -120,45 +106,16 @@ export default function DepositForm({ onSuccess, onError }) {
           <div className="payment-methods">
             <label className="payment-method-label">Payment Method</label>
             <div className="payment-method-options">
-              <button
-                type="button"
-                className={`payment-method-option ${paymentMethod === 'paystack' ? 'active' : ''}`}
-                onClick={() => setPaymentMethod('paystack')}
-              >
-                <span className="payment-method-icon">₦</span>
-                <span>Paystack (ZAR)</span>
-              </button>
-              <button
-                type="button"
-                className={`payment-method-option ${paymentMethod === 'transfer' ? 'active' : ''}`}
-                onClick={() => setPaymentMethod('transfer')}
-              >
-                <span className="payment-method-icon">◎</span>
-                <span>Direct Transfer</span>
-              </button>
+              <div className="payment-method-option active" aria-current="true">
+                <span className="payment-method-icon">🏦</span>
+                <span>Paystack (card / bank)</span>
+              </div>
             </div>
           </div>
 
-          {paymentMethod === 'transfer' && (
-            <div className="wallet-address-display">
-              <label className="input-label">USDC Wallet Address</label>
-              <div className="wallet-address-box">
-                <code>{walletAddress}</code>
-                <button
-                  type="button"
-                  className="copy-button"
-                  onClick={() => navigator.clipboard.writeText(walletAddress)}
-                >
-                  Copy
-                </button>
-              </div>
-              <span className="input-helper">Send USDC to this address. Deposits are processed within 24 hours.</span>
-            </div>
-          )}
-
           {status === 'success' && (
             <div className="form-status success">
-              {paymentMethod === 'paystack' ? 'Payment initiated! Check your email for confirmation.' : 'Transfer initiated! Your balance will be updated upon confirmation.'}
+              Payment initiated! Check your email for confirmation.
             </div>
           )}
 
@@ -176,7 +133,7 @@ export default function DepositForm({ onSuccess, onError }) {
             disabled={!amount || parseFloat(amount) <= 0}
             className="deposit-submit-btn"
           >
-            {isProcessing ? 'Processing...' : paymentMethod === 'paystack' ? `Pay ${amount || '0'} ZAR` : 'Confirm Transfer'}
+            {isProcessing ? 'Processing...' : `Pay $${amount || '0'} via Paystack`}
           </Button>
         </form>
       ) : (

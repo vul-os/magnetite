@@ -3,12 +3,12 @@ import { Button } from '../common';
 import './Landing.css';
 
 const benefits = [
-  '85% revenue share, paid weekly in USDC',
+  '70% revenue share, paid weekly via Wise',
   'Zero upfront costs or hidden fees',
   'Server-authoritative netcode included',
   'WASM + native builds from one codebase',
   'Real-time analytics dashboard',
-  'Paystack fiat on-ramp built in',
+  'Paystack card/bank on-ramp built in',
   'Custom domain & CNAME support',
   'MIT-licensed SDK, own your game forever',
 ];

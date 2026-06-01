@@ -44,7 +44,7 @@ const benefits = [
   {
     kicker: '// PAY',
     title: 'Competitive Pay',
-    desc: 'Market-leading salaries with optional USDC payments.',
+    desc: 'Market-leading salaries paid in your local currency via Wise.',
   },
   {
     kicker: '// CULTURE',
@@ -191,7 +191,7 @@ export default function Careers() {
                 <div className="logo-icon" aria-hidden="true">M</div>
                 <span>Magnetite</span>
               </div>
-              <p>Open-source Rust gaming. No middlemen.</p>
+              <p>Open-source Rust gaming at any scale.</p>
             </div>
             <nav className="footer-links" aria-label="Footer navigation">
               <a href="/marketplace">Marketplace</a>

@@ -99,7 +99,7 @@ const faqs = [
   },
   {
     q: 'What payment methods are accepted?',
-    a: 'We accept USDC (on-chain) and Paystack (ZAR fiat on-ramp) for subscription payments.',
+    a: 'We accept credit and debit cards, and bank transfers via Paystack. All payments are in USD — no crypto required.',
   },
 ];
 
@@ -118,7 +118,7 @@ export default function Pricing() {
               Simple, honest pricing
             </h1>
             <p className="pricing-hero-subtitle reveal-3">
-              Choose the plan that fits your gaming style. USDC or fiat — no hidden fees, no
+              Choose the plan that fits your gaming style. Pay by card or bank — no hidden fees, no
               long-term contracts.
             </p>
           </div>

@@ -4,9 +4,9 @@ import { api } from '../api/client';
 // Mock data — only used when VITE_USE_MOCKS === 'true'
 const MOCK_BALANCE = 1000.0;
 const MOCK_TRANSACTIONS = [
-  { id: 1, type: 'deposit', amount: 1000, date: '2026-05-01', status: 'completed', description: 'Initial Deposit' },
-  { id: 2, type: 'deposit', amount: 500,  date: '2026-05-15', status: 'completed', description: 'USDC Transfer' },
-  { id: 3, type: 'withdraw', amount: -200, date: '2026-05-18', status: 'completed', description: 'Bank Withdrawal' },
+  { id: 1, type: 'deposit', amount: 1000, date: '2026-05-01', status: 'completed', description: 'Initial Deposit via Paystack' },
+  { id: 2, type: 'deposit', amount: 500,  date: '2026-05-15', status: 'completed', description: 'Bank Transfer (Paystack)' },
+  { id: 3, type: 'withdraw', amount: -200, date: '2026-05-18', status: 'completed', description: 'Payout via Wise' },
 ];
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -14,7 +14,6 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 export function useWallet() {
   const [balance, setBalance] = useState(USE_MOCKS ? MOCK_BALANCE : null);
   const [transactions, setTransactions] = useState(USE_MOCKS ? MOCK_TRANSACTIONS : []);
-  const [walletAddress, setWalletAddress] = useState(null);
   const [loading, setLoading] = useState(!USE_MOCKS);
   const [error, setError] = useState(null);
 
@@ -36,10 +35,9 @@ export function useWallet() {
 
         if (balanceResult.status === 'fulfilled') {
           const data = balanceResult.value;
-          // Response shape: { data: { balance, wallet_address?, ... } } or unwrapped
+          // Response shape: { data: { balance, ... } } or unwrapped
           const payload = data?.data ?? data;
           if (payload?.balance != null) setBalance(Number(payload.balance));
-          if (payload?.wallet_address) setWalletAddress(payload.wallet_address);
         } else {
           throw balanceResult.reason;
         }
@@ -102,7 +100,7 @@ export function useWallet() {
     if (USE_MOCKS) {
       setBalance((b) => (b ?? 0) - amount);
       setTransactions((t) => [
-        { id: Date.now(), type: 'withdraw', amount: -amount, date: new Date().toISOString().split('T')[0], status: 'completed', description: 'Withdrawal' },
+        { id: Date.now(), type: 'withdraw', amount: -amount, date: new Date().toISOString().split('T')[0], status: 'completed', description: 'Payout requested' },
         ...t,
       ]);
       return;
@@ -117,10 +115,10 @@ export function useWallet() {
       setBalance((b) => (b ?? 0) - amount);
     }
     setTransactions((t) => [
-      { id: Date.now(), type: 'withdraw', amount: -amount, date: new Date().toISOString().split('T')[0], status: 'completed', description: 'Withdrawal' },
+      { id: Date.now(), type: 'withdraw', amount: -amount, date: new Date().toISOString().split('T')[0], status: 'completed', description: 'Payout requested' },
       ...t,
     ]);
   }, [balance]);
 
-  return { balance, deposit, withdraw, transactions, walletAddress, loading, error };
+  return { balance, deposit, withdraw, transactions, loading, error };
 }

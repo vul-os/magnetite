@@ -100,7 +100,7 @@ Magnetite is the open-source **unified gaming suite** for Rust game development 
 - **Controllers.** First-class gamepad support (Gamepad API + gilrs) with a unified binding layer.
 - **Graphics tiers.** `Lite2D` → `Standard3D` → `Advanced3D` — simple games stay lightweight, AAA games scale up.
 - **Open source.** Platform MIT, SDK MIT, game templates MIT.
-- **Real money, no middlemen.** USDC payments (Circle), Paystack fiat on-ramp, 30% platform fee / 70% developer split, playtime-based developer payouts.
+- **Real money, no middlemen.** USD-denominated balances, Paystack fiat on-ramp for deposits and subscriptions, Wise payouts for developers, 30% platform fee / 70% developer split.
 
 ---
 
@@ -144,7 +144,7 @@ Magnetite is the open-source **unified gaming suite** for Rust game development 
 ### Developer Marketplace
 
 - Developers create in-game stores for their game (cosmetics, items, DLC, passes)
-- Shared checkout: USDC (70 % developer / 30 % platform) or points
+- Shared checkout: fiat USD via Paystack (70 % developer / 30 % platform) or points; developer payouts via Wise
 - Entitlement tracking per user/item
 - Store management UI at `/developers/marketplace`; in-game store panel component
 
@@ -168,7 +168,7 @@ Magnetite is the open-source **unified gaming suite** for Rust game development 
 | Real-time | WebSocket (Axum WS), WebRTC (signaling), RTMP egress |
 | Game engine (client) | Bevy → WASM (wasm-bindgen) |
 | Physics | rapier3d (FPS + motorsport templates) |
-| Payments | USDC via Circle; Paystack fiat on-ramp |
+| Payments | Paystack fiat on-ramp (deposits + subscriptions); Wise (developer payouts); USD-denominated balances |
 | Email | Resend / AWS SES (lettre) |
 | Storage | AWS S3 (game artifacts, replays) |
 | Frontend | React 19 + Vite, React Router 7, Recharts |
@@ -331,7 +331,7 @@ The backend exposes all routes under `/api`. Key modules:
 | Games | `/api/games` | CRUD, search, categories, reviews, screenshots, versions |
 | Developer | `/api/developer` | Dashboard stats, game management, build triggers, earnings |
 | Marketplace | `/api/games` (public) | Browse, filter, wishlist, ratings |
-| Wallet | `/api/wallet` | Balance, deposit (USDC/Paystack), withdraw, transaction history |
+| Wallet | `/api/wallet` | Balance, deposit (Paystack fiat on-ramp), withdraw, transaction history |
 | Subscriptions | `/api/subscriptions` | Tiers (Free / Basic / Pro / Unlimited), activation |
 | Matchmaking | `/api/matchmaking` | Join queue, leave queue, status |
 | Leaderboard | `/api/leaderboard` | Global and per-game score boards |

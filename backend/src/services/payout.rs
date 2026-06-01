@@ -1,4 +1,8 @@
-// Payout service — developer earnings distribution via Circle USDC disbursement.
+// Payout service — developer earnings distribution via Wise fiat disbursement.
+//
+// The Circle USDC path has been removed entirely (Wave PAY, D-PAY-2).
+// process_single_payout now calls WiseClient: quote → transfer → fund.
+// If the developer has no Wise recipient registered, the payout is marked failed.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
@@ -11,6 +15,7 @@ use crate::api::notifications::{broadcast_notification, Notification, Notificati
 use crate::error::{AppError, Result};
 use crate::services::auth::get_user_by_id;
 use crate::services::email::EmailService;
+use crate::services::wise::WiseClient;
 
 // Fee percentages are expressed as fractions (e.g. 0.30 = 30%), NOT as integer basis points.
 // Do NOT add a /100 divisor when multiplying against revenue — these are already in [0,1].
@@ -23,7 +28,7 @@ fn developer_share_percent() -> Decimal {
 }
 
 fn minimum_payout_amount() -> Decimal {
-    Decimal::new(2500, 2)
+    Decimal::new(2500, 2) // $25.00 USD
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,7 +161,7 @@ impl PayoutService {
     ) -> Result<PayoutRequest> {
         if amount < minimum_payout_amount() {
             return Err(AppError::Validation(format!(
-                "Minimum payout amount is {} USDC",
+                "Minimum payout amount is ${} USD",
                 minimum_payout_amount()
             )));
         }
@@ -249,93 +254,78 @@ impl PayoutService {
         Ok(processed_count)
     }
 
+    /// Process a single pending payout via Wise (quote → transfer → fund).
+    /// Uses the developer's stored Wise recipient. Marks `failed` on any Wise error.
     async fn process_single_payout(&self, payout: &Payout) -> Result<()> {
         tracing::info!(
-            "Processing payout {} for user {} (amount={} USDC, dest={})",
+            "Processing payout {} for user {} (amount=${} USD)",
             payout.id,
             payout.user_id,
             payout.amount,
-            payout.destination
         );
 
-        // Check for sandbox mode first.
-        let sandbox = std::env::var("PAYMENTS_SANDBOX")
-            .map(|v| v == "true")
-            .unwrap_or(false);
+        // Look up the developer's current Wise recipient (most recently registered).
+        let wise_recipient_id: Option<(String,)> = sqlx::query_as(
+            r#"
+            SELECT wise_recipient_id
+            FROM wise_recipients
+            WHERE developer_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(payout.user_id)
+        .fetch_optional(&self.pool)
+        .await?;
 
-        let circle_api_key = std::env::var("CIRCLE_API_KEY").ok();
-
-        let transfer_id = if sandbox {
-            // Sandbox: return a clearly-labeled result without calling Circle.
-            tracing::info!(
-                "[SANDBOX] Skipping real Circle disbursement for payout {}",
-                payout.id
-            );
-            format!("sandbox_transfer_{}", Uuid::new_v4())
-        } else {
-            // Production: require CIRCLE_API_KEY; return ProviderUnconfigured if absent.
-            let api_key = circle_api_key.ok_or_else(|| {
-                AppError::Internal(
-                    "payments not configured: CIRCLE_API_KEY is unset (set PAYMENTS_SANDBOX=true for local dev)"
-                        .to_string(),
-                )
-            })?;
-
-            // Call Circle /v1/transfers to disburse USDC to the developer's destination address.
-            let idempotency_key = format!("payout-{}", payout.id);
-            let client = reqwest::Client::new();
-            let resp = client
-                .post("https://api.circle.com/v1/transfers")
-                .header("Authorization", format!("Bearer {}", api_key))
-                .json(&serde_json::json!({
-                    "idempotencyKey": idempotency_key,
-                    "destination": {
-                        "type": "blockchain",
-                        "address": payout.destination,
-                        "chain": "ETH"
-                    },
-                    "amount": {
-                        "amount": payout.amount.to_string(),
-                        "currency": "USDC"
-                    }
-                }))
-                .send()
-                .await
-                .map_err(|e| {
-                    AppError::Internal(format!("Circle disbursement request failed: {}", e))
-                })?;
-
-            if !resp.status().is_success() {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
+        let wise_recipient_id = match wise_recipient_id {
+            Some((id,)) => id,
+            None => {
                 tracing::error!(
-                    "Circle disbursement failed for payout {}: HTTP {} — {}",
+                    "Payout {} for user {} has no Wise recipient — marking failed",
                     payout.id,
-                    status,
-                    body
+                    payout.user_id,
                 );
-                // Mark the payout as failed so it isn't retried endlessly.
                 let _ = sqlx::query(
                     "UPDATE payouts SET status = 'failed', processed_at = NOW() WHERE id = $1",
                 )
                 .bind(payout.id)
                 .execute(&self.pool)
                 .await;
-                return Err(AppError::Internal(format!(
-                    "Circle disbursement failed (HTTP {}): {}",
-                    status, body
-                )));
+                return Err(AppError::Validation(
+                    "No Wise recipient registered for this developer — payout marked failed"
+                        .to_string(),
+                ));
             }
-
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| AppError::Internal(format!("Circle response parse error: {}", e)))?;
-
-            body["data"]["id"].as_str().unwrap_or("unknown").to_string()
         };
 
-        // Mark completed with the provider transfer id stored in the reference column.
+        let wise = WiseClient::from_env();
+
+        // quote → transfer → fund
+        let transfer_id = match self
+            .run_wise_payout(&wise, payout, &wise_recipient_id)
+            .await
+        {
+            Ok(tid) => tid,
+            Err(e) => {
+                tracing::error!(
+                    "Wise payout failed for payout {} (user {}): {}",
+                    payout.id,
+                    payout.user_id,
+                    e,
+                );
+                // Mark failed — do not silently complete.
+                let _ = sqlx::query(
+                    "UPDATE payouts SET status = 'failed', processed_at = NOW() WHERE id = $1",
+                )
+                .bind(payout.id)
+                .execute(&self.pool)
+                .await;
+                return Err(e);
+            }
+        };
+
+        // Mark completed with the Wise transfer id stored in the destination column.
         sqlx::query(
             r#"
             UPDATE payouts
@@ -358,7 +348,7 @@ impl PayoutService {
         .bind(NotificationType::PayoutComplete.as_str())
         .bind("Payout Complete")
         .bind(format!(
-            "Your payout of {} USDC has been processed (transfer: {})",
+            "Your payout of ${} USD has been processed via Wise (transfer: {})",
             payout.amount, transfer_id
         ))
         .bind(serde_json::json!({ "payout_id": payout.id, "transfer_id": transfer_id }))
@@ -378,7 +368,7 @@ impl PayoutService {
                             &user.email,
                             &user.username,
                             &amount_str,
-                            &payout.destination,
+                            "Wise bank transfer",
                             &transfer_id,
                         )
                         .await
@@ -417,6 +407,28 @@ impl PayoutService {
         }
 
         Ok(())
+    }
+
+    /// Execute the Wise quote → transfer → fund sequence and return the Wise transfer id.
+    async fn run_wise_payout(
+        &self,
+        wise: &WiseClient,
+        payout: &Payout,
+        wise_recipient_id: &str,
+    ) -> Result<String> {
+        // Step 1: create a quote for the USD amount.
+        let quote = wise.create_quote("USD", "USD", payout.amount).await?;
+
+        // Step 2: create a transfer linking quote to recipient.
+        let reference = format!("magnetite-payout-{}", payout.id);
+        let transfer = wise
+            .create_transfer(&quote, wise_recipient_id, &reference)
+            .await?;
+
+        // Step 3: fund the transfer (debit Wise balance and initiate bank transfer).
+        wise.fund_transfer(&transfer).await?;
+
+        Ok(transfer.transfer_id)
     }
 
     pub async fn get_payout_history(&self, user_id: Uuid) -> Result<Vec<Payout>> {
@@ -481,14 +493,10 @@ impl PayoutService {
             .execute(&mut *tx)
             .await?;
 
-        sqlx::query(
-            r#"
-            UPDATE payouts SET status = 'cancelled' WHERE id = $1
-            "#,
-        )
-        .bind(payout_id)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("UPDATE payouts SET status = 'cancelled' WHERE id = $1")
+            .bind(payout_id)
+            .execute(&mut *tx)
+            .await?;
 
         tx.commit().await?;
 
@@ -504,19 +512,19 @@ mod tests {
     fn test_platform_fee_calculation() {
         // platform_fee_percent() = 0.30, developer_share_percent() = 0.70 (already fractional).
         // Multiply directly against revenue — no additional /100.
-        let revenue = Decimal::new(10000, 2); // 100.00 USDC
+        let revenue = Decimal::new(10000, 2); // 100.00 USD
         let fee = revenue * platform_fee_percent();
         let share = revenue * developer_share_percent();
         // 30% of 100.00 = 30.00; 70% of 100.00 = 70.00
         assert_eq!(
             fee,
             Decimal::new(3000, 2),
-            "platform fee must be 30.00 USDC (30%)"
+            "platform fee must be 30.00 USD (30%)"
         );
         assert_eq!(
             share,
             Decimal::new(7000, 2),
-            "developer share must be 70.00 USDC (70%)"
+            "developer share must be 70.00 USD (70%)"
         );
     }
 

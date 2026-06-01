@@ -5,7 +5,7 @@ export const faqData = [
     questions: [
       {
         q: "How do I start playing?",
-        a: "Create an account by clicking the Sign Up button, verify your email address, add funds to your wallet using a credit card or cryptocurrency, and browse our game marketplace to find matches. Once you find a game you like, click Play and you'll be matched with other players."
+        a: "Create an account by clicking the Sign Up button, verify your email address, add funds to your wallet using a credit card or bank transfer via Paystack, and browse our game marketplace to find matches. Once you find a game you like, click Play and you'll be matched with other players."
       },
       {
         q: "How do I create an account?",
@@ -13,11 +13,11 @@ export const faqData = [
       },
       {
         q: "How do I add funds to my wallet?",
-        a: "Navigate to your Wallet page and click Add Funds. We accept major credit cards (Visa, Mastercard, American Express), PayPal, and cryptocurrencies including Bitcoin, Ethereum, and USDC. Funds are typically available instantly after payment confirmation."
+        a: "Navigate to your Wallet page and click Add Funds. We accept major credit cards (Visa, Mastercard, American Express) and bank transfers via Paystack. Funds are typically available instantly after payment confirmation."
       },
       {
         q: "What is the minimum deposit amount?",
-        a: "The minimum deposit is $5.00 USD or equivalent in cryptocurrency. There's no maximum deposit limit, but transactions over $10,000 may require additional verification."
+        a: "The minimum deposit is $5.00 USD. There's no maximum deposit limit, but transactions over $10,000 may require additional verification."
       },
       {
         q: "Is my information secure?",
@@ -35,11 +35,11 @@ export const faqData = [
       },
       {
         q: "What payment methods do you accept?",
-        a: "We accept credit/debit cards (Visa, Mastercard, Amex), PayPal, Apple Pay, Google Pay, and cryptocurrencies (BTC, ETH, USDC, USDT). All transactions are secured with end-to-end encryption."
+        a: "We accept credit and debit cards (Visa, Mastercard, Amex) and bank transfers via Paystack. All transactions are secured with end-to-end encryption. No cryptocurrency required."
       },
       {
-        q: "How do I withdraw my winnings?",
-        a: "Go to your Wallet page and click Withdraw. Enter the amount and your preferred withdrawal method. Withdrawals to bank accounts typically take 2-5 business days, while cryptocurrency withdrawals are processed within 30 minutes."
+        q: "How do I withdraw my earnings?",
+        a: "Go to your Wallet page and click Withdraw. Enter the amount and your bank details. Withdrawals are processed via Wise and typically arrive in your bank account within 1-2 business days."
       },
       {
         q: "Why is my game not loading?",
@@ -65,19 +65,19 @@ export const faqData = [
       },
       {
         q: "What are the revenue share terms?",
-        a: "Developers receive 70% of all session fees collected from their games. There are no upfront costs to publish - we only earn when you earn. Payouts are processed monthly for balances over $50."
+        a: "Developers receive 70% of all session fees collected from their games. There are no upfront costs to publish — we only earn when you earn. Payouts are processed weekly via Wise to your connected bank account for balances over $50."
       },
       {
         q: "Do you provide an SDK?",
-        a: "Yes, we offer SDKs for Unity, Unreal Engine, and JavaScript/TypeScript. Our SDK handles matchmaking, secure payment processing, anti-cheat integration, and player analytics out of the box."
+        a: "Yes, we offer a Rust SDK built on Bevy. Our SDK handles matchmaking, secure payment processing, anti-cheat integration, and player analytics out of the box. Compile to WASM for browsers or native for desktop."
       },
       {
         q: "How do payouts work?",
-        a: "Earnings are calculated at the end of each billing cycle (1st of every month). If your balance exceeds $50, we'll process a payout to your connected bank account or crypto wallet. Direct bank transfers take 3-5 business days."
+        a: "Earnings are calculated weekly. If your balance exceeds $50, we process a payout to your connected bank account via Wise. Transfers typically arrive within 1-2 business days. You configure your bank details once in Developer Settings."
       },
       {
         q: "What are the technical requirements for games?",
-        a: "Games must be web-based (HTML5/WebGL) or support our SDK integration. Maximum session duration is 60 minutes. Games must include our anti-cheat module and support our authentication flow. See our developer documentation for full specifications."
+        a: "Games must be written in Rust using Bevy and compile to WASM or native via the Magnetite SDK. Maximum session duration is 60 minutes. Games must include our anti-cheat module and support our authentication flow. See our developer documentation for full specifications."
       },
       {
         q: "Can I use my own payment system?",

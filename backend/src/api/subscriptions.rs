@@ -1,4 +1,4 @@
-// Subscriptions API — tier management and billing; wired to real Circle/Paystack providers.
+// Subscriptions API — tier management and billing; Paystack fiat on-ramp + free/platform tiers.
 #![allow(dead_code)]
 
 use axum::{
@@ -94,9 +94,9 @@ pub struct UserSubscriptionResponse {
 #[derive(Debug, Deserialize)]
 pub struct SubscribeRequest {
     pub tier_id: Uuid,
-    /// Payment reference to verify. Required for paid tiers.
+    /// Paystack payment reference to verify. Required for paid tiers.
     pub payment_id: Option<String>,
-    /// "paystack" or "circle". Defaults to "paystack" for paid tiers.
+    /// Payment provider. Only "paystack" (or "platform" for free) is accepted.
     pub payment_provider: Option<String>,
 }
 
@@ -209,7 +209,7 @@ pub async fn subscribe(
         .unwrap_or("paystack")
         .to_string();
 
-    // For paid tiers, verify the payment before creating the subscription record.
+    // For paid tiers, verify the Paystack payment before creating the subscription record.
     let (subscription_status, verified_payment_id) = if is_paid {
         let payment_id = payload.payment_id.as_deref().ok_or_else(|| {
             AppError::BadRequest("payment_id is required for paid subscription tiers".to_string())
@@ -236,20 +236,15 @@ pub async fn subscribe(
 
                 ("active", payment_id.to_string())
             }
-            "circle" => {
-                // Circle USDC: the caller provides a transfer ID. Mark active immediately;
-                // production webhook confirmation is the correctness backstop.
-                ("active", payment_id.to_string())
-            }
             _ => {
                 return Err(AppError::BadRequest(format!(
-                    "Unknown payment provider '{}'. Use 'paystack' or 'circle'.",
+                    "Unknown payment provider '{}'. Use 'paystack'.",
                     provider
                 )));
             }
         }
     } else {
-        // Free tier — no payment required.
+        // Free / platform tier — no payment required.
         ("active", String::new())
     };
 
@@ -272,21 +267,16 @@ pub async fn subscribe(
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
 
-    // Record the payment transaction with the correct provider (not a hardcoded 'stripe').
+    // Record the payment transaction with the correct provider.
     if is_paid && !verified_payment_id.is_empty() {
         let tx_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO subscription_transactions (id, user_subscription_id, amount, currency, status, payment_provider, payment_id, created_at)
-             VALUES ($1, $2, $3, $4, 'completed', $5, $6, NOW())",
+             VALUES ($1, $2, $3, 'ZAR', 'completed', $4, $5, NOW())",
         )
         .bind(tx_id)
         .bind(subscription_id)
-        .bind(if provider == "paystack" {
-            tier.price_zar
-        } else {
-            tier.price_usdc
-        })
-        .bind(if provider == "paystack" { "ZAR" } else { "USDC" })
+        .bind(tier.price_zar)
         .bind(&provider)
         .bind(&verified_payment_id)
         .execute(&pool)

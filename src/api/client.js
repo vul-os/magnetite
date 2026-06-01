@@ -142,6 +142,30 @@ export const api = {
     earnings: () => request('/api/developer/earnings'),
     payouts: () => request('/api/developer/payouts'),
     analytics: (gameId) => request(`/api/developer/analytics/${gameId}`),
+
+    // ── Wise payout recipient (D-PAY-2) ──────────────────────────────────
+    /** GET /api/v1/developer/wise-recipient — current saved Wise recipient */
+    getWiseRecipient: () => request('/api/v1/developer/wise-recipient'),
+    /**
+     * POST /api/v1/developer/wise-recipient
+     * data: { account_holder_name, currency, type: 'email'|'iban'|'ach'|..., details: {...} }
+     */
+    saveWiseRecipient: (data) =>
+      request('/api/v1/developer/wise-recipient', { method: 'POST', body: JSON.stringify(data) }),
+    /** DELETE /api/v1/developer/wise-recipient — remove saved recipient */
+    deleteWiseRecipient: () =>
+      request('/api/v1/developer/wise-recipient', { method: 'DELETE' }),
+
+    // ── Payout request (D-PAY-4) ─────────────────────────────────────────
+    /**
+     * POST /api/v1/developer/payout
+     * data: { amount: number }
+     * Creates a payout_requests row; processed async by the payout job via Wise.
+     */
+    requestPayout: (data) =>
+      request('/api/v1/developer/payout', { method: 'POST', body: JSON.stringify(data) }),
+    /** GET /api/v1/developer/payout-status — list payout requests with status */
+    payoutStatus: () => request('/api/v1/developer/payout-status'),
   },
 
   // ── Wave 6: Comms Core ────────────────────────────────────────────────────
@@ -291,7 +315,7 @@ export const api = {
     delete: (storeId) => request(`/api/stores/${storeId}`, { method: 'DELETE' }),
     /** List items in a store. */
     items: (storeId) => request(`/api/stores/${storeId}/items`),
-    /** Add an item to a store. data: { name, description, price_points, price_usdc, item_type, metadata? } */
+    /** Add an item to a store. data: { name, description, price_points, price_usd, item_type, metadata? } */
     addItem: (storeId, data) =>
       request(`/api/stores/${storeId}/items`, { method: 'POST', body: JSON.stringify(data) }),
     /** Update a store item. */
@@ -300,7 +324,7 @@ export const api = {
     /** Remove an item from a store. */
     removeItem: (storeId, itemId) =>
       request(`/api/stores/${storeId}/items/${itemId}`, { method: 'DELETE' }),
-    /** Purchase an item. data: { currency: 'points' | 'usdc' } */
+    /** Purchase an item. data: { currency: 'points' | 'usd' } */
     purchase: (storeId, itemId, data) =>
       request(`/api/stores/${storeId}/items/${itemId}/purchase`, { method: 'POST', body: JSON.stringify(data) }),
     /** Current user's entitlements (purchased items). */

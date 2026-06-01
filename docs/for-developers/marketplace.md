@@ -3,7 +3,8 @@
 Magnetite lets developers create **in-game stores** for their game. Players can browse
 and purchase items (cosmetics, DLC, passes, consumable items) directly inside the game
 or on the game's marketplace page. Revenue is split 70 % developer / 30 % platform for
-USDC purchases; points purchases are a pure in-game transaction.
+fiat USD purchases; points purchases are a pure in-game transaction. Developer earnings
+are disbursed via **Wise** (TransferWise).
 
 ---
 
@@ -31,12 +32,12 @@ USDC purchases; points purchases are a pure in-game transaction.
 
 ## Currency
 
-Items can be priced in **USDC** or **points** (see [Points Economy](./points-economy.md)):
+Items can be priced in **USD** (fiat) or **points** (see [Points Economy](./points-economy.md)):
 
 | Currency | Developer share | Platform share |
 |----------|----------------|----------------|
-| `USDC` | 70 % | 30 % |
-| `points` | Full points deducted from buyer's balance; developer receives no USDC | — |
+| `USD` | 70 % (paid out via Wise) | 30 % |
+| `points` | Full points deducted from buyer's balance; no cash transfer | — |
 
 ---
 
@@ -69,7 +70,7 @@ CREATE TABLE store_items (
     sku      TEXT NOT NULL,           -- e.g. "skin_dragon_red"
     name     TEXT NOT NULL,
     price    NUMERIC(18, 6) NOT NULL,
-    currency TEXT NOT NULL,           -- 'USDC' or 'points'
+    currency TEXT NOT NULL,           -- 'USD' or 'points'
     kind     TEXT NOT NULL,           -- 'cosmetic' | 'item' | 'dlc' | 'pass'
     active   BOOLEAN NOT NULL DEFAULT true,
     metadata JSONB                    -- {icon_url, rarity, boost_multiplier, …}

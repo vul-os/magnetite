@@ -40,9 +40,9 @@ const features = [
   {
     Icon: WalletIcon,
     kicker: '// MONETIZATION',
-    title: 'Real Money, No Middlemen',
+    title: 'Real Money, Fast Global Payouts',
     description:
-      'Playtime-based USDC earnings paid weekly. 85% to developers. Paystack fiat on-ramp included. No payment plumbing required.',
+      'Playtime-based earnings paid via Wise — fast bank transfers to developers worldwide. 70% revenue share. Paystack card/bank on-ramp included. No payment plumbing required.',
   },
 ];
 

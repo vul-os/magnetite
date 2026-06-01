@@ -8,14 +8,16 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 // Mock data — only used when VITE_USE_MOCKS === 'true'
 const MOCK_TRANSACTIONS = [
   { id: 'tx_001', type: 'game',    description: 'Cosmic Raiders - Session #4521', amount: -1.50,   balance: 24580.50, date: '2026-05-18 14:32' },
-  { id: 'tx_002', type: 'deposit', description: 'USDC Deposit',                    amount: 500.00,  balance: 24582.50, date: '2026-05-18 10:15' },
-  { id: 'tx_003', type: 'payout',  description: 'Payout to Wallet',                amount: -500.00, balance: 24083.50, date: '2026-05-17 18:00' },
+  { id: 'tx_002', type: 'deposit', description: 'Paystack Deposit',                amount: 500.00,  balance: 24582.50, date: '2026-05-18 10:15' },
+  { id: 'tx_003', type: 'payout',  description: 'Wise Payout',                     amount: -500.00, balance: 24083.50, date: '2026-05-17 18:00' },
 ];
 
 const MOCK_PAYOUTS = [
-  { id: 'pay_001', amount: 500.00,  method: 'USDC (Polygon)', status: 'Completed', date: '2026-05-17' },
-  { id: 'pay_002', amount: 1250.00, method: 'USDC (Polygon)', status: 'Completed', date: '2026-05-10' },
+  { id: 'pay_001', amount: 500.00,  method: 'Wise (Bank Transfer)', status: 'Completed', date: '2026-05-17' },
+  { id: 'pay_002', amount: 1250.00, method: 'Wise (Bank Transfer)', status: 'Completed', date: '2026-05-10' },
 ];
+
+const MOCK_WISE_RECIPIENT = null; // no recipient in mock — user must set one
 
 export default function Earnings() {
   const [balance, setBalance]               = useState(USE_MOCKS ? 24580.50 : null);
@@ -24,12 +26,29 @@ export default function Earnings() {
   const [transactions, setTransactions]     = useState(USE_MOCKS ? MOCK_TRANSACTIONS : []);
   const [payouts, setPayouts]               = useState(USE_MOCKS ? MOCK_PAYOUTS : []);
   const [activeTab, setActiveTab]           = useState('transactions');
-  const [withdrawing, setWithdrawing]       = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
-  const [withdrawError, setWithdrawError]   = useState(null);
   const [loading, setLoading]               = useState(!USE_MOCKS);
   const [loadError, setLoadError]           = useState(null);
+
+  // ── Wise recipient state ────────────────────────────────────────────────
+  const [wiseRecipient, setWiseRecipient]           = useState(USE_MOCKS ? MOCK_WISE_RECIPIENT : null);
+  const [wiseLoading, setWiseLoading]               = useState(!USE_MOCKS);
+  const [showRecipientForm, setShowRecipientForm]   = useState(false);
+  const [recipientForm, setRecipientForm]           = useState({
+    account_holder_name: '',
+    currency: 'USD',
+    type: 'email',
+    details: { email: '' },
+  });
+  const [recipientSaving, setRecipientSaving]       = useState(false);
+  const [recipientError, setRecipientError]         = useState(null);
+  const [recipientSuccess, setRecipientSuccess]     = useState(false);
+
+  // ── Payout request state ────────────────────────────────────────────────
+  const [withdrawAmount, setWithdrawAmount]         = useState('');
+  const [withdrawing, setWithdrawing]               = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess]       = useState(false);
+  const [withdrawError, setWithdrawError]           = useState(null);
+  const [payoutStatuses, setPayoutStatuses]         = useState([]);
 
   useEffect(() => {
     if (USE_MOCKS) return;
@@ -38,22 +57,23 @@ export default function Earnings() {
 
     async function loadData() {
       setLoading(true);
+      setWiseLoading(true);
       setLoadError(null);
       try {
-        const [earningsData, txData, payoutsData] = await Promise.allSettled([
+        const [earningsData, txData, payoutsData, recipientData, statusData] = await Promise.allSettled([
           api.developer.earnings(),
           api.wallet.transactions(),
           api.developer.payouts(),
+          api.developer.getWiseRecipient(),
+          api.developer.payoutStatus(),
         ]);
 
         if (cancelled) return;
 
         if (earningsData.status === 'fulfilled') {
           const d = earningsData.value?.data ?? earningsData.value;
-          // EarningsSummary: { total_earnings, pending_payout, total_paid, recent_earnings }
           if (d?.total_earnings != null) setLifetimeEarnings(Number(d.total_earnings));
           if (d?.pending_payout != null) setPendingBalance(Number(d.pending_payout));
-          // Available = total_paid (already paid out) used here as available balance
           if (d?.total_paid != null) setBalance(Number(d.total_paid));
         } else {
           throw earningsData.reason;
@@ -72,10 +92,25 @@ export default function Earnings() {
           const list = Array.isArray(d) ? d : (d?.payouts ?? []);
           setPayouts(list);
         }
+
+        if (recipientData.status === 'fulfilled') {
+          const d = recipientData.value?.data ?? recipientData.value;
+          setWiseRecipient(d ?? null);
+        }
+        // Recipient fetch 404 = not set yet; that's fine — form is shown.
+
+        if (statusData.status === 'fulfilled') {
+          const d = statusData.value?.data ?? statusData.value;
+          const list = Array.isArray(d) ? d : (d?.payouts ?? []);
+          setPayoutStatuses(list);
+        }
       } catch (err) {
         if (!cancelled) setLoadError(err.message || 'Failed to load earnings');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setWiseLoading(false);
+        }
       }
     }
 
@@ -83,20 +118,75 @@ export default function Earnings() {
     return () => { cancelled = true; };
   }, []);
 
+  // ── Wise recipient form handlers ────────────────────────────────────────
+  const handleRecipientTypeChange = (type) => {
+    const defaultDetails = type === 'email' ? { email: '' }
+      : type === 'iban' ? { iban: '', bic: '' }
+      : type === 'ach' ? { account_number: '', routing_number: '' }
+      : {};
+    setRecipientForm(f => ({ ...f, type, details: defaultDetails }));
+    setRecipientError(null);
+  };
+
+  const handleRecipientDetailChange = (key, value) => {
+    setRecipientForm(f => ({ ...f, details: { ...f.details, [key]: value } }));
+  };
+
+  const handleSaveRecipient = async (e) => {
+    e.preventDefault();
+    setRecipientSaving(true);
+    setRecipientError(null);
+    setRecipientSuccess(false);
+    try {
+      const saved = await api.developer.saveWiseRecipient(recipientForm);
+      const d = saved?.data ?? saved;
+      setWiseRecipient(d ?? recipientForm);
+      setRecipientSuccess(true);
+      setShowRecipientForm(false);
+      setTimeout(() => setRecipientSuccess(false), 3000);
+    } catch (err) {
+      setRecipientError(err.message || 'Failed to save recipient. Please try again.');
+    } finally {
+      setRecipientSaving(false);
+    }
+  };
+
+  const handleDeleteRecipient = async () => {
+    if (!window.confirm('Remove your Wise payout recipient?')) return;
+    try {
+      await api.developer.deleteWiseRecipient();
+      setWiseRecipient(null);
+      setShowRecipientForm(false);
+    } catch (err) {
+      setRecipientError(err.message || 'Failed to remove recipient.');
+    }
+  };
+
+  // ── Payout request handler ──────────────────────────────────────────────
   const handleWithdraw = async (e) => {
     e.preventDefault();
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return;
+    if (!wiseRecipient) {
+      setWithdrawError('Please add a Wise payout recipient first.');
+      return;
+    }
 
     setWithdrawing(true);
     setWithdrawError(null);
     try {
-      await api.wallet.withdraw({ amount: parseFloat(withdrawAmount) });
+      await api.developer.requestPayout({ amount: parseFloat(withdrawAmount) });
       setBalance(prev => (prev ?? 0) - parseFloat(withdrawAmount));
       setWithdrawSuccess(true);
       setWithdrawAmount('');
-      setTimeout(() => setWithdrawSuccess(false), 3000);
+      // Refresh payout status list
+      const statusData = await api.developer.payoutStatus().catch(() => null);
+      if (statusData) {
+        const d = statusData?.data ?? statusData;
+        setPayoutStatuses(Array.isArray(d) ? d : (d?.payouts ?? []));
+      }
+      setTimeout(() => setWithdrawSuccess(false), 5000);
     } catch (err) {
-      setWithdrawError(err.message || 'Withdrawal failed. Please try again.');
+      setWithdrawError(err.message || 'Payout request failed. Please try again.');
     } finally {
       setWithdrawing(false);
     }
@@ -106,13 +196,21 @@ export default function Earnings() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(amount));
   };
 
+  const recipientLabel = (r) => {
+    if (!r) return '';
+    const name = r.account_holder_name ?? r.name ?? '';
+    const type = r.type ?? '';
+    const detail = r.details?.email ?? r.details?.iban ?? r.details?.account_number ?? '';
+    return [name, type, detail].filter(Boolean).join(' · ');
+  };
+
   return (
     <Layout>
       <div className="earnings-page">
         <header className="earnings-header">
           <span className="kicker">// DEVELOPER EARNINGS</span>
           <h1>Earnings</h1>
-          <p className="earnings-subtitle">Track your Rust game revenue and manage USDC payouts</p>
+          <p className="earnings-subtitle">Track your Rust game revenue and request USD payouts via Wise</p>
         </header>
 
         {loadError && (
@@ -149,45 +247,220 @@ export default function Earnings() {
           </div>
         </div>
 
+        {/* ── Wise Recipient Section ─────────────────────────────────────── */}
         <div className="withdraw-section">
-          <span className="kicker">// USDC PAYOUT</span>
-          <h3>Withdraw Earnings</h3>
+          <span className="kicker">// WISE PAYOUT RECIPIENT</span>
+          <h3>Payout Recipient</h3>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: '1rem', fontFamily: 'var(--font-sans)' }}>
+            Payouts are processed via Wise (TransferWise). Add your bank account, email, or IBAN to receive funds.
+          </p>
+
+          {wiseLoading ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)' }}>Loading…</p>
+          ) : wiseRecipient && !showRecipientForm ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.75rem 1rem', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)' }}>
+                {recipientLabel(wiseRecipient)}
+              </span>
+              {recipientSuccess && (
+                <span style={{ color: 'var(--color-success)', fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>✓ Saved</span>
+              )}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                <button className="btn btn-secondary" style={{ fontSize: 'var(--text-xs)' }} onClick={() => { setShowRecipientForm(true); setRecipientError(null); }}>
+                  Edit
+                </button>
+                <button className="btn" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)', border: '1px solid var(--color-error)' }} onClick={handleDeleteRecipient}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : !showRecipientForm ? (
+            <button className="btn btn-secondary" style={{ marginBottom: '1rem' }} onClick={() => setShowRecipientForm(true)}>
+              + Add Payout Recipient
+            </button>
+          ) : null}
+
+          {showRecipientForm && (
+            <form onSubmit={handleSaveRecipient} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', padding: '1rem', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {['email', 'iban', 'ach'].map(type => (
+                  <label key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+                    <input
+                      type="radio"
+                      name="recipientType"
+                      value={type}
+                      checked={recipientForm.type === type}
+                      onChange={() => handleRecipientTypeChange(type)}
+                    />
+                    {type.toUpperCase()}
+                  </label>
+                ))}
+              </div>
+
+              <input
+                className="input"
+                type="text"
+                placeholder="Account holder name"
+                value={recipientForm.account_holder_name}
+                onChange={e => setRecipientForm(f => ({ ...f, account_holder_name: e.target.value }))}
+                required
+                aria-label="Account holder name"
+              />
+              <input
+                className="input"
+                type="text"
+                placeholder="Currency (e.g. USD, EUR, GBP)"
+                value={recipientForm.currency}
+                onChange={e => setRecipientForm(f => ({ ...f, currency: e.target.value.toUpperCase() }))}
+                required
+                aria-label="Payout currency"
+                style={{ textTransform: 'uppercase' }}
+              />
+
+              {recipientForm.type === 'email' && (
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="Wise email address"
+                  value={recipientForm.details.email ?? ''}
+                  onChange={e => handleRecipientDetailChange('email', e.target.value)}
+                  required
+                  aria-label="Wise email address"
+                />
+              )}
+              {recipientForm.type === 'iban' && (
+                <>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="IBAN"
+                    value={recipientForm.details.iban ?? ''}
+                    onChange={e => handleRecipientDetailChange('iban', e.target.value)}
+                    required
+                    aria-label="IBAN"
+                  />
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="BIC / SWIFT"
+                    value={recipientForm.details.bic ?? ''}
+                    onChange={e => handleRecipientDetailChange('bic', e.target.value)}
+                    aria-label="BIC / SWIFT code"
+                  />
+                </>
+              )}
+              {recipientForm.type === 'ach' && (
+                <>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Account number"
+                    value={recipientForm.details.account_number ?? ''}
+                    onChange={e => handleRecipientDetailChange('account_number', e.target.value)}
+                    required
+                    aria-label="Account number"
+                  />
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Routing number"
+                    value={recipientForm.details.routing_number ?? ''}
+                    onChange={e => handleRecipientDetailChange('routing_number', e.target.value)}
+                    required
+                    aria-label="Routing number"
+                  />
+                </>
+              )}
+
+              {recipientError && (
+                <p role="alert" style={{ color: 'var(--color-error)', fontSize: '0.875rem' }}>{recipientError}</p>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <button type="submit" className="btn btn-primary" disabled={recipientSaving}>
+                  {recipientSaving ? 'Saving…' : 'Save Recipient'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowRecipientForm(false); setRecipientError(null); }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* ── Payout Request Section ─────────────────────────────────────── */}
+        <div className="withdraw-section" style={{ marginTop: '2rem' }}>
+          <span className="kicker">// REQUEST PAYOUT</span>
+          <h3>Request Payout</h3>
           <form className="withdraw-form" onSubmit={handleWithdraw}>
             <div className="withdraw-input-group">
               <input
                 type="number"
                 step="0.01"
                 min="1"
-                max={balance}
-                placeholder="Enter amount"
+                max={balance ?? undefined}
+                placeholder="Enter amount (USD)"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
                 disabled={withdrawing}
-                aria-label="Withdrawal amount"
+                aria-label="Payout amount"
               />
-              <span className="currency-label">USDC</span>
+              <span className="currency-label">USD</span>
             </div>
             <button
               type="submit"
               className="btn btn-primary withdraw-btn"
-              disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) > (balance ?? 0)}
+              disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) > (balance ?? 0) || !wiseRecipient}
             >
               {withdrawing
                 ? 'Processing…'
                 : withdrawSuccess
-                  ? '✓ Withdrawal Initiated!'
-                  : 'Withdraw'}
+                  ? '✓ Payout Requested!'
+                  : 'Request Payout via Wise'}
             </button>
+            {!wiseRecipient && !wiseLoading && (
+              <p style={{ color: 'var(--color-warning)', fontSize: '0.875rem', marginTop: '0.5rem', fontFamily: 'var(--font-sans)' }}>
+                Add a Wise recipient above before requesting a payout.
+              </p>
+            )}
             {withdrawError && (
               <p role="alert" style={{ color: 'var(--color-error)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
                 {withdrawError}
               </p>
             )}
           </form>
-          <p className="withdraw-note">Withdrawals are processed to your connected Polygon wallet within 24 hours. Platform fee: 15%.</p>
+          <p className="withdraw-note">
+            Payouts are sent via Wise (TransferWise) to your saved recipient. Platform split: 70% to you, 30% platform fee.
+            Processing typically takes 1–2 business days.
+          </p>
         </div>
 
-        <div className="earnings-tabs" role="tablist">
+        {/* ── Recent Payout Status ───────────────────────────────────────── */}
+        {payoutStatuses.length > 0 && (
+          <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)' }}>
+            <span className="kicker" style={{ marginBottom: '0.5rem', display: 'block' }}>// PAYOUT STATUS</span>
+            <table className="payouts-table">
+              <thead>
+                <tr>
+                  <th>Requested</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payoutStatuses.slice(0, 5).map(p => (
+                  <tr key={p.id}>
+                    <td className="date-cell">{p.created_at ? p.created_at.slice(0, 10) : p.date ?? '—'}</td>
+                    <td className="amount-cell positive">{formatAmount(p.amount ?? 0)}</td>
+                    <td><span className={`status-badge ${p.status?.toLowerCase() ?? ''}`}>{p.status ?? '—'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="earnings-tabs" role="tablist" style={{ marginTop: '2rem' }}>
           <button
             role="tab"
             aria-selected={activeTab === 'transactions'}
@@ -214,6 +487,10 @@ export default function Earnings() {
                   <span className="spinner large" />
                   <span>Loading transactions…</span>
                 </div>
+              ) : transactions.length === 0 ? (
+                <p style={{ padding: '2rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+                  No transactions yet.
+                </p>
               ) : (
                 <table className="transactions-table">
                   <thead>
@@ -251,6 +528,10 @@ export default function Earnings() {
                   <span className="spinner large" />
                   <span>Loading payouts…</span>
                 </div>
+              ) : payouts.length === 0 ? (
+                <p style={{ padding: '2rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+                  No payouts yet.
+                </p>
               ) : (
                 <table className="payouts-table">
                   <thead>

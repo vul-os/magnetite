@@ -1,4 +1,4 @@
-// Wallet service — USDC balance, AML velocity limits, deposits; platform surface, not yet wired.
+// Wallet service — USD balance, AML velocity limits, deposits; platform surface, not yet wired.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};

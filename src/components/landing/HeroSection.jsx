@@ -14,7 +14,7 @@ const PARTICLES = Array.from({ length: 24 }, (_, i) => ({
 const STATS = [
   { value: '2,847', label: 'Developers' },
   { value: '156+',  label: 'Games Shipped' },
-  { value: '$2.4M', label: 'USDC Paid Out' },
+  { value: '$2.4M', label: 'Paid to Developers' },
 ];
 
 function StatItem({ value, label }) {
@@ -109,7 +109,7 @@ export default function HeroSection() {
               <span className="trust-sep" aria-hidden="true" />
               <span className="trust-item">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                USDC Payouts
+                Wise Payouts
               </span>
               <span className="trust-sep" aria-hidden="true" />
               <span className="trust-item">
@@ -193,7 +193,7 @@ export default function HeroSection() {
               <div className="hero-chip chip-accent">Bevy 0.14</div>
               <div className="hero-chip chip-amber">WASM</div>
               <div className="hero-chip chip-info">Matchmaking</div>
-              <div className="hero-chip chip-success">USDC</div>
+              <div className="hero-chip chip-success">Wise Payouts</div>
             </div>
           </div>
         </div>

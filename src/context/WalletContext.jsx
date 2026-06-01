@@ -5,14 +5,14 @@ const WalletContext = createContext();
 export function WalletProvider({ children }) {
   const [balance, setBalance] = useState(100);
   const [transactions, setTransactions] = useState([
-    { id: 1, type: 'deposit', amount: 100, currency: 'USDC', timestamp: Date.now() - 86400000, status: 'completed' },
+    { id: 1, type: 'deposit', amount: 100, currency: 'USD', timestamp: Date.now() - 86400000, status: 'completed' },
   ]);
   const [isLoading, setIsLoading] = useState(false);
 
   const deposit = async (amount) => {
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 500));
-    const newTx = { id: Date.now(), type: 'deposit', amount, currency: 'USDC', timestamp: Date.now(), status: 'completed' };
+    const newTx = { id: Date.now(), type: 'deposit', amount, currency: 'USD', timestamp: Date.now(), status: 'completed' };
     setTransactions(prev => [newTx, ...prev]);
     setBalance(prev => prev + amount);
     setIsLoading(false);
@@ -23,7 +23,7 @@ export function WalletProvider({ children }) {
     if (amount > balance) return { success: false, error: 'Insufficient balance' };
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 500));
-    const newTx = { id: Date.now(), type: 'withdraw', amount, currency: 'USDC', timestamp: Date.now(), status: 'completed' };
+    const newTx = { id: Date.now(), type: 'withdraw', amount, currency: 'USD', timestamp: Date.now(), status: 'completed' };
     setTransactions(prev => [newTx, ...prev]);
     setBalance(prev => prev - amount);
     setIsLoading(false);

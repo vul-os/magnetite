@@ -2,8 +2,8 @@
 //!
 //! The Magnetite marketplace enables developers to run **in-game stores** with
 //! cosmetics, items, DLC, and season passes.  All purchases flow through the
-//! platform's payment rails (USDC / Paystack) with a 15% platform fee and
-//! revenue share paid out to the developer.
+//! platform's payment rails (Paystack fiat on-ramp / platform points) with a
+//! 30% platform fee and revenue share paid out to the developer via Wise.
 //!
 //! # Concepts
 //!
@@ -187,9 +187,9 @@ pub struct PurchaseRequest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaymentMethod {
-    /// Pay with USDC (Circle payment rails).
+    /// Pay with fiat USD from the player's platform wallet (funded via Paystack on-ramp).
     Usd,
-    /// Pay with Paystack (fiat on-ramp for supported regions).
+    /// Pay via Paystack directly (fiat on-ramp for supported regions).
     Paystack,
     /// Pay with platform points (deducted from the player's balance).
     Points,

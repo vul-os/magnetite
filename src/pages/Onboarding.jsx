@@ -8,7 +8,7 @@ import './Onboarding.css';
 
 const ONBOARDING_STORAGE_KEY = 'magnetite_onboarding_completed';
 
-const STEPS = ['Welcome', 'Create Wallet', 'Add Funds', 'Browse Games'];
+const STEPS = ['Welcome', 'Set Up Wallet', 'Add Funds', 'Browse Games'];
 
 // Placeholder featured games — replaced by real games if the API responds
 const FEATURED_GAMES_FALLBACK = [
@@ -39,11 +39,11 @@ function WelcomeStep({ onNext }) {
         </div>
         <div className="welcome-feature">
           <span className="feature-icon" aria-hidden="true">◈</span>
-          <span>Pay with USDC — instant settlement</span>
+          <span>Pay by card or bank — fast, secure via Paystack</span>
         </div>
         <div className="welcome-feature">
           <span className="feature-icon" aria-hidden="true">◉</span>
-          <span>Earn 85% of playtime revenue as developer</span>
+          <span>Earn 70% of playtime revenue as developer, paid via Wise</span>
         </div>
       </div>
       <Button size="lg" onClick={onNext}>
@@ -63,7 +63,7 @@ function WalletStep({ onNext, onSkip }) {
     setIsGenerating(true);
     setError(null);
     try {
-      // POST to wallet API — backend creates/returns the user's wallet address
+      // POST to wallet API — backend creates/returns the user's wallet info
       const data = await api.wallet.balance();
       const address = data?.address ?? data?.wallet_address ?? null;
       if (address) {
@@ -72,7 +72,7 @@ function WalletStep({ onNext, onSkip }) {
       } else {
         // Backend didn't return an address yet (wallet auto-created on registration)
         // Fetch balance which also initialises the wallet server-side
-        setWalletAddress('Wallet initialised — view full address in Settings');
+        setWalletAddress('Wallet activated — manage it in Settings');
         setShowAddress(true);
       }
     } catch {
@@ -88,8 +88,8 @@ function WalletStep({ onNext, onSkip }) {
     <div className="onboarding-step wallet-step">
       <h2>Set Up Your Wallet</h2>
       <p className="step-description">
-        A USDC wallet lets you pay for game sessions and receive winnings.
-        Your wallet is managed securely by Magnetite.
+        Your Magnetite wallet holds your USD balance for game sessions and earnings.
+        It is managed securely by the platform — no crypto required.
       </p>
 
       {error && (
@@ -107,8 +107,8 @@ function WalletStep({ onNext, onSkip }) {
             onKeyDown={(e) => e.key === 'Enter' && !isGenerating && generateWallet()}
           >
             <div className="option-icon" aria-hidden="true">{isGenerating ? '⏳' : '✨'}</div>
-            <h3>{isGenerating ? 'Initialising…' : 'Create Wallet'}</h3>
-            <p>Create your USDC wallet to start playing</p>
+            <h3>{isGenerating ? 'Initialising…' : 'Activate Wallet'}</h3>
+            <p>Activate your USD wallet to start playing</p>
           </div>
         </div>
       ) : (
@@ -165,7 +165,7 @@ function FundsStep({ onNext, onSkip }) {
     <div className="onboarding-step funds-step">
       <h2>Add Funds</h2>
       <p className="step-description">
-        Add USDC to your wallet to start playing. You can skip this step and add funds later.
+        Add USD to your wallet to start playing. Pay by card or bank transfer. You can skip this step and add funds later.
       </p>
 
       {depositError && (
@@ -222,16 +222,16 @@ function FundsStep({ onNext, onSkip }) {
           </div>
           <div
             className={`deposit-option ${isProcessing ? 'loading' : ''}`}
-            onClick={() => !isProcessing && handleDeposit('usdc')}
+            onClick={() => !isProcessing && handleDeposit('bank_transfer')}
             role="button"
             tabIndex={0}
             aria-disabled={isProcessing}
-            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleDeposit('usdc')}
+            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleDeposit('bank_transfer')}
           >
-            <div className="option-icon" aria-hidden="true">🪙</div>
+            <div className="option-icon" aria-hidden="true">🏦</div>
             <div className="option-info">
-              <h4>Deposit USDC</h4>
-              <p>Transfer from another wallet</p>
+              <h4>Bank Transfer</h4>
+              <p>Direct bank deposit via Paystack</p>
             </div>
             <div className="option-arrow" aria-hidden="true">→</div>
           </div>

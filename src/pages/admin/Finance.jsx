@@ -30,8 +30,8 @@ const MOCK_TRANSACTIONS = import.meta.env.VITE_USE_MOCKS
 
 const MOCK_PENDING_PAYOUTS = import.meta.env.VITE_USE_MOCKS
   ? [
-      { id: 1, user: 'PixelMaster',    amount: 500.00, games: 'Galaxy Conquest',         requestDate: '2024-05-19', method: 'USDC Wallet'   },
-      { id: 2, user: 'CryptoGamer42',  amount: 750.00, games: 'Cosmic Raiders',           requestDate: '2024-05-18', method: 'USDC Wallet'   },
+      { id: 1, user: 'PixelMaster',    amount: 500.00, games: 'Galaxy Conquest',         requestDate: '2024-05-19', method: 'Wise'   },
+      { id: 2, user: 'CryptoGamer42',  amount: 750.00, games: 'Cosmic Raiders',           requestDate: '2024-05-18', method: 'Wise'   },
       { id: 3, user: 'IndieDev_Mike',  amount: 320.00, games: 'Dungeon Realms',           requestDate: '2024-05-17', method: 'Bank Transfer' },
     ]
   : null;
@@ -103,7 +103,7 @@ export default function Finance() {
               amount:      Math.abs(t.amount),
               games:       t.game,
               requestDate: t.date.split(' ')[0],
-              method:      'USDC Wallet',
+              method:      'Wise',
               _idx:        i,
             }))
         );

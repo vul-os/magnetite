@@ -10,7 +10,7 @@ const team = [
 const timeline = [
   { year: '2024 Q1',   event: 'Magnetite founded — vision: open-source Rust gaming at any scale.' },
   { year: '2024 Q3',   event: 'First Bevy game compiled to WASM and deployed on the platform.' },
-  { year: '2025 Q1',   event: 'USDC payment integration & Paystack fiat on-ramp launched.' },
+  { year: '2025 Q1',   event: 'Paystack fiat on-ramp launched for player deposits and subscriptions.' },
   { year: '2025 Q3',   event: '100+ Rust games live on the marketplace.' },
   { year: '2026 Q1',   event: 'Real-time multiplayer matchmaking & server-authoritative netcode released.' },
 ];
@@ -52,9 +52,9 @@ export default function About() {
               A tiny single-file arcade game and a 64-player multiplayer title use the same SDK.
             </p>
             <p>
-              Our platform pays 85% of revenue directly to developers in USDC, weekly, with
-              zero friction. Players get transparent, open-source games with provably fair
-              matchmaking and no hidden mechanics.
+              Our platform pays 70% of revenue directly to developers via Wise — fast global
+              bank transfers, weekly, with zero friction. Players get transparent, open-source
+              games with provably fair matchmaking and no hidden mechanics.
             </p>
           </div>
         </div>
@@ -203,7 +203,7 @@ export default function About() {
                 <div className="logo-icon" aria-hidden="true">M</div>
                 <span>Magnetite</span>
               </div>
-              <p>Open-source Rust gaming. No middlemen.</p>
+              <p>Open-source Rust gaming at any scale.</p>
             </div>
             <nav className="footer-links" aria-label="Footer navigation">
               <a href="/marketplace">Marketplace</a>

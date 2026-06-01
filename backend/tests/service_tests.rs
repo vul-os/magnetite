@@ -4,9 +4,9 @@
 //
 // Topics covered:
 //   1. PaymentService — sandbox vs unconfigured error selection.
-//   2. PaymentService — calculate_earnings (15% platform / 85% dev split via PaymentService).
+//   2. PaymentService — calculate_earnings (30% platform / 70% dev split per D-PAY-1).
 //   3. Payout fee split (30% platform / 70% dev via payout service constants).
-//   4. ZAR→USDC conversion arithmetic.
+//   4. Paystack verification sandbox path.
 //   5. Matchmaking wait-estimate formula (queue depth × 30 s, clamped 5-600 s).
 //   6. Matchmaking region filter (in-memory version passes all players through).
 //   7. Matchmaking SkillRange logic.
@@ -23,55 +23,30 @@ mod payment_provider_tests {
     #[test]
     fn sandbox_mode_on_mock_constructor() {
         // PaymentService::mock() always sets sandbox=true.
-        // In sandbox mode, create_wallet and other methods return labeled results
-        // instead of calling Circle/Paystack.
+        // Circle is removed; only Paystack on-ramp remains.
         let svc = PaymentService::mock();
-        // We cannot call async methods here, but we verify the struct is constructed.
-        // The sandbox flag is visible through the public sandbox_create_wallet test below.
         // (No panics = mock constructor works.)
         let _ = svc;
     }
 
     #[tokio::test]
-    async fn sandbox_wallet_has_labeled_id() {
-        let svc = PaymentService::mock();
-        let user_id = uuid::Uuid::new_v4();
-        let result = svc.create_wallet(user_id).await;
-        assert!(result.is_ok(), "sandbox create_wallet should succeed");
-        let wallet = result.unwrap();
-        assert!(
-            wallet.wallet_id.starts_with("sandbox_wallet_"),
-            "sandbox wallet_id should be labeled: {}",
-            wallet.wallet_id
-        );
-        assert_eq!(wallet.chain, "ETH-SANDBOX");
-    }
-
-    #[tokio::test]
-    async fn unconfigured_production_returns_error() {
-        // Without CIRCLE_API_KEY and without PAYMENTS_SANDBOX=true,
-        // create_wallet must return an Err (not a fabricated success).
-        // Save and restore env vars around the test body.
-        let saved_circle = std::env::var("CIRCLE_API_KEY").ok();
+    async fn unconfigured_production_paystack_returns_error() {
+        // Without PAYSTACK_SECRET_KEY and without PAYMENTS_SANDBOX=true,
+        // verify_paystack_payment must return an Err (not a fabricated success).
         let saved_paystack = std::env::var("PAYSTACK_SECRET_KEY").ok();
         let saved_sandbox = std::env::var("PAYMENTS_SANDBOX").ok();
 
-        // Clear all payment env vars.
+        // Clear payment env vars.
         unsafe {
-            std::env::remove_var("CIRCLE_API_KEY");
             std::env::remove_var("PAYSTACK_SECRET_KEY");
             std::env::remove_var("PAYMENTS_SANDBOX");
         }
 
         let svc = PaymentService::from_env();
-        let user_id = uuid::Uuid::new_v4();
-        let result = svc.create_wallet(user_id).await;
+        let result = svc.verify_paystack_payment("FAKE_REF").await;
 
-        // Restore env vars before asserting (so other tests are unaffected).
+        // Restore env vars before asserting.
         unsafe {
-            if let Some(v) = saved_circle {
-                std::env::set_var("CIRCLE_API_KEY", v);
-            }
             if let Some(v) = saved_paystack {
                 std::env::set_var("PAYSTACK_SECRET_KEY", v);
             }
@@ -82,29 +57,13 @@ mod payment_provider_tests {
 
         assert!(
             result.is_err(),
-            "unconfigured create_wallet must return Err, not fabricated success"
+            "unconfigured verify_paystack_payment must return Err, not fabricated success"
         );
         let msg = result.err().unwrap().to_string();
         assert!(
-            msg.contains("payments not configured") || msg.contains("CIRCLE_API_KEY"),
+            msg.contains("payments not configured") || msg.contains("PAYSTACK_SECRET_KEY"),
             "error message should mention missing key: {msg}"
         );
-    }
-
-    #[tokio::test]
-    async fn sandbox_deposit_has_labeled_transfer_id() {
-        let svc = PaymentService::mock();
-        let result = svc
-            .deposit_funds("sandbox_wallet_abc", rust_decimal_macros::dec!(50))
-            .await;
-        assert!(result.is_ok());
-        let transfer = result.unwrap();
-        assert!(
-            transfer.transfer_id.starts_with("sandbox_transfer_"),
-            "sandbox deposit transfer_id should be labeled: {}",
-            transfer.transfer_id
-        );
-        assert!(transfer.status.contains("sandbox"));
     }
 
     #[tokio::test]
@@ -130,28 +89,28 @@ mod earnings_split_tests {
     use rust_decimal_macros::dec;
 
     #[test]
-    fn calculate_earnings_developer_gets_85_pct() {
-        // PaymentService::calculate_earnings uses 15% platform / 85% developer (per §1).
+    fn calculate_earnings_developer_gets_70_pct() {
+        // PaymentService::calculate_earnings uses 30% platform / 70% developer (D-PAY-1, D-PAY-5).
         let svc = PaymentService::mock();
         let revenue = dec!(10_000.00);
         let breakdown = svc.calculate_earnings(revenue);
 
-        // Platform gets 15%, developer gets 85%.
-        let expected_platform = dec!(1_500.00);
-        let expected_developer = dec!(8_500.00);
+        // Platform gets 30%, developer gets 70%.
+        let expected_platform = dec!(3_000.00);
+        let expected_developer = dec!(7_000.00);
 
         assert_eq!(
             breakdown.platform_share, expected_platform,
-            "platform share should be 15% = 1500"
+            "platform share should be 30% = 3000"
         );
         assert_eq!(
             breakdown.developer_share, expected_developer,
-            "developer share should be 85% = 8500"
+            "developer share should be 70% = 7000"
         );
         assert_eq!(
             breakdown.developer_percentage,
-            dec!(85),
-            "developer_percentage field should be 85 (not 0.85)"
+            dec!(70),
+            "developer_percentage field should be 70 (not 0.70)"
         );
         assert_eq!(breakdown.total_revenue, revenue);
     }
@@ -267,97 +226,7 @@ mod payout_fee_split_tests {
     }
 }
 
-// ── ZAR → USDC conversion ──────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod zar_usdc_conversion_tests {
-    use magnetite_backend::services::payment::PaymentService;
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-
-    #[tokio::test]
-    async fn default_rate_275_zar_per_usdc() {
-        // Without ZAR_USDC_RATE env, default is 275.0 ZAR/USDC.
-        let saved = std::env::var("ZAR_USDC_RATE").ok();
-        unsafe {
-            std::env::remove_var("ZAR_USDC_RATE");
-        }
-
-        let svc = PaymentService::mock();
-        let zar = dec!(275.00);
-        let result = svc.convert_zar_to_usdc(zar).await;
-
-        unsafe {
-            if let Some(v) = saved {
-                std::env::set_var("ZAR_USDC_RATE", v);
-            }
-        }
-
-        assert!(result.is_ok());
-        let usdc = result.unwrap();
-        // 275 / 275 = 1 USDC, minus 3% fee = 0.97 USDC
-        let expected = dec!(0.97);
-        let diff = (usdc - expected).abs();
-        assert!(
-            diff < dec!(0.001),
-            "275 ZAR should convert to ~0.97 USDC at default rate: got {usdc}"
-        );
-    }
-
-    #[tokio::test]
-    async fn custom_rate_env_is_respected() {
-        // When ZAR_USDC_RATE=550, 550 ZAR = 1 USDC (before fee).
-        let saved = std::env::var("ZAR_USDC_RATE").ok();
-        unsafe {
-            std::env::set_var("ZAR_USDC_RATE", "550.0");
-        }
-
-        let svc = PaymentService::mock();
-        let zar = dec!(550.00);
-        let result = svc.convert_zar_to_usdc(zar).await;
-
-        unsafe {
-            match saved {
-                Some(v) => std::env::set_var("ZAR_USDC_RATE", v),
-                None => std::env::remove_var("ZAR_USDC_RATE"),
-            }
-        }
-
-        assert!(result.is_ok());
-        let usdc = result.unwrap();
-        // 550 / 550 = 1 USDC, minus 3% = 0.97 USDC
-        assert!(
-            usdc > dec!(0.9) && usdc < dec!(1.0),
-            "550 ZAR at rate 550 should give ~0.97 USDC: got {usdc}"
-        );
-    }
-
-    #[tokio::test]
-    async fn zero_zar_gives_zero_usdc() {
-        let svc = PaymentService::mock();
-        let result = svc.convert_zar_to_usdc(Decimal::ZERO).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Decimal::ZERO);
-    }
-
-    #[tokio::test]
-    async fn conversion_applies_3_pct_fee() {
-        // Verify the 3% platform fee is applied: result < zar / rate.
-        let svc = PaymentService::mock();
-        let zar = dec!(2750.00); // At default rate 275, this is 10 USDC before fee
-        let result = svc.convert_zar_to_usdc(zar).await;
-        assert!(result.is_ok());
-        let usdc = result.unwrap();
-        let gross = dec!(10.00); // without fee
-        assert!(
-            usdc < gross,
-            "after 3% fee, usdc should be less than gross {gross}: got {usdc}"
-        );
-        // 10 * 0.97 = 9.70
-        let diff = (usdc - dec!(9.70)).abs();
-        assert!(diff < dec!(0.01), "expected ~9.70 USDC, got {usdc}");
-    }
-}
+// ZAR→USDC conversion removed (Wave PAY — D-PAY-1: Circle/USDC removed; fiat USD only).
 
 // ── Matchmaking wait estimate formula ─────────────────────────────────────────
 
@@ -632,11 +501,12 @@ mod earnings_breakdown_tests {
     use rust_decimal_macros::dec;
 
     #[test]
-    fn earnings_breakdown_developer_percentage_is_85() {
+    fn earnings_breakdown_developer_percentage_is_70() {
+        // Wave PAY D-PAY-1/D-PAY-5: 70/30 split (Wise payouts, Paystack on-ramp).
         let svc = PaymentService::mock();
         let breakdown = svc.calculate_earnings(dec!(1000.00));
-        // developer_percentage is stored as 85 (the integer percentage), not 0.85.
-        assert_eq!(breakdown.developer_percentage, dec!(85));
+        // developer_percentage is stored as 70 (the integer percentage), not 0.70.
+        assert_eq!(breakdown.developer_percentage, dec!(70));
     }
 
     #[test]
@@ -649,62 +519,14 @@ mod earnings_breakdown_tests {
     }
 
     #[test]
-    fn earnings_breakdown_platform_is_15_pct() {
+    fn earnings_breakdown_platform_is_30_pct() {
         let svc = PaymentService::mock();
         let revenue = dec!(2000.00);
         let b = svc.calculate_earnings(revenue);
-        // 15% of 2000 = 300
-        assert_eq!(b.platform_share, dec!(300.00));
+        // 30% of 2000 = 600
+        assert_eq!(b.platform_share, dec!(600.00));
     }
 }
 
-// ── PaymentService sandbox payout ─────────────────────────────────────────────
-
-#[cfg(test)]
-mod payment_payout_tests {
-    use magnetite_backend::services::payment::PaymentService;
-    use rust_decimal_macros::dec;
-    use uuid::Uuid;
-
-    #[tokio::test]
-    async fn sandbox_payout_returns_labeled_status() {
-        let svc = PaymentService::mock();
-        // process_payout with a db pool — we pass a dummy pool construction that will fail
-        // the DB write, but since this is sandbox mode the transfer is skipped.
-        // We test process_payout without a real DB by passing a dummy pool.
-        // create a minimal pool that will fail (we only care sandbox short-circuits first)
-        let user_id = Uuid::new_v4();
-        // We use a fake pool from env — it won't connect, but sandbox short-circuits before any DB call.
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(1)
-            .connect_lazy("postgres://localhost/magnetite_test")
-            .expect("lazy connect should not fail");
-
-        let result = svc
-            .process_payout(&pool, user_id, dec!(100.00), "0xABC123")
-            .await;
-        assert!(
-            result.is_ok(),
-            "sandbox process_payout should succeed: {result:?}"
-        );
-        let payout = result.unwrap();
-        assert!(
-            payout.status.contains("sandbox"),
-            "sandbox payout status should be labeled: {}",
-            payout.status
-        );
-        assert_eq!(payout.amount, dec!(100.00));
-        assert_eq!(payout.user_id, user_id);
-    }
-
-    #[tokio::test]
-    async fn sandbox_withdraw_funds_labeled() {
-        let svc = PaymentService::mock();
-        let result = svc.withdraw_funds("0xDEADBEEF", dec!(50.00)).await;
-        assert!(result.is_ok());
-        let transfer = result.unwrap();
-        assert!(transfer.status.contains("sandbox"));
-        assert_eq!(transfer.amount, dec!(50.00));
-        assert_eq!(transfer.destination_address, "0xDEADBEEF");
-    }
-}
+// PaymentService Circle payout methods removed in Wave PAY (D-PAY-2/D-PAY-4).
+// Payout tests now live in payout.rs (Agent A); Wise sandbox tests in wise.rs.

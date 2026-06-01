@@ -100,10 +100,11 @@ without real credentials.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CIRCLE_API_KEY` | — | Circle API key for USDC wallets, transfers, and developer payouts |
-| `PAYSTACK_SECRET_KEY` | — | Paystack secret key for ZAR fiat on-ramp (Africa region) |
-| `PAYMENTS_SANDBOX` | `false` | `true` enables sandbox mode: labelled placeholder results, no real money moves |
-| `ZAR_USDC_RATE` | `275.0` | ZAR-to-USDC conversion rate used by the fiat on-ramp helper |
+| `PAYSTACK_SECRET_KEY` | — | Paystack secret key for fiat on-ramp (deposits + subscriptions) |
+| `WISE_API_TOKEN` | — | Wise API token for developer payout disbursements |
+| `WISE_PROFILE_ID` | — | Wise sending-profile ID (business or personal) used for outbound transfers |
+| `WISE_SANDBOX` | `false` | `true` routes Wise requests to `api.sandbox.transferwise.tech`; results are labelled sandbox |
+| `PAYMENTS_SANDBOX` | `false` | `true` enables sandbox mode across providers: labelled placeholder results, no real money moves |
 
 ---
 

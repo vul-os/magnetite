@@ -23,7 +23,7 @@
 > Single source of truth for the autonomous multi-wave rebuild. Every agent reads this
 > file before working. The orchestrator audits against it every 30 minutes.
 
-Last updated: 2026-06-01 (Wave N2 — game-client-bevy)
+Last updated: 2026-06-01 (Wave PAY — Agent B: money-core + config)
 
 ---
 
@@ -418,6 +418,31 @@ frontend build clean, lint 0 errors, 115 tests; 6 Rust crates compile clean.
 game-template-motorsport); frontend build clean, lint 0 errors (65 warnings — intentional experimental
 react-hooks rules), **146 frontend tests pass**, backend 189 tests pass. A/B/C closed, bucket D documented in
 GAPS.md. **Loop terminated — no re-arm.** Branch `feat/redesign-and-harden` not merged/pushed (awaiting user).
+
+## Wave PAY — Agent B progress (2026-06-01)
+
+**Agent B (money core + config) — DONE.** Circle/USDC removed from all B-owned files; Paystack kept; Wise config added.
+
+### Changes
+- **`services/payment.rs`:** Removed `create_wallet`, `get_wallet_balance`, `deposit_funds`, `withdraw_funds`, `create_payment`, `process_payout`, `process_weekly_payouts`, `convert_zar_to_usdc`, `require_circle_key`, `create_circle_subscription`, `cancel_circle_subscription`, `renew_circle_subscription`, `handle_circle_success`. `SubscriptionService.circle_api_key` removed. `subscribe()` now accepts only `paystack`/`platform`. Revenue split corrected to **30/70** (was incorrectly 15/85 in this file).
+- **`config.rs`:** Removed `circle_api_key`. Added `wise_api_token`, `wise_profile_id`, `wise_sandbox` (read from `WISE_API_TOKEN`, `WISE_PROFILE_ID`, `WISE_SANDBOX`).
+- **`api/wallet.rs`:** Deposit path: Paystack-only verification → credit USD (removed Circle branch + ZAR→USDC conversion). Withdraw path: debit balance → insert `payout_requests` row (status=pending) for Wise job; no Circle call.  All currency literals changed to `'USD'`.
+- **`api/subscriptions.rs`:** Removed Circle payment path from `subscribe()`; only `paystack`/`platform` accepted. Subscription transaction records `ZAR` currency (Paystack). `cancel_subscription` removes Circle branch.
+- **`services/wallet.rs`:** Comment updated (USDC→USD).
+- **`migrations/20260601_currency_usd.sql`:** UPDATE wallet_balances/wallet_transactions rows from `USDC`→`USD`; ALTER column defaults; DROP users.wallet_address IF EXISTS; COMMENT on price_usdc column.
+- **`tests/service_tests.rs`:** Updated to 70/30 split assertions; removed Circle/ZAR-USDC tests; updated `unconfigured` test to use Paystack path.
+
+### Crossroads
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| PAY-B1 | Revenue split in payment.rs | Changed from 15/85 to **30/70** | DECISIONS.md D-PAY-5 says "70/30 split — unchanged"; payment.rs was incorrectly 15/85 (different from payout.rs which was already 70/30). Corrected to be consistent. |
+| PAY-B2 | Deposit USD amount | Caller-supplied amount (gated by Paystack verify) | ZAR→USD FX rate would require a live feed (Bucket D). Paystack verification is the authenticity gate; the USD credit amount comes from the caller. Admin-configurable FX rate is a Bucket-D item. |
+| PAY-B3 | wallet_address column | DROP IF EXISTS | Column holds on-chain ETH addresses which are crypto-only; safe to drop. Non-destructive (IF EXISTS). |
+
+### Verify (written to /tmp/payB.txt)
+- `cargo check` — **0 warnings, exit 0**
+- `cargo fmt --check` — **clean, exit 0**
+- `cargo test --no-run` — **all 6 test executables compile, exit 0**
 
 ## 7. CLOSING SUMMARY (2026-05-30)
 

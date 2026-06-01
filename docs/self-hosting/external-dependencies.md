@@ -16,8 +16,8 @@ happens if it is absent.
 | RTMP egress to Twitch/YouTube | MediaMTX + configured runOnPublish | Egress silently does nothing |
 | WASM game builds via CI | GitHub CI runner + wasm-pack | Build status stays `building`; artifact never uploaded |
 | Dedicated / auto-scaled game servers | Self-hosted or cloud game server fleet | `server_endpoint` on match sessions is `null`; WS connects to the same host as the API |
-| USDC payments (Circle) | Circle API account + `CIRCLE_API_KEY` | Payment endpoints return HTTP 502 |
-| Fiat on-ramp — ZAR (Paystack) | Paystack account + `PAYSTACK_SECRET_KEY` | Paystack endpoints return HTTP 502 |
+| Fiat deposits + subscriptions (Paystack) | Paystack account + `PAYSTACK_SECRET_KEY` | Paystack endpoints return HTTP 502 |
+| Developer payouts (Wise) | Wise account + `WISE_API_TOKEN` + `WISE_PROFILE_ID` | Payout endpoints return HTTP 502 |
 | Transactional email | Resend API key **or** AWS SES SMTP credentials | Email not sent; auth verification links not dispatched |
 
 ---
@@ -88,32 +88,14 @@ and means no geographic distribution.
 
 ---
 
-## Circle — USDC Payments and Developer Payouts
+## Paystack — Fiat On-Ramp (Deposits + Subscriptions)
 
-**What it does:** Circle is the payment provider for USDC wallet creation, deposits,
-withdrawals, and developer payout disbursements.
-
-If `CIRCLE_API_KEY` is not set:
-- Wallet creation, deposit, withdrawal, and payout endpoints return HTTP 502
-  (`ProviderUnconfigured`).
-- No money moves and no USDC is fabricated.
-- Set `PAYMENTS_SANDBOX=true` to receive labelled sandbox responses for local testing.
-
-**What you need:**
-
-1. A Circle account and API key from [circle.com](https://www.circle.com/en/circle-apis).
-2. Set `CIRCLE_API_KEY` in the backend environment.
-3. Ensure your Circle account is set up for the correct network (mainnet or testnet).
-
----
-
-## Paystack — ZAR Fiat On-Ramp
-
-**What it does:** Paystack handles fiat-to-USDC on-ramp for the Africa region (ZAR
-and other supported currencies).
+**What it does:** Paystack handles fiat card and bank payments for wallet top-ups and
+paid subscriptions (all denominated in USD). It is the player-facing on-ramp.
 
 If `PAYSTACK_SECRET_KEY` is not set:
-- The Paystack subscription and payment endpoints return HTTP 502.
+- The Paystack deposit, subscription, and payment-initiation endpoints return HTTP 502
+  (`ProviderUnconfigured`).
 - Set `PAYMENTS_SANDBOX=true` for local dev sandbox behaviour.
 
 **What you need:**
@@ -122,6 +104,27 @@ If `PAYSTACK_SECRET_KEY` is not set:
 2. Set `PAYSTACK_SECRET_KEY` to your Paystack secret key.
 3. Configure the Paystack webhook URL to point to
    `https://api.your-domain.com/api/v1/webhooks/paystack`.
+
+---
+
+## Wise — Developer Payouts
+
+**What it does:** Wise (TransferWise) handles outbound payout disbursements to developers.
+When a developer requests a payout, the backend creates a Wise quote → transfer → funds it
+from the platform's Wise balance. The developer receives their 70 % share to their bank
+account or Wise balance.
+
+If `WISE_API_TOKEN` or `WISE_PROFILE_ID` is not set:
+- Payout endpoints return HTTP 502 (`ProviderUnconfigured`).
+- No money moves and no payout is fabricated.
+- Set `WISE_SANDBOX=true` to direct requests to `api.sandbox.transferwise.tech` for local testing.
+
+**What you need:**
+
+1. A Wise business account at [wise.com](https://wise.com).
+2. Generate an API token under **Settings → API tokens** (full access required for transfers).
+3. Set `WISE_API_TOKEN` and `WISE_PROFILE_ID` in the backend environment.
+4. Ensure your Wise account has sufficient balance in USD to fund payouts (or set up auto-funding).
 
 ---
 

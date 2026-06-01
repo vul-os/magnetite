@@ -30,7 +30,7 @@ const MOCK_GAMES = [
 
 const MOCK_ACTIVITIES = [
   { id: 1, type: 'player', message: '128 new players joined Cosmic Raiders', time: '2 hours ago' },
-  { id: 2, type: 'earnings', message: 'Earned 450.00 USDC from Dungeon Realms', time: '6 hours ago' },
+  { id: 2, type: 'earnings', message: 'Earned $450.00 from Dungeon Realms', time: '6 hours ago' },
 ];
 
 /* Design-token colours for recharts (must match CSS vars) */
@@ -191,7 +191,7 @@ export default function DeveloperDashboard() {
                 <span>💰</span>
               </div>
               <div className="stat-content">
-                <span className="stat-label">Total Earnings (USDC)</span>
+                <span className="stat-label">Total Earnings (USD)</span>
                 <span className="stat-value amber-value">{loading ? '—' : `$${(stats?.totalEarnings ?? 0).toLocaleString()}`}</span>
               </div>
             </div>
@@ -351,7 +351,7 @@ export default function DeveloperDashboard() {
                   <span className="action-icon" aria-hidden="true">💳</span>
                   <span className="action-text">
                     <strong>Manage Wallet</strong>
-                    <small>Withdraw or deposit USDC</small>
+                    <small>Add funds or request payout</small>
                   </span>
                 </Link>
               </div>

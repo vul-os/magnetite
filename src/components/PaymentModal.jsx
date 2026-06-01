@@ -18,7 +18,7 @@ export default function PaymentModal({ isOpen, onClose }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={activeTab === 'deposit' ? 'Deposit USDC' : 'Withdraw USDC'}
+      title={activeTab === 'deposit' ? 'Add Funds (USD)' : 'Request Payout (USD)'}
       size="md"
     >
       <div className="payment-modal-tabs">

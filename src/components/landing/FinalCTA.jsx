@@ -37,7 +37,7 @@ export default function FinalCTA() {
             <span className="separator" aria-hidden="true">·</span>
             <span>No credit card required</span>
             <span className="separator" aria-hidden="true">·</span>
-            <span>85% revenue share</span>
+            <span>70/30 revenue split</span>
             <span className="separator" aria-hidden="true">·</span>
             <span>Deploy in under 5 min</span>
           </div>

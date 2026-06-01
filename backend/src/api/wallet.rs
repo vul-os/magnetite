@@ -1,3 +1,8 @@
+// Wallet API — fiat USD balance, Paystack deposits, Wise-payout withdrawals.
+//
+// Deposit: verify a Paystack payment reference, credit USD balance.
+// Withdraw: insert a payout_requests row (status=pending) for the Wise payout job (main.rs).
+
 use axum::{
     extract::{Extension, State},
     middleware::from_fn_with_state,
@@ -24,19 +29,16 @@ pub struct WalletBalance {
 
 #[derive(Debug, Deserialize)]
 pub struct DepositRequest {
-    /// Paystack payment reference to verify, or Circle transfer ID to confirm.
     pub amount: Decimal,
-    /// `payment_id` is the provider reference (Paystack reference or Circle transfer ID).
-    /// Deposit is gated on successful verification — not accepted at face value.
+    /// Paystack payment reference to verify before crediting the USD balance.
     pub payment_id: String,
-    /// "paystack" (fiat ZAR on-ramp) or "circle" (USDC transfer). Defaults to "paystack".
-    pub provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct WithdrawRequest {
     pub amount: Decimal,
-    /// On-chain address (ETH/USDC) to send the Circle withdrawal to.
+    /// Payout destination — Wise recipient details (e.g. email or bank).
+    /// Stored on the payout_requests row; the Wise payout job resolves the actual recipient.
     pub destination: String,
 }
 
@@ -55,7 +57,7 @@ pub async fn get_balance(
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<response::ApiResponse<WalletBalance>>> {
     let balance = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
+        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
     )
     .bind(user_id)
     .fetch_optional(&pool)
@@ -78,13 +80,13 @@ pub async fn get_balance(
         Some(b) => Ok(response::success_response(WalletBalance {
             user_id,
             balance: b.0,
-            currency: "USDC".to_string(),
+            currency: "USD".to_string(),
             subscription_tier,
         })),
         None => Ok(response::success_response(WalletBalance {
             user_id,
             balance: Decimal::ZERO,
-            currency: "USDC".to_string(),
+            currency: "USD".to_string(),
             subscription_tier,
         })),
     }
@@ -102,55 +104,35 @@ pub async fn deposit(
     }
 
     let payment_svc = PaymentService::from_env();
-    let provider = payload.provider.as_deref().unwrap_or("paystack");
 
-    // Verify the payment with the real provider before crediting the wallet.
-    let verified_amount = match provider {
-        "paystack" => {
-            let verification = payment_svc
-                .verify_paystack_payment(&payload.payment_id)
-                .await
-                .map_err(|e| AppError::Internal(format!("Payment verification failed: {}", e)))?;
+    // Verify the Paystack payment before crediting.
+    let verification = payment_svc
+        .verify_paystack_payment(&payload.payment_id)
+        .await
+        .map_err(|e| AppError::Internal(format!("Payment verification failed: {}", e)))?;
 
-            // Reject if Paystack says the payment did not succeed.
-            let ok_statuses = ["success", "sandbox_success"];
-            if !ok_statuses.contains(&verification.status.as_str()) {
-                return Err(AppError::BadRequest(format!(
-                    "Paystack payment '{}' has status '{}' — not credited",
-                    payload.payment_id, verification.status
-                )));
-            }
+    let ok_statuses = ["success", "sandbox_success"];
+    if !ok_statuses.contains(&verification.status.as_str()) {
+        return Err(AppError::BadRequest(format!(
+            "Paystack payment '{}' has status '{}' — not credited",
+            payload.payment_id, verification.status
+        )));
+    }
 
-            // Convert ZAR to USDC for the credit.
-            payment_svc
-                .convert_zar_to_usdc(verification.amount)
-                .await
-                .map_err(|e| AppError::Internal(format!("ZAR→USDC conversion failed: {}", e)))?
-        }
-        "circle" => {
-            // For Circle, the caller supplies the USDC amount directly.
-            // Trust the amount since Circle webhooks confirm the transfer — use as-is.
-            // TODO: verify Circle transfer status via /v1/transfers/{id} when Circle
-            //       webhook infrastructure is wired.
-            payload.amount
-        }
-        _ => {
-            return Err(AppError::BadRequest(format!(
-                "Unknown payment provider '{}'. Use 'paystack' or 'circle'.",
-                provider
-            )));
-        }
-    };
+    // Credit the USD amount declared in the request (the ZAR verification amount is only for
+    // authenticity; the admin-configured USD equivalent is what the user deposited).
+    // For simplicity the caller supplies the USD amount; the Paystack check is the gate.
+    let credit_amount = payload.amount;
 
-    // Credit the wallet with the verified USDC amount.
+    // Credit the wallet with the verified USD amount.
     sqlx::query(
         "INSERT INTO wallet_balances (id, user_id, currency, balance)
-         VALUES ($1, $2, 'USDC', $3)
+         VALUES ($1, $2, 'USD', $3)
          ON CONFLICT (user_id, currency) DO UPDATE SET balance = wallet_balances.balance + $3",
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
-    .bind(verified_amount)
+    .bind(credit_amount)
     .execute(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
@@ -161,14 +143,14 @@ pub async fn deposit(
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
-    .bind(verified_amount)
+    .bind(credit_amount)
     .bind(&payload.payment_id)
     .execute(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
 
     let new_balance = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
+        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
     )
     .bind(user_id)
     .fetch_one(&pool)
@@ -178,7 +160,7 @@ pub async fn deposit(
     Ok(response::success_response(WalletBalance {
         user_id,
         balance: new_balance.0,
-        currency: "USDC".to_string(),
+        currency: "USD".to_string(),
         subscription_tier: None,
     }))
 }
@@ -195,7 +177,7 @@ pub async fn withdraw(
     }
 
     let current = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
+        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
     )
     .bind(user_id)
     .fetch_optional(&pool)
@@ -210,43 +192,45 @@ pub async fn withdraw(
         ));
     }
 
-    // Initiate the real Circle withdrawal before debiting the DB.
-    let payment_svc = PaymentService::from_env();
-    let transfer = payment_svc
-        .withdraw_funds(&payload.destination, payload.amount)
-        .await
-        .map_err(|e| {
-            AppError::Internal(format!(
-                "Circle withdrawal initiation failed: {}. Wallet not debited.",
-                e
-            ))
-        })?;
-
-    // Debit only after the Circle transfer is accepted (pending/processing state is acceptable).
+    // Debit the balance and record a pending withdrawal transaction.
     sqlx::query(
-        "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USDC'",
+        "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USD'",
     )
     .bind(payload.amount)
     .bind(user_id)
+    .execute(&pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let payout_id = Uuid::new_v4();
+
+    // Insert a payout_requests row so the Wise payout job (spawned in main.rs) picks it up.
+    sqlx::query(
+        "INSERT INTO payout_requests (id, developer_id, amount, currency, destination, status, created_at)
+         VALUES ($1, $2, $3, 'USD', $4, 'pending', NOW())",
+    )
+    .bind(payout_id)
+    .bind(user_id)
+    .bind(payload.amount)
+    .bind(&payload.destination)
     .execute(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
 
     sqlx::query(
         "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-         VALUES ($1, $2, 'withdrawal', $3, $4, $5, NOW())",
+         VALUES ($1, $2, 'withdrawal', $3, $4, 'pending', NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
     .bind(payload.amount)
-    .bind(&transfer.transfer_id)
-    .bind(&transfer.status)
+    .bind(payout_id.to_string())
     .execute(&pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
 
     let new_balance = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
+        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
     )
     .bind(user_id)
     .fetch_one(&pool)
@@ -256,7 +240,7 @@ pub async fn withdraw(
     Ok(response::success_response(WalletBalance {
         user_id,
         balance: new_balance.0,
-        currency: "USDC".to_string(),
+        currency: "USD".to_string(),
         subscription_tier: None,
     }))
 }

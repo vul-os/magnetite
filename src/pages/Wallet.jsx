@@ -10,14 +10,10 @@ const TIER_DISPLAY = {
   unlimited: { name: 'Unlimited' },
 };
 
-const FALLBACK_ADDRESS = null; // no hardcoded address — shown as loading until API responds
-
 export default function Wallet() {
-  const { balance, transactions, walletAddress, loading, error: walletError, deposit: hookDeposit } = useWallet();
+  const { balance, transactions, loading, error: walletError, deposit: hookDeposit } = useWallet();
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
-  const [depositMethod, setDepositMethod] = useState('paystack');
-  const [copied, setCopied] = useState(false);
   const [depositError, setDepositError] = useState(null);
   const [depositLoading, setDepositLoading] = useState(false);
   const [subscription] = useState({
@@ -26,8 +22,6 @@ export default function Wallet() {
     hoursUsed: 32,
     hoursTotal: 50,
   });
-
-  const walletAddressDisplay = walletAddress || FALLBACK_ADDRESS;
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
@@ -53,17 +47,6 @@ export default function Wallet() {
     return customAmount || (selectedPreset ? selectedPreset.toString() : '');
   };
 
-  const handleCopyAddress = async () => {
-    if (!walletAddressDisplay) return;
-    try {
-      await navigator.clipboard.writeText(walletAddressDisplay);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
   const handleDeposit = async (e) => {
     e.preventDefault();
     const amount = getAmount();
@@ -71,7 +54,7 @@ export default function Wallet() {
     setDepositError(null);
     setDepositLoading(true);
     try {
-      await hookDeposit(parseFloat(amount), depositMethod);
+      await hookDeposit(parseFloat(amount), 'paystack');
     } catch (err) {
       setDepositError(err.message || 'Deposit failed. Please try again.');
     } finally {
@@ -109,9 +92,9 @@ export default function Wallet() {
     <Layout>
       <div className="wallet">
         <header className="wallet-page-header">
-          <span className="kicker">// USDC WALLET</span>
+          <span className="kicker">// USD WALLET</span>
           <h1>Wallet</h1>
-          <p className="wallet-subtitle">Manage your USDC balance, deposits, and subscription</p>
+          <p className="wallet-subtitle">Manage your USD balance, add funds via Paystack, and manage your subscription</p>
         </header>
 
         {walletError && (
@@ -161,8 +144,8 @@ export default function Wallet() {
             <div className="balance-card">
               <div className="balance-card-top">
                 <div className="usdc-badge">
-                  <span className="usdc-icon">◎</span>
-                  <span>USDC</span>
+                  <span className="usdc-icon">$</span>
+                  <span>USD</span>
                 </div>
                 <span className="balance-label-text">Total Balance</span>
               </div>
@@ -177,30 +160,19 @@ export default function Wallet() {
                 <button className="btn btn-primary btn-add-funds">
                   <span aria-hidden="true">+</span> Add Funds
                 </button>
-                <button className="btn btn-withdraw">
-                  <span aria-hidden="true">↓</span> Withdraw
-                </button>
-              </div>
-              <div className="quick-actions-row">
-                <button className="quick-action-item">
-                  <span className="qa-icon" aria-hidden="true">↗</span>
-                  <span>Send</span>
-                </button>
-                <button className="quick-action-item">
-                  <span className="qa-icon" aria-hidden="true">↙</span>
-                  <span>Receive</span>
-                </button>
-                <button className="quick-action-item">
-                  <span className="qa-icon" aria-hidden="true">⟳</span>
-                  <span>Swap</span>
-                </button>
+                <a href="/earnings" className="btn btn-withdraw">
+                  <span aria-hidden="true">↓</span> Request Payout
+                </a>
               </div>
             </div>
 
-            {/* Quick deposit */}
+            {/* Add funds via Paystack */}
             <div className="quick-deposit-card">
-              <span className="kicker">// FUND YOUR ACCOUNT</span>
-              <h3>Quick Deposit</h3>
+              <span className="kicker">// ADD FUNDS</span>
+              <h3>Add Funds via Paystack</h3>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: '1rem', fontFamily: 'var(--font-sans)' }}>
+                Deposit using your card or bank account. Funds are added to your USD balance instantly.
+              </p>
               <div className="preset-amounts">
                 {[5, 10, 25, 50].map((amt) => (
                   <button
@@ -226,40 +198,6 @@ export default function Wallet() {
                   />
                 </div>
               </div>
-              <div className="deposit-methods">
-                <label className={`method-option${depositMethod === 'paystack' ? ' active' : ''}`}>
-                  <input
-                    type="radio"
-                    name="method"
-                    value="paystack"
-                    checked={depositMethod === 'paystack'}
-                    onChange={(e) => setDepositMethod(e.target.value)}
-                  />
-                  <div className="method-content">
-                    <span className="method-icon" aria-hidden="true">🏦</span>
-                    <div className="method-info">
-                      <span className="method-name">Paystack</span>
-                      <span className="method-desc">ZAR (South Africa)</span>
-                    </div>
-                  </div>
-                </label>
-                <label className={`method-option${depositMethod === 'usdc' ? ' active' : ''}`}>
-                  <input
-                    type="radio"
-                    name="method"
-                    value="usdc"
-                    checked={depositMethod === 'usdc'}
-                    onChange={(e) => setDepositMethod(e.target.value)}
-                  />
-                  <div className="method-content">
-                    <span className="method-icon" aria-hidden="true">◎</span>
-                    <div className="method-info">
-                      <span className="method-name">USDC Direct</span>
-                      <span className="method-desc">Deposit from wallet</span>
-                    </div>
-                  </div>
-                </label>
-              </div>
               {depositError && (
                 <p style={{ color: 'var(--color-error)', fontSize: '0.875rem', marginTop: '0.5rem' }} role="alert">
                   {depositError}
@@ -272,32 +210,10 @@ export default function Wallet() {
               >
                 {depositLoading
                   ? 'Processing…'
-                  : `Deposit ${getAmount() ? `$${getAmount()}` : ''} via ${depositMethod === 'paystack' ? 'Paystack' : 'USDC'}`}
+                  : `Add Funds ${getAmount() ? `$${getAmount()}` : ''} via Paystack`}
               </button>
-            </div>
-
-            {/* Wallet address */}
-            <div className="wallet-address-card">
-              <span className="kicker">// DEPOSIT ADDRESS</span>
-              <h3>Your Deposit Address</h3>
-              <div className="address-card">
-                <div className="qr-placeholder" aria-label="QR code placeholder">
-                  <div className="qr-box">QR</div>
-                </div>
-                <div className="address-details">
-                  <div className="address-network-label">Ethereum (ERC-20)</div>
-                  <div className="address-value-row">
-                    <code className="address-code">
-                      {walletAddressDisplay ?? (loading ? 'Loading…' : '—')}
-                    </code>
-                  </div>
-                  <button className="btn btn-copy-addr" onClick={handleCopyAddress}>
-                    {copied ? '✓ Copied!' : 'Copy Address'}
-                  </button>
-                </div>
-              </div>
-              <p className="address-notice">
-                Only send USDC on Ethereum network to this address. Other tokens may be lost.
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: '0.75rem', fontFamily: 'var(--font-sans)' }}>
+                Powered by Paystack. Supports card and bank transfer payments.
               </p>
             </div>
           </div>
@@ -306,12 +222,16 @@ export default function Wallet() {
             <div className="transactions-card">
               <div className="transactions-header">
                 <h3>Recent Transactions</h3>
-                <button className="btn-text-link">View All</button>
+                <a href="/earnings" className="btn-text-link">View All</a>
               </div>
               {loading ? (
                 <div className="loading-state">
                   <span className="spinner" />
                   <span>Loading transactions…</span>
+                </div>
+              ) : transactions.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+                  No transactions yet. Add funds to get started.
                 </div>
               ) : (
                 <div className="transactions-list">
@@ -328,7 +248,7 @@ export default function Wallet() {
                       </div>
                       <div className="tx-right">
                         <span className={`tx-amount ${tx.amount > 0 ? 'positive' : 'negative'}`}>
-                          {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)}
+                          {tx.amount > 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
                         </span>
                         <span className={`tx-status ${getStatusClass(tx.status)}`}>
                           {tx.status}

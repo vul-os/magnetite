@@ -1,7 +1,8 @@
-// useWallet.test.js — tests for the gap-closure real-fetch contract.
-// useWallet now fetches from the real API; mock data is only used when
-// VITE_USE_MOCKS=true (default off). These tests assert the real-fetch path
-// by mocking the api client (never the network).
+// useWallet.test.js — tests for the USD fiat contract (D-PAY-1).
+// Platform is now fiat-only (USD); payouts go via Wise, deposits via Paystack.
+// walletAddress (crypto on-chain) is removed. withdraw = payout request.
+// Mock data is only used when VITE_USE_MOCKS=true (default off).
+// These tests assert the real-fetch path by mocking the api client.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -49,15 +50,16 @@ describe('useWallet', () => {
     expect(result.current.error).toBeTruthy();
   });
 
-  it('populates balance from API response', async () => {
-    api.wallet.balance.mockResolvedValue({ data: { balance: '250.75', wallet_address: '0xABC' } });
+  it('populates USD balance from API response', async () => {
+    api.wallet.balance.mockResolvedValue({ data: { balance: '250.75' } });
     api.wallet.transactions.mockRejectedValue(new Error('no tx'));
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.balance).toBe(250.75);
-    expect(result.current.walletAddress).toBe('0xABC');
+    // No walletAddress — crypto on-chain address is removed (D-PAY-1).
+    expect(result.current.walletAddress).toBeUndefined();
     expect(result.current.error).toBeNull();
   });
 
@@ -97,7 +99,7 @@ describe('useWallet', () => {
     expect(result.current.transactions).toEqual([]);
   });
 
-  // ── deposit ───────────────────────────────────────────────────────────────
+  // ── deposit (Paystack fiat on-ramp) ──────────────────────────────────────
 
   it('deposit: calls real API with amount and method', async () => {
     api.wallet.balance.mockResolvedValue({ balance: '200' });
@@ -114,7 +116,7 @@ describe('useWallet', () => {
     expect(api.wallet.deposit).toHaveBeenCalledWith({ amount: 100, method: 'paystack' });
   });
 
-  it('deposit: updates balance from API response', async () => {
+  it('deposit: updates USD balance from API response', async () => {
     api.wallet.balance.mockResolvedValue({ balance: '200' });
     api.wallet.transactions.mockResolvedValue({ transactions: [] });
     api.wallet.deposit.mockResolvedValue({ balance: '350' });
@@ -139,7 +141,7 @@ describe('useWallet', () => {
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(async () => {
-      await result.current.deposit(50, 'circle');
+      await result.current.deposit(50, 'paystack');
     });
 
     // Optimistic: balance += amount
@@ -186,9 +188,9 @@ describe('useWallet', () => {
     expect(result.current.transactions[0].type).toBe('deposit');
   });
 
-  // ── withdraw ──────────────────────────────────────────────────────────────
+  // ── withdraw = payout request (Wise, D-PAY-4) ────────────────────────────
 
-  it('withdraw: calls real API with amount', async () => {
+  it('withdraw: calls real API with amount (payout request)', async () => {
     api.wallet.balance.mockResolvedValue({ balance: '500' });
     api.wallet.transactions.mockResolvedValue({ transactions: [] });
     api.wallet.withdraw.mockResolvedValue({ ok: true });
@@ -203,7 +205,7 @@ describe('useWallet', () => {
     expect(api.wallet.withdraw).toHaveBeenCalledWith({ amount: 100 });
   });
 
-  it('withdraw: throws InsufficientBalance error when balance too low', async () => {
+  it('withdraw: throws Insufficient balance error when balance too low', async () => {
     api.wallet.balance.mockResolvedValue({ balance: '50' });
     api.wallet.transactions.mockResolvedValue({ transactions: [] });
 
@@ -244,7 +246,7 @@ describe('useWallet', () => {
     expect(caughtError).toBeDefined();
   });
 
-  it('withdraw: adds a transaction to the list on success', async () => {
+  it('withdraw: adds a payout transaction to the list on success', async () => {
     api.wallet.balance.mockResolvedValue({ balance: '500' });
     api.wallet.transactions.mockResolvedValue({ transactions: [] });
     api.wallet.withdraw.mockResolvedValue({ ok: true });
@@ -264,12 +266,14 @@ describe('useWallet', () => {
 
   // ── Return shape ──────────────────────────────────────────────────────────
 
-  it('exposes the expected shape from the hook', async () => {
+  it('exposes the expected shape from the hook (USD, no walletAddress)', async () => {
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(typeof result.current.deposit).toBe('function');
     expect(typeof result.current.withdraw).toBe('function');
     expect(Array.isArray(result.current.transactions)).toBe(true);
+    // walletAddress removed — crypto on-chain address is no longer exposed.
+    expect(result.current.walletAddress).toBeUndefined();
   });
 });

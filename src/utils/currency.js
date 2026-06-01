@@ -1,8 +1,8 @@
-export function formatCurrency(amount, currency = 'USDC') {
+export function formatCurrency(amount, currency = 'USD') {
   const formatted = new Intl.NumberFormat('en-US', {
     style: 'decimal',
     minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
+    maximumFractionDigits: 2,
   }).format(amount);
 
   return `${formatted} ${currency}`;
@@ -12,8 +12,9 @@ export function formatUSD(amount) {
   return formatCurrency(amount, 'USD');
 }
 
+// Alias kept for backwards compatibility — platform is now USD-only (fiat via Wise/Paystack).
 export function formatUSDC(amount) {
-  return formatCurrency(amount, 'USDC');
+  return formatUSD(amount);
 }
 
 export function parseCurrency(value) {

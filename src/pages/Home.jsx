@@ -7,14 +7,14 @@ const features = [
     description: 'Write Bevy game logic once. Magnetite compiles to WASM for browsers and native for desktop — transparent code, fair by design.',
   },
   {
-    kicker: '// USDC PAYMENTS',
-    title: 'Pay with USDC',
-    description: 'No middlemen, instant on-chain settlements. Your money flows directly to developers with a 15% platform fee — everything else is yours.',
+    kicker: '// FIAT PAYMENTS',
+    title: 'Pay by Card or Bank',
+    description: 'Players top up with card or bank transfer via Paystack — no crypto required. Fast, secure, and available globally.',
   },
   {
-    kicker: '// 85% REVENUE',
+    kicker: '// 70% REVENUE',
     title: 'Earn as Developer',
-    description: '85% revenue share, weekly USDC payouts. Own your code, own your players, scale from a game-jam entry to a AAA title on the same platform.',
+    description: '70% revenue share, weekly payouts via Wise directly to your bank. Own your code, own your players, scale from a game-jam entry to a AAA title on the same platform.',
   },
 ];
 
@@ -28,8 +28,8 @@ const steps = [
   {
     num: '02',
     kicker: '// PAY',
-    title: 'Connect your USDC wallet',
-    desc: 'Scan or paste your wallet address. Paystack fiat on-ramp available for ZAR and other currencies.',
+    title: 'Add funds via card or bank',
+    desc: 'Top up your wallet with Paystack — Visa, Mastercard, or bank transfer. Instant and secure.',
   },
   {
     num: '03',
@@ -103,7 +103,7 @@ export default function Home() {
           <span className="kicker">// OPEN SOURCE · RUST-NATIVE · MONETIZED</span>
           <div className="hero-badge">
             <span className="hero-badge-dot" aria-hidden="true" />
-            Now live — USDC payments &amp; real-time multiplayer
+            Now live — Wise payouts &amp; real-time multiplayer
           </div>
           <h1 id="home-hero-heading" className="hero-title">
             <span className="line">Rust Games.</span>
@@ -112,7 +112,7 @@ export default function Home() {
           </h1>
           <p className="hero-subtitle">
             The open-source platform where developers publish Rust games,
-            players keep their winnings, and no middlemen take a cut.
+            players pay by card or bank, and 70% of every dollar goes straight to developers.
           </p>
           <div className="hero-ctas">
             <a href="/marketplace" className="btn btn-primary btn-lg">Start Playing</a>
@@ -155,7 +155,7 @@ export default function Home() {
             <div className="stat-divider" aria-hidden="true" />
             <div className="stat-item">
               <span className="stat-number">$2.4M</span>
-              <span className="stat-label">USDC Paid Out</span>
+              <span className="stat-label">Paid to Developers</span>
             </div>
           </div>
         </div>
@@ -170,8 +170,8 @@ export default function Home() {
               Gaming without compromise
             </h2>
             <p className="section-subtitle">
-              A new paradigm where fairness is guaranteed by transparency,
-              not trust in centralized platforms.
+              A platform where developer-credible infrastructure meets
+              straightforward fiat payments — no crypto required.
             </p>
           </div>
           <div className="features-grid">
@@ -195,8 +195,8 @@ export default function Home() {
               Start playing in minutes
             </h2>
             <p className="section-subtitle">
-              Three simple steps to access a new world of transparent,
-              decentralized Rust gaming.
+              Three simple steps from sign-up to your first
+              Rust game session — no wallet setup, no crypto.
             </p>
           </div>
           <div className="steps-container">
@@ -223,8 +223,8 @@ export default function Home() {
                 Built by developers,<br />for developers
               </h2>
               <p className="section-subtitle">
-                Stop giving 30% to platforms. Keep your code, own your players,
-                and earn what you deserve.
+                Keep your code, own your players, and receive 70% of every dollar
+                — paid weekly to your bank via Wise.
               </p>
               <div className="dev-features">
                 {devFeatures.map((f, i) => (
@@ -304,7 +304,7 @@ export default function Home() {
                       {' = '}
                       <span className="code-number">0.50</span>
                       {'  '}
-                      <span className="code-comment"># USDC</span>
+                      <span className="code-comment"># USD</span>
                     </span>
                   </div>
                   <div className="code-line">
@@ -344,7 +344,7 @@ export default function Home() {
             </h2>
             <p className="section-subtitle">
               Join thousands of developers and players building
-              the future of transparent, decentralized Rust gaming.
+              the future of open-source Rust gaming at any scale.
             </p>
             <div className="cta-buttons">
               <a href="/marketplace" className="btn btn-primary btn-lg">Join the Platform</a>
@@ -363,7 +363,7 @@ export default function Home() {
                 <div className="footer-logo-icon" aria-hidden="true">M</div>
                 <span>Magnetite</span>
               </div>
-              <p>Open-source Rust gaming. No middlemen. MIT forever.</p>
+              <p>Open-source Rust gaming at any scale. MIT forever.</p>
             </div>
             <div className="footer-links-grid">
               <div className="footer-link-group">

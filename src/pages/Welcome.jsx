@@ -9,7 +9,7 @@ const RELEASE_NOTES = [
     changes: [
       'Server-authoritative multiplayer matchmaking — zero config for small-scale games',
       'Platform fee reduced from 20% to 15%',
-      'Achievement system with on-chain attestation',
+      'Achievement system with server-side attestation',
       'WASM compile time down 40% via incremental cargo builds',
     ],
   },
@@ -18,7 +18,7 @@ const RELEASE_NOTES = [
     date: 'April 2026',
     changes: [
       'Developer Dashboard with real-time session analytics',
-      'USDC wallet integration via Circle — instant playtime payouts',
+      'Wise payout integration — fast global bank transfers for developer earnings',
       'Leaderboard rankings with server-side anti-cheat validation',
     ],
   },

@@ -54,7 +54,7 @@ and creates an `entitlements` row. No real-money transfer occurs.
 
 - **One store per game.** A developer creates exactly one store per game via
   `POST /api/marketplace/stores`. Multiple item SKUs can be sold from a single store.
-- **Shared checkout.** The platform handles payment processing (USDC via Circle) and
+- **Shared checkout.** The platform handles payment processing (fiat USD via Paystack) and
   point deduction — developers don't build their own checkout.
 - **Idempotent purchases.** Every `POST /api/marketplace/items/:item_id/purchase`
   requires a client-generated `idempotency_key` to prevent duplicate charges on retries.
@@ -85,7 +85,7 @@ store_purchases               active, metadata
   metadata
 ```
 
-### Revenue split — USDC
+### Revenue split — USD
 
 | Party | Share |
 |-------|-------|
@@ -93,7 +93,8 @@ store_purchases               active, metadata
 | Platform | **30 %** of `price_paid` |
 
 The `developer_share` and `platform_fee` columns in `store_purchases` record the
-exact amounts at purchase time. Developers request payouts via `POST /api/developer/payouts`.
+exact amounts at purchase time. Developers request payouts via `POST /api/developer/payouts`;
+the platform processes disbursements through **Wise** (TransferWise).
 
 ---
 
