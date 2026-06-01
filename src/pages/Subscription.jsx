@@ -75,7 +75,7 @@ const MOCK_PAYMENT_HISTORY = import.meta.env.VITE_USE_MOCKS
   : null;
 
 const MOCK_SUBSCRIPTION = import.meta.env.VITE_USE_MOCKS
-  ? { tier: 'pro', renewalDate: '2026-06-01', hoursUsed: 67, hoursTotal: 100 }
+  ? { tier: 'pro', renewalDate: '2026-06-01', hoursUsed: 67, hoursTotal: 100, cancelAtPeriodEnd: false }
   : null;
 
 export default function Subscription() {
@@ -83,10 +83,14 @@ export default function Subscription() {
   const [paymentHistory, _setPaymentHistory]          = useState(MOCK_PAYMENT_HISTORY ?? []);
   const [loading, setLoading]       = useState(!MOCK_SUBSCRIPTION);
   const [error, setError]           = useState(null);
-  const [subscribing, setSubscribing]   = useState(false);
+  const [_subscribing, setSubscribing]  = useState(false);
   const [cancelling, setCancelling]     = useState(false);
+  const [upgrading, setUpgrading]       = useState(false);
   const [actionError, setActionError]   = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+  // Upgrade flow: show payment ref input
+  const [upgradeTarget, setUpgradeTarget] = useState(null);
+  const [upgradePaymentRef, setUpgradePaymentRef] = useState('');
 
   const fetchSubscription = useCallback(async () => {
     if (import.meta.env.VITE_USE_MOCKS) return;
@@ -102,10 +106,12 @@ export default function Subscription() {
         const d = subData.value;
         const usage = usageData.status === 'fulfilled' ? usageData.value : null;
         setCurrentSubscription({
-          tier:        d.tier ?? d.plan_id ?? 'free',
-          renewalDate: d.renewal_date ?? d.renews_at ?? null,
-          hoursUsed:   usage?.hours_used  ?? d.hours_used  ?? 0,
-          hoursTotal:  usage?.hours_total ?? d.hours_limit ?? 0,
+          tier:               d.tier ?? d.plan_id ?? 'free',
+          renewalDate:        d.renewal_date ?? d.renews_at ?? null,
+          hoursUsed:          usage?.hours_used  ?? d.hours_used  ?? 0,
+          hoursTotal:         usage?.hours_total ?? d.hours_limit ?? 0,
+          cancelAtPeriodEnd:  d.cancel_at_period_end ?? false,
+          currentPeriodEnd:   d.current_period_end ?? d.renewal_date ?? null,
         });
       }
     } catch (err) {
@@ -134,8 +140,36 @@ export default function Subscription() {
     }
   };
 
+  const handleUpgrade = async (tier) => {
+    // If already on this tier, do nothing
+    if (currentSubscription && tier.name.toLowerCase() === currentSubscription.tier) return;
+    // Show the payment reference input panel
+    setUpgradeTarget(tier);
+    setUpgradePaymentRef('');
+    setActionError(null);
+    setActionSuccess(null);
+  };
+
+  const handleConfirmUpgrade = async () => {
+    if (!upgradeTarget) return;
+    setUpgrading(true);
+    setActionError(null);
+    try {
+      await api.subscriptions.upgrade(upgradeTarget.id, upgradePaymentRef || undefined);
+      setActionSuccess(`Plan changed to ${upgradeTarget.name}!`);
+      setUpgradeTarget(null);
+      setUpgradePaymentRef('');
+      setTimeout(() => setActionSuccess(null), 4000);
+      await fetchSubscription();
+    } catch (err) {
+      setActionError(err.message || 'Failed to change plan. If a payment is required, enter your Paystack reference above.');
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
-    if (!window.confirm('Are you sure you want to cancel your subscription? You will lose access to Pro features at the end of your billing period.')) {
+    if (!window.confirm('Cancel your subscription? You will keep access until the end of the current billing period.')) {
       return;
     }
     setCancelling(true);
@@ -143,9 +177,9 @@ export default function Subscription() {
     setActionSuccess(null);
     try {
       await api.subscriptions.cancel();
-      setActionSuccess('Subscription cancelled. Access continues until the end of your billing period.');
-      setTimeout(() => setActionSuccess(null), 4000);
-      await fetchSubscription();
+      setActionSuccess('Subscription cancelled. Your plan remains active until the billing period ends.');
+      setCurrentSubscription(prev => prev ? { ...prev, cancelAtPeriodEnd: true } : prev);
+      setTimeout(() => setActionSuccess(null), 5000);
     } catch (err) {
       setActionError(err.message || 'Failed to cancel subscription');
     } finally {
@@ -161,6 +195,10 @@ export default function Subscription() {
       year: 'numeric',
     });
   };
+
+  const currentTierId = currentSubscription?.tier?.toLowerCase() ?? 'free';
+  const isCurrentTier = (tier) =>
+    tier.name.toLowerCase() === currentTierId || tier.id === currentTierId;
 
   return (
     <Layout>
@@ -208,13 +246,25 @@ export default function Subscription() {
                 <div className="current-plan-card">
                   <div className="current-plan-header">
                     <SubscriptionBadge tier={currentSubscription.tier} size="lg" />
-                    <span className="current-plan-label">Active</span>
+                    {currentSubscription.cancelAtPeriodEnd ? (
+                      <span className="current-plan-label" style={{ color: 'var(--color-warning)' }}>Cancels at period end</span>
+                    ) : (
+                      <span className="current-plan-label">Active</span>
+                    )}
                   </div>
                   <div className="current-plan-details">
-                    {currentSubscription.renewalDate && (
+                    {currentSubscription.renewalDate && !currentSubscription.cancelAtPeriodEnd && (
                       <div className="detail-row">
                         <span className="detail-label">Renews on</span>
                         <span className="detail-value">{formatDate(currentSubscription.renewalDate)}</span>
+                      </div>
+                    )}
+                    {currentSubscription.cancelAtPeriodEnd && currentSubscription.currentPeriodEnd && (
+                      <div className="detail-row">
+                        <span className="detail-label">Access until</span>
+                        <span className="detail-value" style={{ color: 'var(--color-warning)' }}>
+                          {formatDate(currentSubscription.currentPeriodEnd)}
+                        </span>
                       </div>
                     )}
                     <div className="detail-row">
@@ -232,19 +282,65 @@ export default function Subscription() {
               </section>
             ) : null}
 
+            {/* Upgrade flow: payment reference panel */}
+            {upgradeTarget && (
+              <section style={{ marginBottom: '1.5rem' }}>
+                <div style={{ padding: '1.25rem', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius)', maxWidth: 520 }}>
+                  <h3 style={{ margin: '0 0 0.75rem', fontSize: 'var(--text-base)' }}>
+                    Change plan to <strong>{upgradeTarget.name}</strong> ({upgradeTarget.price}/mo)
+                  </h3>
+                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
+                    If upgrading to a paid tier, provide your Paystack payment reference for the prorated amount.
+                    Downgrading is free — leave this blank.
+                  </p>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="Paystack payment reference (optional for downgrades)"
+                    value={upgradePaymentRef}
+                    onChange={e => setUpgradePaymentRef(e.target.value)}
+                    aria-label="Paystack payment reference"
+                    style={{ marginBottom: '0.75rem', width: '100%' }}
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleConfirmUpgrade}
+                      disabled={upgrading}
+                    >
+                      {upgrading ? 'Changing plan…' : `Confirm — ${upgradeTarget.name}`}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { setUpgradeTarget(null); setActionError(null); }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <section className="plans-section">
               <h2>Available Plans</h2>
               <div className="plans-grid">
-                {TIERS.map((tier) => (
-                  <SubscriptionCard
-                    key={tier.id}
-                    tier={tier}
-                    isCurrent={currentSubscription
-                      ? tier.name.toLowerCase() === currentSubscription.tier
-                      : tier.id === 'free'}
-                    onSubscribe={subscribing ? () => {} : handleSubscribe}
-                  />
-                ))}
+                {TIERS.map((tier) => {
+                  const isCurrent = isCurrentTier(tier);
+                  return (
+                    <SubscriptionCard
+                      key={tier.id}
+                      tier={tier}
+                      isCurrent={isCurrent}
+                      onSubscribe={(t) => {
+                        if (currentSubscription && !isCurrent) {
+                          handleUpgrade(t);
+                        } else {
+                          handleSubscribe(t);
+                        }
+                      }}
+                    />
+                  );
+                })}
               </div>
             </section>
           </div>
@@ -274,14 +370,14 @@ export default function Subscription() {
               )}
             </section>
 
-            {currentSubscription && currentSubscription.tier !== 'free' && (
+            {currentSubscription && currentSubscription.tier !== 'free' && !currentSubscription.cancelAtPeriodEnd && (
               <section className="danger-zone-section">
                 <h3>Danger Zone</h3>
                 <div className="danger-card">
                   <div className="danger-info">
                     <span className="danger-title">Cancel Subscription</span>
                     <span className="danger-desc">
-                      You will lose access to Pro features at the end of your billing period.
+                      Your plan stays active until the end of the billing period, then reverts to Free.
                     </span>
                   </div>
                   <button
@@ -289,9 +385,18 @@ export default function Subscription() {
                     onClick={handleCancelSubscription}
                     disabled={cancelling}
                   >
-                    {cancelling ? 'Cancelling…' : 'Cancel Subscription'}
+                    {cancelling ? 'Cancelling…' : 'Cancel at Period End'}
                   </button>
                 </div>
+              </section>
+            )}
+
+            {currentSubscription?.cancelAtPeriodEnd && (
+              <section style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(245,165,36,0.08)', border: '1px solid var(--color-warning)', borderRadius: 'var(--radius)' }}>
+                <p style={{ color: 'var(--color-warning)', fontSize: 'var(--text-sm)', margin: 0, fontFamily: 'var(--font-sans)' }}>
+                  Your subscription is set to cancel at the end of the billing period.
+                  Re-subscribe below to keep access.
+                </p>
               </section>
             )}
           </aside>

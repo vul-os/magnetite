@@ -88,20 +88,26 @@ pub struct RecipientDetails {
     pub account_holder_name: String,
     /// ISO 3166-1 alpha-2 country of the bank account
     pub country: String,
-    /// ISO 4217 currency code (e.g. "USD")
+    /// ISO 4217 currency code (e.g. "USD", "EUR", "GBP")
     pub currency: String,
     /// Bank account type for ACH: "checking" or "savings"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_type: Option<String>,
-    /// US routing number (ABA)
+    /// US routing number (ABA) — for ACH/USD transfers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub routing_number: Option<String>,
-    /// Bank account number
+    /// Bank account number — for ACH/USD transfers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_number: Option<String>,
     /// PayPal / email payout address (for EMAIL type)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    /// IBAN — for SEPA/international transfers (EUR, GBP sort-code IBAN, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iban: Option<String>,
+    /// BIC/SWIFT code — required for most IBAN transfers outside SEPA
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bic: Option<String>,
 }
 
 /// A Wise recipient that has been created and stored.
@@ -148,7 +154,8 @@ impl WiseClient {
 
         let profile_id = self.profile_id()?;
 
-        // Determine Wise account type — EMAIL vs bank (US ACH for now).
+        // Determine Wise account type — EMAIL, IBAN (SEPA/international), or ABA (US ACH).
+        // Priority: email > iban > aba.
         let (type_str, type_details) = if details.email.is_some() {
             (
                 "email",
@@ -156,6 +163,18 @@ impl WiseClient {
                     "email": details.email
                 }),
             )
+        } else if details.iban.is_some() {
+            // IBAN type: used for SEPA EUR transfers and GBP/other SWIFT-IBAN routes.
+            // Wise requires legalType + IBAN; BIC is optional for SEPA but required for
+            // non-SEPA routes (e.g., USD SWIFT via IBAN). Include it when present.
+            let mut iban_details = serde_json::json!({
+                "legalType": "PRIVATE",
+                "IBAN": details.iban,
+            });
+            if let Some(ref bic) = details.bic {
+                iban_details["BIC"] = serde_json::Value::String(bic.clone());
+            }
+            ("iban", iban_details)
         } else {
             (
                 "aba",
@@ -454,6 +473,26 @@ mod tests {
             routing_number: Some("110000000".into()),
             account_number: Some("000123456789".into()),
             email: None,
+            iban: None,
+            bic: None,
+        };
+        let id = c.create_recipient(&details).await.unwrap();
+        assert!(id.starts_with("sandbox_recipient_"), "got: {id}");
+    }
+
+    #[tokio::test]
+    async fn sandbox_create_recipient_iban_returns_sandbox_prefix() {
+        let c = sandbox_client();
+        let details = RecipientDetails {
+            account_holder_name: "Klaus Müller".into(),
+            country: "DE".into(),
+            currency: "EUR".into(),
+            account_type: None,
+            routing_number: None,
+            account_number: None,
+            email: None,
+            iban: Some("DE89370400440532013000".into()),
+            bic: Some("COBADEFFXXX".into()),
         };
         let id = c.create_recipient(&details).await.unwrap();
         assert!(id.starts_with("sandbox_recipient_"), "got: {id}");
@@ -510,6 +549,8 @@ mod tests {
             routing_number: None,
             account_number: None,
             email: Some("bob@example.com".into()),
+            iban: None,
+            bic: None,
         };
         let err = c.create_recipient(&details).await.unwrap_err();
         assert!(

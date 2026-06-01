@@ -1,7 +1,6 @@
 // Leaderboard service — Redis-backed score tracking; called from api/leaderboard.rs submit_score.
 // get_top / get_rank / get_around / archive_and_reset are platform surface for future read-path wiring.
 #![allow(dead_code)]
-use chrono::Utc;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -201,7 +200,12 @@ impl LeaderboardService {
         Ok(result)
     }
 
-    pub async fn archive_and_reset(&self, game_id: Uuid) -> Result<()> {
+    /// Archive the current live leaderboard for `game_id` under a season-labelled key,
+    /// then wipe the live sorted set so the new season starts fresh.
+    ///
+    /// `season_label` should be the human-readable season name (e.g. "Season 2026-Q1").
+    /// It is embedded in the Redis archive key so per-season boards are permanently addressable.
+    pub async fn archive_and_reset(&self, game_id: Uuid, season_label: &str) -> Result<()> {
         let mut conn = self
             .client
             .get_multiplexed_async_connection()
@@ -209,9 +213,13 @@ impl LeaderboardService {
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let key = Self::leaderboard_key(game_id);
-        let now = Utc::now();
 
-        let weekly_key = Self::archive_key(game_id, &format!("weekly:{}", now.format("%Y-W%W")));
+        // Sanitise the label for use in a Redis key (replace spaces/colons/slashes).
+        let safe_label = season_label
+            .replace(' ', "_")
+            .replace(':', "-")
+            .replace('/', "-");
+        let archive_key = Self::archive_key(game_id, &safe_label);
 
         let entries: Vec<(String, i64)> = conn
             .zrevrange_withscores(&key, 0, -1)
@@ -221,10 +229,16 @@ impl LeaderboardService {
         if !entries.is_empty() {
             for (user_id, score) in &entries {
                 let _: () = conn
-                    .zadd(&weekly_key, user_id.as_str(), *score)
+                    .zadd(&archive_key, user_id.as_str(), *score)
                     .await
                     .map_err(|e| AppError::Internal(e.to_string()))?;
             }
+
+            // Expire the archive after 1 year (optional safeguard).
+            let _: () = conn
+                .expire(&archive_key, 365 * 24 * 3600)
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?;
 
             let _: () = conn
                 .del(&key)

@@ -27,7 +27,9 @@ function clearRecentSearches() {
 
 const CATEGORIES = ['All', 'Games', 'Users', 'Leaderboard', 'Achievements'];
 
-async function fetchSearchResults(query, searchType = 'all') {
+const GENRES = ['Action', 'Adventure', 'Puzzle', 'Racing', 'RPG', 'Shooter', 'Strategy', 'Simulation', 'Sports', 'Other'];
+
+async function fetchSearchResults(query, searchType = 'all', filters = {}) {
   if (USE_MOCKS) {
     const q = query.toLowerCase();
     const { mockGames }       = await import('../data/mockGames');
@@ -36,6 +38,7 @@ async function fetchSearchResults(query, searchType = 'all') {
     if (searchType === 'All' || searchType === 'Games') {
       results.games = mockGames
         .filter(g => g.title.toLowerCase().includes(q) || (g.developer ?? '').toLowerCase().includes(q))
+        .filter(g => !filters.genre || (g.genre ?? '').toLowerCase() === filters.genre.toLowerCase())
         .slice(0, 5)
         .map(g => ({ type: 'game', id: g.id, title: g.title, subtitle: g.developer ?? '', ...g }));
     }
@@ -49,7 +52,7 @@ async function fetchSearchResults(query, searchType = 'all') {
   }
 
   // Real API path — let errors propagate so callers can show an error state
-  const data = await api.search.query(query, searchType.toLowerCase(), 20, 0);
+  const data = await api.search.query(query, searchType.toLowerCase(), 20, 0, filters);
   return {
     games: (data.results ?? [])
       .filter(r => r.result_type === 'game')
@@ -59,6 +62,8 @@ async function fetchSearchResults(query, searchType = 'all') {
         title: g.title,
         subtitle: g.description || '',
         result_type: 'game',
+        genre: g.genre ?? null,
+        tags: g.tags ?? [],
       })),
     users: (data.results ?? [])
       .filter(r => r.result_type === 'user')
@@ -78,10 +83,11 @@ export function useSearch() {
   const [loading, setLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState(getRecentSearches);
   const debounceRef = useRef(null);
+  const [filters, setFilters] = useState({});
 
   const [searchError, setSearchError] = useState(null);
 
-  const search = useCallback(async (searchQuery, category = 'All') => {
+  const search = useCallback(async (searchQuery, category = 'All', activeFilters = {}) => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -99,7 +105,7 @@ export function useSearch() {
     return new Promise((resolve) => {
       debounceRef.current = setTimeout(async () => {
         try {
-          const data = await fetchSearchResults(searchQuery, category);
+          const data = await fetchSearchResults(searchQuery, category, activeFilters);
           setResults(data);
           setLoading(false);
           resolve(data);
@@ -139,9 +145,12 @@ export function useSearch() {
     loading,
     error: searchError,
     search,
+    filters,
+    setFilters,
     recentSearches,
     addRecentSearch,
     clearRecentSearches: clearRecentSearchesFn,
     categories: CATEGORIES,
+    genres: GENRES,
   };
 }

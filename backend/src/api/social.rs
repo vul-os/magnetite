@@ -547,6 +547,71 @@ pub async fn get_user_profile(
     Ok(response::success_response(user))
 }
 
+/// GET /friends/pending — incoming (to_user_id = me, status = pending)
+pub async fn list_pending_requests(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<response::PaginatedResponse<FriendRequest>>> {
+    let requests = sqlx::query_as::<_, FriendRequest>(
+        r#"
+        SELECT id, from_user_id, to_user_id, status, created_at
+        FROM friend_requests
+        WHERE to_user_id = $1 AND status = 'pending'
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let total = requests.len() as u64;
+    Ok(response::paginated(requests, 1, 100, total))
+}
+
+/// GET /friends/sent — outgoing (from_user_id = me, status = pending)
+pub async fn list_sent_requests(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<response::PaginatedResponse<FriendRequest>>> {
+    let requests = sqlx::query_as::<_, FriendRequest>(
+        r#"
+        SELECT id, from_user_id, to_user_id, status, created_at
+        FROM friend_requests
+        WHERE from_user_id = $1 AND status = 'pending'
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let total = requests.len() as u64;
+    Ok(response::paginated(requests, 1, 100, total))
+}
+
+/// DELETE /friends/request/:id — cancel a sent friend request (only the sender may cancel)
+pub async fn cancel_friend_request(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(request_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<()>>> {
+    let result = sqlx::query(
+        "DELETE FROM friend_requests WHERE id = $1 AND from_user_id = $2 AND status = 'pending'",
+    )
+    .bind(request_id)
+    .bind(user_id)
+    .execute(&pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound(
+            "Pending friend request not found or you are not the sender".to_string(),
+        ));
+    }
+
+    Ok(response::success_response(()))
+}
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route(
@@ -563,6 +628,22 @@ pub fn router(pool: PgPool) -> Router {
                 middleware::auth_middleware,
             )),
         )
+        // List pending incoming requests
+        .route(
+            "/pending",
+            get(list_pending_requests).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // List sent (outgoing) pending requests
+        .route(
+            "/sent",
+            get(list_sent_requests).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .route(
             "/accept/:id",
             post(accept_friend_request).layer(from_fn_with_state(
@@ -573,6 +654,14 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/reject/:id",
             post(reject_friend_request).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // Cancel a sent request (sender only)
+        .route(
+            "/request/:id",
+            delete(cancel_friend_request).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

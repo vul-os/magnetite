@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: '◉', path: '/admin'          },
-  { id: 'users',     label: 'Users',     icon: '👥', path: '/admin/users'    },
-  { id: 'games',     label: 'Games',     icon: '⬡',  path: '/admin/games'    },
-  { id: 'finance',   label: 'Finance',   icon: '$',  path: '/admin/finance'  },
-  { id: 'settings',  label: 'Settings',  icon: '⚙',  path: '/admin/settings' },
+  { id: 'dashboard',          label: 'Dashboard',       icon: '◉', path: '/admin'                   },
+  { id: 'users',              label: 'Users',           icon: '👥', path: '/admin/users'             },
+  { id: 'games',              label: 'Games',           icon: '⬡',  path: '/admin/games'             },
+  { id: 'review-moderation',  label: 'Moderation',      icon: '⚑',  path: '/admin/review-moderation' },
+  { id: 'finance',            label: 'Finance',         icon: '$',  path: '/admin/finance'           },
+  { id: 'settings',           label: 'Settings',        icon: '⚙',  path: '/admin/settings'         },
 ];
 
 export default function AdminSidebar() {

@@ -1155,6 +1155,239 @@ pub async fn seed_test_data(
     ))
 }
 
+// ── Review moderation ─────────────────────────────────────────────────────────
+//
+// GET  /admin/review-reports          — list all pending reports (paginated, filterable)
+// POST /admin/review-reports/:id/action — dismiss / remove_review / warn / ban
+
+#[derive(Debug, Deserialize)]
+pub struct ReviewReportQuery {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    /// Filter by report status: "pending", "dismissed", "resolved" (optional)
+    pub status: Option<String>,
+    /// Filter by reason string (case-insensitive substring, optional)
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct AdminReviewReport {
+    pub id: Uuid,
+    pub review_id: Uuid,
+    pub reporter_id: Uuid,
+    pub reporter_username: Option<String>,
+    /// The reported review's author id
+    pub review_author_id: Option<Uuid>,
+    /// The reported review's author username
+    pub review_author_username: Option<String>,
+    /// The rating of the reported review
+    pub review_rating: Option<i32>,
+    /// Content of the reported review (may be None for brief reviews)
+    pub review_content: Option<String>,
+    pub reason: String,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReviewReportActionRequest {
+    /// One of: "dismiss" | "remove_review" | "warn_user" | "ban_user"
+    pub action: String,
+    /// Optional note recorded on the report
+    pub note: Option<String>,
+}
+
+pub async fn list_review_reports(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Query(query): Query<ReviewReportQuery>,
+) -> Result<Json<PaginatedResponse<AdminReviewReport>>> {
+    require_admin(&pool, user_id).await?;
+
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    let offset = (page - 1) * limit;
+    let status_filter = query.status.as_deref().unwrap_or("pending");
+    let reason_filter = query
+        .reason
+        .as_deref()
+        .map(|r| format!("%{}%", r.to_lowercase()))
+        .unwrap_or_else(|| "%".to_string());
+
+    let total = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM review_reports rr
+         WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2",
+    )
+    .bind(status_filter)
+    .bind(&reason_filter)
+    .fetch_one(&pool)
+    .await?;
+
+    let reports = sqlx::query_as::<_, AdminReviewReport>(
+        "SELECT
+             rr.id,
+             rr.review_id,
+             rr.reporter_id,
+             reporter.username AS reporter_username,
+             r.user_id AS review_author_id,
+             author.username AS review_author_username,
+             r.rating AS review_rating,
+             r.content AS review_content,
+             rr.reason,
+             rr.status,
+             rr.created_at
+         FROM review_reports rr
+         LEFT JOIN users reporter ON reporter.id = rr.reporter_id
+         LEFT JOIN reviews r      ON r.id = rr.review_id
+         LEFT JOIN users author   ON author.id = r.user_id
+         WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2
+         ORDER BY rr.created_at DESC
+         LIMIT $3 OFFSET $4",
+    )
+    .bind(status_filter)
+    .bind(&reason_filter)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&pool)
+    .await?;
+
+    let total_pages = (total as f64 / limit as f64).ceil() as i64;
+
+    Ok(Json(PaginatedResponse {
+        data: reports,
+        page,
+        limit,
+        total,
+        total_pages,
+    }))
+}
+
+pub async fn act_on_review_report(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(report_id): Path<Uuid>,
+    Json(payload): Json<ReviewReportActionRequest>,
+) -> Result<axum::http::StatusCode> {
+    require_admin(&pool, user_id).await?;
+
+    // Fetch the report to get its review_id and the review author.
+    let report_row = sqlx::query_as::<
+        _,
+        (
+            Uuid, // review_id
+            Uuid, // reporter_id (unused but available)
+        ),
+    >("SELECT review_id, reporter_id FROM review_reports WHERE id = $1")
+    .bind(report_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Review report not found".to_string()))?;
+
+    let review_id = report_row.0;
+
+    // Resolve the action.
+    match payload.action.as_str() {
+        "dismiss" => {
+            // Mark as dismissed; leave review intact.
+            sqlx::query(
+                "UPDATE review_reports SET status = 'dismissed', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE id = $3",
+            )
+            .bind(user_id)
+            .bind(&payload.note)
+            .bind(report_id)
+            .execute(&pool)
+            .await?;
+        }
+        "remove_review" => {
+            // Delete the review (cascade removes related helpful votes and other reports).
+            sqlx::query("DELETE FROM reviews WHERE id = $1")
+                .bind(review_id)
+                .execute(&pool)
+                .await?;
+            // Mark all reports for this review as resolved.
+            sqlx::query(
+                "UPDATE review_reports SET status = 'resolved', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE review_id = $3",
+            )
+            .bind(user_id)
+            .bind(&payload.note)
+            .bind(review_id)
+            .execute(&pool)
+            .await?;
+        }
+        "warn_user" => {
+            // Fetch the review author id.
+            let author_id =
+                sqlx::query_scalar::<_, Uuid>("SELECT user_id FROM reviews WHERE id = $1")
+                    .bind(review_id)
+                    .fetch_optional(&pool)
+                    .await?;
+            if let Some(author_id) = author_id {
+                // Record a system notification as the warning mechanism.
+                let note = payload
+                    .note
+                    .as_deref()
+                    .unwrap_or("Your review has been flagged by moderators.");
+                sqlx::query(
+                    "INSERT INTO notifications (id, user_id, type, title, body, read, created_at)
+                     VALUES ($1, $2, 'SYSTEM', 'Moderation Warning', $3, false, NOW())",
+                )
+                .bind(Uuid::new_v4())
+                .bind(author_id)
+                .bind(note)
+                .execute(&pool)
+                .await?;
+            }
+            sqlx::query(
+                "UPDATE review_reports SET status = 'resolved', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE id = $3",
+            )
+            .bind(user_id)
+            .bind(&payload.note)
+            .bind(report_id)
+            .execute(&pool)
+            .await?;
+        }
+        "ban_user" => {
+            // Fetch the review author id.
+            let author_id =
+                sqlx::query_scalar::<_, Uuid>("SELECT user_id FROM reviews WHERE id = $1")
+                    .bind(review_id)
+                    .fetch_optional(&pool)
+                    .await?;
+            if let Some(author_id) = author_id {
+                sqlx::query("UPDATE users SET banned_at = NOW(), updated_at = NOW() WHERE id = $1")
+                    .bind(author_id)
+                    .execute(&pool)
+                    .await?;
+            }
+            // Delete the review and mark all reports resolved.
+            sqlx::query("DELETE FROM reviews WHERE id = $1")
+                .bind(review_id)
+                .execute(&pool)
+                .await?;
+            sqlx::query(
+                "UPDATE review_reports SET status = 'resolved', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE review_id = $3",
+            )
+            .bind(user_id)
+            .bind(&payload.note)
+            .bind(review_id)
+            .execute(&pool)
+            .await?;
+        }
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "Unknown action '{}'. Valid: dismiss | remove_review | warn_user | ban_user",
+                other
+            )));
+        }
+    }
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route(
@@ -1293,6 +1526,23 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/analytics/performance",
             get(analytics_performance).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // ── Review moderation ──────────────────────────────────────────────
+        // GET  /admin/review-reports           — paginated list with report + review data
+        // POST /admin/review-reports/:id/action — dismiss | remove_review | warn_user | ban_user
+        .route(
+            "/review-reports",
+            get(list_review_reports).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/review-reports/:id/action",
+            post(act_on_review_report).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

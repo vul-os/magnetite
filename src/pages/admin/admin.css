@@ -959,6 +959,156 @@
   .form-row { grid-template-columns: 1fr; }
 }
 
+/* ─── Review Moderation ──────────────────────────────────────────────────── */
+
+.admin-reports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-report-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  overflow: hidden;
+  transition: border-color var(--t) ease;
+}
+
+.admin-report-row:hover {
+  border-color: var(--color-border-strong);
+}
+
+.admin-report-row.resolved {
+  opacity: 0.6;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  gap: 1rem;
+  user-select: none;
+}
+
+.report-header:hover {
+  background: var(--color-bg-elevated);
+}
+
+.report-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+}
+
+.report-reason-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  background: rgba(91, 157, 255, 0.15);
+  color: var(--color-info);
+  border: 1px solid rgba(91, 157, 255, 0.3);
+}
+
+.report-reason-badge[data-reason="inappropriate"],
+.report-reason-badge[data-reason="harassment"] {
+  background: rgba(255, 84, 104, 0.12);
+  color: var(--color-error);
+  border-color: rgba(255, 84, 104, 0.3);
+}
+
+.report-reason-badge[data-reason="spam"] {
+  background: rgba(245, 165, 36, 0.12);
+  color: var(--color-amber);
+  border-color: rgba(245, 165, 36, 0.3);
+}
+
+.report-game {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-text-primary);
+}
+
+.report-reviewer {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.report-status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.report-status[data-status="pending"] {
+  background: rgba(245, 165, 36, 0.12);
+  color: var(--color-amber);
+}
+
+.report-status[data-status="dismissed"] {
+  background: rgba(168, 168, 179, 0.1);
+  color: var(--color-text-muted);
+}
+
+.report-status[data-status="actioned"] {
+  background: rgba(61, 220, 132, 0.1);
+  color: var(--color-success);
+}
+
+.report-date {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.report-body {
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.report-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.admin-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+.admin-empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+}
+
+.admin-empty-state p {
+  margin: 0.25rem 0;
+}
+
+/* ─── Admin sidebar link for moderation ─────────────────────────────────── */
+
 @media (max-width: 480px) {
   .admin-stats-grid { grid-template-columns: 1fr; }
 }

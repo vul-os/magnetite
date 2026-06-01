@@ -8,9 +8,10 @@ const CATEGORY_FILTERS = ['All', 'Games', 'Users'];
 
 export function SearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
-  const { query, setQuery, search, recentSearches, addRecentSearch, clearRecentSearches, loading, results } = useSearch();
+  const { query, setQuery, search, recentSearches, addRecentSearch, clearRecentSearches, loading, results, filters, setFilters, genres } = useSearch();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [showFilters, setShowFilters] = useState(false);
   const inputRef = useRef(null);
   const modalRef = useRef(null);
   const cleanupRef = useRef(false);
@@ -90,9 +91,9 @@ export function SearchModal({ isOpen, onClose }) {
     setQuery(value);
     setActiveIndex(-1);
     if (value.trim()) {
-      search(value, selectedCategory);
+      search(value, selectedCategory, filters);
     }
-  }, [setQuery, search, selectedCategory]);
+  }, [setQuery, search, selectedCategory, filters]);
 
   const handleSelect = useCallback((result) => {
     addRecentSearch(result.title);
@@ -106,8 +107,8 @@ export function SearchModal({ isOpen, onClose }) {
 
   const handleRecentSelect = useCallback((recent) => {
     setQuery(recent);
-    search(recent, selectedCategory);
-  }, [setQuery, search, selectedCategory]);
+    search(recent, selectedCategory, filters);
+  }, [setQuery, search, selectedCategory, filters]);
 
   const getTotalItems = useCallback(() => {
     if (selectedCategory === 'All') {
@@ -151,9 +152,22 @@ export function SearchModal({ isOpen, onClose }) {
   const handleCategoryChange = useCallback((cat) => {
     setSelectedCategory(cat);
     if (query.trim()) {
-      search(query, cat);
+      search(query, cat, filters);
     }
-  }, [query, search]);
+  }, [query, search, filters]);
+
+  const handleFilterChange = useCallback((key, value) => {
+    const newFilters = { ...filters };
+    if (value === '' || value == null) {
+      delete newFilters[key];
+    } else {
+      newFilters[key] = value;
+    }
+    setFilters(newFilters);
+    if (query.trim()) {
+      search(query, selectedCategory, newFilters);
+    }
+  }, [filters, setFilters, query, search, selectedCategory]);
 
   const renderResultsGroup = (title, items, icon, type) => {
     if (!items.length) return null;
@@ -258,7 +272,58 @@ export function SearchModal({ isOpen, onClose }) {
               {cat}
             </button>
           ))}
+          {(selectedCategory === 'All' || selectedCategory === 'Games') && (
+            <button
+              type="button"
+              className={`search-filter-btn ${showFilters || Object.keys(filters).length > 0 ? 'active' : ''}`}
+              onClick={() => setShowFilters(v => !v)}
+              aria-label="Toggle genre/tag filters"
+              title="Filters"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              Filters{Object.keys(filters).length > 0 ? ` (${Object.keys(filters).length})` : ''}
+            </button>
+          )}
         </div>
+
+        {showFilters && (selectedCategory === 'All' || selectedCategory === 'Games') && (
+          <div className="search-modal-advanced-filters" style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', background: 'var(--color-bg-secondary)' }}>
+            <select
+              value={filters.genre ?? ''}
+              onChange={e => handleFilterChange('genre', e.target.value || null)}
+              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text-primary)', cursor: 'pointer' }}
+              aria-label="Filter by genre"
+            >
+              <option value="">All Genres</option>
+              {(genres ?? []).map(g => (
+                <option key={g} value={g.toLowerCase()}>{g}</option>
+              ))}
+            </select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={filters.is_free === 'true'}
+                onChange={e => handleFilterChange('is_free', e.target.checked ? 'true' : null)}
+                aria-label="Free to play only"
+              />
+              Free to play
+            </label>
+            {Object.keys(filters).length > 0 && (
+              <button
+                type="button"
+                style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                onClick={() => {
+                  setFilters({});
+                  if (query.trim()) search(query, selectedCategory, {});
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="search-modal-content">
           {!query.trim() && recentSearches.length > 0 && (

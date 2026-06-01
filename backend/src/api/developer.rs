@@ -133,10 +133,17 @@ pub struct RevenueBreakdown {
 // ---------------------------------------------------------------------------
 
 /// POST /api/v1/developer/wise-recipient body.
+///
+/// Exactly one of the payment-method groups must be populated:
+///   • Email: set `email`
+///   • IBAN (SEPA/international): set `iban`; optionally set `bic` for non-SEPA routes
+///   • US ACH: set `routing_number` + `account_number`
 #[derive(Debug, Deserialize)]
 pub struct CreateWiseRecipientRequest {
     pub account_holder_name: String,
+    /// ISO 4217 currency code (USD, EUR, GBP, …)
     pub currency: String,
+    /// ISO 3166-1 alpha-2 country code
     pub country: String,
     /// "checking" or "savings" — for ACH bank accounts.
     #[serde(default)]
@@ -150,6 +157,12 @@ pub struct CreateWiseRecipientRequest {
     /// Email address — for email/PayPal payouts.
     #[serde(default)]
     pub email: Option<String>,
+    /// IBAN — for SEPA / international transfers (EUR, GBP, etc.).
+    #[serde(default)]
+    pub iban: Option<String>,
+    /// BIC / SWIFT code — required for non-SEPA IBAN routes.
+    #[serde(default)]
+    pub bic: Option<String>,
 }
 
 /// Stored Wise recipient row returned to clients (no sensitive bank details).
@@ -564,6 +577,16 @@ pub async fn create_wise_recipient(
         return Err(AppError::Validation("currency is required".to_string()));
     }
 
+    // Validate: at least one payment method must be specified.
+    let has_method = payload.email.is_some()
+        || payload.iban.is_some()
+        || (payload.routing_number.is_some() && payload.account_number.is_some());
+    if !has_method {
+        return Err(AppError::Validation(
+            "At least one payment method must be specified: email, iban, or routing_number + account_number".to_string(),
+        ));
+    }
+
     let details = RecipientDetails {
         account_holder_name: payload.account_holder_name.clone(),
         country: payload.country.clone(),
@@ -572,18 +595,23 @@ pub async fn create_wise_recipient(
         routing_number: payload.routing_number.clone(),
         account_number: payload.account_number.clone(),
         email: payload.email.clone(),
+        iban: payload.iban.clone(),
+        bic: payload.bic.clone(),
     };
 
     let wise = WiseClient::from_env();
     let wise_recipient_id = wise.create_recipient(&details).await?;
 
-    // Store the details as JSONB (sanitised — no raw account numbers returned to clients).
+    // Store the details as JSONB (sanitised — raw account/IBAN numbers are NOT returned to clients).
     let detail_json = serde_json::json!({
         "country": payload.country,
         "account_type": payload.account_type,
         "has_routing_number": payload.routing_number.is_some(),
         "has_account_number": payload.account_number.is_some(),
         "email": payload.email,
+        // IBAN: store last 4 chars for display; never the full IBAN
+        "iban_suffix": payload.iban.as_ref().map(|v| &v[v.len().saturating_sub(4)..]),
+        "has_bic": payload.bic.is_some(),
     });
 
     let row = sqlx::query_as::<_, WiseRecipientRow>(

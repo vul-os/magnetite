@@ -93,11 +93,18 @@ export const api = {
     /** DELETE /api/v1/subscriptions — cancel the active subscription */
     cancel: () => request('/api/v1/subscriptions', { method: 'DELETE' }),
     /**
-     * POST /api/v1/subscriptions/upgrade — upgrade/downgrade tier.
-     * NOTE: this endpoint does not yet exist on the backend (AUDIT critical).
-     * The call is preserved so the UI receives an honest error rather than faking success.
+     * POST /api/v1/subscriptions/upgrade — upgrade/downgrade tier (AX2).
+     * planId: target tier id.
+     * paystackRef: Paystack payment reference for the prorated charge (optional for downgrades).
      */
-    upgrade: (planId) => request('/api/v1/subscriptions/upgrade', { method: 'POST', body: JSON.stringify({ plan_id: planId }) }),
+    upgrade: (planId, paystackRef) =>
+      request('/api/v1/subscriptions/upgrade', {
+        method: 'POST',
+        body: JSON.stringify({
+          plan_id: planId,
+          ...(paystackRef ? { paystack_payment_id: paystackRef } : {}),
+        }),
+      }),
     /**
      * /hours and /usage have no backend implementation (AUDIT high).
      * Kept here so the UI can display an honest error; will be implemented in a later wave.
@@ -106,8 +113,26 @@ export const api = {
     usage: () => request('/api/v1/subscriptions/usage'),
   },
   search: {
-    query: (q, searchType = 'all', limit = 20, offset = 0) =>
-      request(`/api/search?q=${encodeURIComponent(q)}&search_type=${searchType}&limit=${limit}&offset=${offset}`),
+    /**
+     * GET /api/v1/search — full-text game/user search.
+     * q: search query string.
+     * searchType: 'all' | 'game' | 'user'.
+     * filters: { genre?, tags?, min_rating?, is_free? } — genre/tag filter (AX2).
+     * limit/offset: pagination.
+     */
+    query: (q, searchType = 'all', limit = 20, offset = 0, filters = {}) => {
+      const params = new URLSearchParams({
+        q,
+        search_type: searchType,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      if (filters.genre) params.set('genre', filters.genre);
+      if (filters.tags) params.set('tags', filters.tags);
+      if (filters.min_rating != null) params.set('min_rating', String(filters.min_rating));
+      if (filters.is_free != null) params.set('is_free', String(filters.is_free));
+      return request(`/api/search?${params.toString()}`);
+    },
   },
   notifications: {
     list: () => request('/api/notifications'),
@@ -129,6 +154,16 @@ export const api = {
   },
   social: {
     friends: () => request('/api/friends'),
+    /** GET /api/v1/friends/pending — incoming friend requests (to_user_id = me, status = pending) */
+    pendingRequests: () => request('/api/v1/friends/pending'),
+    /** GET /api/v1/friends/sent — outgoing friend requests (from_user_id = me, status = pending) */
+    sentRequests: () => request('/api/v1/friends/sent'),
+    /** DELETE /api/v1/friends/request/:id — cancel a sent friend request */
+    cancelRequest: (id) => request(`/api/v1/friends/request/${id}`, { method: 'DELETE' }),
+    /** POST /api/v1/friends/accept/:id — accept a pending incoming request */
+    acceptRequest: (id) => request(`/api/v1/friends/accept/${id}`, { method: 'POST' }),
+    /** POST /api/v1/friends/reject/:id — decline a pending incoming request */
+    rejectRequest: (id) => request(`/api/v1/friends/reject/${id}`, { method: 'POST' }),
     /** POST /api/v1/friends/request — send a friend request; body uses to_user_id per backend */
     addFriend: (userId) => request('/api/v1/friends/request', { method: 'POST', body: JSON.stringify({ to_user_id: userId }) }),
     removeFriend: (userId) => request(`/api/friends/${userId}`, { method: 'DELETE' }),
@@ -163,6 +198,41 @@ export const api = {
     getSettings: () => request('/api/platform/settings'),
     /** Update platform settings (admin). PUT /api/platform/settings */
     updateSettings: (data) => request('/api/platform/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  },
+
+  admin: {
+    /**
+     * GET /api/v1/admin/review-reports — list reported reviews (admin only).
+     * params: { limit?, offset?, status?, reason? }
+     */
+    reviewReports: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/admin/review-reports${qs ? `?${qs}` : ''}`);
+    },
+    /**
+     * POST /api/v1/admin/review-reports/:id/dismiss — dismiss a report or remove the review.
+     * data: { action: 'dismiss' | 'remove_review' | 'ban_user' }
+     */
+    dismissReport: (reportId, data) =>
+      request(`/api/v1/admin/review-reports/${reportId}/dismiss`, { method: 'POST', body: JSON.stringify(data) }),
+    /**
+     * GET /api/v1/admin/users — list users (admin only).
+     * params: { limit?, offset?, filter?, sort? }
+     */
+    users: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/admin/users${qs ? `?${qs}` : ''}`);
+    },
+    /** POST /api/v1/admin/users/:id/ban — ban a user */
+    banUser: (userId, reason) =>
+      request(`/api/v1/admin/users/${userId}/ban`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    /** POST /api/v1/admin/users/:id/unban — unban a user */
+    unbanUser: (userId) =>
+      request(`/api/v1/admin/users/${userId}/unban`, { method: 'POST' }),
   },
 
   developer: {

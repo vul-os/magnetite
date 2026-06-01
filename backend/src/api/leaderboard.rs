@@ -20,6 +20,8 @@ pub struct LeaderboardQuery {
     pub limit: Option<i32>,
     pub offset: Option<i32>,
     pub timeframe: Option<String>,
+    /// Optional season UUID — filters scores recorded in that season.
+    pub season_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,29 +93,58 @@ pub async fn get_leaderboard(
     let timeframe = query.timeframe.as_deref().unwrap_or("alltime");
     let (timeframe_cond, _timeframe_name) = get_timeframe_filter(timeframe);
 
-    let entries = sqlx::query_as::<_, (Uuid, String, i64)>(&format!(
+    // Season filter: when season_id is supplied, restrict to scores for that season.
+    let season_filter = if query.season_id.is_some() {
+        "AND ghs.season_id = $4".to_string()
+    } else {
+        String::new()
+    };
+
+    let entries_sql = format!(
         "SELECT u.id, u.username, ghs.score
              FROM game_high_scores ghs
              JOIN users u ON ghs.user_id = u.id
-             WHERE ghs.game_id = $1 AND {}
+             WHERE ghs.game_id = $1 AND {timeframe_cond} {season_filter}
              ORDER BY ghs.score DESC
              LIMIT $2 OFFSET $3",
-        timeframe_cond
-    ))
-    .bind(game_id)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&pool)
-    .await?;
+    );
+    let entries = sqlx::query_as::<_, (Uuid, String, i64)>(&entries_sql);
 
-    let total_count: i64 = sqlx::query_as::<_, (i64,)>(&format!(
-        "SELECT COUNT(*) FROM game_high_scores ghs WHERE ghs.game_id = $1 AND {}",
-        timeframe_cond
-    ))
-    .bind(game_id)
-    .fetch_one(&pool)
-    .await?
-    .0;
+    let entries = if let Some(sid) = query.season_id {
+        entries
+            .bind(game_id)
+            .bind(limit)
+            .bind(offset)
+            .bind(sid)
+            .fetch_all(&pool)
+            .await?
+    } else {
+        entries
+            .bind(game_id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&pool)
+            .await?
+    };
+
+    let total_count: i64 = if let Some(sid) = query.season_id {
+        sqlx::query_as::<_, (i64,)>(&format!(
+            "SELECT COUNT(*) FROM game_high_scores ghs WHERE ghs.game_id = $1 AND {timeframe_cond} AND ghs.season_id = $2",
+        ))
+        .bind(game_id)
+        .bind(sid)
+        .fetch_one(&pool)
+        .await?
+        .0
+    } else {
+        sqlx::query_as::<_, (i64,)>(&format!(
+            "SELECT COUNT(*) FROM game_high_scores ghs WHERE ghs.game_id = $1 AND {timeframe_cond}",
+        ))
+        .bind(game_id)
+        .fetch_one(&pool)
+        .await?
+        .0
+    };
 
     let leaderboard_entries: Vec<LeaderboardEntryResponse> = entries
         .into_iter()
@@ -161,15 +192,23 @@ pub async fn submit_score(
 
     // Only update Postgres when it's a new personal best (keep existing high-score semantics).
     if is_personal_best {
+        // Fetch active season id so we can tag this score to the current season.
+        let active_season_id =
+            sqlx::query_as::<_, (Uuid,)>("SELECT id FROM seasons WHERE is_active = true LIMIT 1")
+                .fetch_optional(&pool)
+                .await?
+                .map(|r| r.0);
+
         sqlx::query(
-            "INSERT INTO game_high_scores (game_id, user_id, score, recorded_at)
-             VALUES ($1, $2, $3, NOW())
+            "INSERT INTO game_high_scores (game_id, user_id, score, season_id, recorded_at)
+             VALUES ($1, $2, $3, $4, NOW())
              ON CONFLICT (game_id, user_id)
-             DO UPDATE SET score = $3, recorded_at = NOW()",
+             DO UPDATE SET score = $3, season_id = $4, recorded_at = NOW()",
         )
         .bind(game_id)
         .bind(user_id)
         .bind(payload.score)
+        .bind(active_season_id)
         .execute(&pool)
         .await?;
     }

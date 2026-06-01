@@ -5,6 +5,7 @@ import { AnnouncementProvider } from './context/AnnouncementContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { AccessibilityProvider } from './components/AccessibilityProvider';
 import { CommsProvider } from './context/CommsContext';
+import { NotificationProvider } from './context/NotificationContext';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import Toast from './components/Toast';
 import PageLoader from './components/PageLoader';
@@ -64,6 +65,7 @@ const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminGames = lazy(() => import('./pages/admin/Games'));
 const AdminFinance = lazy(() => import('./pages/admin/Finance'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
+const AdminReviewModeration = lazy(() => import('./pages/admin/ReviewModeration'));
 const Communities = lazy(() => import('./pages/Communities'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Streams = lazy(() => import('./pages/Streams'));
@@ -118,6 +120,7 @@ function App() {
       <ThemeProvider>
         <AnnouncementProvider announcement="Magnetite v2.0 launching soon! New features and improvements coming your way.">
           <ToastProvider>
+            <NotificationProvider>
             <CommsProvider>
               <a href="#main-content" className="skip-link">
                 Skip to main content
@@ -178,6 +181,7 @@ function App() {
                       <Route path="/admin/games" element={<AdminRoute><AdminGames /></AdminRoute>} />
                       <Route path="/admin/finance" element={<AdminRoute><AdminFinance /></AdminRoute>} />
                       <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
+                      <Route path="/admin/review-moderation" element={<AdminRoute><AdminReviewModeration /></AdminRoute>} />
                       <Route path="/communities" element={<Communities />} />
                       <Route path="/messages" element={<Messages />} />
                       <Route path="/streams" element={<Streams />} />
@@ -190,6 +194,7 @@ function App() {
                 </BrowserRouter>
               </ErrorBoundary>
             </CommsProvider>
+            </NotificationProvider>
           </ToastProvider>
         </AnnouncementProvider>
       </ThemeProvider>

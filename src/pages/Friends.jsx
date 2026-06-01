@@ -10,7 +10,8 @@ const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 export default function Friends() {
   const [friends, setFriends]               = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
-  const [blockedUsers, setBlockedUsers]     = useState([]);
+  const [sentRequests, setSentRequests]       = useState([]);
+  const [blockedUsers, setBlockedUsers]       = useState([]);
   const [loading, setLoading]               = useState(true);
   const [loadError, setLoadError]           = useState(null);
 
@@ -30,6 +31,7 @@ export default function Friends() {
       if (!cancelled) {
         setFriends(mockFriends);
         setPendingRequests(mockPendingRequests);
+        setSentRequests([]);
         setBlockedUsers(mockBlockedUsers);
         setLoading(false);
       }
@@ -40,19 +42,41 @@ export default function Friends() {
       return () => { cancelled = true; };
     }
 
-    api.social.friends()
-      .then(data => {
-        if (!cancelled) {
-          const list = Array.isArray(data) ? data : (data?.friends ?? []);
-          setFriends(list);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setLoadError(err.message || 'Failed to load friends');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    Promise.allSettled([
+      api.social.friends(),
+      api.social.pendingRequests(),
+      api.social.sentRequests(),
+    ]).then(([friendsResult, pendingResult, sentResult]) => {
+      if (cancelled) return;
+
+      if (friendsResult.status === 'fulfilled') {
+        const data = friendsResult.value;
+        const list = Array.isArray(data) ? data : (data?.friends ?? []);
+        setFriends(list);
+      } else {
+        setLoadError(friendsResult.reason?.message || 'Failed to load friends');
+      }
+
+      if (pendingResult.status === 'fulfilled') {
+        const data = pendingResult.value;
+        const list = Array.isArray(data) ? data : (data?.requests ?? data?.friend_requests ?? []);
+        setPendingRequests(list);
+      }
+
+      if (sentResult.status === 'fulfilled') {
+        const data = sentResult.value;
+        const list = Array.isArray(data) ? data : (data?.requests ?? data?.friend_requests ?? []);
+        setSentRequests(list);
+      }
+
+      setLoading(false);
+    }).catch((err) => {
+      if (!cancelled) {
+        setLoadError(err.message || 'Failed to load friends');
+        setLoading(false);
+      }
+    });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -87,6 +111,17 @@ export default function Friends() {
   const handleAddFriend = useCallback(async (user) => {
     try {
       await api.social.addFriend(user.id);
+      // Move from search results to sent requests (optimistic)
+      setSentRequests(prev => [...prev, {
+        id: `pending_${user.id}`,
+        from_user_id: 'me',
+        to_user_id: user.id,
+        username: user.username,
+        avatar: user.avatar,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        sentAt: new Date().toISOString(),
+      }]);
     } catch { /* optimistic */ }
     setSearchResults(prev => prev.filter(u => u.id !== user.id));
     setSearchQuery('');
@@ -105,22 +140,42 @@ export default function Friends() {
 
   const handleAcceptRequest = useCallback(async (request) => {
     try {
-      await api.social.acceptInvite(request.id);
+      // Use the backend's accept route: POST /friends/accept/:id
+      await api.social.acceptRequest(request.id).catch(() =>
+        api.social.acceptInvite(request.id)
+      );
     } catch { /* optimistic */ }
     setPendingRequests(prev => prev.filter(r => r.id !== request.id));
-    setFriends(prev => [...prev, { ...request, status: 'offline' }]);
+    setFriends(prev => [...prev, {
+      id: request.from_user_id ?? request.id,
+      username: request.username ?? request.from_username ?? 'User',
+      avatar: request.avatar ?? request.from_avatar ?? null,
+      status: 'offline',
+    }]);
   }, []);
 
   const handleDeclineRequest = useCallback(async (request) => {
     try {
-      await api.social.declineInvite(request.id);
+      await api.social.rejectRequest(request.id).catch(() =>
+        api.social.declineInvite(request.id)
+      );
     } catch { /* optimistic */ }
     setPendingRequests(prev => prev.filter(r => r.id !== request.id));
+  }, []);
+
+  const handleCancelSentRequest = useCallback(async (request) => {
+    try {
+      await api.social.cancelRequest(request.id);
+    } catch { /* optimistic */ }
+    setSentRequests(prev => prev.filter(r => r.id !== request.id));
   }, []);
 
   const handleUnblock = useCallback((user) => {
     setBlockedUsers(prev => prev.filter(u => u.id !== user.id));
   }, []);
+
+  const incomingCount = pendingRequests.length;
+  const sentCount = sentRequests.length;
 
   if (loading) {
     return (
@@ -199,7 +254,15 @@ export default function Friends() {
             className={`tab ${activeTab === 'requests' ? 'active' : ''}`}
             onClick={() => setActiveTab('requests')}
           >
-            Requests ({pendingRequests.length})
+            Incoming {incomingCount > 0 && <span className="badge-count">{incomingCount}</span>}
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'sent'}
+            className={`tab ${activeTab === 'sent' ? 'active' : ''}`}
+            onClick={() => setActiveTab('sent')}
+          >
+            Sent ({sentCount})
           </button>
           <button
             role="tab"
@@ -235,31 +298,70 @@ export default function Friends() {
           )}
 
           {activeTab === 'requests' && (
-            <div className="requests-list" role="tabpanel" aria-label="Pending requests">
+            <div className="requests-list" role="tabpanel" aria-label="Incoming friend requests">
               {pendingRequests.length === 0 ? (
-                <p className="empty-state-inline">No pending requests</p>
+                <p className="empty-state-inline">No pending incoming requests</p>
               ) : (
                 pendingRequests.map(request => (
                   <div key={request.id} className="request-card">
-                    <img src={request.avatar} alt={`${request.username} avatar`} loading="lazy" />
+                    <img
+                      src={request.avatar ?? request.from_avatar ?? `https://api.dicebear.com/7.x/identicon/svg?seed=${request.id}`}
+                      alt={`${request.username ?? request.from_username ?? 'User'} avatar`}
+                      loading="lazy"
+                    />
                     <div className="request-info">
-                      <h4>{request.username}</h4>
-                      <span>Sent {new Date(request.sentAt).toLocaleDateString()}</span>
+                      <h4>{request.username ?? request.from_username ?? 'Unknown User'}</h4>
+                      <span>
+                        Sent {new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="request-actions">
                       <button
                         onClick={() => handleAcceptRequest(request)}
                         className="btn btn-primary btn-sm"
-                        aria-label={`Accept request from ${request.username}`}
+                        aria-label={`Accept request from ${request.username ?? request.from_username ?? 'user'}`}
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => handleDeclineRequest(request)}
                         className="btn btn-secondary btn-sm"
-                        aria-label={`Decline request from ${request.username}`}
+                        aria-label={`Decline request from ${request.username ?? request.from_username ?? 'user'}`}
                       >
                         Decline
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'sent' && (
+            <div className="requests-list" role="tabpanel" aria-label="Sent friend requests">
+              {sentRequests.length === 0 ? (
+                <p className="empty-state-inline">No pending sent requests</p>
+              ) : (
+                sentRequests.map(request => (
+                  <div key={request.id} className="request-card">
+                    <img
+                      src={request.avatar ?? request.to_avatar ?? `https://api.dicebear.com/7.x/identicon/svg?seed=${request.id}`}
+                      alt={`${request.username ?? request.to_username ?? 'User'} avatar`}
+                      loading="lazy"
+                    />
+                    <div className="request-info">
+                      <h4>{request.username ?? request.to_username ?? 'Unknown User'}</h4>
+                      <span>
+                        Sent {new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="request-actions">
+                      <button
+                        onClick={() => handleCancelSentRequest(request)}
+                        className="btn btn-secondary btn-sm"
+                        aria-label={`Cancel request to ${request.username ?? request.to_username ?? 'user'}`}
+                      >
+                        Cancel
                       </button>
                     </div>
                   </div>

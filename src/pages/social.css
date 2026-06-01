@@ -576,6 +576,23 @@
   color: var(--color-accent);
 }
 
+.badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  background: var(--color-accent);
+  color: var(--color-bg-primary);
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  margin-left: 0.3rem;
+  line-height: 1;
+}
+
 /* Friend/request/blocked lists */
 .friends-list,
 .requests-list,

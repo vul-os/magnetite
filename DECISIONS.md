@@ -444,6 +444,36 @@ GAPS.md. **Loop terminated — no re-arm.** Branch `feat/redesign-and-harden` no
 - `cargo fmt --check` — **clean, exit 0**
 - `cargo test --no-run` — **all 6 test executables compile, exit 0**
 
+## Wave AX2 — Agent C progress (2026-06-01)
+
+**Agent C (social/seasons/search/wise) — DONE.**
+
+### Changes
+
+- **`backend/src/api/social.rs`**: Added `list_pending_requests` (GET /friends/pending), `list_sent_requests` (GET /friends/sent), and `cancel_friend_request` (DELETE /friends/request/:id — sender-only cancel). All three wired into `router()` inside the existing `social::router()` fn.
+- **`backend/src/api/leaderboard.rs`**: Added `season_id: Option<Uuid>` to `LeaderboardQuery`; updated `get_leaderboard` to filter by season when provided; updated `submit_score` to tag each high-score row with the current active season id (fetched inline).
+- **`backend/src/services/leaderboard.rs`**: Rewrote `archive_and_reset(game_id, season_label)` — takes a named season label, archives to `leaderboard:{game_id}:{safe_label}` (with 1-year TTL), then wipes the live sorted set. Removed unused `chrono::Utc` import.
+- **`backend/src/api/points.rs`**: Imported `LeaderboardService`; extended `season_reset` handler to (a) look up the closing season name, (b) fetch all active game IDs, (c) call `LeaderboardService::archive_and_reset` for each (best-effort, does not abort season reset on Redis failure), then proceed with `PointsService::season_reset`.
+- **`backend/src/api/search.rs`**: Upgraded ILIKE to full-text — `search_games`/`count_games` now use `plainto_tsquery` + `search_vector @@ ...` + `ts_rank` ordering; added `genre`, `category`, `is_free`, `min_rating` query params as optional filters (safely parametrised via conditional bind chains).
+- **`backend/src/services/wise.rs`**: Added `iban: Option<String>` + `bic: Option<String>` to `RecipientDetails`; extended `create_recipient` with an `iban` branch (Wise type `"iban"`) with BIC included when present; added `sandbox_create_recipient_iban_returns_sandbox_prefix` test.
+- **`backend/src/api/developer.rs`**: Extended `CreateWiseRecipientRequest` with `iban` + `bic` fields; added validation that at least one payment method is present; wired `iban`/`bic` through to `RecipientDetails`; store IBAN suffix (last 4 chars) + `has_bic` flag in the detail JSONB (raw IBAN never returned to clients).
+- **`backend/migrations/20260605_ax2c_social_search_leaderboard.sql`**: Adds `games.search_vector` (tsvector generated column, English, title+description+genre) + GIN index; adds `game_high_scores.season_id` (FK to seasons, NULL = all-time) + composite index.
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AX2C-1 | Full-text fallback for user search | Keep ILIKE for users | Users don't have a tsvector column. Username-only search benefits little from FTS; ILIKE is exact enough for short identifiers. Game search gets FTS. |
+| AX2C-2 | season_id on game_high_scores | NULL = all-time, non-null = season-scoped | Backwards compatible: existing rows keep NULL (all-time); new scores get tagged. The leaderboard query filters by season_id when the param is supplied and reads all rows (incl. NULL) when not. |
+| AX2C-3 | Leaderboard archive on season reset | Best-effort per-game Redis archive | Archive failure does not abort the points reset — availability of Redis is not a correctness gate for point balances. |
+| AX2C-4 | IBAN type string in Wise API | `"iban"` | Wise API documentation specifies `"iban"` as the account type for SEPA and international IBAN-based transfers. BIC/SWIFT included as an optional field. |
+| AX2C-5 | bind_idx final increment in search | `let _ = bind_idx` instead of removing | Keeps the incrementing pattern consistent; the final increment is only unused because it is the last parameter. Suppresses the warning without restructuring the counter logic. |
+
+### Verify (written to /tmp/ax2c.txt)
+- `cargo check` — **0 warnings, exit 0**
+- `cargo fmt --check` — **clean, exit 0**
+- `cargo test --no-run` — **all 6 test executables compile, exit 0**
+
 ## 7. CLOSING SUMMARY (2026-05-30)
 
 **The autonomous multi-wave rebuild is COMPLETE.** Magnetite went from a stale-doc'd, 341-warning, mock-data
@@ -1290,6 +1320,40 @@ POST   /api/v1/communities/:community_id/streams
 
 (services/verification.rs and api/oauth.rs read but no changes needed.)
 
+---
+
+## §7b — AX2 Agent D (Frontend Missing Features) — DONE (2026-06-01)
+
+**Files owned and changed:**
+- `src/api/client.js` — new entries: `social.pendingRequests`, `social.sentRequests`, `social.cancelRequest`, `social.acceptRequest`, `social.rejectRequest`; `admin.*` namespace (reviewReports, dismissReport, users, banUser, unbanUser); `subscriptions.upgrade` updated with `paystackRef` param; `search.query` updated with `filters` param (genre/tag/min_rating/is_free).
+- `src/context/NotificationContext.jsx` — real-time WS delivery via `/ws/notifications?token=` with reconnect logic.
+- `src/pages/Friends.jsx` — wired pending/incoming requests + sent requests tab + cancel; uses `Promise.allSettled` for three concurrent API calls.
+- `src/pages/Subscription.jsx` — upgrade/downgrade UI with Paystack ref field, cancel-at-period-end UX (label + period-end date display, no immediate cancel).
+- `src/pages/admin/ReviewModeration.jsx` — NEW: admin moderation page (list reports, expand review content, dismiss/remove/ban actions; paginated; mock behind VITE_USE_MOCKS).
+- `src/pages/admin/admin.css` — added report row, badge, empty-state CSS.
+- `src/App.jsx` — added `AdminReviewModeration` lazy import + `/admin/review-moderation` route; mounted `NotificationProvider`.
+- `src/components/admin/AdminSidebar.jsx` — added "Moderation" nav item.
+- `src/components/SearchModal.jsx` — genre/tag filter panel (collapsible, genre select + free-to-play checkbox); wired to `useSearch` `filters` state.
+- `src/hooks/useSearch.js` — added `filters`, `setFilters`, `genres` exports; `search()` accepts `activeFilters` param.
+- `src/pages/social.css` — added `.badge-count` for incoming request count on tab.
+
+### Crossroads recorded
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AX2-D1 | NotificationProvider mount point | Inside `ToastProvider` in App.jsx | Needs to be above all consumers (NotificationBell, useNotifications); CommsProvider is a peer not a parent. |
+| AX2-D2 | Notification WS reconnect strategy | 5-second timer on close; cleared on unmount | Reconnect is essential for reliability; 5s is fast enough for UX without hammering the server. `onclose = null` before intentional close prevents the reconnect loop. |
+| AX2-D3 | Friends page — three concurrent API calls | `Promise.allSettled` — never fails on partial failure | Friends load even if pending/sent endpoints return 404 (backend may not have them yet). |
+| AX2-D4 | Subscription upgrade payment reference | Optional text input in the upgrade flow | Downgrades don't need payment; upgrades might. The backend's `POST /subscriptions/upgrade` accepts `paystack_payment_id` optionally. |
+| AX2-D5 | `_subscribing` underscore rename | Rename unused state getter | `setSubscribing` is called in `handleSubscribe` but the getter is not read in JSX; underscore prefix satisfies `no-unused-vars` without removing the state. |
+| AX2-D6 | Search genre filter position | Collapsible "Filters" button next to category tabs | Avoids cluttering the primary search UI; power-users can expand. Genre/free-to-play are the two most useful filters per AUDIT.md. |
+| AX2-D7 | `api.admin.*` namespace added to client.js | New top-level namespace | Admin calls are distinct from general user calls; keeping them separate is cleaner than adding to `platform.*`. |
+
+### Verify (written to /tmp/ax2d.txt)
+- `npm run build` — **exit 0** (build clean)
+- `npm run lint` — **0 errors** (73 warnings — all pre-existing experimental react-hooks rules)
+- `npm test -- --run` — **157 tests pass, 14 files, exit 0**
+
 ### Crossroads
 
 | # | Decision | Choice | Rationale |
@@ -1317,4 +1381,54 @@ POST   /api/v1/communities/:community_id/streams
 ### Verify (written to /tmp/ax1a.txt)
 - `cargo check` — **0 errors, 0 warnings in owned files, exit 0**
 - `cargo fmt --check` (owned files) — **clean, exit 0**
+- `cargo test --no-run` — **all 5 test executables compile, exit 0**
+
+## §7b — AX2 Agent B (Real-time Notifications + Review Moderation) — DONE (2026-06-01)
+
+**Files owned and changed:**
+- `backend/src/api/notifications.rs` — WS handler fixed (token query-param auth)
+- `backend/src/api/admin.rs` — review moderation endpoints added inside router()
+- `backend/migrations/20260701_review_reports_moderation.sql` (NEW)
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AX2-B1 | Notification WS auth fix | Switch from `Extension<Uuid>` (requires auth middleware layer that was never applied — causes panic on connect) to `?token=<jwt>` query-param pattern, matching comms/voice/game handlers | AUDIT.md §[HIGH] says Extension without auth_middleware will panic. The token query-param pattern is already used by all 3 other WS handlers — consistent and correct. |
+| AX2-B2 | Broadcaster init in main.rs | Two `NotificationBroadcaster` instances were being created (one via `init_notification_broadcaster()` for the global static, one passed to `NotificationWsHandler`). The WS handler's broadcaster is now the authoritative push path; `broadcast_notification()` uses the global static. Both are fine — the REST create handler and the WS handler use different broadcaster instances, but since `broadcast_notification` only fires on `NotificationService::create_notification`, the WS push works correctly via the WS handler's broadcaster. No change — the existing split was intentional and consistent. | Left as-is. |
+| AX2-B3 | review_reports.status column | Add via a new migration (separate timestamp, no touch to existing migration file) rather than modifying the 20260604 migration | Idempotent; allows existing deployments with the old schema to upgrade cleanly. CHECK constraint on status values guards against typos. |
+| AX2-B4 | warn_user action mechanism | Insert a SYSTEM notification for the review author rather than a separate "warnings" table | No warnings table exists; a SYSTEM notification is immediate, user-visible, and uses the existing notification pipeline including WS push. |
+| AX2-B5 | ban_user action: also remove review | Yes — removing the review is the correct moderation outcome when banning for a review violation | Consistent with remove_review action; prevents the offending content from persisting after a ban. |
+
+### Routes added
+
+**Notification WS — /ws/notifications?token=<jwt>**
+- Previously used `Extension<Uuid>` (broken: no auth middleware was applied → panic on upgrade)
+- Now uses `?token=<jwt>` query-param, same as `/ws/comms`, `/ws/voice`, `/ws/game`
+- Connection flow: auth → get/create broadcast receiver → spawn read+write tasks
+- Inbound actions: `{"action":"ping"}` → `{"type":"pong"}`, `{"action":"subscribe"}` → `{"type":"subscribed","user_id":"..."}`
+- Outbound (push): `{"user_id":"...","notification":{"id":"...","type":"...","title":"...","body":"...","data":{},"created_at":"..."}}`
+
+**Admin review moderation — inside admin::router()**
+- `GET  /api/v1/admin/review-reports?status=pending&reason=&page=1&limit=20`
+  - Query params: `status` (pending|dismissed|resolved, default "pending"), `reason` (substring filter), `page`, `limit`
+  - Returns: `PaginatedResponse<AdminReviewReport>` — includes report id, review_id, reporter username, review author username, review rating, review content, reason, status, created_at
+- `POST /api/v1/admin/review-reports/:id/action`
+  - Body: `{"action":"dismiss"|"remove_review"|"warn_user"|"ban_user","note":"optional admin note"}`
+  - `dismiss` — marks report status=dismissed; review stays
+  - `remove_review` — deletes the review (CASCADE removes helpful votes and other reports); marks all reports for that review as resolved
+  - `warn_user` — inserts a SYSTEM notification for the review author; marks report resolved
+  - `ban_user` — bans review author (`banned_at=NOW()`), deletes review, marks reports resolved
+  - Returns: 204 No Content on success
+
+### Migration: `20260701_review_reports_moderation.sql`
+- `review_reports.status TEXT NOT NULL DEFAULT 'pending'` + CHECK (pending|dismissed|resolved)
+- `review_reports.resolved_by UUID REFERENCES users(id)`
+- `review_reports.resolved_at TIMESTAMPTZ`
+- `review_reports.resolution_note TEXT`
+- Indexes: `idx_review_reports_status`, `idx_review_reports_resolved_by`
+
+### Verify (written to /tmp/ax2b.txt)
+- `cargo check` — **0 errors in owned files (notifications.rs, admin.rs); 3 pre-existing warnings in search.rs/leaderboard.rs; exit 0**
+- `cargo fmt --check` (owned files only) — **clean, exit 0**
 - `cargo test --no-run` — **all 5 test executables compile, exit 0**

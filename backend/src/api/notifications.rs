@@ -9,6 +9,8 @@ use axum::{
     routing::{delete, get, post, put},
     Extension, Json, Router,
 };
+
+use crate::api::middleware::validate_token;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -355,11 +357,34 @@ impl NotificationWsHandler {
     }
 }
 
+/// Query params accepted on /ws/notifications?token=<jwt>
+#[derive(Debug, Deserialize)]
+struct WsNotifQuery {
+    token: Option<String>,
+}
+
 async fn handle_notification_connection(
     ws: axum::extract::ws::WebSocketUpgrade,
     State(handler): State<Arc<NotificationWsHandler>>,
-    Extension(user_id): Extension<Uuid>,
+    Query(query): Query<WsNotifQuery>,
 ) -> axum::response::Response {
+    // Authenticate via JWT query param — same pattern as /ws/comms and /ws/voice.
+    // If the token is missing or invalid, close the connection immediately.
+    let user_id = match query
+        .token
+        .as_deref()
+        .and_then(|t| validate_token(t).ok())
+        .and_then(|claims| Uuid::parse_str(&claims.sub).ok())
+    {
+        Some(id) => id,
+        None => {
+            return axum::response::Response::builder()
+                .status(axum::http::StatusCode::UNAUTHORIZED)
+                .body(axum::body::Body::from("Unauthorized"))
+                .unwrap();
+        }
+    };
+
     let receiver = handler.get_or_create_hub(&user_id).await;
 
     ws.on_upgrade(move |socket| async move {

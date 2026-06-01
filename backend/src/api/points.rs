@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::leaderboard::LeaderboardService;
 use crate::services::points::{LedgerEntry, PointBalance, PointsLeaderboardEntry, PointsService};
 
 // ─── Request / response types ─────────────────────────────────────────────────
@@ -246,6 +247,7 @@ pub async fn get_active_season(
 }
 
 /// POST /points/season/reset — end current season, zero balances, start new one.
+/// Also archives all game leaderboards in Redis under the ending season's name.
 /// Restricted to admin users only.
 pub async fn season_reset(
     State(pool): State<PgPool>,
@@ -257,6 +259,29 @@ pub async fn season_reset(
         return Err(AppError::Validation(
             "new_season_name must not be empty".to_string(),
         ));
+    }
+
+    // Fetch the name of the season being closed so we can label the Redis archives.
+    let closing_season_name: Option<String> =
+        sqlx::query_as::<_, (String,)>("SELECT name FROM seasons WHERE is_active = true LIMIT 1")
+            .fetch_optional(&pool)
+            .await?
+            .map(|r| r.0);
+
+    // Archive all game leaderboards before resetting balances.
+    if let Some(ref season_name) = closing_season_name {
+        let game_ids = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM games WHERE active = true")
+            .fetch_all(&pool)
+            .await?;
+
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost".to_string());
+        let lb_svc = LeaderboardService::new(&redis_url);
+
+        for (game_id,) in game_ids {
+            // Best-effort: archive failure does not abort the season reset.
+            let _ = lb_svc.archive_and_reset(game_id, season_name).await;
+        }
     }
 
     let svc = PointsService::new(pool);
