@@ -1112,3 +1112,29 @@ frontend build clean, lint 0 errors, 157 tests pass. HEAD `30806a6`, tree clean.
 server + voice SFU; GitHub CI `wasm-pack` runner; full Bevy WASM CI for fps/motorsport; multi-node shard
 coordination + cloud auto-scaled runner fleet; container orchestration; Circle/Paystack/Resend-SES credentials
 + Circle deposit webhook. None faked — each returns an honest error or labelled-absent state.
+
+---
+
+## §6 — PAYMENTS PIVOT CLOSING ENTRY (2026-06-01)
+
+**Crypto/USDC/Circle removed; Wise payouts + Paystack on-ramp live. Complete & verified.**
+Commits: decisions `6763c21` → core `a1a3d0a` → cleanup `d2782c6`.
+
+- **Removed:** all Circle/USDC code — the Circle webhook handler (`webhooks.rs`), `PaymentService` Circle
+  methods, ZAR→USDC conversion, on-chain `wallet_address` (column dropped), every `currency = 'USDC'` query
+  (→ `'USD'`), and all crypto marketing copy.
+- **Added — payouts via Wise:** `services/wise.rs` (recipient → quote → transfer → fund; env-gated on
+  `WISE_API_TOKEN`/`WISE_PROFILE_ID`/`WISE_SANDBOX`; unconfigured → HTTP 502, sandbox for dev);
+  `payout.rs::process_single_payout` dispatches via Wise; developer wise-recipient CRUD + migration.
+- **Kept — fiat on-ramp:** Paystack for player deposits + paid subscriptions; wallet/earnings are **USD**.
+- **Frontend:** USD throughout, Wise recipient form (email/IBAN/ACH), Paystack "add funds", crypto UI removed.
+- **SDK/docs/env:** `PaymentMethod::Usd` reframed as fiat; `CIRCLE_API_KEY`/`ZAR_USDC_RATE` → `WISE_*`; docs +
+  README reframed; the former "Circle deposit webhook" Bucket-D item is obsolete (deposits are Paystack-verified).
+- **One partition gap caught + fixed:** 6 unowned files (`webhooks`, `marketplace`, `sessions`, `admin`,
+  `email`, `notifications`) still had USDC/Circle refs — including runtime bugs (`WHERE currency='USDC'` matched
+  nothing post-migration; `admin.rs` selected the dropped `wallet_address` column). Cleaned in `d2782c6`.
+
+**Verified:** backend `cargo check` 0 warnings + fmt + tests compile; no residual circle/usdc (except a
+descriptive comment); frontend build clean, lint 0 errors, 157 tests; `subscription_tiers.price_usdc` left as
+an internal column name (value is USD; renaming would break the frontend that reads it). Bucket D now: live
+`WISE_API_TOKEN` + Paystack keys (code real, honest 502 without them).
