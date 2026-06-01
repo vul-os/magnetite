@@ -1040,3 +1040,30 @@ Add to `main.rs` `api_v1` router:
 - `backend/src/services/games.rs` — removed stale comment + `#![allow(dead_code)]`; re-added module-level allow with updated rationale
 - `backend/src/jobs/backup.rs` — updated comment; re-added module-level allow for utility functions
 - `backend/src/jobs/session_cleanup.rs` — updated stale comment; removed `#![allow(dead_code)]`
+
+---
+
+## §6 — PROGRAM CLOSING ENTRY (2026-06-01)
+
+**All autonomous programs are complete. Loop terminated — no further waves, no re-arm.**
+
+Commit trail (branch `feat/redesign-and-harden`, not merged/pushed — awaiting user):
+- Rebuild Waves 1–5 → design system, all pages, data wiring, SDK, distribution, UI polish, perf.
+- Gaming Suite Waves 6–9 → Discord-class comms+voice+streaming, controllers, points economy, marketplace, templates.
+- Gap-closure F1–F3 → real payments/email/security/anti-cheat wiring, end-to-end de-mock.
+- **Moat N1–N3** (`9f3c57b`→`68d169b`→`479fdc6`) → the novel core: deterministic server-authoritative
+  `AuthoritativeGame`, Wasmtime sandbox, anti-cheat-by-construction, auto-scaling topology, `magnetite
+  new|build|dev|deploy`. Headline proof: game→wasm32-wasip1→sandbox produces **identical state_hash to
+  native over 30 ticks**, `verify_replay` Clean.
+- **Backlog B1** (`b90248f`, GAPS refresh `30806a6`) → closed the entire codeable backlog (API keys, 2FA TOTP,
+  review helpful/report, contact, platform/tournaments mounting, leaderboard/achievements wiring, backup job,
+  retention, gamepad, hls.js, doc fixes). Reconciled a latent bug: `reviews.rs` was never mounted — mounting it
+  surfaced + fixed 4 hidden compile errors.
+
+**Final verified state:** 9 Rust crates `cargo check` 0 warnings + `cargo fmt` clean; backend tests compile;
+frontend build clean, lint 0 errors, 157 tests pass. HEAD `30806a6`, tree clean.
+
+**Remaining = Bucket D only (external infra/credentials, NOT code; documented in GAPS.md):** MediaMTX media
+server + voice SFU; GitHub CI `wasm-pack` runner; full Bevy WASM CI for fps/motorsport; multi-node shard
+coordination + cloud auto-scaled runner fleet; container orchestration; Circle/Paystack/Resend-SES credentials
++ Circle deposit webhook. None faked — each returns an honest error or labelled-absent state.
