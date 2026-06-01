@@ -7,6 +7,7 @@ import InGameStore from '../components/store/InGameStore';
 import { useAuth } from '../hooks/useAuth';
 import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
+import { usePlayManifest } from '../hooks/usePlayManifest';
 import './Playground.css';
 
 function formatTime(seconds) {
@@ -31,6 +32,14 @@ export default function Playground() {
   const userIdRef = useRef(null);
   userIdRef.current = user?.id ?? null;
 
+  // ── Play manifest — resolve live ws_endpoint from the distribution API ────
+  const {
+    manifest,
+    loading: manifestLoading,
+    error: manifestError,
+    reload: reloadManifest,
+  } = usePlayManifest(gameId);
+
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [latency, setLatency]                   = useState(0);
   const [gameState, setGameState]               = useState({
@@ -46,9 +55,18 @@ export default function Playground() {
   const [chatMessages, setChatMessages] = useState([]);
   const [minimapData] = useState({ players: [], objectives: [] });
 
-  const connectWebSocket = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws        = new WebSocket(`${protocol}//${window.location.host}/ws/game/${gameId}`);
+  const connectWebSocket = useCallback((wsEndpoint) => {
+    // Use the live endpoint from the play manifest; fall back to the path-based URL
+    // derived from the current host so local dev without a provisioned instance still works.
+    let wsUrl;
+    if (wsEndpoint) {
+      wsUrl = wsEndpoint;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws/game/${gameId}`;
+    }
+
+    const ws        = new WebSocket(wsUrl);
     wsRef.current   = ws;
 
     ws.onopen = () => {
@@ -83,8 +101,15 @@ export default function Playground() {
     return ws;
   }, [gameId]);
 
+  // Wait for the manifest before opening the WebSocket so we connect to the
+  // provisioned server URL rather than any hardcoded default.
   useEffect(() => {
-    const ws = connectWebSocket();
+    // While the manifest is still loading, don't open the socket yet.
+    if (manifestLoading) return;
+    // If the manifest failed and there is no server_url, we still attempt a
+    // connection using the fallback URL so the game page stays functional.
+    const wsEndpoint = manifest?.server_url ?? null;
+    const ws = connectWebSocket(wsEndpoint);
 
     const pingInterval = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -96,7 +121,7 @@ export default function Playground() {
       ws.close();
       clearInterval(pingInterval);
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, manifestLoading, manifest]);
 
   useEffect(() => {
     const initCanvas = () => {
@@ -190,6 +215,31 @@ export default function Playground() {
     setShowPauseMenu(false);
     setGameState(prev => ({ ...prev, isPaused: false }));
   };
+
+  // ── Manifest loading / error gates ────────────────────────────────────────
+  if (manifestLoading) {
+    return (
+      <div className="playground-container playground-loading" role="main" aria-label="Loading game">
+        <div className="playground-status-card" aria-live="polite">
+          <span className="playground-status-kicker">// Connecting</span>
+          <p className="playground-status-msg">Fetching game server&hellip;</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (manifestError && !manifest) {
+    return (
+      <div className="playground-container playground-error" role="main" aria-label="Game unavailable">
+        <div className="playground-status-card" role="alert">
+          <span className="playground-status-kicker">// Error</span>
+          <p className="playground-status-msg">{manifestError}</p>
+          <button className="btn btn-primary" onClick={reloadManifest}>Retry</button>
+          <button className="btn btn-secondary" onClick={() => navigate('/matchmaking')}>Back</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="playground-container" role="main" aria-label="Game playground">

@@ -19,6 +19,41 @@
   display: block;
 }
 
+/* ─── Manifest loading / error gates ──────────────────────────────────────── */
+.playground-loading,
+.playground-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playground-status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4, 1rem);
+  padding: var(--space-8, 2rem) var(--space-10, 2.5rem);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 16px);
+  text-align: center;
+  max-width: 24rem;
+}
+
+.playground-status-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.playground-status-msg {
+  font-family: var(--font-sans);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
 /* ─── Top overlay bar ──────────────────────────────────────────────────────── */
 .game-overlay-top {
   position: absolute;

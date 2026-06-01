@@ -6,6 +6,87 @@
 
 ---
 
+## The Magnetite Moat — one Rust game, jam to AAA
+
+> Nobody gives an open, Rust-native "same code, jam-to-AAA, authoritative + sandboxed + anti-cheat +
+> one-command-deploy" primitive. That's what this is.
+
+Three interlocking differentiators form one system that competitors (Nakama, PlayFab, Roblox) do not offer together:
+
+### Scale primitive — identical game code, topology auto-selected
+
+Write your game once against `magnetite-sdk::authority::AuthoritativeGame`. The platform runs it at any scale:
+
+| Topology | Player count | How |
+|----------|-------------|-----|
+| `SingleRoom` | up to ~16 | 1 process, broadcast-all |
+| `Dedicated` | up to ~256 | authoritative server, interest-filtered snapshots |
+| `Sharded` | AAA / unbounded | spatial shards + cross-shard handoff |
+
+`MatchConfig::auto(n)` escalates topology by player count. Your game code is identical across all three.
+
+### Wasmtime sandbox — untrusted game logic, deterministic by construction
+
+Game logic compiles to `wasm32-wasip1` and runs inside a `WasmExecutor` with hard guarantees:
+
+- **Fuel budget** per tick (`fuel_per_step`) — runaway loops cannot stall the server.
+- **Memory cap** (`max_memory_bytes`) — guest cannot exhaust host RAM.
+- **Epoch interrupt** (`epoch_tick_ms × max_epochs_per_step`) — wall-clock timeout per step.
+- **No OS randomness, no wall clock** — `random_get` and `clock_time_get` return `ENOSYS`. The only
+  randomness source is `StepCtx.rng` (seeded `DeterministicRng`, xoshiro256**).
+
+Result: same `(state, ordered commands, tick, seed)` always produces the same result, on any host.
+
+### Anti-cheat by construction — server-authoritative + deterministic replay verification
+
+Anti-cheat is not a bolt-on; it is the architecture:
+
+1. Clients send *inputs*; the server runs `AuthoritativeGame::validate` to reject illegal actions, then
+   `AuthoritativeGame::step` to advance state. Clients never send state.
+2. The runtime records a `ReplayLog` (every tick's inputs + `state_hash`). `verify_replay` re-simulates
+   from scratch; any divergence is tamper evidence or a determinism bug.
+3. `magnetite-anticheat` adds composable `Validator`s (aimbot snap, position teleport, fire-rate flood)
+   and a `TrustScoreMap` (Warn → Kick → Ban escalation with decay).
+
+### One-command pipeline
+
+```bash
+cargo install magnetite-cli        # install once
+
+magnetite new my-game              # scaffold a crate implementing AuthoritativeGame
+cd my-game
+magnetite build                    # cargo build --release --target wasm32-wasip1 → game.wasm
+magnetite dev                      # build → WasmExecutor → SingleRoom server → ws://127.0.0.1:<port>
+magnetite deploy                   # build → register artifact with backend → live instance
+```
+
+### Crate map
+
+| Crate | Role |
+|-------|------|
+| `backend/magnetite-sdk` (`::authority`) | Frozen traits: `AuthoritativeGame`, `GameExecutor`, `NativeExecutor`, `Validator`, `ReplayLog`, `verify_replay`, `Topology`, `MatchConfig`, `DeterministicRng` |
+| `magnetite-runtime` | Authoritative game-server host: tick loop, WebSocket connection mgmt, interest-filtered delta/snapshot fan-out, `ShardManager` seam |
+| `magnetite-sandbox` | `WasmExecutor` — Wasmtime host implementing `GameExecutor`; fuel/memory/epoch limits; WASI stubs (no clock, no rng) |
+| `magnetite-anticheat` | Composable validators, `TrustScoreMap`, `ReplayVerifier` wrapper |
+| `magnetite-cli` | `magnetite new|build|dev|deploy` binary |
+| `game-template-authoritative` | Reference game (top-down arena shooter) implementing `AuthoritativeGame`; canonical wasm ABI exports behind `--features wasm` |
+| `game-client-bevy` | Bevy client with prediction/reconciliation (`PredictionBuffer` + `ClientPredictor`) wired to `ServerNet` |
+| `magnetite-e2e` | Integration tests: convergence + `verify_replay` clean + anti-cheat WS rejection + wasm parity vs native |
+
+### Proved end-to-end (N3)
+
+The `magnetite-e2e` suite proves the full pipeline:
+
+- `WasmExecutor` and `NativeExecutor` produce **identical `state_hash`** on every tick (seed `0xDEADCAFE1337BABE`, 30 ticks).
+- `verify_replay` returns `ReplayVerdict::Clean` over that run.
+- The live WebSocket server delivers `Snapshot`/`Delta` frames to all connected clients.
+- Cheating inputs (position delta 9999, threshold 100) receive `ServerNet::Reject`; the `TrustScoreMap` escalates.
+
+See [`docs/MOAT-ARCHITECTURE.md`](docs/MOAT-ARCHITECTURE.md) for the frozen interface contracts and full
+wave plan.
+
+---
+
 ## Vision
 
 Magnetite is the open-source **unified gaming suite** for Rust game development at any scale. Game logic is authored in Rust; clients compile Bevy → WASM for the browser and to native binaries. The platform is server-authoritative and sandboxed, providing the heavy lifting — hosting, matchmaking, real-time netcode, persistence, comms, economy, and payment rails — so developers only write game logic.

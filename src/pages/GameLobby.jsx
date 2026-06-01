@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
 import { useGameLobby } from '../hooks/useGameLobby';
+import { usePlayManifest } from '../hooks/usePlayManifest';
 import './GameLobby.css';
 
 export default function GameLobby() {
@@ -26,6 +27,13 @@ export default function GameLobby() {
     : { id: 'guest', username: 'Guest', avatar: null };
 
   const [showStore, setShowStore] = useState(false);
+
+  // ── Play manifest — resolve live ws_endpoint ahead of game start ──────────
+  const {
+    manifest: playManifest,
+    loading: manifestLoading,
+    error: manifestError,
+  } = usePlayManifest(_gameId);
 
   // Connect to the real lobby WebSocket via useGameLobby
   const {
@@ -120,6 +128,26 @@ export default function GameLobby() {
               >
                 <span className="status-dot" aria-hidden="true" />
                 {isConnected ? 'Connected' : 'Connecting…'}
+              </div>
+
+              {/* Game server status — resolved from the play manifest */}
+              <div
+                className={`lobby-server-status ${
+                  manifestLoading ? 'pending' :
+                  manifestError   ? 'error'   :
+                  playManifest?.server_url ? 'ready' : 'pending'
+                }`}
+                aria-live="polite"
+                aria-label={
+                  manifestLoading ? 'Resolving game server…' :
+                  manifestError   ? `Game server unavailable: ${manifestError}` :
+                  playManifest?.server_url ? 'Game server ready' : 'Game server pending'
+                }
+              >
+                <span className="status-dot" aria-hidden="true" />
+                {manifestLoading           ? 'Server…'  :
+                 manifestError             ? 'No server' :
+                 playManifest?.server_url  ? 'Server ready' : 'Server pending'}
               </div>
             </div>
           </header>

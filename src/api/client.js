@@ -234,6 +234,15 @@ export const api = {
 
   // ── Wave 8: Marketplace Stores & Items ───────────────────────────────────
 
+  distribution: {
+    /**
+     * GET /api/v1/distribution/:game_id/play
+     * Returns { game_id, version, commit_sha, wasm_url, server_url, artifact_type, sha256_hash, file_size_bytes }.
+     * `server_url` is the live WebSocket endpoint the browser should connect to.
+     */
+    playManifest: (gameId) => request(`/api/v1/distribution/${gameId}/play`),
+  },
+
   stores: {
     /** List all public stores. params: { game_id?, limit?, offset? } */
     list: (params = {}) => {

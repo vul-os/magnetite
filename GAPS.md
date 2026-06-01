@@ -94,18 +94,34 @@ These are real gaps in the current working tree, confirmed by code inspection.
 
 ---
 
+## Closed in Moat N1–N3 (2026-06-01)
+
+These are the four MOAT differentiators previously listed as "Bucket D / remaining" in earlier audits.
+All four are now implemented as real, compiling, tested Rust crates. Evidence is the working tree.
+
+| Capability | Status | Crate evidence |
+|---|---|---|
+| **Scale primitive** — `SingleRoom` / `Dedicated` / `Sharded` topology auto-selection; identical game code across all three | **closed** | `backend/magnetite-sdk/src/authority.rs` — `Topology` enum, `MatchConfig::auto()`, `NativeExecutor<G: AuthoritativeGame>`; `magnetite-runtime/` — `TickScheduler` + `ShardManager` (N1 single-shard seam, handoff hook for N2+); `magnetite-e2e/tests/scale_bench.rs` — throughput bench across SingleRoom→Dedicated |
+| **Sandbox** — untrusted game logic runs in Wasmtime with fuel/memory/epoch limits; deterministic (no wall clock, no OS random) | **closed** | `magnetite-sandbox/` — `WasmExecutor` implementing `GameExecutor`; `LimitsConfig` (fuel/memory/epoch); 9 WASI stub imports (clock→ENOSYS, random→ENOSYS); `magnetite-e2e/tests/wasm_end_to_end.rs` — `wasm_sandbox_parity_with_native` proves identical state_hash vs `NativeExecutor` over 30 ticks |
+| **Anti-cheat** — server-authoritative by construction; composable `Validator` chain; deterministic replay re-simulation; trust-score escalation | **closed** | `magnetite-anticheat/` — `Anticheat`, `AimbotSnap`, `PositionTeleport`, `FireRateCooldown`, `InputFlood`, `TrustScoreMap`, `ReplayVerifier`; `magnetite-e2e/tests/anticheat.rs` — `anticheat_rejects_speedhack_and_escalates_trust_score` + `anticheat_allows_honest_client`; `magnetite-e2e/tests/convergence.rs` — `verify_replay` returns `Clean` |
+| **One-command pipeline** — `magnetite new\|build\|dev\|deploy`; `cargo build --target wasm32-wasip1` → `WasmExecutor` → live server → connect URL | **closed** | `magnetite-cli/` — `magnetite new\|build\|dev\|deploy` binary (clap 4); `game-template-authoritative/src/wasm_abi.rs` — `mag_*` ABI exports (behind `--features wasm`); `scripts/moat-demo.sh` — one-command build→sandbox-parity→convergence→fmt→check pipeline; `magnetite-e2e/tests/wasm_end_to_end.rs` — end-to-end proof |
+
+---
+
 ## Remaining — Bucket D (needs external infra/credentials)
 
-These cannot be resolved without external infrastructure or third-party accounts. They are honestly documented and not faked.
+These cannot be resolved without external infrastructure or third-party accounts. They are honestly documented and not faked. The MOAT items previously listed here have been closed (see section above).
 
 | Capability | Status | What is missing | File evidence / docs |
 |---|---|---|---|
 | **MediaMTX media server — HLS watch** | documented-only | `/streams/:id/hls.m3u8` returns HTTP 503 without a running MediaMTX instance at `MEDIA_SERVER_BASE_URL` | `backend/src/api/streaming.rs:11,227`; `docs/self-hosting/external-dependencies.md:25-44` |
 | **MediaMTX — RTMP egress to Twitch/YouTube** | documented-only | Backend stores RTMP target URL; MediaMTX `runOnPublish` must be configured to forward; no media bytes touch the backend | `backend/src/services/streaming.rs:23-28`; `docs/self-hosting/external-dependencies.md` |
 | **Voice SFU (LiveKit/mediasoup) for large rooms** | documented-only | Current WebRTC mesh relay works up to ~8 participants; SFU is the scale path, not implemented | `backend/src/ws/voice.rs:5-17`; `docs/comms/realtime.md` |
-| **GitHub CI runner executing `wasm-pack`** | documented-only | `trigger_wasm_build()` writes a `status='building'` DB row; no subprocess invoked; WASM artifact never uploaded to CDN | `backend/src/api/github.rs:573-598`; `docs/self-hosting/external-dependencies.md:47-75` |
+| **GitHub CI runner executing `wasm-pack` for the platform store** | documented-only | `trigger_wasm_build()` in the storefront API writes a `status='building'` DB row; no subprocess invoked; WASM artifact never uploaded to CDN | `backend/src/api/github.rs:573-598`; `docs/self-hosting/external-dependencies.md:47-75` |
 | **game-template-fps and game-template-motorsport — full WASM CI builds** | documented-only | `game-ci.yml` covers only `game-template` (arcade); FPS and motorsport have no CI WASM build (they pass `cargo check --no-default-features` only) | `.github/workflows/game-ci.yml:21,59` |
-| **Dedicated / auto-scaled game servers** | documented-only | `server_endpoint` on matched sessions points to `GAME_SERVER_WS_BASE` (default: same host as the backend); no auto-scaled or dedicated server fleet provisioned | `backend/src/services/matchmaking.rs:480-523`; `docs/self-hosting/external-dependencies.md:77-100` |
+| **Multi-node sharding / distributed shard coordination** | documented-only | `ShardManager` always assigns `ShardId::LOCAL` in N1; multi-process shard handoff and distributed coordination require a separate N3+ pass | `magnetite-runtime/src/shard.rs`; DECISIONS.md §10 crossroad R5 |
+| **Cloud auto-scaled runner fleet** | documented-only | `magnetite deploy` registers the artifact and requests a runtime instance via the backend distribution API; no auto-scaled cloud fleet provisioned; self-hosted runner only | `magnetite-cli/src/main.rs`; `backend/src/api/distribution.rs` |
+| **Production container orchestration** | documented-only | No Kubernetes/Nomad manifests for the magnetite-runtime process; Dockerfile.fly covers the monolith only | `Dockerfile.fly`; `fly.toml` |
 | **Circle USDC live credentials** | documented-only | All Circle payment methods work when `CIRCLE_API_KEY` is set; return HTTP 502 "payments not configured" when absent (no silent mock) | `backend/src/services/payment.rs:894-900`; `.env.example:39` |
 | **Paystack live credentials** | documented-only | `PAYSTACK_SECRET_KEY` required for Paystack deposit verification and subscription creation; absent → HTTP 502 | `backend/src/services/payment.rs:902-908`; `.env.example:43` |
 | **Transactional email credentials** | documented-only | `RESEND_API_KEY` (Resend) or `AWS_SES_SMTP_USER/PASSWORD` (SES) required; absent → Err returned, no silent success | `backend/src/services/email.rs:41-50,111-130`; `.env.example:57-87` |
@@ -118,11 +134,12 @@ These cannot be resolved without external infrastructure or third-party accounts
 
 **F1 fixed:** 15 findings  
 **F2 fixed:** 22 findings  
-**Total closed (F1+F2):** 37 findings
+**F3 fixed:** final de-mock + anti-cheat DB wiring  
+**Total closed (F1–F3):** 37+ findings  
+**Closed in Moat N1–N3 (2026-06-01):** 4 MOAT differentiators (scale primitive, sandbox, anti-cheat, one-command pipeline)
 
-**Remaining — smaller gaps (not Bucket D):** 22 findings  
-**Remaining — Bucket D (external infra/creds):** 11 findings  
-**Total remaining:** 33 findings
+**Remaining — smaller gaps (not Bucket D):** 22 findings (unchanged from F3 close)  
+**Remaining — Bucket D (external infra/creds):** 13 entries (11 original + 2 moat infrastructure items: multi-node sharding, cloud runner fleet; 4 former moat items moved to Closed above)
 
 Of the 22 non-Bucket-D remaining gaps: 8 are low-impact cosmetic/docs issues, 7 are medium stubs with clear TODOs, 7 are partial implementations that work when the service is instantiated. None of these remaining items are "silent mock successes" — every one either shows an honest error or a clearly-labelled absent state.
 

@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 magnetite-runtime = { path = "../magnetite-runtime" }
 magnetite-anticheat = { path = "../magnetite-anticheat" }
+magnetite-sandbox = { path = "../magnetite-sandbox" }
 magnetite-sdk = { path = "../backend/magnetite-sdk" }
 game-template-authoritative = { path = "../game-template-authoritative" }
 tokio = { version = "1", features = ["full"] }
@@ -21,6 +22,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 magnetite-runtime = { path = "../magnetite-runtime" }
 magnetite-anticheat = { path = "../magnetite-anticheat" }
+magnetite-sandbox = { path = "../magnetite-sandbox" }
 magnetite-sdk = { path = "../backend/magnetite-sdk" }
 game-template-authoritative = { path = "../game-template-authoritative" }
 tokio = { version = "1", features = ["full"] }

@@ -738,6 +738,7 @@ dependencies = [
  "game-template-authoritative",
  "magnetite-anticheat",
  "magnetite-runtime",
+ "magnetite-sandbox",
  "magnetite-sdk",
  "serde",
  "serde_json",
