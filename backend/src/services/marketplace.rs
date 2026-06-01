@@ -251,9 +251,9 @@ impl MarketplaceService {
 
     fn validate_item_currency(currency: &str) -> Result<()> {
         match currency {
-            "USDC" | "points" => Ok(()),
+            "USD" | "points" => Ok(()),
             _ => Err(AppError::Validation(format!(
-                "Invalid currency '{currency}'. Must be 'USDC' or 'points'"
+                "Invalid currency '{currency}'. Must be 'USD' or 'points'"
             ))),
         }
     }
@@ -401,7 +401,7 @@ impl MarketplaceService {
 
     /// Purchase an item.
     ///
-    /// - USDC items: debit wallet_balances, record revenue-share amounts.
+    /// - USD items: debit wallet_balances, record revenue-share amounts.
     /// - Points items: call PointsService::spend.
     /// - Creates an entitlement on success.
     pub async fn purchase(
@@ -435,8 +435,8 @@ impl MarketplaceService {
         }
 
         let purchase = match item.currency.as_str() {
-            "USDC" => {
-                self.purchase_usdc(user_id, &item, &store, idempotency_key)
+            "USD" => {
+                self.purchase_usd(user_id, &item, &store, idempotency_key)
                     .await?
             }
             "points" => {
@@ -466,7 +466,7 @@ impl MarketplaceService {
         Ok(purchase)
     }
 
-    async fn purchase_usdc(
+    async fn purchase_usd(
         &self,
         user_id: Uuid,
         item: &StoreItem,
@@ -482,7 +482,7 @@ impl MarketplaceService {
 
         // Lock buyer wallet
         let balance: Decimal = sqlx::query_as::<_, (Decimal,)>(
-            "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC' FOR UPDATE",
+            "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD' FOR UPDATE",
         )
         .bind(user_id)
         .fetch_optional(&mut *tx)
@@ -492,14 +492,14 @@ impl MarketplaceService {
 
         if balance < price {
             return Err(AppError::InsufficientFunds(format!(
-                "Insufficient USDC balance. Have {balance}, need {price}"
+                "Insufficient USD balance. Have {balance}, need {price}"
             )));
         }
 
         // Debit buyer
         sqlx::query(
             "UPDATE wallet_balances SET balance = balance - $1, updated_at = NOW()
-             WHERE user_id = $2 AND currency = 'USDC'",
+             WHERE user_id = $2 AND currency = 'USD'",
         )
         .bind(price)
         .bind(user_id)
@@ -526,7 +526,7 @@ impl MarketplaceService {
             INSERT INTO store_purchases
                 (id, user_id, item_id, store_id, game_id, price_paid, currency,
                  developer_share, platform_fee, status, idempotency_key, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 'USDC', $7, $8, 'completed', $9, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, 'USD', $7, $8, 'completed', $9, NOW())
             RETURNING id, user_id, item_id, store_id, game_id, price_paid, currency,
                       developer_share, platform_fee, status, idempotency_key, metadata, created_at
             "#,
@@ -646,7 +646,7 @@ impl MarketplaceService {
         Ok(purchases)
     }
 
-    /// Revenue summary for a store — total sales in USDC and points count.
+    /// Revenue summary for a store — total sales in USD and points count.
     pub async fn store_revenue(
         &self,
         developer_id: Uuid,
@@ -659,10 +659,10 @@ impl MarketplaceService {
             ));
         }
 
-        let usdc_revenue: Decimal = sqlx::query_as::<_, (Decimal,)>(
+        let usd_revenue: Decimal = sqlx::query_as::<_, (Decimal,)>(
             "SELECT COALESCE(SUM(developer_share), 0)
              FROM store_purchases
-             WHERE store_id = $1 AND currency = 'USDC' AND status = 'completed'",
+             WHERE store_id = $1 AND currency = 'USD' AND status = 'completed'",
         )
         .bind(store_id)
         .fetch_one(&self.pool)
@@ -689,7 +689,7 @@ impl MarketplaceService {
 
         Ok(serde_json::json!({
             "store_id": store_id,
-            "developer_share_usdc": usdc_revenue,
+            "developer_share_usd": usd_revenue,
             "points_sales_count": points_sales,
             "total_completed_purchases": total_sales,
         }))
@@ -753,7 +753,7 @@ mod tests {
     #[test]
     fn invalid_currency_rejected() {
         assert!(MarketplaceService::validate_item_currency("BTC").is_err());
-        assert!(MarketplaceService::validate_item_currency("USDC").is_ok());
+        assert!(MarketplaceService::validate_item_currency("USD").is_ok());
         assert!(MarketplaceService::validate_item_currency("points").is_ok());
     }
 

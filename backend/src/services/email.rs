@@ -295,8 +295,8 @@ impl EmailService {
     /// Send the payout-completed email.
     ///
     /// `amount`      — human-readable amount string (e.g. "250.00")
-    /// `destination` — blockchain address or provider reference
-    /// `transfer_id` — Circle/sandbox transfer identifier
+    /// `destination` — bank account or provider reference
+    /// `transfer_id` — Wise/sandbox transfer identifier
     pub async fn send_payout_complete_email(
         &self,
         to: &str,
@@ -305,9 +305,9 @@ impl EmailService {
         destination: &str,
         transfer_id: &str,
     ) -> Result<()> {
-        let subject = format!("Payout of {amount} USDC Complete");
+        let subject = format!("Payout of {amount} USD Complete");
         let text = format!(
-            "Hi {username},\n\nYour payout of {amount} USDC has been processed.\n\n\
+            "Hi {username},\n\nYour payout of {amount} USD has been processed.\n\n\
              Destination: {destination}\nTransfer ID: {transfer_id}\n\n\
              View your earnings: {base}/earnings\n\nCheers, the Magnetite team",
             base = self.base_url
@@ -486,7 +486,7 @@ fn render_payout_complete(
         r#"
   <tr><td style="padding:50px 30px 20px 30px;text-align:center;">
     <h1 style="margin:0 0 12px 0;font-size:28px;font-weight:700;color:#ffffff;line-height:1.2;">Payout Complete</h1>
-    <p style="margin:0;font-size:18px;color:#10b981;font-weight:600;">{amount} USDC</p>
+    <p style="margin:0;font-size:18px;color:#10b981;font-weight:600;">{amount} USD</p>
   </td></tr>
   <tr><td style="padding:0 30px 30px 30px;text-align:center;">
     <p style="margin:0;font-size:16px;color:#9ca3af;line-height:1.6;">Hi {username}, your payout has been processed successfully.</p>
@@ -497,7 +497,7 @@ fn render_payout_complete(
         <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
           <tr><td style="padding:0 0 16px 0;border-bottom:1px solid #2a2a3a;">
             <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Amount</p>
-            <p style="margin:0;font-size:24px;color:#ffffff;font-weight:700;">{amount} USDC</p>
+            <p style="margin:0;font-size:24px;color:#ffffff;font-weight:700;">{amount} USD</p>
           </td></tr>
           <tr><td style="padding:16px 0 0 0;">
             <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Destination</p>

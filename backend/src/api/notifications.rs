@@ -290,7 +290,7 @@ impl NotificationService {
             user_id,
             notification_type: NotificationType::PayoutComplete.as_str().to_string(),
             title: "Payout Complete".to_string(),
-            body: Some(format!("Your payout of {} USDC has been processed", amount)),
+            body: Some(format!("Your payout of {} USD has been processed", amount)),
             data: None,
         })
         .await

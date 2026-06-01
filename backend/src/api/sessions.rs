@@ -102,7 +102,7 @@ pub async fn create_game_session(
 
     if fee_amount > Decimal::ZERO {
         let balance = sqlx::query_as::<_, (Option<Decimal>)>(
-            "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
+            "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
         )
         .bind(user_id)
         .fetch_optional(&pool)
@@ -115,7 +115,7 @@ pub async fn create_game_session(
         }
 
         sqlx::query(
-            "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USDC'",
+            "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USD'",
         )
         .bind(fee_amount)
         .bind(user_id)

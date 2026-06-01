@@ -37,7 +37,6 @@ pub struct AdminUser {
     pub id: Uuid,
     pub username: String,
     pub email: String,
-    pub wallet_address: Option<String>,
     pub is_developer: bool,
     pub is_admin: bool,
     pub banned_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -177,7 +176,7 @@ pub async fn list_users(
         .await?;
 
     let users = sqlx::query_as::<_, AdminUser>(
-        "SELECT id, username, email, wallet_address, is_developer, is_admin, banned_at, created_at
+        "SELECT id, username, email, is_developer, is_admin, banned_at, created_at
          FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2",
     )
     .bind(limit)
@@ -204,7 +203,7 @@ pub async fn get_user(
     require_admin(&pool, user_id).await?;
 
     let user = sqlx::query_as::<_, AdminUser>(
-        "SELECT id, username, email, wallet_address, is_developer, is_admin, banned_at, created_at
+        "SELECT id, username, email, is_developer, is_admin, banned_at, created_at
          FROM users WHERE id = $1",
     )
     .bind(target_user_id)
@@ -228,7 +227,7 @@ pub async fn update_user_role(
     let user = sqlx::query_as::<_, AdminUser>(
         "UPDATE users SET is_admin = $1, updated_at = NOW()
          WHERE id = $2
-         RETURNING id, username, email, wallet_address, is_developer, is_admin, banned_at, created_at",
+         RETURNING id, username, email, is_developer, is_admin, banned_at, created_at",
     )
     .bind(new_is_admin)
     .bind(target_user_id)
@@ -260,7 +259,7 @@ pub async fn ban_user(
     let user = sqlx::query_as::<_, AdminUser>(
         "UPDATE users SET banned_at = $1, updated_at = NOW()
          WHERE id = $2
-         RETURNING id, username, email, wallet_address, is_developer, is_admin, banned_at, created_at",
+         RETURNING id, username, email, is_developer, is_admin, banned_at, created_at",
     )
     .bind(banned_at)
     .bind(target_user_id)
@@ -507,7 +506,7 @@ pub async fn process_payout(
     require_admin(&pool, user_id).await?;
 
     let user_balance = sqlx::query_scalar::<_, Decimal>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USDC'",
+        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
     )
     .bind(payload.user_id)
     .fetch_optional(&pool)
@@ -521,7 +520,7 @@ pub async fn process_payout(
     }
 
     sqlx::query(
-        "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USDC'",
+        "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USD'",
     )
     .bind(payload.amount)
     .bind(payload.user_id)
@@ -631,7 +630,7 @@ pub struct AnalyticsOverview {
     pub total_users: i64,
     pub total_games: i64,
     pub total_play_sessions: i64,
-    pub total_revenue_usdc: Decimal,
+    pub total_revenue_usd: Decimal,
     pub active_users_24h: i64,
     pub new_users_today: i64,
 }
@@ -753,7 +752,7 @@ pub async fn analytics_overview(
     .fetch_one(&pool)
     .await?;
 
-    let total_revenue_usdc = sqlx::query_scalar::<_, Decimal>(
+    let total_revenue_usd = sqlx::query_scalar::<_, Decimal>(
         "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type IN ('platform_fee', 'game_fee')",
     )
     .fetch_one(&pool)
@@ -774,7 +773,7 @@ pub async fn analytics_overview(
         total_users,
         total_games,
         total_play_sessions,
-        total_revenue_usdc,
+        total_revenue_usd,
         active_users_24h,
         new_users_today,
     }))
@@ -1141,7 +1140,7 @@ pub async fn seed_test_data(
 
     sqlx::query(
         "INSERT INTO wallet_balances (id, user_id, currency, balance)
-         VALUES ($1, $2, 'USDC', 1000.0)
+         VALUES ($1, $2, 'USD', 1000.0)
          ON CONFLICT (user_id, currency) DO NOTHING",
     )
     .bind(Uuid::new_v4())

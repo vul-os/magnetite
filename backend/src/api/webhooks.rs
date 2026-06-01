@@ -1,4 +1,4 @@
-// Webhooks API — Stripe, Circle, GitHub, Paystack event handlers; platform surface.
+// Webhooks API — Paystack, GitHub event handlers; platform surface.
 #![allow(dead_code)]
 
 use axum::{
@@ -21,7 +21,6 @@ use crate::error::{AppError, Result};
 type HmacSha256 = Hmac<Sha256>;
 
 const PAYSTACK_HEADER: &str = "x-paystack-signature";
-const CIRCLE_HEADER: &str = "circle-signature";
 
 fn compute_hmac_sha256(secret: &str, payload: &[u8]) -> String {
     let mut mac =
@@ -35,7 +34,7 @@ fn verify_paystack_signature(secret: &str, signature: &str, payload: &[u8]) -> b
     signature == expected
 }
 
-fn verify_circle_signature(secret: &str, signature: &str, payload: &[u8]) -> bool {
+fn verify_hmac_signature(secret: &str, signature: &str, payload: &[u8]) -> bool {
     let expected = compute_hmac_sha256(secret, payload);
     if let Some(sig) = signature.strip_prefix("sha256=") {
         sig == expected
@@ -129,7 +128,7 @@ pub async fn handle_paystack(
 
             sqlx::query(
                 "INSERT INTO wallet_balances (id, user_id, currency, balance)
-                 VALUES ($1, $2, 'USDC', $3)
+                 VALUES ($1, $2, 'USD', $3)
                  ON CONFLICT (user_id, currency) DO UPDATE SET balance = wallet_balances.balance + $3",
             )
             .bind(Uuid::new_v4())
@@ -144,12 +143,12 @@ pub async fn handle_paystack(
                 .create_system_notification(
                     user_id,
                     "Deposit Received",
-                    &format!("Your wallet has been credited with {} USDC", amount),
+                    &format!("Your wallet has been credited with {} USD", amount),
                 )
                 .await;
 
             tracing::info!(
-                "Credited user {} wallet with {} USDC from Paystack",
+                "Credited user {} wallet with {} USD from Paystack",
                 user_id,
                 amount
             );
@@ -181,139 +180,6 @@ pub async fn handle_paystack(
         status: "ok".to_string(),
         message: format!("Processed Paystack event: {}", event.event),
     }))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CircleWebhook {
-    #[serde(rename = "type")]
-    pub event_type: String,
-    pub id: String,
-    pub created_at: String,
-    pub data: CircleEventData,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CircleEventData {
-    pub id: String,
-    pub state: String,
-    pub amount: Option<CircleAmount>,
-    pub metadata: Option<CircleMetadata>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CircleAmount {
-    pub amount: String,
-    pub currency: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CircleMetadata {
-    pub email: Option<String>,
-    pub user_id: Option<Uuid>,
-    pub session_id: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CircleWebhookResponse {
-    pub received: bool,
-}
-
-pub async fn handle_circle(
-    State(pool): State<PgPool>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<Json<CircleWebhookResponse>> {
-    let api_key = std::env::var("CIRCLE_API_KEY")
-        .map_err(|_| AppError::Internal("CIRCLE_API_KEY not configured".to_string()))?;
-
-    let payload = body.to_vec();
-
-    let signature = headers
-        .get(CIRCLE_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Circle signature".to_string()))?;
-
-    if !verify_circle_signature(&api_key, signature, &payload) {
-        return Err(AppError::Unauthorized(
-            "Invalid Circle signature".to_string(),
-        ));
-    }
-
-    let event: CircleWebhook = serde_json::from_slice(&payload)
-        .map_err(|e| AppError::BadRequest(format!("Failed to parse Circle webhook: {}", e)))?;
-
-    tracing::info!("Circle webhook received: type={}", event.event_type);
-
-    match event.event_type.as_str() {
-        "payment.notifications" => {
-            if let Some(ref data) = event.data.metadata {
-                if let Some(user_id) = data.user_id {
-                    if let Some(ref amount) = event.data.amount {
-                        let amount_dec = amount.amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
-
-                        if event.data.state == "confirmed" || event.data.state == "complete" {
-                            sqlx::query(
-                                "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-                                 VALUES ($1, $2, 'deposit', $3, $4, 'completed', NOW())",
-                            )
-                            .bind(Uuid::new_v4())
-                            .bind(user_id)
-                            .bind(amount_dec)
-                            .bind(&event.data.id)
-                            .execute(&pool)
-                            .await
-                            .map_err(|e| AppError::Database(e.to_string()))?;
-
-                            sqlx::query(
-                                "INSERT INTO wallet_balances (id, user_id, currency, balance)
-                                 VALUES ($1, $2, $3, $4)
-                                 ON CONFLICT (user_id, currency) DO UPDATE SET balance = wallet_balances.balance + $4",
-                            )
-                            .bind(Uuid::new_v4())
-                            .bind(user_id)
-                            .bind(&amount.currency)
-                            .bind(amount_dec)
-                            .execute(&pool)
-                            .await
-                            .map_err(|e| AppError::Database(e.to_string()))?;
-
-                            tracing::info!(
-                                "Circle payment credited: user={}, amount={} {}",
-                                user_id,
-                                amount_dec,
-                                amount.currency
-                            );
-                        }
-                    }
-                }
-            }
-        }
-        "kyc.outcome" => {
-            if let Some(ref metadata) = event.data.metadata {
-                if let Some(user_id) = metadata.user_id {
-                    let kyc_status = match event.data.state.as_str() {
-                        "approved" | "complete" => "verified",
-                        "failed" | "rejected" => "failed",
-                        _ => "pending",
-                    };
-
-                    sqlx::query("UPDATE users SET kyc_status = $1 WHERE id = $2")
-                        .bind(kyc_status)
-                        .bind(user_id)
-                        .execute(&pool)
-                        .await
-                        .map_err(|e| AppError::Database(e.to_string()))?;
-
-                    tracing::info!("KYC update for user {}: {}", user_id, kyc_status);
-                }
-            }
-        }
-        _ => {
-            tracing::info!("Unhandled Circle event type: {}", event.event_type);
-        }
-    }
-
-    Ok(Json(CircleWebhookResponse { received: true }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -355,7 +221,7 @@ pub async fn handle_game(
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| AppError::Unauthorized("Missing game signature".to_string()))?;
 
-    if !verify_circle_signature(&webhook_secret, signature, &payload) {
+    if !verify_hmac_signature(&webhook_secret, signature, &payload) {
         return Err(AppError::Unauthorized("Invalid game signature".to_string()));
     }
 
@@ -619,7 +485,6 @@ pub async fn delete_endpoint(
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/paystack", post(handle_paystack))
-        .route("/circle", post(handle_circle))
         .route("/game", post(handle_game))
         .route("/endpoints", get(list_endpoints))
         .route("/endpoints", post(register_endpoint))
