@@ -1,6 +1,9 @@
 # Magnetite — Wiring & Security Audit (2026-06-01)
 
 > Read-only audit, 5 agents. Severity counts: **16 critical · 36 high · 30 medium · 7 low**.
+
+> **STATUS 2026-06-01:** ALL CRITICAL + HIGH findings FIXED (AX1 f751d3e, AX2 f6a6c97, GDS 4897679); verified green. Medium/low remain as documented backlog. See DECISIONS.md §7c.
+
 > Generated into a fix program (Waves AX1 wiring+security, AX2 missing-features, GDS game-dev). Evidence is file:line.
 
 ## 🔴 Critical + High — must fix

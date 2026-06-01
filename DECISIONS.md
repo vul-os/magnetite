@@ -1583,3 +1583,35 @@ Secondary exports from `src/client.js`:
 - `cargo fmt --check` — **CLEAN, exit 0**
 - `RUSTFLAGS="-D warnings" cargo test --no-run` — **all 8 test executables compile, 0 warnings, exit 0**
 - `cargo test --test gds_tests` — **45/45 tests pass**
+
+---
+
+## §7c — AUDIT-FIX + GAME-DEV CLOSING ENTRY (2026-06-01)
+
+**All CRITICAL + HIGH audit findings fixed; game-dev-in-Magnetite shipped. Verified green.**
+Commits: audit `9615c66` → AX1 `f751d3e` (wiring+security) → AX2 `f6a6c97` (missing features) → GDS `4897679`.
+
+- **AX1 — wiring + security:** `/api`→`/api/v1` prefix shim (fixed 64 broken calls) + all REST path/body fixes;
+  WS `?token=` + snake_case frames + `?room=` + real `/ws/game/:id`; backend route gaps mounted (wishlist,
+  search, contact, subscriptions aliases, profile, voice-rooms, streams, stores). Security: deposit validated
+  vs Paystack amount + idempotent; games IDOR ownership checks; TOTP + email-verify enforced at login; TOTP
+  secret encrypted; refresh-token DoS fixed; webhook auth + constant-time HMAC; admin_middleware fixed; CSP +
+  headers; OAuth state + open-redirect; content sanitizer.
+- **AX2 — missing features:** subscription upgrade/downgrade/proration + cancel-at-period-end; real-time
+  notifications over WS; review-report moderation admin surface; friend pending/incoming/sent + cancel;
+  leaderboard seasons; full-text search (tsvector+GIN+rank, genre/tag filters); Wise IBAN payouts.
+- **GDS — develop & play games in Magnetite:** `magnetite-web-client` (browser authoritative client — predict/
+  reconcile/render, 38 tests) makes games **playable in-browser**; backend templates + scaffold endpoint; Web
+  Game Studio (template gallery → scaffold → connect repo → build → version → **Preview/Play in browser** →
+  publish). A user can now create a game from a template and play it in the browser.
+
+**Verified:** backend 0 warnings + fmt + tests (89/89 + suites); 6 Rust crates + 3 moat crates compile clean;
+frontend build clean, lint 0 errors, **306 tests**. Tree clean @ `4897679`, branch `feat/redesign-and-harden`
+(not pushed/merged — awaiting user).
+
+**Remaining = Bucket D (infra/credentials, not code):** live WISE_API_TOKEN + Paystack/Resend keys; a real CI
+runner executing `wasm-pack` (the studio shows honest "build queued / runner = Bucket D"); MediaMTX media server
++ voice SFU; multi-node sharding + cloud runtime fleet; magnetite-runtime as a deployed authoritative server for
+the in-browser play flow at scale. Plus the audit's MEDIUM/LOW items (documented in AUDIT.md) remain as backlog.
+
+**Program closed — loop terminated, no re-arm.**
