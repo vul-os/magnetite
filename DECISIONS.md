@@ -1,5 +1,25 @@
 # Magnetite — Autonomous Build Decisions & Design System
 
+## ⚑ PAYMENTS PIVOT (2026-06-01, user directive): REMOVE CRYPTO → WISE FOR PAYOUTS
+**Crypto/USDC/Circle is removed entirely. The platform is fiat-only.** Grounded decisions (Wave PAY):
+- **D-PAY-1 — Currency:** Wallet/earnings/marketplace are denominated in **USD** (fiat). Remove all "USDC",
+  Circle, on-chain wallet-address, and ZAR→USDC concepts. `currency.js` default → `USD`; drop `formatUSDC`.
+- **D-PAY-2 — Payouts → Wise:** Developer payouts go through the **Wise (TransferWise) API**. New
+  `services/wise.rs` client: create/store a Wise **recipient** per developer (bank/email), then quote →
+  transfer → fund. Env: `WISE_API_TOKEN`, `WISE_PROFILE_ID`, `WISE_SANDBOX` (uses api.sandbox.transferwise.tech).
+  Unconfigured → explicit error (HTTP 502 "payouts not configured"), NEVER fake success; `WISE_SANDBOX=true`
+  returns clearly-labelled sandbox results for dev. `payout.rs::process_single_payout` calls Wise (not Circle).
+- **D-PAY-3 — Deposits/top-ups & subscriptions:** keep **Paystack** (fiat on-ramp) for adding funds + paid
+  subscriptions; remove the Circle deposit path and the Circle deposit-webhook gap. Card/bank top-ups stay fiat.
+- **D-PAY-4 — Withdraw = payout:** wallet/developer "withdraw" creates a payout request row that the existing
+  spawned payout job processes via Wise. No on-chain transfer.
+- **D-PAY-5 — SDK:** `platform::marketplace::PaymentMethod::Usd` stays (now means fiat USD); fix the doc that
+  says "USDC (Circle)". Keep `Paystack` + `Points` variants. Remove `Circle`/crypto references in docs/copy.
+- **D-PAY-6 — Marketing copy:** drop "crypto"/"USDC"/"real money no middlemen → crypto" framing; reframe as
+  fiat payouts via Wise, Paystack on-ramp. The 70/30 split is unchanged.
+- Bucket D after this: live **WISE_API_TOKEN** + Paystack keys (code real, honest error without them);
+  the former "Circle deposit webhook" Bucket-D item is removed.
+
 > Single source of truth for the autonomous multi-wave rebuild. Every agent reads this
 > file before working. The orchestrator audits against it every 30 minutes.
 
