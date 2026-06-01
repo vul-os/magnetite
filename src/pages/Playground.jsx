@@ -4,11 +4,24 @@ import GameHUD from '../components/GameHUD';
 import Modal from '../components/Modal';
 import GameOverlay from '../components/GameOverlay';
 import InGameStore from '../components/store/InGameStore';
+import GamePreview from '../components/GamePreview';
 import { useAuth } from '../hooks/useAuth';
 import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
 import { usePlayManifest } from '../hooks/usePlayManifest';
 import './Playground.css';
+
+// When the play manifest returns a server_url that looks like a real ws[s]:// URL
+// we hand the connection entirely to the GamePreview / magnetite-web-client pipeline
+// (Welcome → Snapshot → Delta → InputFrame).  The existing raw-canvas path stays as
+// a fallback for the legacy /ws/game/:id game-server endpoint.
+function isWebClientUrl(url) {
+  if (!url) return false;
+  // A "web-client–managed" URL comes from magnetite-runtime and follows the
+  // ServerNet protocol; legacy URLs use the older game WS message format.
+  // Heuristic: if the URL path contains /runtime/ or /play/ we use the new client.
+  return /\/(runtime|play)\//i.test(url) || url.includes(':9001');
+}
 
 function formatTime(seconds) {
   const mins = Math.floor(seconds / 60);
@@ -258,6 +271,66 @@ export default function Playground() {
           <p className="playground-status-msg">{manifestError}</p>
           <button className="btn btn-primary" onClick={reloadManifest}>Retry</button>
           <button className="btn btn-secondary" onClick={() => navigate('/matchmaking')}>Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── GamePreview path: manifest resolved to a web-client–compatible URL ─────
+  // When the distribution server returns a URL that speaks the ServerNet protocol
+  // (Welcome/Snapshot/Delta/Ack/Reject), delegate rendering to GamePreview which
+  // uses the full magnetite-web-client (prediction buffer + input capture + canvas).
+  const resolvedWsUrl = manifest?.server_url ?? null;
+  if (resolvedWsUrl && isWebClientUrl(resolvedWsUrl)) {
+    return (
+      <div className="playground-container playground-webclient" role="main" aria-label="Game playground">
+        <div className="playground-webclient-inner">
+          <div className="playground-webclient-header" role="toolbar" aria-label="Game controls">
+            <div
+              className="connection-status"
+              data-status={connectionStatus}
+              aria-live="polite"
+            >
+              <span className="status-dot" aria-hidden="true" />
+              <span className="status-text">
+                {connectionStatus === 'connected'    ? 'Server Connected' :
+                 connectionStatus === 'disconnected' ? 'Disconnected'     : 'Error'}
+              </span>
+              {connectionStatus === 'connected' && (
+                <span className="latency" aria-label={`Latency: ${latency}ms`}>{latency}ms</span>
+              )}
+            </div>
+
+            {user && (
+              <div className="player-hud" aria-label={`Signed in as ${user.username ?? user.email}`}>
+                <span className="player-hud-avatar" aria-hidden="true">
+                  {(user.username ?? user.email ?? 'P').charAt(0).toUpperCase()}
+                </span>
+                <span className="player-hud-name">{user.username ?? user.email}</span>
+              </div>
+            )}
+
+            <button className="exit-btn" onClick={handleExit} aria-label="Exit game">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M10 11l3-3-3-3M6 8h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Exit
+            </button>
+          </div>
+
+          <GamePreview
+            wsEndpoint={resolvedWsUrl}
+            token={localStorage.getItem('token')}
+            title={manifest?.name ?? `Game ${gameId}`}
+            devMode={false}
+          />
+
+          <GameOverlay
+            label="Match Chat"
+            channelId={gameId ? `match-${gameId}` : null}
+            voiceRoomId={gameId ? `match-voice-${gameId}` : null}
+            comms={comms}
+          />
         </div>
       </div>
     );

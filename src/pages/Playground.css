@@ -227,6 +227,133 @@
   color: var(--color-text-secondary);
 }
 
+/* ─── GamePreview / web-client path ────────────────────────────────────────── */
+.playground-webclient {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.playground-webclient-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.playground-webclient-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1.25rem;
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  z-index: var(--z-elevated);
+}
+
+.playground-webclient .game-preview {
+  flex: 1;
+  border-radius: 0;
+  border: none;
+  border-top: none;
+}
+
+.playground-webclient .gp-canvas-wrap {
+  aspect-ratio: unset;
+  flex: 1;
+}
+
+/* ─── Points HUD ────────────────────────────────────────────────────────────── */
+.points-hud {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  backdrop-filter: blur(8px);
+}
+
+.points-hud-icon { color: var(--color-amber); }
+.points-hud-value { font-weight: 700; color: var(--color-amber); }
+.points-hud-label { color: var(--color-text-muted); font-size: var(--text-2xs); }
+
+/* ─── Player HUD ────────────────────────────────────────────────────────────── */
+.player-hud {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.player-hud-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.player-hud-name { color: var(--color-text-primary); }
+
+/* ─── Store HUD button ──────────────────────────────────────────────────────── */
+.store-hud-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  backdrop-filter: blur(8px);
+}
+
+.store-hud-btn:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.ingame-store-overlay {
+  position: absolute;
+  top: 3.5rem;
+  right: 1rem;
+  width: 360px;
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  z-index: var(--z-modal);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+
 /* ─── Points HUD ────────────────────────────────────────────────────────────── */
 .points-hud {
   display: flex;

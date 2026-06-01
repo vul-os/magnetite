@@ -242,6 +242,41 @@ export const api = {
     payouts: () => request('/api/developer/payouts'),
     analytics: (gameId) => request(`/api/developer/analytics/${gameId}`),
 
+    // ── GDS: Game scaffold ───────────────────────────────────────────────────
+    /**
+     * POST /api/v1/developer/games/scaffold
+     * body: { name: string, template_id: string, description?: string }
+     * Returns: { game_id, name, template_id, created_at, cli_instructions: string, next_steps: string[] }
+     */
+    scaffold: (data) =>
+      request('/api/v1/developer/games/scaffold', { method: 'POST', body: JSON.stringify(data) }),
+
+    /**
+     * GET /api/v1/developer/games/:gameId/builds
+     * Returns list of build jobs: { id, status, version, commit_sha, started_at, logs_url }
+     */
+    builds: (gameId) => request(`/api/v1/developer/games/${gameId}/builds`),
+
+    /**
+     * GET /api/v1/developer/games/:gameId/builds/:buildId/logs
+     * Returns { logs: string, status, updated_at }
+     */
+    buildLogs: (gameId, buildId) => request(`/api/v1/developer/games/${gameId}/builds/${buildId}/logs`),
+
+    /**
+     * POST /api/v1/developer/games/:gameId/builds/:buildId/promote
+     * Promotes this build to be the live version.
+     */
+    promote: (gameId, buildId) =>
+      request(`/api/v1/developer/games/${gameId}/builds/${buildId}/promote`, { method: 'POST' }),
+
+    /**
+     * POST /api/v1/developer/games/:gameId/rollback
+     * body: { version: string }
+     */
+    rollback: (gameId, data) =>
+      request(`/api/v1/developer/games/${gameId}/rollback`, { method: 'POST', body: JSON.stringify(data) }),
+
     // ── Wise payout recipient (D-PAY-2) ──────────────────────────────────
     /** GET /api/v1/developer/wise-recipient — current saved Wise recipient */
     getWiseRecipient: () => request('/api/v1/developer/wise-recipient'),
@@ -410,6 +445,24 @@ export const api = {
      * `server_url` is the live WebSocket endpoint the browser should connect to.
      */
     playManifest: (gameId) => request(`/api/v1/distribution/${gameId}/play`),
+  },
+
+  // ── GDS: Game Templates + Scaffold ──────────────────────────────────────────
+
+  templates: {
+    /**
+     * GET /api/v1/templates
+     * Returns a list of game templates, each with:
+     *   { id, name, description, tier, tags[], preview_url?, screenshot_url? }
+     * tier: 'free' | 'starter' | 'advanced'
+     */
+    list: () => request('/api/v1/templates'),
+
+    /**
+     * GET /api/v1/templates/:id
+     * Returns a single template detail.
+     */
+    get: (id) => request(`/api/v1/templates/${id}`),
   },
 
   stores: {

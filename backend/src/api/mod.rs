@@ -27,6 +27,7 @@ pub mod search;
 pub mod social;
 pub mod streaming;
 pub mod subscriptions;
+pub mod templates;
 pub mod tournaments;
 pub mod versioning;
 pub mod wallet;

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Magnetite Arena — Web Client Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #07070b;
+      --bg2:      #0f0f16;
+      --card:     #14141d;
+      --border:   #23232e;
+      --text:     #f4f4f6;
+      --muted:    #6b6b78;
+      --accent:   #38e1c8;
+      --error:    #ff5468;
+      --warning:  #f5a524;
+      --success:  #3ddc84;
+      --mono:     "JetBrains Mono", "Courier New", monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      gap: 20px;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 22px;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    header p {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .connect-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    .connect-bar label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .connect-bar input {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 6px 10px;
+      min-width: 220px;
+      outline: none;
+    }
+
+    .connect-bar input:focus {
+      border-color: var(--accent);
+    }
+
+    button {
+      background: var(--accent);
+      border: none;
+      border-radius: 4px;
+      color: #07070b;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 7px 18px;
+      text-transform: uppercase;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.danger {
+      background: var(--error);
+    }
+
+    .status-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 11px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .dot.connected { background: var(--success); }
+    .dot.error     { background: var(--error); }
+    .dot.pending   { background: var(--warning); }
+
+    canvas {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: block;
+      background: #07070b;
+      max-width: 100%;
+    }
+
+    .controls-hint {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    .controls-hint span {
+      display: inline-block;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    .log {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 10px 14px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 120px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+
+    .log .entry { display: flex; gap: 8px; }
+    .log .ts    { color: var(--muted); min-width: 60px; }
+    .log .msg   { color: var(--text); }
+    .log .msg.warn  { color: var(--warning); }
+    .log .msg.error { color: var(--error); }
+    .log .msg.ok    { color: var(--success); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>// magnetite arena</h1>
+    <p>web client demo — connect to a magnetite dev server</p>
+  </header>
+
+  <div class="connect-bar">
+    <label>WS URL</label>
+    <input id="url-input" type="text" value="ws://localhost:9001" placeholder="ws://localhost:9001" />
+    <label>Token</label>
+    <input id="token-input" type="text" placeholder="optional" style="min-width:120px;" />
+    <button id="btn-connect">Connect</button>
+    <button id="btn-disconnect" class="danger" disabled>Disconnect</button>
+  </div>
+
+  <div class="status-row">
+    <div class="pill">
+      <div id="dot" class="dot"></div>
+      <span id="status-text">disconnected</span>
+    </div>
+    <div class="pill" id="pill-player" style="display:none;">
+      PLAYER <span id="player-id-display">—</span>
+    </div>
+    <div class="pill" id="pill-tick">
+      TICK <span id="tick-display">0</span>
+    </div>
+    <div class="pill" id="pill-pending">
+      PENDING <span id="pending-display">0</span>
+    </div>
+  </div>
+
+  <canvas id="game-canvas" width="600" height="600"></canvas>
+
+  <div class="controls-hint">
+    <span>W A S D</span> move &nbsp;|&nbsp;
+    <span>Mouse</span> aim &nbsp;|&nbsp;
+    <span>Left click</span> / <span>Z</span> shoot &nbsp;|&nbsp;
+    <span>Shift</span> sprint
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <script type="module">
+    import { createClient } from '../src/client.js';
+
+    // ---------------------------------------------------------------------------
+    // DOM refs
+    // ---------------------------------------------------------------------------
+    const urlInput    = document.getElementById('url-input');
+    const tokenInput  = document.getElementById('token-input');
+    const btnConnect  = document.getElementById('btn-connect');
+    const btnDiscon   = document.getElementById('btn-disconnect');
+    const dot         = document.getElementById('dot');
+    const statusText  = document.getElementById('status-text');
+    const pillPlayer  = document.getElementById('pill-player');
+    const playerIdEl  = document.getElementById('player-id-display');
+    const tickEl      = document.getElementById('tick-display');
+    const pendingEl   = document.getElementById('pending-display');
+    const canvas      = document.getElementById('game-canvas');
+    const logEl       = document.getElementById('log');
+
+    // ---------------------------------------------------------------------------
+    // Logging
+    // ---------------------------------------------------------------------------
+    function log(msg, kind = '') {
+      const ts = new Date().toLocaleTimeString('en', { hour12: false });
+      const row = document.createElement('div');
+      row.className = 'entry';
+      row.innerHTML = `<span class="ts">${ts}</span><span class="msg ${kind}">${msg}</span>`;
+      logEl.appendChild(row);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Status helpers
+    // ---------------------------------------------------------------------------
+    function setStatus(state, playerIdStr) {
+      dot.className = 'dot ' + state;
+      statusText.textContent = state;
+      if (playerIdStr) {
+        pillPlayer.style.display = '';
+        playerIdEl.textContent = playerIdStr.slice(0, 8);
+      } else {
+        pillPlayer.style.display = 'none';
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Client lifecycle
+    // ---------------------------------------------------------------------------
+    let client = null;
+
+    btnConnect.addEventListener('click', () => {
+      if (client) return;
+
+      const url   = urlInput.value.trim() || 'ws://localhost:9001';
+      const token = tokenInput.value.trim() || undefined;
+
+      setStatus('pending', null);
+      log(`connecting to ${url}…`);
+
+      client = createClient({ url, token, canvas });
+
+      // Wire up status updates via onState
+      client.onState((state) => {
+        tickEl.textContent    = state?.tick ?? 0;
+        pendingEl.textContent = client._prediction?.pendingCount ?? 0;
+      });
+
+      // Monkey-patch connection events (internal, for demo purposes)
+      client._conn.onOpen = () => {
+        setStatus('connected', client.playerId);
+        log('WebSocket opened — waiting for Welcome…', 'ok');
+        btnConnect.disabled  = true;
+        btnDiscon.disabled   = false;
+      };
+
+      client._conn.onClose = () => {
+        setStatus('error', null);
+        log('connection closed', 'warn');
+        btnConnect.disabled  = false;
+        btnDiscon.disabled   = true;
+        client = null;
+      };
+
+      client._conn.onError = () => {
+        log('WebSocket error', 'error');
+        setStatus('error', null);
+      };
+
+      // Listen for Welcome to update player pill
+      const origWelcome = client._conn._handlers.get('welcome');
+      client._conn.on('welcome', (msg) => {
+        if (origWelcome) origWelcome(msg);
+        setStatus('connected', String(msg.player_id));
+        playerIdEl.textContent = String(msg.player_id).slice(0, 8);
+        log(`welcome! player_id=${msg.player_id}  tick_hz=${msg.config?.tick_hz ?? '?'}`, 'ok');
+      });
+
+      client.connect();
+    });
+
+    btnDiscon.addEventListener('click', () => {
+      if (!client) return;
+      client.disconnect();
+      client = null;
+      setStatus('', null);
+      log('disconnected by user');
+      btnConnect.disabled = false;
+      btnDiscon.disabled  = true;
+    });
+  </script>
+</body>
+</html>

@@ -42,6 +42,7 @@ use crate::api::search;
 use crate::api::social;
 use crate::api::streaming;
 use crate::api::subscriptions;
+use crate::api::templates;
 use crate::api::tournaments;
 use crate::api::versioning;
 use crate::api::wallet;
@@ -97,6 +98,7 @@ async fn main() {
         .nest("/leaderboard", leaderboard::router(pool.clone()))
         .nest("/matchmaking", matchmaking::router(pool.clone()))
         .nest("/developer", developer::router(pool.clone()))
+        .nest("/templates", templates::router())
         .nest("/admin", admin::router(pool.clone()))
         .nest("/oauth", oauth::router(pool.clone()))
         .nest("/github", github::router(pool.clone()))

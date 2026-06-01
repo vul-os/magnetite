@@ -1,0 +1,293 @@
+/* ── GamePreview Component — Industrial Magnetite ───────────────────────── */
+
+@keyframes gpReveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-preview, .gp-overlay { animation: none !important; }
+}
+
+/* ── Root ────────────────────────────────────────────────────────────────── */
+.game-preview {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: gpReveal var(--t) var(--ease-out) both;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.gp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1rem;
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 42px;
+}
+
+.gp-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gp-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.gp-name {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+/* ── Status row ──────────────────────────────────────────────────────────── */
+.gp-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gp-conn-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs, 0.65rem);
+  letter-spacing: 0.04em;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.gp-conn-pill[data-status="connecting"] {
+  border-color: var(--color-amber);
+  color: var(--color-amber);
+  background: var(--color-amber-soft);
+}
+
+.gp-conn-pill[data-status="connected"] {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: rgba(61, 220, 132, 0.08);
+}
+
+.gp-conn-pill[data-status="error"],
+.gp-conn-pill[data-status="disconnected"] {
+  border-color: var(--color-error);
+  color: var(--color-error);
+  background: rgba(255, 84, 104, 0.08);
+}
+
+.gp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.gp-conn-pill[data-status="connected"] .gp-dot {
+  animation: gpDotPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes gpDotPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.gp-latency {
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 3px);
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 0.6rem;
+}
+
+.gp-players {
+  color: var(--color-text-muted);
+  font-size: 0.6rem;
+}
+
+.gp-action-btn {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+}
+
+.gp-action-btn:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.gp-close-btn {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
+/* ── Canvas wrap ─────────────────────────────────────────────────────────── */
+.gp-canvas-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--color-bg-primary);
+  min-height: 200px;
+}
+
+.gp-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #07070b;
+}
+
+/* ── Overlays ────────────────────────────────────────────────────────────── */
+.gp-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  background: rgba(7, 7, 11, 0.92);
+  animation: gpReveal var(--t) var(--ease-out) both;
+}
+
+.gp-overlay h4 {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.gp-overlay p {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+.gp-overlay p code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.gp-empty-icon {
+  font-size: 2.5rem;
+  color: var(--color-text-muted);
+  opacity: 0.4;
+}
+
+.gp-error-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 84, 104, 0.1);
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* ── Dev mode overlay ────────────────────────────────────────────────────── */
+.gp-dev-overlay {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-strong);
+}
+
+.gp-dev-overlay h4 {
+  font-size: var(--text-sm);
+}
+
+.gp-dev-input-row {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 480px;
+  flex-wrap: wrap;
+}
+
+.gp-url-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.625rem 0.875rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+.gp-url-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-soft);
+}
+
+.gp-url-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.gp-connect-btn {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  padding: 0.625rem 1.25rem;
+}
+
+/* ── Footer controls hint ────────────────────────────────────────────────── */
+.gp-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-bg-card);
+  border-top: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .gp-canvas-wrap { aspect-ratio: 4/3; }
+  .gp-footer       { gap: 0.75rem; }
+}

@@ -1,364 +1,491 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { api, getOAuthUrl } from '../api/client';
+import GamePreview from '../components/GamePreview';
+import { api } from '../api/client';
 import './GameStudio.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-function authFetch(endpoint, options = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-}
+// ── Mock templates — only used when VITE_USE_MOCKS=true ──────────────────────
+const MOCK_TEMPLATES = [
+  {
+    id: 'arena-shooter',
+    name: 'Arena Shooter',
+    description: 'Top-down multiplayer arena shooter. Authoritative server, interest-filtered views, 60 Hz tick. Includes weapon, health, and respawn systems.',
+    tier: 'free',
+    tags: ['multiplayer', 'top-down', 'action'],
+    player_count: '2–16',
+    tick_hz: 60,
+    topology: 'SingleRoom',
+  },
+  {
+    id: 'platformer',
+    name: 'Platformer',
+    description: 'Side-scroller platformer with server-authoritative physics, jump prediction, and collectibles. Client-side prediction built in.',
+    tier: 'free',
+    tags: ['platformer', 'single-player', 'puzzle'],
+    player_count: '1–4',
+    tick_hz: 60,
+    topology: 'SingleRoom',
+  },
+  {
+    id: 'fps-starter',
+    name: 'FPS Starter',
+    description: 'First-person shooter with Bevy + rapier3d physics, gamepad support, spatial sharding for large lobbies, and anti-cheat replay verification.',
+    tier: 'starter',
+    tags: ['fps', 'multiplayer', '3d', 'gamepad'],
+    player_count: '2–64',
+    tick_hz: 60,
+    topology: 'Dedicated',
+  },
+  {
+    id: 'motorsport',
+    name: 'Motorsport',
+    description: 'Racing game with vehicle physics, analog throttle/brake/steering, lap tracking, and points leaderboard integration.',
+    tier: 'starter',
+    tags: ['racing', 'gamepad', 'physics', 'leaderboard'],
+    player_count: '2–16',
+    tick_hz: 60,
+    topology: 'Dedicated',
+  },
+  {
+    id: 'strategy',
+    name: 'RTS Strategy',
+    description: 'Real-time strategy game with a sharded topology for AAA-scale maps, cloud saves, and in-game marketplace for cosmetics.',
+    tier: 'advanced',
+    tags: ['strategy', 'rts', 'sharded', 'marketplace'],
+    player_count: '2–1000',
+    tick_hz: 20,
+    topology: 'Sharded',
+  },
+  {
+    id: 'blank',
+    name: 'Blank Slate',
+    description: 'Empty AuthoritativeGame scaffold — implement every method yourself. Maximum control, minimum boilerplate.',
+    tier: 'free',
+    tags: ['custom', 'blank'],
+    player_count: 'Any',
+    tick_hz: 60,
+    topology: 'SingleRoom',
+  },
+];
 
-const CATEGORIES = ['Action', 'Puzzle', 'Racing', 'RPG', 'Strategy', 'Arcade', 'Sports', 'Casual'];
+const TIER_CONFIG = {
+  free:     { label: 'Free',     color: 'var(--color-success)', bg: 'rgba(61,220,132,0.1)' },
+  starter:  { label: 'Starter',  color: 'var(--color-accent)',  bg: 'var(--color-accent-soft)' },
+  advanced: { label: 'Advanced', color: 'var(--color-amber)',   bg: 'var(--color-amber-soft)' },
+};
+
+const TOPOLOGY_LABELS = {
+  SingleRoom: 'Single Room (≤16)',
+  Dedicated:  'Dedicated (≤256)',
+  Sharded:    'Sharded (AAA)',
+};
+
+// ── Step states ──────────────────────────────────────────────────────────────
+const STEP_TEMPLATE  = 'template';
+const STEP_CONFIGURE = 'configure';
+const STEP_RESULT    = 'result';
 
 export default function GameStudio() {
-  const [githubRepo, setGithubRepo]     = useState('');
-  const [githubConnected, setGithubConnected] = useState(false);
-  const [connecting, setConnecting]     = useState(false);
-  const [connectError, setConnectError] = useState(null);
-  const [installations, setInstallations] = useState([]);
-  const [formData, setFormData]         = useState({
-    title: '',
-    description: '',
-    category: 'Action',
-    price: '',
-    thumbnail: '',
-    min_players: 1,
-    max_players: 4,
-  });
-  const [deploying, setDeploying]       = useState(false);
-  const [deploySuccess, setDeploySuccess] = useState(false);
-  const [deployError, setDeployError]   = useState(null);
+  // ── Step 1: template gallery ─────────────────────────────────────────────
+  const [templates, setTemplates]         = useState(USE_MOCKS ? MOCK_TEMPLATES : []);
+  const [templatesLoading, setTemplatesLoading] = useState(!USE_MOCKS);
+  const [templatesError, setTemplatesError]     = useState(null);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
 
-  /* Check if GitHub App is already installed (any installations available) */
+  // ── Step 2: configure ────────────────────────────────────────────────────
+  const [step, setStep]         = useState(STEP_TEMPLATE);
+  const [gameName, setGameName] = useState('');
+  const [gameDesc, setGameDesc] = useState('');
+
+  // ── Step 3: result ───────────────────────────────────────────────────────
+  const [creating, setCreating]     = useState(false);
+  const [createError, setCreateError] = useState(null);
+  const [result, setResult]         = useState(null);
+
+  // ── Preview ──────────────────────────────────────────────────────────────
+  const [showPreview, setShowPreview] = useState(false);
+
+  // ── Load templates ───────────────────────────────────────────────────────
   useEffect(() => {
-    async function checkInstallations() {
-      try {
-        const res = await authFetch('/api/github/installations');
-        if (res.ok) {
-          const data = await res.json();
-          const list = Array.isArray(data) ? data : (data.installations ?? []);
-          setInstallations(list);
-          if (list.length > 0) {
-            setGithubConnected(true);
-          }
-        }
-      } catch {
-        /* Not connected — user can trigger the OAuth flow */
-      }
-    }
-    checkInstallations();
+    if (USE_MOCKS) return;
+    let cancelled = false;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+
+    api.templates.list()
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : (data?.data ?? data?.templates ?? []);
+        setTemplates(list.length > 0 ? list : MOCK_TEMPLATES);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Fall back to built-in templates so the gallery is always usable
+        setTemplates(MOCK_TEMPLATES);
+        setTemplatesError(null); // not a hard error — mocks cover it
+      })
+      .finally(() => {
+        if (!cancelled) setTemplatesLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
-  /* Handle OAuth callback: after GitHub App install, GitHub redirects back
-   * with ?installation_id=... or ?code=... The user is already logged in so
-   * we just reload installations. */
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('installation_id') || params.get('setup_action') === 'install') {
-      /* Clean the URL and mark as connected */
-      window.history.replaceState({}, '', window.location.pathname);
-      authFetch('/api/github/installations')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data) {
-            const list = Array.isArray(data) ? data : (data.installations ?? []);
-            setInstallations(list);
-            setGithubConnected(list.length > 0);
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
-
-  const handleConnectGithub = async () => {
-    if (!githubRepo.trim() && !githubConnected) {
-      /* Start the GitHub App OAuth/installation flow */
-      setConnecting(true);
-      setConnectError(null);
-      try {
-        /* Redirect to GitHub App installation page.
-         * The OAuth URL for github provider is /api/oauth/github which starts the flow. */
-        const oauthUrl = getOAuthUrl('github');
-        window.location.href = oauthUrl;
-      } catch (err) {
-        setConnectError(err.message || 'Failed to start GitHub OAuth flow');
-        setConnecting(false);
-      }
-      return;
-    }
-
-    if (githubRepo.trim()) {
-      /* Register a specific repository */
-      setConnecting(true);
-      setConnectError(null);
-      try {
-        const [owner, repo] = githubRepo.trim().split('/');
-        if (!owner || !repo) throw new Error('Repository must be in owner/repository format');
-        const res = await authFetch('/api/github/repos/register', {
-          method: 'POST',
-          body: JSON.stringify({ owner, repo }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || `Registration failed (HTTP ${res.status})`);
-        }
-        setGithubConnected(true);
-      } catch (err) {
-        setConnectError(err.message);
-      } finally {
-        setConnecting(false);
-      }
-    }
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const handleSelectTemplate = (tpl) => {
+    setSelectedTemplate(tpl);
+    setStep(STEP_CONFIGURE);
+    setGameName('');
+    setGameDesc('');
+    setCreateError(null);
   };
 
-  const handleDisconnectGithub = () => {
-    setGithubConnected(false);
-    setGithubRepo('');
-    setInstallations([]);
+  const handleBack = () => {
+    setStep(STEP_TEMPLATE);
+    setCreateError(null);
   };
 
-  const handleDeploy = async (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
-    setDeploying(true);
-    setDeployError(null);
-    setDeploySuccess(false);
+    if (!gameName.trim() || !selectedTemplate) return;
+    setCreating(true);
+    setCreateError(null);
+
     try {
-      await api.games.create(formData);
-      setDeploySuccess(true);
-      setTimeout(() => setDeploySuccess(false), 3000);
+      const body = await api.developer.scaffold({
+        name:        gameName.trim(),
+        template_id: selectedTemplate.id,
+        description: gameDesc.trim() || undefined,
+      });
+      const res = body?.data ?? body;
+      setResult(res);
+      setStep(STEP_RESULT);
     } catch (err) {
-      setDeployError(err.message || 'Deployment failed');
+      setCreateError(err?.message ?? 'Failed to create game');
     } finally {
-      setDeploying(false);
+      setCreating(false);
     }
   };
 
-  const connectedRepo = installations.length > 0
-    ? installations[0]?.full_name ?? installations[0]?.name ?? githubRepo
-    : githubRepo;
+  const handleStartOver = () => {
+    setStep(STEP_TEMPLATE);
+    setSelectedTemplate(null);
+    setResult(null);
+    setCreateError(null);
+    setShowPreview(false);
+  };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Layout>
       <div className="game-studio">
         <header className="studio-header">
           <span className="kicker">// RUST GAME STUDIO</span>
           <h1>Game Studio</h1>
-          <p className="studio-subtitle">Connect your GitHub repository and configure your Rust game for deployment on Magnetite</p>
+          <p className="studio-subtitle">
+            Pick a template, name your game, and get the CLI commands to start building — then deploy to the platform.
+          </p>
         </header>
 
-        <div className="studio-grid">
-          <section className="studio-card github-card">
-            <span className="kicker">// STEP 1</span>
-            <h2>GitHub Integration</h2>
-            <p className="card-description">Connect your Rust game repository to enable automatic WASM builds and deployments</p>
+        {/* Step indicator */}
+        <div className="studio-steps" aria-label="Steps">
+          {[
+            { id: STEP_TEMPLATE,  label: 'Choose Template', n: 1 },
+            { id: STEP_CONFIGURE, label: 'Configure',        n: 2 },
+            { id: STEP_RESULT,    label: 'Get Started',      n: 3 },
+          ].map(({ id, label, n }) => {
+            const done = (
+              (id === STEP_TEMPLATE  && (step === STEP_CONFIGURE || step === STEP_RESULT)) ||
+              (id === STEP_CONFIGURE && step === STEP_RESULT)
+            );
+            const active = step === id;
+            return (
+              <div key={id} className={`studio-step ${active ? 'active' : ''} ${done ? 'done' : ''}`}>
+                <span className="step-num">{done ? '✓' : n}</span>
+                <span className="step-label">{label}</span>
+              </div>
+            );
+          })}
+        </div>
 
-            {connectError && (
-              <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
-                <span className="auth-error-icon" aria-hidden="true">!</span>
-                {connectError}
+        {/* Step 1 — Template gallery */}
+        {step === STEP_TEMPLATE && (
+          <section className="studio-section">
+            <div className="studio-section-header">
+              <h2>Choose a Template</h2>
+              <p className="studio-section-desc">
+                Each template implements <code>AuthoritativeGame</code> — pick one and we'll scaffold the Rust crate, ready for <code>magnetite build</code>.
+              </p>
+            </div>
+
+            {templatesLoading && (
+              <div className="studio-loading" aria-live="polite">
+                <span className="spinner" aria-hidden="true" />
+                Loading templates&hellip;
               </div>
             )}
 
-            {!githubConnected ? (
-              <div className="github-connect">
-                <div className="input-group">
-                  <input
-                    type="text"
-                    placeholder="owner/repository (optional — or click Connect to install App)"
-                    value={githubRepo}
-                    onChange={(e) => setGithubRepo(e.target.value)}
-                    className="github-input"
-                    aria-label="GitHub repository (owner/repository)"
-                  />
-                </div>
-                <button
-                  className="btn btn-primary github-btn"
-                  onClick={handleConnectGithub}
-                  disabled={connecting}
-                >
-                  {connecting ? (
-                    <>
-                      <span className="spinner" aria-hidden="true" />
-                      Connecting…
-                    </>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                      </svg>
-                      Connect GitHub
-                    </>
+            {templatesError && (
+              <div className="studio-error" role="alert">{templatesError}</div>
+            )}
+
+            {!templatesLoading && (
+              <div className="template-gallery">
+                {templates.map((tpl) => {
+                  const tc = TIER_CONFIG[tpl.tier] ?? TIER_CONFIG.free;
+                  return (
+                    <button
+                      key={tpl.id}
+                      className={`template-card ${selectedTemplate?.id === tpl.id ? 'selected' : ''}`}
+                      onClick={() => handleSelectTemplate(tpl)}
+                      aria-pressed={selectedTemplate?.id === tpl.id}
+                    >
+                      <div className="template-card-top">
+                        <div className="template-icon" aria-hidden="true">
+                          {tpl.id === 'arena-shooter' ? '⬡' :
+                           tpl.id === 'platformer'    ? '▲' :
+                           tpl.id === 'fps-starter'   ? '◎' :
+                           tpl.id === 'motorsport'    ? '⬬' :
+                           tpl.id === 'strategy'      ? '⬟' : '⬢'}
+                        </div>
+                        <span
+                          className="tier-badge"
+                          style={{ background: tc.bg, color: tc.color }}
+                        >
+                          {tc.label}
+                        </span>
+                      </div>
+
+                      <h3 className="template-name">{tpl.name}</h3>
+                      <p className="template-desc">{tpl.description}</p>
+
+                      <div className="template-meta">
+                        <span className="meta-item">
+                          <span className="meta-label">Players</span>
+                          <span className="meta-value">{tpl.player_count ?? '?'}</span>
+                        </span>
+                        <span className="meta-item">
+                          <span className="meta-label">Tick</span>
+                          <span className="meta-value">{tpl.tick_hz ?? 60} Hz</span>
+                        </span>
+                        <span className="meta-item">
+                          <span className="meta-label">Topology</span>
+                          <span className="meta-value">{TOPOLOGY_LABELS[tpl.topology] ?? tpl.topology ?? '—'}</span>
+                        </span>
+                      </div>
+
+                      <div className="template-tags">
+                        {(tpl.tags ?? []).map((tag) => (
+                          <span key={tag} className="tag">{tag}</span>
+                        ))}
+                      </div>
+
+                      <span className="template-cta">Select template →</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Step 2 — Configure */}
+        {step === STEP_CONFIGURE && selectedTemplate && (
+          <section className="studio-section">
+            <div className="studio-section-header">
+              <button className="back-btn" onClick={handleBack} aria-label="Back to template gallery">
+                ← Templates
+              </button>
+              <h2>Configure Your Game</h2>
+              <p className="studio-section-desc">
+                Using template: <strong>{selectedTemplate.name}</strong>
+              </p>
+            </div>
+
+            <div className="configure-grid">
+              <div className="configure-form-card">
+                <form onSubmit={handleCreate} className="configure-form">
+                  <div className="form-group">
+                    <label htmlFor="game-name">Game Name <span aria-hidden="true">*</span></label>
+                    <input
+                      id="game-name"
+                      type="text"
+                      placeholder="my-awesome-game"
+                      value={gameName}
+                      onChange={(e) => setGameName(e.target.value)}
+                      required
+                      autoFocus
+                      pattern="[a-zA-Z0-9_\- ]+"
+                      title="Letters, numbers, spaces, hyphens and underscores"
+                    />
+                    <span className="form-hint">Used as the Cargo crate name (alphanumeric + hyphens)</span>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="game-desc">Description</label>
+                    <textarea
+                      id="game-desc"
+                      placeholder="Describe your game…"
+                      value={gameDesc}
+                      onChange={(e) => setGameDesc(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  {createError && (
+                    <div className="studio-error" role="alert">{createError}</div>
                   )}
-                </button>
-              </div>
-            ) : (
-              <div className="github-connected">
-                <div className="connected-repo">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                  </svg>
-                  <span>{connectedRepo || 'GitHub Connected'}</span>
-                  <span className="connected-badge-label">Connected</span>
-                </div>
-                {installations.length > 1 && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {installations.length} repositories available
-                  </span>
-                )}
-                <button className="btn btn-secondary" onClick={handleDisconnectGithub}>Disconnect</button>
-              </div>
-            )}
 
-            <div className="github-permissions">
-              <h4>Permissions granted</h4>
-              <ul>
-                <li>Read repository contents (Rust source &amp; Cargo.toml)</li>
-                <li>Read commit status</li>
-                <li>Read pull request workflows</li>
-              </ul>
+                  <div className="form-actions">
+                    <button type="button" className="btn btn-secondary" onClick={handleBack}>
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={creating || !gameName.trim()}
+                    >
+                      {creating ? (
+                        <><span className="spinner" aria-hidden="true" /> Creating…</>
+                      ) : 'Create Game'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Template summary */}
+              <div className="template-summary-card">
+                <span className="kicker">// TEMPLATE SUMMARY</span>
+                <h3>{selectedTemplate.name}</h3>
+                <p>{selectedTemplate.description}</p>
+                <div className="summary-grid">
+                  <div className="summary-row">
+                    <span className="summary-label">Topology</span>
+                    <span className="summary-value mono">{TOPOLOGY_LABELS[selectedTemplate.topology] ?? selectedTemplate.topology}</span>
+                  </div>
+                  <div className="summary-row">
+                    <span className="summary-label">Tick rate</span>
+                    <span className="summary-value mono">{selectedTemplate.tick_hz ?? 60} Hz</span>
+                  </div>
+                  <div className="summary-row">
+                    <span className="summary-label">Players</span>
+                    <span className="summary-value mono">{selectedTemplate.player_count ?? '?'}</span>
+                  </div>
+                  <div className="summary-row">
+                    <span className="summary-label">Tier</span>
+                    <span className="summary-value mono">{selectedTemplate.tier}</span>
+                  </div>
+                </div>
+                <div className="template-tags" style={{ marginTop: '1rem' }}>
+                  {(selectedTemplate.tags ?? []).map((tag) => (
+                    <span key={tag} className="tag">{tag}</span>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
+        )}
 
-          <section className="studio-card config-card">
-            <span className="kicker">// STEP 2</span>
-            <h2>Game Configuration</h2>
-            <p className="card-description">Configure your Rust game&apos;s metadata and playtime pricing</p>
+        {/* Step 3 — Result + next steps */}
+        {step === STEP_RESULT && result && (
+          <section className="studio-section">
+            <div className="result-header">
+              <div className="result-success-icon" aria-hidden="true">✓</div>
+              <h2>Game Created!</h2>
+              <p>
+                <strong>{result.name ?? gameName}</strong> is registered on Magnetite.
+                Follow the steps below to start building.
+              </p>
+            </div>
 
-            {deployError && (
-              <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
-                <span className="auth-error-icon" aria-hidden="true">!</span>
-                {deployError}
-              </div>
-            )}
+            <div className="result-grid">
+              {/* CLI instructions */}
+              <div className="result-card cli-card">
+                <span className="kicker">// GET THE CODE</span>
+                <h3>CLI Setup</h3>
+                <p className="card-desc">Run these commands to scaffold and connect your local repository:</p>
 
-            <form className="config-form" onSubmit={handleDeploy}>
-              <div className="form-group">
-                <label htmlFor="game-title">Game Title</label>
-                <input
-                  id="game-title"
-                  type="text"
-                  placeholder="My Awesome Rust Game"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="game-description">Description</label>
-                <textarea
-                  id="game-description"
-                  placeholder="Describe your game..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="game-category">Category</label>
-                  <select
-                    id="game-category"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  >
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="game-price">Price per Session (USDC)</label>
-                  <input
-                    id="game-price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.50"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="min-players">Min Players</label>
-                  <input
-                    id="min-players"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={formData.min_players}
-                    onChange={(e) => setFormData({ ...formData, min_players: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="max-players">Max Players</label>
-                  <input
-                    id="max-players"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={formData.max_players}
-                    onChange={(e) => setFormData({ ...formData, max_players: parseInt(e.target.value) })}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="game-thumbnail">Thumbnail URL</label>
-                <input
-                  id="game-thumbnail"
-                  type="url"
-                  placeholder="https://example.com/thumbnail.jpg"
-                  value={formData.thumbnail}
-                  onChange={(e) => setFormData({ ...formData, thumbnail: e.target.value })}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary deploy-btn"
-                disabled={deploying || !formData.title || !githubConnected}
-              >
-                {deploying ? (
-                  <>
-                    <span className="spinner" aria-hidden="true" />
-                    Deploying…
-                  </>
-                ) : deploySuccess ? (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                    </svg>
-                    Deployed!
-                  </>
+                {result.cli_instructions ? (
+                  <pre className="cli-block">{result.cli_instructions}</pre>
                 ) : (
-                  'Deploy Game'
-                )}
-              </button>
+                  <pre className="cli-block">{`# Install the Magnetite CLI
+cargo install magnetite-cli
 
-              {!githubConnected && (
-                <p style={{ marginTop: '0.5rem', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Connect GitHub (Step 1) to enable deployment
+# Scaffold a new game crate from the ${selectedTemplate?.name ?? 'selected'} template
+magnetite new ${gameName.replace(/\s+/g, '-').toLowerCase()} \\
+  --template ${selectedTemplate?.id ?? 'arena-shooter'} \\
+  --game-id ${result.game_id ?? '<game-id>'}
+
+# Enter the generated directory
+cd ${gameName.replace(/\s+/g, '-').toLowerCase()}
+
+# Build locally (compiles to wasm32-wasip1)
+magnetite build
+
+# Run a local authoritative server on ws://localhost:9001
+magnetite dev`}</pre>
+                )}
+              </div>
+
+              {/* Next steps */}
+              <div className="result-card next-steps-card">
+                <span className="kicker">// NEXT STEPS</span>
+                <h3>What&apos;s Next</h3>
+                <ol className="next-steps-list">
+                  {(result.next_steps ?? [
+                    'Run `magnetite new` to scaffold the crate locally',
+                    'Implement your game logic in `src/game.rs` — the template has a working starting point',
+                    'Run `magnetite dev` to test locally with a real authoritative server',
+                    'Connect your GitHub repo in Game Deploy to enable automatic WASM builds',
+                    'When ready, `magnetite deploy` pushes your build to the platform (Bucket D CI runner)',
+                  ]).map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+
+                <div className="result-actions">
+                  <a href="/developers/deploy" className="btn btn-primary">
+                    Connect GitHub &amp; Deploy
+                  </a>
+                  <button className="btn btn-secondary" onClick={handleStartOver}>
+                    Create Another Game
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Live preview section — wire up when a dev ws_endpoint is available */}
+            <div className="preview-section">
+              <div className="preview-section-header">
+                <span className="kicker">// LIVE PREVIEW</span>
+                <h3>Preview in Browser</h3>
+                <p>
+                  Once you run <code>magnetite dev</code>, enter the WebSocket URL below to preview your game live in the browser using the Magnetite web client.
                 </p>
+              </div>
+
+              {!showPreview ? (
+                <div className="preview-cta">
+                  <button
+                    className="btn btn-accent"
+                    onClick={() => setShowPreview(true)}
+                  >
+                    Open Preview
+                  </button>
+                  <span className="preview-hint">Requires a running <code>magnetite dev</code> server</span>
+                </div>
+              ) : (
+                <GamePreview
+                  wsEndpoint={null}
+                  devMode
+                  onClose={() => setShowPreview(false)}
+                />
               )}
-            </form>
+            </div>
           </section>
-        </div>
+        )}
       </div>
     </Layout>
   );

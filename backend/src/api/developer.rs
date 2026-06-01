@@ -11,7 +11,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::api::middleware;
+use crate::api::response;
+use crate::api::templates;
 use crate::error::{AppError, Result};
+use crate::services::distribution as dist_svc;
 use crate::services::payout::PayoutService;
 use crate::services::wise::{RecipientDetails, WiseClient};
 
@@ -676,6 +679,284 @@ pub async fn delete_wise_recipient(
 }
 
 // ---------------------------------------------------------------------------
+// GDS — Scaffold a new game from a template
+// ---------------------------------------------------------------------------
+
+/// POST /api/v1/developer/games/scaffold — body.
+#[derive(Debug, Deserialize)]
+pub struct ScaffoldGameRequest {
+    /// Template id: one of "arcade" | "authoritative" | "fps" | "motorsport".
+    pub template_id: String,
+    /// Display title for the new game record.
+    pub title: String,
+    /// Optional description.
+    pub description: Option<String>,
+}
+
+/// Scaffold info returned to the developer alongside the new game id.
+#[derive(Debug, Serialize)]
+pub struct ScaffoldInfo {
+    /// The `magnetite new` command the developer should run locally.
+    pub cli_command: String,
+    /// On-disk template crate path (relative to the repo root).
+    pub template_path: String,
+    /// Canonical template repo reference.
+    pub template_repo: String,
+    /// Starter file list (informational manifest).
+    pub starter_files: Vec<String>,
+    /// Additional instructions shown to the developer.
+    pub instructions: String,
+}
+
+/// Full response for POST /developer/games/scaffold.
+#[derive(Debug, Serialize)]
+pub struct ScaffoldResponse {
+    pub game_id: Uuid,
+    pub scaffold: ScaffoldInfo,
+}
+
+/// POST /api/v1/developer/games/scaffold
+///
+/// Creates a `games` record for the authenticated developer seeded from the
+/// chosen template, then records the scaffold details in `game_scaffolds`.
+/// Returns the new game id plus everything the developer needs to run
+/// `magnetite new` locally and point their CLI at this game record.
+pub async fn scaffold_game(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<ScaffoldGameRequest>,
+) -> Result<Json<ScaffoldResponse>> {
+    if payload.title.trim().is_empty() {
+        return Err(AppError::Validation("title is required".to_string()));
+    }
+
+    let template = templates::find_template(&payload.template_id).ok_or_else(|| {
+        AppError::Validation(format!(
+            "Unknown template '{}'. Valid values: arcade, authoritative, fps, motorsport",
+            payload.template_id
+        ))
+    })?;
+
+    // Sanitise the title into a valid Rust crate name for the CLI command.
+    let crate_name: String = payload
+        .title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    let crate_name = crate_name.trim_matches('_').to_string();
+    let crate_name = if crate_name.is_empty() {
+        "my_game".to_string()
+    } else {
+        crate_name
+    };
+
+    // Insert the games row (no github_repo yet — the developer will connect one later).
+    let game_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO games (id, developer_id, github_repo, title, description, template_id, status, active, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'draft', true, NOW())",
+    )
+    .bind(game_id)
+    .bind(user_id)
+    .bind(format!("pending/{}", game_id)) // placeholder until GitHub repo is connected
+    .bind(&payload.title)
+    .bind(&payload.description)
+    .bind(template.id)
+    .execute(&pool)
+    .await?;
+
+    let cli_command = format!("magnetite new {} --template {}", crate_name, template.id);
+
+    let manifest = serde_json::json!({
+        "template_id": template.id,
+        "template_path": template.template_path,
+        "starter_files": template.starter_files,
+    });
+
+    // Record the scaffold action.
+    sqlx::query(
+        "INSERT INTO game_scaffolds (id, game_id, developer_id, template_id, cli_command, template_repo, manifest, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())",
+    )
+    .bind(Uuid::new_v4())
+    .bind(game_id)
+    .bind(user_id)
+    .bind(template.id)
+    .bind(&cli_command)
+    .bind(template.template_repo)
+    .bind(&manifest)
+    .execute(&pool)
+    .await?;
+
+    let scaffold = ScaffoldInfo {
+        cli_command,
+        template_path: template.template_path.to_string(),
+        template_repo: template.template_repo.to_string(),
+        starter_files: template
+            .starter_files
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        instructions: format!(
+            "1. Install the Magnetite CLI: `cargo install magnetite-cli`\n\
+             2. Scaffold your game: `magnetite new {} --template {}`\n\
+             3. Connect a GitHub repo via POST /api/v1/github/repos\n\
+             4. Trigger your first build: POST /api/v1/distribution/{}/build\n\
+             5. Check build status: GET /api/v1/developer/games/{}/build-status",
+            crate_name, template.id, game_id, game_id
+        ),
+    };
+
+    Ok(Json(ScaffoldResponse { game_id, scaffold }))
+}
+
+// ---------------------------------------------------------------------------
+// GDS — Developer-facing build / version / promote wrappers
+// ---------------------------------------------------------------------------
+// These are thin wrappers that proxy the distribution service behind the
+// developer auth middleware and surface them under the /developer/games/:id/
+// namespace, so the frontend only needs to know one base path.
+
+/// POST /api/v1/developer/games/:id/build
+///
+/// Trigger a WASM build for the game. Creates a new `game_versions` row with
+/// status "pending" and queues it for the self-hosted runner.
+pub async fn trigger_build(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(game_id): Path<Uuid>,
+    Json(payload): Json<crate::api::distribution::RegisterVersionRequest>,
+) -> Result<Json<response::ApiResponse<dist_svc::GameVersion>>> {
+    // Confirm ownership.
+    sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM games WHERE id = $1 AND developer_id = $2 AND active = true",
+    )
+    .bind(game_id)
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+
+    if payload.version.is_empty() {
+        return Err(AppError::Validation("version is required".to_string()));
+    }
+    if payload.commit_sha.is_empty() {
+        return Err(AppError::Validation("commit_sha is required".to_string()));
+    }
+
+    let version = dist_svc::register_version(
+        &pool,
+        game_id,
+        &payload.version,
+        &payload.commit_sha,
+        payload.release_notes.as_deref(),
+    )
+    .await?;
+
+    Ok(response::success_response(version))
+}
+
+/// GET /api/v1/developer/games/:id/build-status
+///
+/// Returns the current build status summary for a game (owned by the authed developer).
+pub async fn get_game_build_status(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(game_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<crate::api::distribution::BuildStatusSummary>>> {
+    // Confirm ownership.
+    sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM games WHERE id = $1 AND developer_id = $2 AND active = true",
+    )
+    .bind(game_id)
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+
+    crate::api::distribution::get_build_status_summary(State(pool), Path(game_id)).await
+}
+
+/// GET /api/v1/developer/games/:id/versions
+///
+/// List all registered versions for a game owned by the authed developer.
+pub async fn list_game_versions(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(game_id): Path<Uuid>,
+) -> Result<Json<response::PaginatedResponse<dist_svc::GameVersion>>> {
+    // Confirm ownership.
+    sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM games WHERE id = $1 AND developer_id = $2 AND active = true",
+    )
+    .bind(game_id)
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+
+    let versions = dist_svc::list_versions(&pool, game_id).await?;
+    let total = versions.len() as u64;
+    Ok(response::paginated(versions, 1, 50, total))
+}
+
+/// PUT /api/v1/developer/games/:game_id/versions/:version_id/promote
+///
+/// Promote a version to live. Verifies ownership before delegating to the
+/// distribution service.
+pub async fn promote_game_version(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path((game_id, version_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<response::ApiResponse<dist_svc::GameVersion>>> {
+    // Confirm ownership.
+    sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM games WHERE id = $1 AND developer_id = $2 AND active = true",
+    )
+    .bind(game_id)
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+
+    let promoted = dist_svc::promote_version(&pool, game_id, version_id).await?;
+    Ok(response::success_response(promoted))
+}
+
+/// PUT /api/v1/developer/games/:game_id/versions/:version_id/rollback
+///
+/// Roll back to a specific version by promoting it (un-promotes any currently
+/// live version for this game first, then sets the target as live).
+pub async fn rollback_game_version(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path((game_id, version_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<response::ApiResponse<dist_svc::GameVersion>>> {
+    // Confirm ownership.
+    sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM games WHERE id = $1 AND developer_id = $2 AND active = true",
+    )
+    .bind(game_id)
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
+
+    // Rollback = demote current live, then promote the target.
+    sqlx::query(
+        "UPDATE game_versions SET is_live = false, updated_at = NOW()
+         WHERE game_id = $1 AND is_live = true",
+    )
+    .bind(game_id)
+    .execute(&pool)
+    .await?;
+
+    let promoted = dist_svc::promote_version(&pool, game_id, version_id).await?;
+    Ok(response::success_response(promoted))
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -762,6 +1043,50 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/wise-recipient",
             delete(delete_wise_recipient).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // GDS — scaffold a new game from a template
+        .route(
+            "/games/scaffold",
+            post(scaffold_game).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // GDS — build / version / promote / rollback wrappers (ownership-checked)
+        .route(
+            "/games/:id/build",
+            post(trigger_build).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/build-status",
+            get(get_game_build_status).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:id/versions",
+            get(list_game_versions).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:game_id/versions/:version_id/promote",
+            put(promote_game_version).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/games/:game_id/versions/:version_id/rollback",
+            put(rollback_game_version).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

@@ -1432,3 +1432,154 @@ POST   /api/v1/communities/:community_id/streams
 - `cargo check` — **0 errors in owned files (notifications.rs, admin.rs); 3 pre-existing warnings in search.rs/leaderboard.rs; exit 0**
 - `cargo fmt --check` (owned files only) — **clean, exit 0**
 - `cargo test --no-run` — **all 5 test executables compile, exit 0**
+
+## §7b — magnetite-web-client (GDS Game Dev, 2026-06-01)
+
+**Agent: magnetite-web-client deliverable — DONE.**
+
+### What was built
+
+New directory `magnetite-web-client/` — a dependency-free ES module browser client that speaks
+the authoritative Magnetite protocol so a Magnetite game is playable in a browser tab.
+
+### Files created
+
+- `src/protocol.js`      — wire format helpers: `encodeInputFrame`, `parseServerMessage`, `decodeBytes`
+- `src/prediction.js`    — `PredictionBuffer` (predict/ack/reject/snapshot reconciliation) + `arenaApplyInput`
+- `src/delta.js`         — `applyDeltaToSnapshot`, `snapshotToView`
+- `src/renderer.js`      — pluggable canvas renderer for ArenaView; Industrial Magnetite palette
+- `src/input-capture.js` — keyboard + mouse → `Input` snapshot; WASD/mouse mapping
+- `src/connection.js`    — WebSocket manager with exponential-backoff reconnect
+- `src/client.js`        — public API: `createClient({ url, token, canvas, render, applyInput })`
+- `src/client.test.js`   — 38 vitest unit tests (no live server needed)
+- `demo/index.html`      — standalone demo; connect to ws:// from `magnetite dev`
+- `README.md`            — usage, protocol mapping table, React integration snippet
+
+### Public API (import path for studio agent)
+
+```js
+import { createClient } from './magnetite-web-client/src/client.js';
+
+const client = createClient({ url, token, canvas, render?, applyInput? });
+client.connect();                      // open WS
+client.disconnect();                   // close + stop tick loop
+client.sendInput(input);               // advanced: send pre-built Input
+const unsub = client.onState(fn);      // subscribe to predicted state
+client.playerId;                       // string | null (set after Welcome)
+client.matchConfig;                    // MatchConfig | null
+client.state;                          // current predicted state
+```
+
+Secondary exports from `src/client.js`:
+`PredictionBuffer`, `arenaApplyInput`, `renderArenaView`, `InputCapture`,
+`ConnectionManager`, `applyDeltaToSnapshot`, `snapshotToView`,
+`encodeInputFrame`, `parseServerMessage`, `decodeBytes`,
+`defaultInput`, `defaultKeyState`, `defaultMouseState`
+
+### Decisions / crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| GDS-WC-1 | Build step | None required — plain ES modules | Zero dependencies; Vite/bundlers consume native ESM directly; no transpile needed for modern browsers |
+| GDS-WC-2 | Vec<u8> decoding | `decodeBytes` handles both base64 string and `number[]` | serde_json serialises `Vec<u8>` as base64; tests cover both paths |
+| GDS-WC-3 | Delta application path | View → snapshot → applyDelta → view | Server sends per-player View for Delta; we reconstruct a snapshot from the View, apply the delta, then convert back to View for rendering |
+| GDS-WC-4 | Prediction function | `arenaApplyInput` is default; injected via opts | Game-agnostic: any game supplies its own `applyInput`; arena shooter works out of the box |
+| GDS-WC-5 | vitest.config.js | Added `magnetite-web-client/src/**/*.{test,spec}.{js,jsx}` to include | Required to pick up the new test file; does not affect existing suite |
+| GDS-WC-6 | Renderer signature `_localPlayerId` | Prefixed with `_` (ESLint argsIgnorePattern) | Parameter is part of the pluggable render API; not used in the default renderer; downstream custom renderers will use it |
+
+### Verify (written to /tmp/gdswc.txt)
+- `npx vitest run` — **38 new tests PASS; 256/256 total (18 pre-existing files + 1 new)**
+- `npx eslint magnetite-web-client/**/*.js` — **0 errors, 0 warnings**
+- `npx eslint .` (full repo) — **0 errors, 73 warnings (all pre-existing)**
+- Protocol shapes: cross-checked against `authority.rs` + `protocol.rs` + `game-template-authoritative` — all match exactly
+
+## GDS Frontend Studio (2026-06-01): GameStudio + GamePreview + Playground + GameDeploy
+
+**Agent: Frontend Studio+Play owner — owns src/api/client.js, src/pages/GameStudio.jsx (+css), src/pages/developers/GameDeploy.jsx, src/pages/developers/BuildLogs.jsx, src/pages/Playground.jsx (+css), src/components/GamePreview.jsx (+css)**
+
+### Changes
+
+- **`src/api/client.js`:** Added `api.templates.{list,get}` (GET /api/v1/templates) + `api.developer.{scaffold,builds,buildLogs,promote,rollback}` (GDS scaffold + build management).
+- **`src/pages/GameStudio.jsx`** (full rewrite): 3-step flow — template gallery (tier badges, topology, tags) → configure (name + desc + template summary) → result (game created + CLI `magnetite new` instructions + next steps). Uses real `api.templates.list` with fallback to built-in MOCK_TEMPLATES. Scaffold calls `api.developer.scaffold`; shows `cli_instructions` from backend or generates instructions client-side. Integrates `GamePreview` in devMode for live preview.
+- **`src/pages/GameStudio.css`** (full rewrite): Template gallery grid, tier badges, configure-grid, result-grid, CLI block.
+- **`src/pages/Playground.jsx`** (patch): Added `GamePreview` import + `isWebClientUrl()` heuristic; when `manifest.server_url` speaks the ServerNet protocol (runtime/play paths or :9001 port), renders the `GamePreview` + magnetite-web-client pipeline instead of the raw-canvas path. Backward compatible — legacy `/ws/game/` stays on raw canvas.
+- **`src/pages/Playground.css`** (patch): Added `.playground-webclient*`, `.points-hud`, `.player-hud`, `.store-hud-btn`, `.ingame-store-overlay` styles.
+- **`src/pages/developers/GameDeploy.jsx`** (patch): Added `BuildLogs` + `api` imports; `normaliseDeploy` gains `game_id`/`build_id`/`queued` status; polling uses `api.developer.buildLogs`; `handleViewLogs`, `handlePromote`, `handleRollback` wired to real API; Build Logs modal added.
+- **`src/components/GamePreview.jsx`** (new): Wraps `magnetite-web-client/src/client.js`; states: idle/connecting/connected/error/disconnected; mock canvas renderer behind VITE_USE_MOCKS; devMode URL input for `magnetite dev` workflow; player count + latency pill.
+- **`src/components/GamePreview.css`** (new): Industrial Magnetite styling for the preview canvas component.
+- **`src/pages/GameStudio.test.jsx`** (full rewrite): 22 tests for the new 3-step flow.
+- **`src/components/GamePreview.test.jsx`** (new + ResizeObserver stub): 28 tests for GamePreview states.
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| GDS-FE-1 | Templates API fallback | Built-in MOCK_TEMPLATES on API error (not hard error) | The templates endpoint may not exist yet; the gallery must always be usable so devs can scaffold. Honest: falls back silently, not via VITE_USE_MOCKS flag. |
+| GDS-FE-2 | GamePreview path detection | `isWebClientUrl()` heuristic (runtime/play/ path or :9001 port) | ServerNet-speaking runtime servers will use these paths; legacy game-WS servers use /ws/game/. No breaking change to the existing raw-canvas Playground path. |
+| GDS-FE-3 | magnetite-web-client import | Relative path `../../magnetite-web-client/src/client.js` | The web-client is in the repo (not an npm package); direct relative import avoids npm publish overhead and keeps changes in-sync. |
+| GDS-FE-4 | Build logs when unavailable | Honest "Bucket D" message in modal | Real wasm-pack CI runner is Bucket D; fabricating logs would hide the honest state. The modal text clearly says the endpoint is not yet live. |
+
+### Verify (written to /tmp/gdsfe.txt)
+- `npm run build` — **OK (exit 0, ~450ms)**
+- `npm run lint`  — **0 errors, 76 warnings (all pre-existing react-hooks patterns)**
+- `npm test -- --run` — **21 test files, 306/306 tests pass**
+
+## GDS Backend Scaffold/Registration — Agent (2026-06-01)
+
+**Owner: backend/src/api/developer.rs, backend/src/api/templates.rs, backend/src/main.rs, backend/src/api/mod.rs, backend/migrations/20260601_gds_scaffold.sql**
+
+### What was built
+
+#### 1. `backend/src/api/templates.rs` (NEW)
+- `GameTemplate` struct with `id`, `name`, `tier`, `description`, `graphics_tier`, `template_path`, `template_repo`, `preview_url`, `starter_files`.
+- `GraphicsTier` enum: `Lite2d` / `Standard3d` / `Advanced3d`.
+- Static `TEMPLATES` slice backed by the 4 real on-disk crates.
+- `GET /api/v1/templates` → list all (public, no auth).
+- `GET /api/v1/templates/:id` → single template or 404.
+- `find_template(id)` helper used by `scaffold_game`.
+- 5 unit tests in the module.
+
+#### 2. `backend/src/api/developer.rs` (EXTENDED)
+- `POST /api/v1/developer/games/scaffold` — creates a `games` row from chosen template, records scaffold action in `game_scaffolds`, returns `ScaffoldResponse { game_id, scaffold: ScaffoldInfo { cli_command, template_path, template_repo, starter_files, instructions } }`.
+- `POST /api/v1/developer/games/:id/build` — ownership-checked wrapper around `dist_svc::register_version` (triggers the build pipeline).
+- `GET /api/v1/developer/games/:id/build-status` — ownership-checked wrapper around `distribution::get_build_status_summary`.
+- `GET /api/v1/developer/games/:id/versions` — list versions for owned game.
+- `PUT /api/v1/developer/games/:game_id/versions/:version_id/promote` — promote a version to live (ownership-checked).
+- `PUT /api/v1/developer/games/:game_id/versions/:version_id/rollback` — demote current live + promote target (ownership-checked).
+
+#### 3. `backend/migrations/20260601_gds_scaffold.sql` (NEW)
+- `ALTER TABLE games ADD COLUMN IF NOT EXISTS template_id TEXT` — records which template each game was scaffolded from.
+- `CREATE TABLE game_scaffolds` — one row per scaffold action (game_id, developer_id, template_id, cli_command, template_repo, manifest JSONB, created_at).
+
+#### 4. Wiring (`mod.rs` + `main.rs`)
+- `pub mod templates` added to `api/mod.rs`.
+- `use crate::api::templates` + `.nest("/templates", templates::router())` added to `main.rs`.
+
+### Routes (exact shapes for frontend agent)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/templates` | No | List all templates (array of `GameTemplate`) |
+| GET | `/api/v1/templates/:id` | No | Single template or 404 |
+| POST | `/api/v1/developer/games/scaffold` | Bearer | `{ template_id, title, description? }` → `{ game_id, scaffold: { cli_command, template_path, template_repo, starter_files[], instructions } }` |
+| POST | `/api/v1/developer/games/:id/build` | Bearer | `{ version, commit_sha, release_notes? }` → `ApiResponse<GameVersion>` |
+| GET | `/api/v1/developer/games/:id/build-status` | Bearer | `ApiResponse<BuildStatusSummary>` |
+| GET | `/api/v1/developer/games/:id/versions` | Bearer | `PaginatedResponse<GameVersion>` |
+| PUT | `/api/v1/developer/games/:game_id/versions/:version_id/promote` | Bearer | `ApiResponse<GameVersion>` |
+| PUT | `/api/v1/developer/games/:game_id/versions/:version_id/rollback` | Bearer | `ApiResponse<GameVersion>` |
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| GDS-B1 | Template backing | Static `&[GameTemplate]` slice with `&'static str` fields | Zero runtime overhead; real on-disk paths are hard-coded for accuracy; no DB table needed for the catalog itself. |
+| GDS-B2 | `github_repo` placeholder on scaffold | `pending/<game_id>` | `games.github_repo` has a NOT NULL constraint; the developer connects a real repo later via `POST /github/repos`. Unique placeholder avoids constraint violations. |
+| GDS-B3 | Build trigger | Wraps `dist_svc::register_version` (status `pending`) | Reuses the existing distribution service; the self-hosted CI runner picks up `queued` status and transitions through building→success/failed. No fake build progress. |
+| GDS-B4 | Rollback mechanism | Demote current live + promote target in same handler | Two-query atomic-ish rollback (no transaction needed; worst case: current demoted, target promote fails → both non-live, developer re-promotes). Simple and sufficient for N1. |
+| GDS-B5 | Ownership checks | `SELECT id FROM games WHERE id=$1 AND developer_id=$2` before all developer-facing wrappers | Prevents one developer from triggering builds/promotes on another's game. |
+
+### Verify (written to /tmp/gdsbe.txt)
+- `cargo check` — **0 warnings, exit 0**
+- `cargo fmt --check` — **CLEAN, exit 0**
+- `RUSTFLAGS="-D warnings" cargo test --no-run` — **all 8 test executables compile, 0 warnings, exit 0**
+- `cargo test --test gds_tests` — **45/45 tests pass**

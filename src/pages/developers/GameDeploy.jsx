@@ -6,7 +6,8 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Modal from '../../components/common/Modal';
 import DeploymentStatus from './DeploymentStatus';
-import { getOAuthUrl } from '../../api/client';
+import BuildLogs from './BuildLogs';
+import { getOAuthUrl, api } from '../../api/client';
 import './GameDeploy.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
@@ -72,10 +73,13 @@ function normaliseRepo(r) {
 }
 
 function normaliseDeploy(d) {
+  const status = d.status ?? 'queued';
   return {
     id:        d.id,
+    game_id:   d.game_id ?? null,
+    build_id:  d.build_id ?? d.id ?? null,
     name:      d.name ?? d.game_title ?? 'Deployment',
-    status:    d.status ?? 'pending',
+    status,
     repo:      d.repo ?? d.github_repo ?? '',
     branch:    d.branch ?? d.build_branch ?? 'main',
     commit:    d.commit ?? d.commit_sha ?? '',
@@ -83,7 +87,11 @@ function normaliseDeploy(d) {
     duration:  d.duration ?? '—',
     url:       d.url ?? d.artifact_url ?? null,
     startedAt: d.started_at ?? d.created_at ?? new Date().toISOString(),
-    progress:  d.progress ?? (d.status === 'success' ? 100 : d.status === 'building' ? 50 : 0),
+    progress:  d.progress ?? (
+      status === 'built'    ? 100 :
+      status === 'building' ? 60  :
+      status === 'queued'   ? 10  : 0
+    ),
     logs:      d.logs ?? d.build_log ?? null,
   };
 }
@@ -185,28 +193,63 @@ export default function GameDeploy() {
     loadDeployments();
   }, []);
 
-  /* Poll building deployments for status */
+  /* Poll in-progress deployments for status via the real builds API */
   useEffect(() => {
-    const building = deployments.filter(d => d.status === 'building' || d.status === 'pending');
-    if (building.length === 0) return;
+    const inProgress = deployments.filter(d =>
+      d.status === 'building' || d.status === 'pending' || d.status === 'queued'
+    );
+    if (inProgress.length === 0) return;
+
     const interval = setInterval(async () => {
-      for (const d of building) {
-        try {
-          /* Check build status via the build-status endpoint if we have owner/repo */
-          const parts = d.repo.split('/');
-          if (parts.length === 2) {
-            const res = await authFetch(`/api/github/repos/${parts[0]}/${parts[1]}/build-status`);
-            if (res.ok) {
-              const status = await res.json();
+      for (const d of inProgress) {
+        // Prefer the game_id / build_id path via the new API
+        const gameId  = d.game_id ?? null;
+        const buildId = d.build_id ?? null;
+
+        if (gameId && buildId) {
+          try {
+            const body   = await api.developer.buildLogs(gameId, buildId);
+            const data   = body?.data ?? body;
+            const status = data?.status ?? null;
+            const logs   = data?.logs ?? data?.log ?? null;
+            if (status) {
               setDeployments(prev => prev.map(dep =>
                 dep.id === d.id
-                  ? { ...dep, status: status.status ?? dep.status, progress: status.progress ?? dep.progress }
+                  ? {
+                      ...dep,
+                      status,
+                      logs:     logs ?? dep.logs,
+                      progress: status === 'built'   ? 100 :
+                                status === 'building' ? 60  :
+                                status === 'queued'   ? 10  : dep.progress,
+                    }
                   : dep
               ));
             }
+          } catch {
+            /* ignore poll errors */
           }
-        } catch {
-          /* ignore poll errors */
+          continue;
+        }
+
+        // Fallback: GitHub webhook-based build-status endpoint
+        if (d.repo) {
+          try {
+            const parts = d.repo.split('/');
+            if (parts.length === 2) {
+              const res = await authFetch(`/api/github/repos/${parts[0]}/${parts[1]}/build-status`);
+              if (res.ok) {
+                const status = await res.json();
+                setDeployments(prev => prev.map(dep =>
+                  dep.id === d.id
+                    ? { ...dep, status: status.status ?? dep.status, progress: status.progress ?? dep.progress }
+                    : dep
+                ));
+              }
+            }
+          } catch {
+            /* ignore poll errors */
+          }
         }
       }
     }, 5000);
@@ -242,6 +285,43 @@ export default function GameDeploy() {
     }
   };
 
+  // ── Build log modal state ────────────────────────────────────────────────
+  const [logModalOpen, setLogModalOpen]   = useState(false);
+  const [logModalDeploy, setLogModalDeploy] = useState(null);
+  const [logModalLogs, setLogModalLogs]   = useState('');
+  const [logModalLoading, setLogModalLoading] = useState(false);
+
+  const handleViewLogs = useCallback(async (deployment) => {
+    setLogModalDeploy(deployment);
+    setLogModalOpen(true);
+    setLogModalLogs('');
+
+    // The deployment entry may carry inline logs from the API
+    if (deployment.logs) {
+      setLogModalLogs(deployment.logs);
+      return;
+    }
+
+    // Try fetching via the real API: GET /developer/games/:gameId/builds/:buildId/logs
+    const gameId  = deployment.game_id ?? deployment.id;
+    const buildId = deployment.build_id ?? deployment.id;
+    if (!gameId || !buildId) {
+      setLogModalLogs('// No log endpoint available for this build.');
+      return;
+    }
+
+    setLogModalLoading(true);
+    try {
+      const body = await api.developer.buildLogs(gameId, buildId);
+      const data = body?.data ?? body;
+      setLogModalLogs(data?.logs ?? data?.log ?? '// No logs available yet.');
+    } catch {
+      setLogModalLogs('// Could not fetch build logs. The log endpoint may not be available yet (Bucket D — CI runner).');
+    } finally {
+      setLogModalLoading(false);
+    }
+  }, []);
+
   const handleTriggerDeploy = async () => {
     setDeploying(true);
     setDeployError(null);
@@ -262,18 +342,35 @@ export default function GameDeploy() {
         throw new Error(err.message || `Failed to register game (HTTP ${res.status})`);
       }
       const game = await res.json();
+      const gameId = game.id ?? game.data?.id;
 
-      /* The build will be triggered by webhook when the game is registered.
-       * Add an optimistic entry showing queued status — actual status comes from the backend. */
-      const newDeployment = normaliseDeploy({
-        id:         game.id ?? `local-${Date.now()}`,
+      // Attempt to fetch builds for the new game (won't exist yet, so we get an empty list)
+      // and also try the scaffold trigger endpoint for a build job
+      let builds = [];
+      if (gameId) {
+        try {
+          const buildsBody = await api.developer.builds(gameId);
+          const raw = buildsBody?.data ?? buildsBody;
+          builds = Array.isArray(raw) ? raw : [];
+        } catch {
+          /* no builds yet — expected */
+        }
+      }
+
+      /* If we got a real build entry, show it; otherwise add an optimistic queued entry.
+       * Bucket D: the actual wasm-pack CI runner is not yet wired, so status = queued
+       * until the CI worker pushes a status update via webhook. */
+      const buildEntry = builds[0] ?? null;
+      const newDeployment = normaliseDeploy(buildEntry ?? {
+        id:         gameId ?? `local-${Date.now()}`,
+        game_id:    gameId,
         name:       gameSettings.title,
-        status:     'building',
+        status:     'queued',
         repo:       selectedRepo,
         branch:     selectedBranch,
         commit:     '',
         started_at: new Date().toISOString(),
-        progress:   5,
+        progress:   0,
       });
       setDeployments(prev => [newDeployment, ...prev]);
     } catch (err) {
@@ -283,13 +380,44 @@ export default function GameDeploy() {
     }
   };
 
-  const handleRollback = async (deployId) => {
-    /* TODO: rollback endpoint not yet implemented in the backend.
-     * The distribution API has version/artifact management but no rollback trigger.
-     * Showing a clear notice rather than a no-op console.log. */
-    alert('Rollback is not yet implemented. Manually redeploy an earlier version to roll back.');
-    void deployId;
-  };
+  const handlePromote = useCallback(async (deployment) => {
+    const gameId  = deployment.game_id ?? deployment.id;
+    const buildId = deployment.build_id ?? deployment.id;
+    if (!gameId || !buildId) {
+      alert('Cannot promote: missing game or build ID.');
+      return;
+    }
+    try {
+      await api.developer.promote(gameId, buildId);
+      // Refresh build list
+      const body = await api.developer.builds(gameId);
+      const raw  = (body?.data ?? body) ?? [];
+      if (Array.isArray(raw) && raw.length > 0) {
+        setDeployments(prev => {
+          const without = prev.filter(d => d.game_id !== gameId);
+          return [...raw.map(normaliseDeploy), ...without];
+        });
+      }
+    } catch (err) {
+      alert(`Promote failed: ${err.message}`);
+    }
+  }, []);
+
+  const handleRollback = useCallback(async (deployment) => {
+    const gameId = deployment.game_id ?? deployment.id;
+    if (!gameId || !deployment.version) {
+      alert('Rollback requires a game ID and version. Manually redeploy an earlier version to roll back (Bucket D — CI runner required).');
+      return;
+    }
+    const targetVersion = window.prompt(`Roll back "${deployment.name}" to which version?`, deployment.version);
+    if (!targetVersion) return;
+    try {
+      await api.developer.rollback(gameId, { version: targetVersion });
+      alert(`Rollback to ${targetVersion} queued. Build status will update when the CI runner completes.`);
+    } catch (err) {
+      alert(`Rollback failed: ${err.message}`);
+    }
+  }, []);
 
   const handleCancelBuild = (deployId) => {
     setDeployments(prev => prev.filter(d => d.id !== deployId));
@@ -613,6 +741,8 @@ export default function GameDeploy() {
                         deployment={deployment}
                         onRollback={handleRollback}
                         onCancel={handleCancelBuild}
+                        onViewLogs={() => handleViewLogs(deployment)}
+                        onPromote={deployment.status === 'built' ? () => handlePromote(deployment) : null}
                       />
                     ))}
                   </div>
@@ -725,6 +855,60 @@ export default function GameDeploy() {
                 <li>Select &ldquo;Push&rdquo; events and save</li>
               </ol>
             </div>
+          </div>
+        </Modal>
+
+        {/* ── Build Logs Modal ──────────────────────────────────────────── */}
+        <Modal
+          isOpen={logModalOpen}
+          onClose={() => { setLogModalOpen(false); setLogModalDeploy(null); }}
+          title={`Build Logs — ${logModalDeploy?.name ?? ''}`}
+          size="lg"
+        >
+          <div style={{ minHeight: '300px' }}>
+            {logModalLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <span className="spinner spinner-sm" aria-hidden="true" /> Loading logs&hellip;
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {logModalDeploy?.status && (
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--text-xs)',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      background: logModalDeploy.status === 'built'    ? 'rgba(61,220,132,0.1)' :
+                                  logModalDeploy.status === 'building'  ? 'var(--color-amber-soft)' :
+                                  logModalDeploy.status === 'failed'    ? 'rgba(255,84,104,0.1)' :
+                                  'var(--color-bg-elevated)',
+                      color:      logModalDeploy.status === 'built'    ? 'var(--color-success)' :
+                                  logModalDeploy.status === 'building'  ? 'var(--color-amber)' :
+                                  logModalDeploy.status === 'failed'    ? 'var(--color-error)' :
+                                  'var(--color-text-muted)',
+                      border: '1px solid currentColor',
+                    }}>
+                      {logModalDeploy.status.toUpperCase()}
+                    </span>
+                  )}
+                  {logModalDeploy?.version && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                      v{logModalDeploy.version}
+                    </span>
+                  )}
+                  {logModalDeploy?.commit && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-accent)' }}>
+                      {logModalDeploy.commit.slice(0, 8)}
+                    </span>
+                  )}
+                </div>
+                <BuildLogs
+                  logs={logModalLogs || '// Waiting for build logs…\n// (Bucket D — CI runner not yet live)'}
+                  isBuilding={logModalDeploy?.status === 'building' || logModalDeploy?.status === 'queued'}
+                />
+              </>
+            )}
           </div>
         </Modal>
       </div>
