@@ -291,40 +291,37 @@ impl InputMap {
 
     /// Check whether a gamepad digital button is pressed.
     ///
-    /// The gilrs Bevy system (and the JS host) encodes button state by
-    /// setting the corresponding `KeyCode::Custom` bit in [`KeyState`] via
-    /// a synthetic `InputEvent::Press`. The SDK's [`KeyState`] does not
-    /// store arbitrary Custom keys, so we check if the matching Custom key
-    /// is present in the pressed-keys set.
+    /// The Bevy `collect_gamepad_input` system (native) and the WASM JS host
+    /// both map controller buttons onto the named [`KeyState`] boolean fields
+    /// before the `Input` frame reaches this function.  This function decodes
+    /// that mapping so that the logical `GAMEPAD_BTN_*` constants stay in sync
+    /// with what the integrations write:
     ///
-    /// Since `KeyState` stores only the named keys as booleans, this check
-    /// always returns `false` in the pure-SDK / keyboard path. The gilrs
-    /// native integration (and the WASM JS host) must inject the button
-    /// state via the existing named fields or a future `custom_buttons` map.
+    /// | Button constant | [`KeyState`] field |
+    /// |---|---|
+    /// | `GAMEPAD_BTN_A` (South / Jump) | `keys.jump` |
+    /// | `GAMEPAD_BTN_B` (East / Crouch) | `keys.crouch` |
+    /// | `GAMEPAD_BTN_X` (West / Reload) | `keys.interact` |
+    /// | `GAMEPAD_BTN_Y` (North / Interact) | `keys.interact` |
+    /// | `GAMEPAD_BTN_RT` (Right trigger / Fire) | `keys.attack` |
+    /// | `GAMEPAD_BTN_LT` (Left trigger / Aim) | `keys.secondary_attack` |
+    /// | `GAMEPAD_BTN_LB` (Left bumper / Sprint) | `keys.sprint` |
     ///
-    /// For the starter template this is intentionally simple — a production
-    /// game would add a `HashMap<u8, bool>` to the [`Input`] type.
-    fn gamepad_button(_input: &Input, _btn: u8) -> bool {
-        // In a real integration, the Bevy/gilrs system would write button
-        // state into input.keys custom_buttons. This stub always returns
-        // `false` so keyboard/mouse input is the fallback and the code
-        // compiles cleanly without a SDK protocol change.
-        //
-        // To integrate gilrs properly in the `native` feature, see
-        // `bevy_client::gilrs_input_system` which does:
-        //
-        //   for ev in gilrs.next_event() {
-        //       match ev.event {
-        //           EventType::ButtonPressed(btn, _) => {
-        //               // map btn → KeyCode::Custom(GAMEPAD_BTN_*) and
-        //               // inject into the pending Input frame.
-        //           }
-        //           EventType::AxisChanged(axis, val, _) => {
-        //               // Write val * 32768 into mouse.delta_x/y for left stick.
-        //           }
-        //       }
-        //   }
-        false
+    /// Buttons without a named `KeyState` field (e.g. RB, Menu) return
+    /// `false` until the SDK adds a `custom_buttons` map.
+    fn gamepad_button(input: &Input, btn: u8) -> bool {
+        match btn {
+            GAMEPAD_BTN_A => input.keys.jump,
+            GAMEPAD_BTN_B => input.keys.crouch,
+            // West (X) is bound to Reload; the Bevy integration writes it
+            // into `keys.interact` (shared with the keyboard Interact key).
+            GAMEPAD_BTN_X | GAMEPAD_BTN_Y => input.keys.interact,
+            GAMEPAD_BTN_RT => input.keys.attack,
+            GAMEPAD_BTN_LT => input.keys.secondary_attack,
+            GAMEPAD_BTN_LB => input.keys.sprint,
+            // RB, Menu, and other buttons have no named KeyState field yet.
+            _ => false,
+        }
     }
 }
 

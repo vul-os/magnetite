@@ -907,22 +907,66 @@ pub async fn analytics_users(
 
     let day_1_retention = sqlx::query_scalar::<_, Option<f64>>(
         "WITH new_users AS (
-            SELECT user_id, DATE(created_at) as signup_date
+            SELECT id AS user_id, DATE(created_at) AS signup_date
             FROM users WHERE created_at > NOW() - INTERVAL '14 days'
         ),
         returning_users AS (
-            SELECT DISTINCT user_id, DATE(created_at) as activity_date
+            SELECT DISTINCT user_id, DATE(created_at) AS activity_date
             FROM transactions WHERE created_at > NOW() - INTERVAL '14 days'
         )
-        SELECT 
-            CASE 
-                WHEN COUNT(DISTINCT nu.user_id) > 0 
+        SELECT
+            CASE
+                WHEN COUNT(DISTINCT nu.user_id) > 0
                 THEN (COUNT(DISTINCT ru.user_id)::float / COUNT(DISTINCT nu.user_id)::float * 100)
-                ELSE NULL 
-            END as retention
+                ELSE NULL
+            END AS retention
         FROM new_users nu
-        LEFT JOIN returning_users ru ON nu.user_id = ru.user_id 
+        LEFT JOIN returning_users ru ON nu.user_id = ru.user_id
             AND ru.activity_date = nu.signup_date + INTERVAL '1 day'",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let day_7_retention = sqlx::query_scalar::<_, Option<f64>>(
+        "WITH new_users AS (
+            SELECT id AS user_id, DATE(created_at) AS signup_date
+            FROM users WHERE created_at > NOW() - INTERVAL '37 days'
+        ),
+        returning_users AS (
+            SELECT DISTINCT user_id, DATE(created_at) AS activity_date
+            FROM transactions WHERE created_at > NOW() - INTERVAL '37 days'
+        )
+        SELECT
+            CASE
+                WHEN COUNT(DISTINCT nu.user_id) > 0
+                THEN (COUNT(DISTINCT ru.user_id)::float / COUNT(DISTINCT nu.user_id)::float * 100)
+                ELSE NULL
+            END AS retention
+        FROM new_users nu
+        LEFT JOIN returning_users ru ON nu.user_id = ru.user_id
+            AND ru.activity_date = nu.signup_date + INTERVAL '7 days'",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let day_30_retention = sqlx::query_scalar::<_, Option<f64>>(
+        "WITH new_users AS (
+            SELECT id AS user_id, DATE(created_at) AS signup_date
+            FROM users WHERE created_at > NOW() - INTERVAL '60 days'
+        ),
+        returning_users AS (
+            SELECT DISTINCT user_id, DATE(created_at) AS activity_date
+            FROM transactions WHERE created_at > NOW() - INTERVAL '60 days'
+        )
+        SELECT
+            CASE
+                WHEN COUNT(DISTINCT nu.user_id) > 0
+                THEN (COUNT(DISTINCT ru.user_id)::float / COUNT(DISTINCT nu.user_id)::float * 100)
+                ELSE NULL
+            END AS retention
+        FROM new_users nu
+        LEFT JOIN returning_users ru ON nu.user_id = ru.user_id
+            AND ru.activity_date = nu.signup_date + INTERVAL '30 days'",
     )
     .fetch_one(&pool)
     .await?;
@@ -930,8 +974,8 @@ pub async fn analytics_users(
     let retention = vec![RetentionMetric {
         period: "30d".to_string(),
         day_1_retention,
-        day_7_retention: None,
-        day_30_retention: None,
+        day_7_retention,
+        day_30_retention,
     }];
 
     Ok(Json(UserAnalytics {

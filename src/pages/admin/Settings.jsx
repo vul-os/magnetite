@@ -19,8 +19,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Defaults used if the platform settings endpoint returns no data or is unreachable.
- * The /api/platform/settings endpoint (platform.rs) is defined but not mounted in main.rs.
- * TODO: mount platform::router in main.rs to make this endpoint reachable. */
+ * The /api/platform/settings endpoint (platform.rs) is defined and mounted in main.rs. */
 const DEFAULT_SETTINGS = {
   platformName:              'Magnetite',
   platformFee:               15,
@@ -103,8 +102,7 @@ export default function AdminSettings() {
     setSaveSuccess(false);
     try {
       if (!endpointAvailable) {
-        /* TODO: platform settings endpoint not mounted — see platform.rs and main.rs */
-        throw new Error('Platform settings API is not yet mounted. Add platform::router to main.rs to enable saving.');
+        throw new Error('Platform settings API is not reachable. Check that the backend is running and the platform router is mounted.');
       }
       const res = await authFetch('/api/platform/settings', {
         method: 'PUT',
@@ -158,9 +156,8 @@ export default function AdminSettings() {
                 fontSize: 'var(--text-sm)',
               }}
             >
-              ⚠ Platform settings API not yet mounted.
-              {/* TODO: wire platform::router in backend/src/main.rs */}
-              Settings shown are defaults. Saving is disabled until the endpoint is wired.
+              ⚠ Platform settings API not reachable.
+              Settings shown are defaults. Check that the backend is running.
             </div>
           )}
 

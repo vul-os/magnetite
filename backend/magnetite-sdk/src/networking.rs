@@ -14,10 +14,13 @@
 //!
 //! # Design notes
 //!
-//! - **No async runtime is mandated.** The traits use plain `std::io` so they
-//!   can be wrapped with `tokio`, `async-std`, or plain blocking threads at
-//!   the integration layer. A future `async` feature flag will add `async fn`
-//!   variants.
+//! - **No async runtime is mandated by this crate.** The traits use plain
+//!   `std::io` so they can be wrapped by any executor. In practice,
+//!   `magnetite-runtime` drives [`TickLoop`] on a Tokio async runtime: it
+//!   calls `TickLoop::advance` each tick, sleeps for `tick_duration()`, and
+//!   broadcasts snapshots / deltas to connected WebSocket clients.  This crate
+//!   stays runtime-agnostic so it remains usable in WASM and test contexts.
+//!   A future `async` feature flag will surface `async fn` variants directly.
 //! - **No heavy deps.** The only dependencies are `serde` + `serde_json`, which
 //!   are already in scope. The TCP helpers use `std::net` exclusively.
 //!

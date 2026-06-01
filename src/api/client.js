@@ -38,6 +38,18 @@ export const api = {
     verifyEmail: (token) => request('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
     resendVerification: (email) => request('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
     updatePassword: (currentPassword, newPassword) => request('/api/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
+    /** List API keys for the authenticated user. GET /api/auth/api-keys */
+    apiKeys: () => request('/api/auth/api-keys'),
+    /** Create a new API key. POST /api/auth/api-keys — returns { id, name, key } (one-time) */
+    createApiKey: (name) => request('/api/auth/api-keys', { method: 'POST', body: JSON.stringify({ name }) }),
+    /** Revoke an API key by id. DELETE /api/auth/api-keys/:id */
+    revokeApiKey: (id) => request(`/api/auth/api-keys/${id}`, { method: 'DELETE' }),
+    /** Begin 2FA TOTP setup. POST /api/auth/2fa/setup — returns { otpauth_uri, qr_data_url? } */
+    setup2fa: () => request('/api/auth/2fa/setup', { method: 'POST' }),
+    /** Verify and enable 2FA. POST /api/auth/2fa/verify */
+    verify2fa: (code) => request('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
+    /** Disable 2FA. DELETE /api/auth/2fa */
+    disable2fa: (code) => request('/api/auth/2fa', { method: 'DELETE', body: JSON.stringify({ code }) }),
   },
   wallet: {
     balance: () => request('/api/wallet/balance'),
@@ -105,7 +117,25 @@ export const api = {
   reviews: {
     list: (gameId) => request(`/api/games/${gameId}/reviews`),
     create: (gameId, data) => request(`/api/games/${gameId}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
+    /** Mark a review as helpful. POST /api/games/:gameId/reviews/:reviewId/helpful */
+    helpful: (gameId, reviewId) =>
+      request(`/api/games/${gameId}/reviews/${reviewId}/helpful`, { method: 'POST' }),
+    /** Report a review. POST /api/games/:gameId/reviews/:reviewId/report */
+    report: (gameId, reviewId) =>
+      request(`/api/games/${gameId}/reviews/${reviewId}/report`, { method: 'POST' }),
   },
+  contact: {
+    /** Submit a contact form message. POST /api/contact */
+    submit: (data) => request('/api/contact', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  platform: {
+    /** Get platform settings (admin). GET /api/platform/settings */
+    getSettings: () => request('/api/platform/settings'),
+    /** Update platform settings (admin). PUT /api/platform/settings */
+    updateSettings: (data) => request('/api/platform/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  },
+
   developer: {
     dashboard: () => request('/api/developer/dashboard'),
     games: () => request('/api/developer/games'),

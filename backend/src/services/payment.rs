@@ -1,4 +1,11 @@
 // Payment/subscription service — Circle + Paystack integration (real HTTP clients).
+//
+// `PaymentService` is constructed per-request via `from_env()` in wallet and
+// subscription handlers.  `SubscriptionService` is spawned as a renewal background
+// job in `main.rs`.  The `#![allow(dead_code)]` below suppresses warnings for the
+// several internal helper methods and struct fields that are wired but not yet
+// called on every code path; individual dead items will be cleaned up as the
+// platform matures.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
@@ -1362,11 +1369,14 @@ impl PaymentService {
         })
     }
 
+    /// No-op shim: weekly batch payouts are executed by `PayoutService::process_pending_payouts`,
+    /// which is spawned as a recurring Tokio background task in `main.rs` (1-hour interval).
+    /// Callers that previously used this method should call `PayoutService` directly instead.
+    /// This shim is retained for API surface compatibility; it does not duplicate the batch logic.
     pub async fn process_weekly_payouts(&self, _db: &sqlx::PgPool) -> Result<Vec<PayoutInfo>> {
         tracing::info!(
-            "process_weekly_payouts: delegated to PayoutService::process_pending_payouts"
+            "process_weekly_payouts: delegated to PayoutService::process_pending_payouts (background job)"
         );
-        // Weekly batch processing is handled by PayoutService (spawned as a background job).
         Ok(vec![])
     }
 }

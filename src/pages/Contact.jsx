@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { api } from '../api/client';
 import './Contact.css';
 
 const socialLinks = [
   {
     name: 'Discord',
-    url: '#',
+    url: 'https://discord.gg/magnetite',
     username: 'magnetite.gg',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -14,7 +15,7 @@ const socialLinks = [
   },
   {
     name: 'Twitter / X',
-    url: '#',
+    url: 'https://twitter.com/MagnetiteGG',
     username: '@MagnetiteGG',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -24,7 +25,7 @@ const socialLinks = [
   },
   {
     name: 'GitHub',
-    url: '#',
+    url: 'https://github.com/magnetite-gg',
     username: 'magnetite-gg',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -34,7 +35,7 @@ const socialLinks = [
   },
   {
     name: 'Telegram',
-    url: '#',
+    url: 'https://t.me/magnetite',
     username: '@magnetite',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -52,14 +53,25 @@ export default function Contact() {
     message: '',
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      await api.contact.submit(formData);
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to send message. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -148,8 +160,17 @@ export default function Contact() {
                     />
                   </div>
 
-                  <button type="submit" className="btn btn-primary btn-lg submit-btn">
-                    Send Message
+                  {submitError && (
+                    <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+                      <span className="auth-error-icon" aria-hidden="true">!</span>
+                      {submitError}
+                    </div>
+                  )}
+
+                  <button type="submit" className="btn btn-primary btn-lg submit-btn" disabled={submitting}>
+                    {submitting ? (
+                      <><span className="spinner spinner-sm" aria-hidden="true" /> Sending&hellip;</>
+                    ) : 'Send Message'}
                   </button>
                 </form>
               ) : (
@@ -165,6 +186,7 @@ export default function Contact() {
                     className="btn btn-secondary"
                     onClick={() => {
                       setSubmitted(false);
+                      setSubmitError('');
                       setFormData({ name: '', email: '', subject: '', message: '' });
                     }}
                   >

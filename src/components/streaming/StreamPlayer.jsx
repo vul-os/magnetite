@@ -35,11 +35,32 @@ export default function StreamPlayer({ stream, messages = [], onSend, onClose })
     const video = videoRef.current;
     if (!video) return;
 
-    if (hlsUrl) {
-      // HLS.js would be loaded here dynamically in production
-      // For now set src directly (native HLS on Safari, or a bundled HLS.js consumer)
-      video.src = hlsUrl;
+    let hlsInstance = null;
+
+    async function attachHls() {
+      if (!hlsUrl) return;
+
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS — Safari, iOS. Set src directly.
+        video.src = hlsUrl;
+      } else {
+        // Non-native HLS (Chrome, Firefox, Edge) — dynamically load hls.js
+        const { default: Hls } = await import('hls.js');
+        if (Hls.isSupported()) {
+          hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true });
+          hlsInstance.loadSource(hlsUrl);
+          hlsInstance.attachMedia(video);
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(() => null);
+          });
+        } else {
+          // Fallback: try direct assignment (may not work without native HLS)
+          video.src = hlsUrl;
+        }
+      }
     }
+
+    attachHls();
 
     const onPlay  = () => setPlaying(true);
     const onPause = () => setPlaying(false);
@@ -48,6 +69,10 @@ export default function StreamPlayer({ stream, messages = [], onSend, onClose })
     return () => {
       video.removeEventListener('play',  onPlay);
       video.removeEventListener('pause', onPause);
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
     };
   }, [hlsUrl]);
 

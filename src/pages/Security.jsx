@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 
@@ -25,10 +25,6 @@ const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS
     ]
   : null;
 
-/* API keys are not yet implemented in the backend.
- * Showing a disabled state with a clear TODO rather than faking success. */
-const API_KEYS_TODO = true;
-
 function normaliseSession(s) {
   return {
     id:         s.id ?? s.session_id,
@@ -41,24 +37,47 @@ function normaliseSession(s) {
   };
 }
 
+function normaliseApiKey(k) {
+  return {
+    id:          k.id,
+    name:        k.name ?? 'Unnamed key',
+    prefix:      k.prefix ?? k.key_prefix ?? (k.key ? k.key.slice(0, 8) + '...' : '••••••••'),
+    createdAt:   k.created_at ? new Date(k.created_at).toLocaleDateString() : '—',
+    lastUsed:    k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never',
+  };
+}
+
 export default function Security() {
   const [passwords, setPasswords]           = useState({ current: '', new: '', confirm: '' });
   const [passwordError, setPasswordError]   = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [changingPw, setChangingPw]         = useState(false);
 
+  // ── 2FA ──────────────────────────────────────────────────────────────────────
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [showSetup2FA, setShowSetup2FA]     = useState(false);
+  const [otpauthUri, setOtpauthUri]         = useState('');
+  const [qrDataUrl, setQrDataUrl]           = useState('');
   const [twoFaCode, setTwoFaCode]           = useState('');
   const [twoFaError, setTwoFaError]         = useState('');
   const [twoFaLoading, setTwoFaLoading]     = useState(false);
+  const [disableCode, setDisableCode]       = useState('');
+  const [showDisableForm, setShowDisableForm] = useState(false);
 
+  // ── Sessions ──────────────────────────────────────────────────────────────────
   const [sessions, setSessions]             = useState(MOCK_SESSIONS ?? []);
   const [sessionsLoading, setSessionsLoading] = useState(!MOCK_SESSIONS);
   const [sessionError, setSessionError]     = useState(null);
 
+  // ── API Keys ──────────────────────────────────────────────────────────────────
+  const [apiKeys, setApiKeys]               = useState([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [apiKeysError, setApiKeysError]     = useState(null);
   const [newKeyName, setNewKeyName]         = useState('');
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
+  const [createdKey, setCreatedKey]         = useState(null); // one-time display
+  const [creatingKey, setCreatingKey]       = useState(false);
+  const [revokingId, setRevokingId]         = useState(null);
 
   /* Load real sessions from backend */
   useEffect(() => {
@@ -80,6 +99,27 @@ export default function Security() {
     }
     loadSessions();
   }, []);
+
+  /* Load API keys */
+  const loadApiKeys = useCallback(async () => {
+    if (import.meta.env.VITE_USE_MOCKS) return;
+    setApiKeysLoading(true);
+    setApiKeysError(null);
+    try {
+      const data = await api.auth.apiKeys();
+      const raw = data?.keys ?? data ?? [];
+      setApiKeys(Array.isArray(raw) ? raw.map(normaliseApiKey) : []);
+    } catch (err) {
+      if (!err.message?.includes('404') && !err.message?.includes('not found')) {
+        setApiKeysError(err.message || 'Failed to load API keys');
+      }
+      // 404 = endpoint not yet deployed; silently show empty
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadApiKeys(); }, [loadApiKeys]);
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
@@ -112,39 +152,59 @@ export default function Security() {
     }
   };
 
-  const handleVerify2FA = async (e) => {
-    e.preventDefault();
-    /* TODO: backend 2FA (TOTP setup/verify) endpoints are not yet implemented.
-     * When they exist, call POST /api/auth/2fa/verify with { code: twoFaCode }.
-     * For now, show an honest disabled state rather than faking success. */
-    setTwoFaLoading(true);
+  // ── 2FA handlers ──────────────────────────────────────────────────────────────
+
+  const handleBeginSetup2FA = async () => {
     setTwoFaError('');
+    setTwoFaLoading(true);
     try {
-      const res = await authFetch('/api/auth/2fa/verify', {
-        method: 'POST',
-        body: JSON.stringify({ code: twoFaCode }),
-      });
-      if (res.status === 404 || res.status === 501) {
-        throw new Error('2FA endpoint not yet implemented on this server.');
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || 'Verification failed');
-      }
-      setTwoFactorEnabled(true);
-      setShowSetup2FA(false);
-      setTwoFaCode('');
+      const data = await api.auth.setup2fa();
+      setOtpauthUri(data.otpauth_uri ?? data.uri ?? '');
+      setQrDataUrl(data.qr_data_url ?? data.qr_url ?? '');
+      setShowSetup2FA(true);
     } catch (err) {
-      setTwoFaError(err.message);
+      if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('not yet')) {
+        setTwoFaError('2FA setup endpoint not yet deployed on this server. The backend route will be added soon.');
+      } else {
+        setTwoFaError(err.message || '2FA setup failed');
+      }
     } finally {
       setTwoFaLoading(false);
     }
   };
 
-  const handleDisable2FA = async () => {
-    /* TODO: call DELETE /api/auth/2fa when implemented */
-    setTwoFaError('2FA management endpoint not yet implemented.');
-    setTimeout(() => setTwoFaError(''), 3000);
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    setTwoFaLoading(true);
+    setTwoFaError('');
+    try {
+      await api.auth.verify2fa(twoFaCode);
+      setTwoFactorEnabled(true);
+      setShowSetup2FA(false);
+      setTwoFaCode('');
+      setOtpauthUri('');
+      setQrDataUrl('');
+    } catch (err) {
+      setTwoFaError(err.message || 'Verification failed — check the code and try again');
+    } finally {
+      setTwoFaLoading(false);
+    }
+  };
+
+  const handleDisable2FA = async (e) => {
+    e.preventDefault();
+    setTwoFaLoading(true);
+    setTwoFaError('');
+    try {
+      await api.auth.disable2fa(disableCode);
+      setTwoFactorEnabled(false);
+      setShowDisableForm(false);
+      setDisableCode('');
+    } catch (err) {
+      setTwoFaError(err.message || 'Could not disable 2FA — check your code and try again');
+    } finally {
+      setTwoFaLoading(false);
+    }
   };
 
   const handleSignOutAll = async () => {
@@ -164,18 +224,41 @@ export default function Security() {
 
   const handleRevokeSession = async (sessionId) => {
     setSessionError(null);
-    /* Optimistically remove, then confirm with backend.
-     * The single-session revoke requires the refresh token (which the frontend doesn't
-     * store separately). Best-effort: remove from UI. */
     setSessions(prev => prev.filter(s => s.id !== sessionId));
   };
 
-  const handleCreateApiKey = (e) => {
+  // ── API Key handlers ──────────────────────────────────────────────────────────
+
+  const handleCreateApiKey = async (e) => {
     e.preventDefault();
-    /* TODO: API key management endpoints are not yet implemented in the backend.
-     * When implemented, call POST /api/auth/api-keys with { name: newKeyName }.
-     * Generating keys client-side (Math.random) would be insecure — not done here.
-     * This form is intentionally disabled until the backend endpoint exists. */
+    if (!newKeyName.trim()) return;
+    setCreatingKey(true);
+    setApiKeysError(null);
+    try {
+      const data = await api.auth.createApiKey(newKeyName.trim());
+      // Store the one-time plaintext key for display before clearing
+      setCreatedKey({ id: data.id, name: data.name ?? newKeyName, key: data.key });
+      setShowNewKeyForm(false);
+      setNewKeyName('');
+      // Reload the key list (will not show plaintext key again)
+      await loadApiKeys();
+    } catch (err) {
+      setApiKeysError(err.message || 'Failed to create API key');
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async (id) => {
+    setRevokingId(id);
+    try {
+      await api.auth.revokeApiKey(id);
+      setApiKeys(prev => prev.filter(k => k.id !== id));
+    } catch (err) {
+      setApiKeysError(err.message || 'Failed to revoke API key');
+    } finally {
+      setRevokingId(null);
+    }
   };
 
   return (
@@ -262,7 +345,7 @@ export default function Security() {
         <section className="settings-section reveal reveal-3">
           <h2 className="settings-section-title">Two-Factor Authentication</h2>
           <p className="settings-section-desc">
-            Add a second layer of security with an authenticator app.
+            Add a second layer of security with an authenticator app (Google Authenticator, Authy, etc.).
           </p>
 
           {twoFaError && (
@@ -278,23 +361,68 @@ export default function Security() {
                 <span aria-hidden="true">✓</span>
                 2FA is enabled — your account is protected
               </div>
-              <button
-                className="settings-action-btn"
-                onClick={handleDisable2FA}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                Disable 2FA
-              </button>
+              {showDisableForm ? (
+                <form onSubmit={handleDisable2FA} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 320 }}>
+                  <div className="settings-field">
+                    <label className="settings-field-label" htmlFor="disable-2fa-code">
+                      Enter your current 6-digit code to disable 2FA
+                    </label>
+                    <input
+                      id="disable-2fa-code"
+                      type="text"
+                      className="settings-input"
+                      placeholder="000000"
+                      maxLength={6}
+                      pattern="[0-9]{6}"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={disableCode}
+                      onChange={(e) => setDisableCode(e.target.value)}
+                      style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.2em' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button type="submit" className="settings-action-btn danger" disabled={twoFaLoading}>
+                      {twoFaLoading ? <><span className="spinner spinner-sm" aria-hidden="true" /> Disabling&hellip;</> : 'Confirm Disable'}
+                    </button>
+                    <button type="button" className="settings-action-btn" onClick={() => { setShowDisableForm(false); setDisableCode(''); setTwoFaError(''); }}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  className="settings-action-btn"
+                  onClick={() => setShowDisableForm(true)}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  Disable 2FA
+                </button>
+              )}
             </div>
           ) : showSetup2FA ? (
             <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="twofa-qr-placeholder">
-                <div className="twofa-qr-code" aria-label="QR code placeholder">⬡</div>
-                <p style={{ font: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: 0, textAlign: 'center' }}>
-                  Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
-                </p>
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', margin: 0, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
-                  Note: 2FA setup requires server support — will error if not yet implemented
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt="Scan this QR code with your authenticator app"
+                    style={{ width: 160, height: 160, imageRendering: 'pixelated' }}
+                  />
+                ) : otpauthUri ? (
+                  <div style={{ maxWidth: 340 }}>
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', wordBreak: 'break-all', color: 'var(--color-accent)', background: 'var(--color-bg-elevated)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-strong)' }}>
+                      {otpauthUri}
+                    </p>
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: '0.5rem 0 0' }}>
+                      Copy this URI into your authenticator app if QR scanning is not available.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="twofa-qr-code" aria-label="QR code placeholder" style={{ fontSize: '3rem' }}>⬡</div>
+                )}
+                <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: 0, textAlign: 'center' }}>
+                  Scan the QR code with your authenticator app, then enter the code below.
                 </p>
               </div>
               <div className="settings-field">
@@ -327,15 +455,22 @@ export default function Security() {
                 <button
                   type="button"
                   className="settings-action-btn"
-                  onClick={() => { setShowSetup2FA(false); setTwoFaCode(''); setTwoFaError(''); }}
+                  onClick={() => { setShowSetup2FA(false); setTwoFaCode(''); setTwoFaError(''); setOtpauthUri(''); setQrDataUrl(''); }}
                 >
                   Cancel
                 </button>
               </div>
             </form>
           ) : (
-            <button className="settings-save-btn" onClick={() => setShowSetup2FA(true)} style={{ margin: 0 }}>
-              Set Up 2FA
+            <button
+              className="settings-save-btn"
+              onClick={handleBeginSetup2FA}
+              disabled={twoFaLoading}
+              style={{ margin: 0 }}
+            >
+              {twoFaLoading ? (
+                <><span className="spinner spinner-sm" aria-hidden="true" /> Loading&hellip;</>
+              ) : 'Set Up 2FA'}
             </button>
           )}
         </section>
@@ -403,7 +538,7 @@ export default function Security() {
           </div>
         </section>
 
-        {/* API Keys — disabled, TODO: implement backend endpoint */}
+        {/* API Keys */}
         <section className="settings-section reveal reveal-5">
           <div className="settings-section-head">
             <div>
@@ -412,38 +547,73 @@ export default function Security() {
                 Programmatic access to Magnetite APIs.
               </p>
             </div>
-            {!API_KEYS_TODO && (
+            {!showNewKeyForm && (
               <button
                 className="settings-save-btn"
                 style={{ margin: 0 }}
-                onClick={() => setShowNewKeyForm(true)}
+                onClick={() => { setShowNewKeyForm(true); setCreatedKey(null); setApiKeysError(null); }}
               >
                 + New Key
               </button>
             )}
           </div>
 
-          {API_KEYS_TODO && (
+          {/* One-time new key display */}
+          {createdKey && (
             <div
+              role="status"
+              aria-live="polite"
               style={{
-                background: 'var(--color-bg-elevated)',
-                border: '1px dashed var(--color-border-strong)',
+                background: 'var(--color-accent-soft)',
+                border: '1px solid var(--color-accent)',
                 borderRadius: 'var(--radius)',
-                padding: '1.25rem',
-                color: 'var(--color-text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-sm)',
+                padding: '1rem',
+                marginBottom: '1rem',
               }}
-              role="note"
             >
-              {/* TODO: API key management (create/list/revoke) requires backend endpoints.
-                  Add POST/GET/DELETE /api/auth/api-keys to the backend auth router.
-                  Keys must be generated server-side (never with Math.random in the browser). */}
-              API key management is not yet available. Backend endpoints are on the roadmap.
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--color-accent)', margin: '0 0 0.5rem' }}>
+                ✓ API key &ldquo;{createdKey.name}&rdquo; created — copy it now, it will not be shown again:
+              </p>
+              <code
+                style={{
+                  display: 'block',
+                  background: 'var(--color-bg-card)',
+                  padding: '0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-sm)',
+                  wordBreak: 'break-all',
+                  color: 'var(--color-text-primary)',
+                  userSelect: 'all',
+                }}
+              >
+                {createdKey.key}
+              </code>
+              <button
+                className="settings-action-btn"
+                style={{ marginTop: '0.75rem' }}
+                onClick={() => navigator.clipboard.writeText(createdKey.key).catch(() => null)}
+              >
+                Copy to Clipboard
+              </button>
+              <button
+                className="settings-action-btn"
+                style={{ marginTop: '0.75rem', marginLeft: '0.5rem' }}
+                onClick={() => setCreatedKey(null)}
+              >
+                Dismiss
+              </button>
             </div>
           )}
 
-          {!API_KEYS_TODO && showNewKeyForm && (
+          {apiKeysError && (
+            <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+              <span className="auth-error-icon" aria-hidden="true">!</span>
+              {apiKeysError}
+            </div>
+          )}
+
+          {showNewKeyForm && (
             <form
               className="apikey-new-display"
               onSubmit={handleCreateApiKey}
@@ -459,19 +629,54 @@ export default function Security() {
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   required
+                  autoFocus
                 />
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button type="submit" className="settings-save-btn" style={{ margin: 0 }}>Create Key</button>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem' }}>
+                <button type="submit" className="settings-save-btn" style={{ margin: 0 }} disabled={creatingKey}>
+                  {creatingKey ? <><span className="spinner spinner-sm" aria-hidden="true" /> Creating&hellip;</> : 'Create Key'}
+                </button>
                 <button
                   type="button"
                   className="settings-action-btn"
-                  onClick={() => { setShowNewKeyForm(false); setNewKeyName(''); }}
+                  onClick={() => { setShowNewKeyForm(false); setNewKeyName(''); setApiKeysError(null); }}
                 >
                   Cancel
                 </button>
               </div>
             </form>
+          )}
+
+          {apiKeysLoading ? (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }} aria-busy="true">
+              <span className="spinner spinner-sm" aria-hidden="true" /> Loading API keys&hellip;
+            </div>
+          ) : apiKeys.length === 0 ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)', padding: '0.5rem 0' }}>
+              No API keys yet. Create one to access the Magnetite API programmatically.
+            </p>
+          ) : (
+            <div className="settings-sessions">
+              {apiKeys.map(key => (
+                <div key={key.id} className="settings-session-item">
+                  <div className="settings-session-icon" aria-hidden="true">⌗</div>
+                  <div className="settings-session-info">
+                    <span className="settings-session-device">{key.name}</span>
+                    <span className="settings-session-meta" style={{ fontFamily: 'var(--font-mono)' }}>
+                      {key.prefix} · Created {key.createdAt} · Last used: {key.lastUsed}
+                    </span>
+                  </div>
+                  <button
+                    className="settings-revoke-btn"
+                    onClick={() => handleRevokeApiKey(key.id)}
+                    disabled={revokingId === key.id}
+                    aria-label={`Revoke API key ${key.name}`}
+                  >
+                    {revokingId === key.id ? 'Revoking…' : 'Revoke'}
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </section>
       </div>

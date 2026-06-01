@@ -1,6 +1,4 @@
-// Leaderboard API — global and per-game rankings; platform surface, partially wired.
-#![allow(dead_code)]
-
+// Leaderboard API — global and per-game rankings; mounted at /api/v1/leaderboard.
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -15,6 +13,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::leaderboard::LeaderboardService;
 
 #[derive(Debug, Deserialize)]
 pub struct LeaderboardQuery {
@@ -37,6 +36,7 @@ pub struct LeaderboardEntryResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 pub struct LeaderboardResponse {
     pub entries: Vec<LeaderboardEntryResponse>,
     pub total_count: i64,
@@ -58,6 +58,7 @@ pub struct UserRankResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TimeframeFilter {
     pub timeframe: String,
 }
@@ -158,28 +159,43 @@ pub async fn submit_score(
 
     let is_personal_best = existing.map(|e| payload.score > e.0).unwrap_or(true);
 
-    sqlx::query(
-        "INSERT INTO game_high_scores (game_id, user_id, score, recorded_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (game_id, user_id)
-         DO UPDATE SET score = $3, recorded_at = NOW()",
-    )
-    .bind(game_id)
-    .bind(user_id)
-    .bind(payload.score)
-    .execute(&pool)
-    .await?;
+    // Only update Postgres when it's a new personal best (keep existing high-score semantics).
+    if is_personal_best {
+        sqlx::query(
+            "INSERT INTO game_high_scores (game_id, user_id, score, recorded_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (game_id, user_id)
+             DO UPDATE SET score = $3, recorded_at = NOW()",
+        )
+        .bind(game_id)
+        .bind(user_id)
+        .bind(payload.score)
+        .execute(&pool)
+        .await?;
+    }
 
-    let rank: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) + 1 FROM game_high_scores WHERE game_id = $1 AND score > $2",
-    )
-    .bind(game_id)
-    .bind(payload.score)
-    .fetch_one(&pool)
-    .await?;
+    // Mirror the score into Redis sorted set for fast leaderboard reads.
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost".to_string());
+    let lb_svc = LeaderboardService::new(&redis_url);
+    let redis_result = lb_svc.submit_score(game_id, user_id, payload.score).await;
+    let redis_rank = redis_result.ok().map(|r| r.rank);
+
+    // Fall back to a Postgres-computed rank if Redis is unavailable.
+    let rank = if let Some(r) = redis_rank {
+        r
+    } else {
+        sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*) + 1 FROM game_high_scores WHERE game_id = $1 AND score > $2",
+        )
+        .bind(game_id)
+        .bind(payload.score)
+        .fetch_one(&pool)
+        .await?
+        .0
+    };
 
     Ok(response::success_response(SubmitScoreResponse {
-        rank: rank.0,
+        rank,
         is_personal_best,
         score: payload.score,
     }))

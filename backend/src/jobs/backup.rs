@@ -1,6 +1,7 @@
-// Backup job — pg_dump + S3/local storage for disaster recovery; platform surface.
+// Backup job — pg_dump + S3/local storage for disaster recovery; spawned in main.rs every 6 h.
+// list_backups / restore_from_backup / cleanup_old_backups are utility functions available for
+// admin API or operational scripts; suppress dead-code lint on this utility module.
 #![allow(dead_code)]
-
 use anyhow::{Context, Result};
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client as S3Client;

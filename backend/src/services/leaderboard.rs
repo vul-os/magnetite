@@ -1,6 +1,6 @@
-// Leaderboard service — Redis-backed score tracking; platform surface, not yet wired.
+// Leaderboard service — Redis-backed score tracking; called from api/leaderboard.rs submit_score.
+// get_top / get_rank / get_around / archive_and_reset are platform surface for future read-path wiring.
 #![allow(dead_code)]
-
 use chrono::Utc;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};

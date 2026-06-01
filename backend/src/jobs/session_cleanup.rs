@@ -1,6 +1,4 @@
-// Session cleanup job — expires stale auth sessions; platform surface, not yet scheduled.
-#![allow(dead_code)]
-
+// Session cleanup job — expires stale auth sessions; spawned in main.rs every hour.
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::interval;

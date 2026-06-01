@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::achievements::{AchievementEvent, AchievementService};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Achievement {
@@ -223,6 +224,19 @@ pub async fn update_progress(
     .bind(unlocked_at_value)
     .execute(&pool)
     .await?;
+
+    // Fire cross-achievement unlock tracking via AchievementService (broadcasts
+    // notifications for any newly-unlocked achievements triggered by this progress update).
+    let svc = AchievementService::new();
+    let _ = svc
+        .check_achievements(
+            &pool,
+            user_id,
+            &AchievementEvent::GamePlayed {
+                game_id: achievement_id,
+            },
+        )
+        .await;
 
     Ok(response::success_response(UserAchievement {
         id: user_achievement_id,

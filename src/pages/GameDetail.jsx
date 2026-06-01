@@ -303,14 +303,20 @@ export default function GameDetail() {
               </div>
             </div>
             <ReviewList
-              reviews={reviews.map((r, i) => ({ ...r, id: i }))}
+              reviews={reviews.map((r, i) => ({ ...r, id: r.id ?? i }))}
               walletConnected={walletConnected}
               onCreateReview={() => {}}
-              onHelpful={() => {
-                /* TODO: POST /api/games/:id/reviews/:reviewId/helpful — endpoint not yet implemented */
+              onHelpful={(reviewId) => {
+                // Optimistic: increment helpful count immediately
+                setReviews(prev => prev.map((r, i) => {
+                  const rId = r.id ?? i;
+                  return rId === reviewId ? { ...r, helpful: (r.helpful ?? 0) + 1 } : r;
+                }));
+                // Fire-and-forget; if the backend 404s the optimistic count stays
+                api.reviews.helpful(id, reviewId).catch(() => null);
               }}
-              onReport={() => {
-                /* TODO: POST /api/games/:id/reviews/:reviewId/report — endpoint not yet implemented */
+              onReport={(reviewId) => {
+                api.reviews.report(id, reviewId).catch(() => null);
               }}
             />
           </div>

@@ -1,6 +1,4 @@
-// Tournament API — bracket management, match results, registration; platform surface, not yet wired.
-#![allow(dead_code)]
-
+// Tournament API — bracket management, match results, registration; mounted at /api/v1/tournaments.
 use axum::{
     extract::{Extension, Path, Query, State},
     middleware::from_fn_with_state,
@@ -19,6 +17,7 @@ use crate::error::{AppError, Result};
 
 #[derive(Debug, Clone, Serialize, sqlx::Type)]
 #[sqlx(type_name = "VARCHAR", rename_all = "PascalCase")]
+#[allow(dead_code)]
 pub enum TournamentStatus {
     Draft,
     Registration,

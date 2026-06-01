@@ -1,6 +1,7 @@
-// Achievement service — unlock tracking and leaderboard integration; platform surface, not yet wired.
+// Achievement service — unlock tracking; called from api/achievements.rs update_progress.
+// Additional methods (get_user_achievements, get_leaderboard, seed_default_achievements) are
+// platform surface not yet wired to a handler — suppress lint until wired.
 #![allow(dead_code)]
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;

@@ -1,6 +1,8 @@
-// Games service — game metadata, categories, play sessions; platform surface, not yet wired.
+// Games service — game metadata, categories, play sessions.
+// Decision: api/games.rs queries the DB directly (agents own that file separately); this module
+// is the shared typed surface for services that need game data (matchmaking, points, etc.).
+// Library surface — not every function is called from a handler; suppress the lint.
 #![allow(dead_code)]
-
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};

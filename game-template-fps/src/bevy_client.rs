@@ -431,8 +431,9 @@ fn sync_player_entities(
 
 /// Return a string summary of the local player's state for an in-game HUD.
 ///
-/// In a full implementation this feeds into a `bevy_egui` HUD system.
-#[allow(dead_code)]
+/// This feeds into a `bevy_egui` HUD system or any overlay that renders
+/// per-frame player stats.  Call it from an Egui/UI Bevy system, passing
+/// the current [`LocalGameState`] snapshot.
 pub fn hud_text(state: &GameState, local_player_id: PlayerId) -> String {
     if let Some(ps) = state.player(local_player_id) {
         let c = FpsPlayerCustom::from_player(ps);

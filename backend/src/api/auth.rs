@@ -1,8 +1,9 @@
-// Auth API — registration, login, token refresh, logout, email verification, password reset.
+// Auth API — registration, login, token refresh, logout, email verification, password reset,
+//            API keys, 2FA TOTP.
 #![allow(dead_code)]
 
 use axum::{
-    extract::{Extension, Query, State},
+    extract::{Extension, Path, Query, State},
     middleware::from_fn_with_state,
     routing::{delete, get, post},
     Json, Router,
@@ -14,6 +15,7 @@ use uuid::Uuid;
 use crate::api::middleware;
 use crate::api::response;
 use crate::error::{AppError, Result};
+use crate::services::auth as auth_svc;
 use crate::services::email::EmailService;
 use crate::services::session::{
     self, AccessToken, RefreshToken, SessionInfo, TokenPair, ACCESS_TOKEN_EXPIRY_SECS,
@@ -428,6 +430,275 @@ pub async fn resend_verification(
     ))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// API Keys
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[derive(Debug, Deserialize)]
+pub struct CreateApiKeyRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ApiKeyCreatedResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub key: String, // plaintext — shown once only
+    pub prefix: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ApiKeyInfo {
+    pub id: Uuid,
+    pub name: String,
+    pub prefix: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// POST /api/auth/api-keys — create a new API key.
+/// The plaintext key is returned exactly once; only its SHA-256 hash is stored.
+pub async fn create_api_key(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<CreateApiKeyRequest>,
+) -> Result<Json<response::ApiResponse<ApiKeyCreatedResponse>>> {
+    let name = payload.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::Validation(
+            "API key name must not be empty".to_string(),
+        ));
+    }
+
+    let (plaintext, prefix, key_hash) = auth_svc::generate_api_key();
+    let id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+
+    sqlx::query(
+        r#"
+        INSERT INTO api_keys (id, user_id, name, key_hash, prefix, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        "#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(&name)
+    .bind(&key_hash)
+    .bind(&prefix)
+    .bind(now)
+    .execute(&pool)
+    .await?;
+
+    Ok(response::success_response(ApiKeyCreatedResponse {
+        id,
+        name,
+        key: plaintext,
+        prefix,
+        created_at: now,
+    }))
+}
+
+/// GET /api/auth/api-keys — list all non-revoked API keys (no secrets).
+pub async fn list_api_keys(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<response::ApiResponse<Vec<ApiKeyInfo>>>> {
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(
+        r#"
+        SELECT id, name, prefix, created_at, last_used_at
+        FROM api_keys
+        WHERE user_id = $1 AND revoked_at IS NULL
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let keys = rows
+        .into_iter()
+        .map(|(id, name, prefix, created_at, last_used_at)| ApiKeyInfo {
+            id,
+            name,
+            prefix,
+            created_at,
+            last_used_at,
+        })
+        .collect();
+
+    Ok(response::success_response(keys))
+}
+
+/// DELETE /api/auth/api-keys/:id — revoke an API key.
+pub async fn revoke_api_key(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(key_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
+    let result = sqlx::query(
+        r#"
+        UPDATE api_keys
+        SET revoked_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+        "#,
+    )
+    .bind(key_id)
+    .bind(user_id)
+    .execute(&pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound(
+            "API key not found or already revoked".to_string(),
+        ));
+    }
+
+    Ok(response::success_response(
+        serde_json::json!({ "message": "API key revoked" }),
+    ))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2FA TOTP
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TOTP_ISSUER: &str = "Magnetite";
+
+#[derive(Debug, Serialize)]
+pub struct TotpSetupResponse {
+    /// Base32-encoded TOTP secret; store securely, show in QR-code / manual entry.
+    pub secret: String,
+    /// otpauth:// URI — encode this into a QR code for authenticator apps.
+    pub uri: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TotpVerifyRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TotpDisableRequest {
+    pub code: String,
+}
+
+/// POST /api/auth/2fa/setup — generate a new TOTP secret and store it as pending.
+/// The secret is NOT active until /2fa/verify succeeds.
+pub async fn totp_setup(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<response::ApiResponse<TotpSetupResponse>>> {
+    // Fetch the username to use as the account label in the otpauth URI.
+    let (username,) = sqlx::query_as::<_, (String,)>("SELECT username FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    let secret = auth_svc::generate_totp_secret();
+    let uri = auth_svc::totp_uri(&secret, &username, TOTP_ISSUER);
+
+    // Store pending secret (totp_enabled stays false until verify).
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET totp_secret = $1, totp_enabled = FALSE
+        WHERE id = $2
+        "#,
+    )
+    .bind(&secret)
+    .bind(user_id)
+    .execute(&pool)
+    .await?;
+
+    Ok(response::success_response(TotpSetupResponse {
+        secret,
+        uri,
+    }))
+}
+
+/// POST /api/auth/2fa/verify — verify a TOTP code and activate 2FA.
+pub async fn totp_verify(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<TotpVerifyRequest>,
+) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
+    let (secret, enabled): (Option<String>, bool) = sqlx::query_as::<_, (Option<String>, bool)>(
+        "SELECT totp_secret, totp_enabled FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    if enabled {
+        return Err(AppError::BadRequest("2FA is already enabled".to_string()));
+    }
+
+    let secret = secret.ok_or_else(|| {
+        AppError::BadRequest("No pending TOTP setup found. Call /2fa/setup first.".to_string())
+    })?;
+
+    if !auth_svc::verify_totp(&secret, &payload.code)? {
+        return Err(AppError::Authentication("Invalid TOTP code".to_string()));
+    }
+
+    sqlx::query("UPDATE users SET totp_enabled = TRUE WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+
+    Ok(response::success_response(
+        serde_json::json!({ "message": "2FA enabled successfully" }),
+    ))
+}
+
+/// POST /api/auth/2fa/disable — verify a TOTP code and disable 2FA.
+pub async fn totp_disable(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<TotpDisableRequest>,
+) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
+    let (secret, enabled): (Option<String>, bool) = sqlx::query_as::<_, (Option<String>, bool)>(
+        "SELECT totp_secret, totp_enabled FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    if !enabled {
+        return Err(AppError::BadRequest("2FA is not enabled".to_string()));
+    }
+
+    let secret = secret.ok_or_else(|| AppError::Internal("TOTP secret missing".to_string()))?;
+
+    if !auth_svc::verify_totp(&secret, &payload.code)? {
+        return Err(AppError::Authentication("Invalid TOTP code".to_string()));
+    }
+
+    sqlx::query("UPDATE users SET totp_enabled = FALSE, totp_secret = NULL WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
+
+    Ok(response::success_response(
+        serde_json::json!({ "message": "2FA disabled successfully" }),
+    ))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/login", post(login))
@@ -467,6 +738,45 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/resend-verification",
             post(resend_verification).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // API keys — all auth-guarded
+        .route(
+            "/api-keys",
+            post(create_api_key)
+                .get(list_api_keys)
+                .layer(from_fn_with_state(
+                    pool.clone(),
+                    middleware::auth_middleware,
+                )),
+        )
+        .route(
+            "/api-keys/:id",
+            delete(revoke_api_key).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // 2FA TOTP — all auth-guarded
+        .route(
+            "/2fa/setup",
+            post(totp_setup).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/2fa/verify",
+            post(totp_verify).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/2fa/disable",
+            post(totp_disable).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

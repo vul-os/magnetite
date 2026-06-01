@@ -1,14 +1,16 @@
-// Platform settings API — admin-controlled config; platform surface, not yet wired.
-#![allow(dead_code)]
-
+// Platform settings API — admin-controlled config.
 use axum::{
     extract::{Extension, State},
-    Json,
+    middleware::from_fn_with_state,
+    routing::{get, put},
+    Json, Router,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::api::middleware;
 
 use crate::error::{AppError, Result};
 
@@ -30,12 +32,6 @@ pub struct UpdatePlatformSettings {
     pub max_withdraw_amount: Option<Decimal>,
     pub maintenance_mode: Option<bool>,
     pub registration_enabled: Option<bool>,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-struct PlatformSettingRow {
-    key: String,
-    value: String,
 }
 
 async fn get_setting(pool: &PgPool, key: &str) -> Result<String> {
@@ -159,4 +155,17 @@ pub async fn update_settings(
     }
 
     get_settings(State(pool)).await
+}
+
+pub fn router(pool: PgPool) -> Router {
+    Router::new()
+        .route("/settings", get(get_settings))
+        .route(
+            "/settings",
+            put(update_settings).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .with_state(pool)
 }

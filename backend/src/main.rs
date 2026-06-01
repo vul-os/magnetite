@@ -33,14 +33,18 @@ use crate::api::messages;
 use crate::api::metrics;
 use crate::api::notifications;
 use crate::api::oauth;
+use crate::api::platform;
 use crate::api::points;
 use crate::api::provisioning;
+use crate::api::reviews;
 use crate::api::social;
 use crate::api::streaming;
 use crate::api::subscriptions;
+use crate::api::tournaments;
 use crate::api::versioning;
 use crate::api::wallet;
 use crate::api::webhooks;
+use crate::jobs::backup;
 use crate::jobs::notification_cleanup;
 use crate::jobs::session_cleanup;
 use crate::jobs::verification_cleanup;
@@ -75,7 +79,10 @@ async fn main() {
     let api_v1 = Router::new()
         .nest("/auth", auth::router(pool.clone()))
         .nest("/wallet", wallet::router(pool.clone()))
-        .nest("/games", games::router(pool.clone()))
+        .nest(
+            "/games",
+            games::router(pool.clone()).merge(reviews::router(pool.clone())),
+        )
         .nest("/distribution", distribution::router(pool.clone()))
         .nest("/provisioning", provisioning::router(pool.clone()))
         .nest("/categories", categories::router(pool.clone()))
@@ -108,6 +115,10 @@ async fn main() {
         .nest("/dms", messages::dms_router(pool.clone()))
         // Wave 9: streaming egress + HLS watch
         .nest("/streams", streaming::router(pool.clone()))
+        // Platform settings (admin-only write, public read)
+        .nest("/platform", platform::router(pool.clone()))
+        // Tournaments: bracket management
+        .nest("/tournaments", tournaments::router(pool.clone()))
         .route("/health", get(health_check))
         .layer(axum::middleware::from_fn_with_state(
             versioning_state.clone(),
@@ -187,6 +198,21 @@ async fn main() {
     // Verification-token cleanup: purge expired and old used email/password-reset
     // tokens every hour so the verification_tokens table stays lean.
     tokio::spawn(verification_cleanup::run_cleanup_job(pool.clone()));
+
+    // Database backup: pg_dump + S3/local storage every 6 hours.
+    // Storage type controlled by BACKUP_STORAGE_TYPE (default: "local").
+    // S3 path requires BACKUP_S3_BUCKET + BACKUP_S3_REGION; local uses BACKUP_LOCAL_DIR.
+    let backup_pool = pool.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
+        loop {
+            ticker.tick().await;
+            match backup::create_backup(&backup_pool).await {
+                Ok(filename) => tracing::info!("Backup completed: {}", filename),
+                Err(e) => tracing::warn!("Backup failed (non-fatal): {}", e),
+            }
+        }
+    });
 
     axum::serve(listener, app).await.unwrap();
 }
