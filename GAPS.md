@@ -108,6 +108,39 @@ All four are now implemented as real, compiling, tested Rust crates. Evidence is
 
 ---
 
+## Closed in Backlog B1 (2026-06-01)
+
+The "Remaining — genuine smaller gaps" list above (lines 65-94) is now **largely closed** by Backlog
+wave B1 (commit `b90248f`). All verified: backend 0 warnings + tests compile; frontend build clean,
+lint 0 errors, 157 tests; game-template-fps + sdk clean.
+
+| Item | Closed how (evidence) |
+|---|---|
+| `api/platform.rs` settings unmounted | mounted at `/api/v1/platform`; stale comment removed (`backend/src/main.rs:115`) |
+| `api/tournaments.rs` allow-only shell | real bracket logic + mounted at `/api/v1/tournaments` (`backend/src/main.rs:117`) |
+| `services/leaderboard.rs` never called | wired into `submit_score` (Redis primary + Postgres fallback) |
+| `services/achievements.rs` never called | wired into achievement progress (`check_achievements`) |
+| `jobs/backup.rs` never scheduled | spawned on a 6-hour interval in `main.rs` |
+| admin day_7/day_30 retention always None | real CTE queries on `transactions` (`backend/src/api/admin.rs`) |
+| API-key creation missing | `POST/GET/DELETE /api/auth/api-keys` (hashed, one-time secret) + migration; Security.jsx wired |
+| 2FA TOTP missing | `POST /api/auth/2fa/{setup,verify,disable}` (inline RFC-6238) + migration; Security.jsx wired |
+| review helpful/report missing | `POST /api/games/:id/reviews/:rid/{helpful,report}` + migration + trigger; GameDetail.jsx wired |
+| Contact form went nowhere | `POST /api/contact` persisted (+ optional email); Contact.jsx wired |
+| `reviews.rs` never mounted (latent) | declared in `mod.rs` + merged into `/games` nest; **4 hidden compile bugs fixed** (u32→i64) |
+| StreamPlayer native-HLS only | dynamic `hls.js` import for non-Safari |
+| game-template-fps `gamepad_button()` always false | real implementation via SDK gamepad input |
+| README "15% platform fee" | corrected to 30% (70/30) |
+| stale "not yet wired"/dead-code comments | swept in `session_cleanup`, `payment`, `networking`, `games` |
+
+**Accepted (not gaps):** `services/games.rs` kept as a typed library surface (api/games queries the DB
+directly — decision GC-R5); `process_weekly_payouts()` is an intentional shim (real work runs in the
+spawned payout job); `useVoice`/`Leaderboard` mock fallbacks are gated behind `VITE_USE_MOCKS` (off by
+default, never silent). None are silent-mock-successes.
+
+**Remaining after B1 = Bucket D only** (external infra/credentials — see below). The codeable backlog is closed.
+
+---
+
 ## Remaining — Bucket D (needs external infra/credentials)
 
 These cannot be resolved without external infrastructure or third-party accounts. They are honestly documented and not faked. The MOAT items previously listed here have been closed (see section above).
