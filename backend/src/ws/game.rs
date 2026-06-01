@@ -31,7 +31,7 @@ use crate::services::anticheat::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum GameMessage {
     PlayerJoin { player_id: String },
     PlayerLeave { player_id: String },

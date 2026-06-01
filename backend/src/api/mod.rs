@@ -23,6 +23,7 @@ pub mod profile;
 pub mod provisioning;
 pub mod response;
 pub mod reviews;
+pub mod search;
 pub mod social;
 pub mod streaming;
 pub mod subscriptions;

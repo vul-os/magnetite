@@ -5,6 +5,7 @@ use axum::{
     body::Bytes,
     extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
+    middleware::from_fn_with_state,
     routing::{delete, get, post},
     Json, Router,
 };
@@ -15,6 +16,7 @@ use sha2::Sha256;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::api::middleware;
 use crate::api::notifications::NotificationService;
 use crate::error::{AppError, Result};
 
@@ -22,24 +24,43 @@ type HmacSha256 = Hmac<Sha256>;
 
 const PAYSTACK_HEADER: &str = "x-paystack-signature";
 
-fn compute_hmac_sha256(secret: &str, payload: &[u8]) -> String {
+fn compute_hmac_bytes(secret: &str, payload: &[u8]) -> Vec<u8> {
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(payload);
-    hex::encode(mac.finalize().into_bytes())
+    mac.finalize().into_bytes().to_vec()
 }
 
+fn compute_hmac_sha256(secret: &str, payload: &[u8]) -> String {
+    hex::encode(compute_hmac_bytes(secret, payload))
+}
+
+/// Constant-time HMAC-SHA256 signature verification.
+/// Uses `hmac::Mac::verify_slice` which is constant-time, avoiding timing side-channels.
 fn verify_paystack_signature(secret: &str, signature: &str, payload: &[u8]) -> bool {
-    let expected = compute_hmac_sha256(secret, payload);
-    signature == expected
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(payload);
+    // Decode the hex signature to raw bytes for constant-time comparison.
+    match hex::decode(signature) {
+        Ok(sig_bytes) => mac.verify_slice(&sig_bytes).is_ok(),
+        Err(_) => false,
+    }
 }
 
+/// Constant-time HMAC-SHA256 verification supporting optional "sha256=" prefix.
 fn verify_hmac_signature(secret: &str, signature: &str, payload: &[u8]) -> bool {
-    let expected = compute_hmac_sha256(secret, payload);
-    if let Some(sig) = signature.strip_prefix("sha256=") {
-        sig == expected
+    let sig_hex = if let Some(stripped) = signature.strip_prefix("sha256=") {
+        stripped
     } else {
-        signature == expected
+        signature
+    };
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(payload);
+    match hex::decode(sig_hex) {
+        Ok(sig_bytes) => mac.verify_slice(&sig_bytes).is_ok(),
+        Err(_) => false,
     }
 }
 
@@ -112,7 +133,33 @@ pub async fn handle_paystack(
                 .and_then(|m| m.user_id)
                 .ok_or_else(|| AppError::BadRequest("Missing user_id in metadata".to_string()))?;
 
-            let amount = Decimal::from(event.data.amount) / Decimal::from(100);
+            // Idempotency: skip if this reference was already processed.
+            let existing: Option<(Uuid,)> = sqlx::query_as(
+                "SELECT id FROM wallet_transactions WHERE reference_id = $1 LIMIT 1",
+            )
+            .bind(&event.data.reference)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+            if existing.is_some() {
+                tracing::info!(
+                    "Paystack webhook charge.success for reference '{}' already processed — skipping",
+                    event.data.reference
+                );
+                return Ok(Json(WebhookResponse {
+                    status: "ok".to_string(),
+                    message: "Already processed".to_string(),
+                }));
+            }
+
+            // Paystack webhook amount is in kobo (ZAR cents); convert to ZAR then to USD.
+            let zar_amount = Decimal::from(event.data.amount) / Decimal::from(100);
+            let zar_usd_rate: Decimal = std::env::var("ZAR_USD_RATE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(|| Decimal::new(54, 3)); // 0.054
+            let amount = zar_amount * zar_usd_rate;
 
             sqlx::query(
                 "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
@@ -121,7 +168,7 @@ pub async fn handle_paystack(
             .bind(Uuid::new_v4())
             .bind(user_id)
             .bind(amount)
-            .bind(event.data.reference)
+            .bind(&event.data.reference)
             .execute(&pool)
             .await
             .map_err(|e| AppError::Database(e.to_string()))?;
@@ -484,10 +531,30 @@ pub async fn delete_endpoint(
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
+        // Inbound webhook receivers — no auth (called by external services, HMAC-signed).
         .route("/paystack", post(handle_paystack))
         .route("/game", post(handle_game))
-        .route("/endpoints", get(list_endpoints))
-        .route("/endpoints", post(register_endpoint))
-        .route("/endpoints/:id", delete(delete_endpoint))
+        // Endpoint management — requires authentication.
+        .route(
+            "/endpoints",
+            get(list_endpoints).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/endpoints",
+            post(register_endpoint).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/endpoints/:id",
+            delete(delete_endpoint).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

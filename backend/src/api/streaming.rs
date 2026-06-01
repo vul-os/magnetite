@@ -80,6 +80,20 @@ pub struct ViewerCountResponse {
     pub viewer_count: i32,
 }
 
+/// Response returned by the /watch endpoint so clients know where to find the HLS stream.
+#[derive(Debug, Serialize)]
+pub struct WatchInfoResponse {
+    pub stream_id: Uuid,
+    pub title: String,
+    pub status: String,
+    pub viewer_count: i32,
+    pub streamer_id: Uuid,
+    /// HLS playlist URL the client should open in a video player.
+    pub hls_url: Option<String>,
+    /// Convenience watch URL (same as the HLS endpoint on the backend).
+    pub watch_url: String,
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -281,6 +295,63 @@ async fn derive_hls_url(pool: &PgPool, stream_id: Uuid, provided: Option<&str>) 
     key.map(|k| format!("{base}/live/{k}/index.m3u8"))
 }
 
+/// GET /api/v1/streams/:id/watch — returns watch info including the HLS URL.
+/// This is the endpoint the frontend calls before opening a stream player.
+pub async fn watch_stream(
+    State(pool): State<PgPool>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<WatchInfoResponse>>> {
+    let stream = svc::get_stream(&pool, id).await?;
+    let api_base = std::env::var("API_BASE_URL").unwrap_or_default();
+    let watch_url = format!("{}/api/v1/streams/{}/hls", api_base, id);
+    Ok(response::success_response(WatchInfoResponse {
+        stream_id: stream.id,
+        title: stream.title.clone(),
+        status: stream.status.clone(),
+        viewer_count: stream.viewer_count,
+        streamer_id: stream.streamer_id,
+        hls_url: stream.hls_url.clone(),
+        watch_url,
+    }))
+}
+
+/// GET /api/v1/communities/:community_id/streams — list live streams in a community.
+/// Delegates to list_live_streams with community_id filter.
+pub async fn list_community_streams(
+    State(pool): State<PgPool>,
+    Path(community_id): Path<Uuid>,
+    Query(q): Query<ListLiveQuery>,
+) -> Result<Json<response::ApiResponse<Vec<svc::StreamPublic>>>> {
+    let limit = q.limit.unwrap_or(20).min(100);
+    let offset = q.offset.unwrap_or(0);
+    let streams =
+        svc::list_live_streams(&pool, Some(community_id), q.game_id, limit, offset).await?;
+    Ok(response::success_response(streams))
+}
+
+/// POST /api/v1/communities/:community_id/streams — go live scoped to a community.
+pub async fn create_community_stream(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(community_id): Path<Uuid>,
+    Json(mut body): Json<CreateStreamRequest>,
+) -> Result<Json<response::ApiResponse<svc::StreamOwnerView>>> {
+    // Force the community_id from the path (override any body-supplied value).
+    body.community_id = Some(community_id);
+    let stream = svc::create_stream(
+        &pool,
+        user_id,
+        &body.title,
+        body.community_id,
+        body.channel_id,
+        body.game_id,
+        body.rtmp_target.as_deref(),
+        body.stream_key.as_deref(),
+    )
+    .await?;
+    Ok(response::success_response(stream))
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -303,7 +374,27 @@ pub fn router(pool: PgPool) -> Router {
         .route("/", get(list_live_streams))
         .route("/:id", get(get_stream))
         .route("/:id/hls", get(hls_manifest))
+        // /watch returns JSON watch-info (hls_url + metadata)
+        .route("/:id/watch", get(watch_stream))
         .route("/:id/leave", post(leave_stream));
+
+    Router::new()
+        .merge(auth_routes)
+        .merge(public_routes)
+        .with_state(pool)
+}
+
+/// Community-scoped streams sub-router — mounted at /communities/:community_id/streams
+/// in main.rs so the full paths are GET/POST /api/v1/communities/:id/streams.
+pub fn community_streams_router(pool: PgPool) -> Router {
+    let auth_routes = Router::new()
+        .route("/", post(create_community_stream))
+        .layer(from_fn_with_state(
+            pool.clone(),
+            middleware::auth_middleware,
+        ));
+
+    let public_routes = Router::new().route("/", get(list_community_streams));
 
     Router::new()
         .merge(auth_routes)

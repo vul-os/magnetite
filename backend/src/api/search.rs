@@ -1,4 +1,8 @@
-use axum::{extract::Query, Json};
+use axum::{
+    extract::{Query, State},
+    routing::get,
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
@@ -78,13 +82,15 @@ async fn search_games(
 
     let results = games
         .into_iter()
-        .map(|(id, title, description, developer_username)| GameSearchResult {
-            id,
-            title,
-            description,
-            developer_username,
-            result_type: "game".to_string(),
-        })
+        .map(
+            |(id, title, description, developer_username)| GameSearchResult {
+                id,
+                title,
+                description,
+                developer_username,
+                result_type: "game".to_string(),
+            },
+        )
         .collect();
 
     Ok(results)
@@ -166,6 +172,10 @@ async fn count_users(pool: &PgPool, query: &str) -> Result<i64> {
     Ok(count.0)
 }
 
+pub fn router(pool: PgPool) -> Router {
+    Router::new().route("/", get(search)).with_state(pool)
+}
+
 pub async fn search(
     State(pool): State<PgPool>,
     Query(query): Query<SearchQuery>,
@@ -186,23 +196,23 @@ pub async fn search(
         "games" => {
             let games = search_games(&pool, &query.q, limit, offset).await?;
             let total = count_games(&pool, &query.q).await?;
-            let search_results: Vec<SearchResult> = games.into_iter().map(SearchResult::Game).collect();
+            let search_results: Vec<SearchResult> =
+                games.into_iter().map(SearchResult::Game).collect();
             (search_results, total)
         }
         "users" => {
             let users = search_users(&pool, &query.q, limit, offset).await?;
             let total = count_users(&pool, &query.q).await?;
-            let search_results: Vec<SearchResult> = users.into_iter().map(SearchResult::User).collect();
+            let search_results: Vec<SearchResult> =
+                users.into_iter().map(SearchResult::User).collect();
             (search_results, total)
         }
         _ => {
             let games = search_games(&pool, &query.q, limit / 2 + 1, 0).await?;
             let users = search_users(&pool, &query.q, limit / 2 + 1, 0).await?;
 
-            let mut all_results: Vec<SearchResult> = games
-                .into_iter()
-                .map(SearchResult::Game)
-                .collect();
+            let mut all_results: Vec<SearchResult> =
+                games.into_iter().map(SearchResult::Game).collect();
             all_results.extend(users.into_iter().map(SearchResult::User));
 
             let total_games = count_games(&pool, &query.q).await?;

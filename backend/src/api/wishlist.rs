@@ -1,14 +1,16 @@
-// Wishlist API — game wishlist for players; platform surface, not yet wired.
-#![allow(dead_code)]
+// Wishlist API — game wishlist for players.
 
 use axum::{
     extract::{Path, State},
-    Extension, Json,
+    middleware::from_fn_with_state,
+    routing::{delete, get, post},
+    Extension, Json, Router,
 };
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::api::middleware;
 use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -129,6 +131,39 @@ pub async fn remove_from_wishlist(
     }
 
     Ok(Json(()))
+}
+
+pub fn router(pool: PgPool) -> Router {
+    Router::new()
+        .route(
+            "/",
+            get(list_wishlist).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:game_id",
+            post(add_to_wishlist).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:game_id",
+            delete(remove_from_wishlist).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:game_id/check",
+            get(check_wishlist).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .with_state(pool)
 }
 
 pub async fn check_wishlist(

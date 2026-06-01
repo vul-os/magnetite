@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWebSocket } from './useWebSocket';
 
 export function useGameLobby(lobbyId, currentUser) {
-  const { isConnected, lastMessage, sendMessage, reconnect } = useWebSocket(`/ws/lobby/${lobbyId}`);
+  // /ws/lobby/:id has no backend handler (AUDIT critical).
+  // Route lobby traffic over /ws/game/:id — the game WS already handles
+  // PlayerJoin/Chat/StateUpdate and useWebSocket will append ?token=<jwt>.
+  const { isConnected, lastMessage, sendMessage, reconnect } = useWebSocket(`/ws/game/${lobbyId}`);
 
   const [players, setPlayers] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);

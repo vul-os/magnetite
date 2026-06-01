@@ -35,8 +35,10 @@ use crate::api::notifications;
 use crate::api::oauth;
 use crate::api::platform;
 use crate::api::points;
+use crate::api::profile;
 use crate::api::provisioning;
 use crate::api::reviews;
+use crate::api::search;
 use crate::api::social;
 use crate::api::streaming;
 use crate::api::subscriptions;
@@ -44,6 +46,7 @@ use crate::api::tournaments;
 use crate::api::versioning;
 use crate::api::wallet;
 use crate::api::webhooks;
+use crate::api::wishlist;
 use crate::jobs::backup;
 use crate::jobs::notification_cleanup;
 use crate::jobs::session_cleanup;
@@ -83,6 +86,11 @@ async fn main() {
             "/games",
             games::router(pool.clone()).merge(reviews::router(pool.clone())),
         )
+        // Contact route at /api/v1/contact (not nested under /games)
+        .route(
+            "/contact",
+            axum::routing::post(reviews::submit_contact).with_state(pool.clone()),
+        )
         .nest("/distribution", distribution::router(pool.clone()))
         .nest("/provisioning", provisioning::router(pool.clone()))
         .nest("/categories", categories::router(pool.clone()))
@@ -102,6 +110,8 @@ async fn main() {
         // Wave 8: points economy + developer marketplace
         .nest("/points", points::router(pool.clone()))
         .nest("/marketplace", marketplace::router(pool.clone()))
+        // Stores namespace — mirrors /marketplace/stores/* so frontend client.stores.* calls resolve
+        .nest("/stores", marketplace::stores_router(pool.clone()))
         // Wave 6: comms core — communities, channels, messages, DMs
         .nest("/communities", communities::router(pool.clone()))
         .nest(
@@ -115,6 +125,24 @@ async fn main() {
         .nest("/dms", messages::dms_router(pool.clone()))
         // Wave 9: streaming egress + HLS watch
         .nest("/streams", streaming::router(pool.clone()))
+        // Community-scoped streams: GET/POST /communities/:id/streams
+        .nest(
+            "/communities/:community_id/streams",
+            streaming::community_streams_router(pool.clone()),
+        )
+        // Voice rooms REST: GET /communities/:id/voice-rooms (in communities router above)
+        // POST /voice-rooms/:id/join (returns room_token for WS connection)
+        .nest(
+            "/voice-rooms",
+            communities::voice_rooms_router(pool.clone()),
+        )
+        // Profile API: GET/PUT /profile/me, public /profile/:id
+        .nest("/profile", profile::router(pool.clone()))
+        // Wishlist: GET/POST/DELETE /wishlist/:game_id
+        .nest("/wishlist", wishlist::router(pool.clone()))
+        // Search: GET /search?q=&search_type=&limit=&offset=
+        .nest("/search", search::router(pool.clone()))
+        // Users by-username: GET /users/by-username/:username (already in users_router above)
         // Platform settings (admin-only write, public read)
         .nest("/platform", platform::router(pool.clone()))
         // Tournaments: bracket management

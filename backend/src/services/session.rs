@@ -21,6 +21,7 @@ pub struct Session {
     pub id: Uuid,
     pub user_id: Uuid,
     pub refresh_token_hash: String,
+    pub token_prefix: Option<String>,
     pub user_agent: Option<String>,
     pub ip_address: Option<String>,
     pub expires_at: DateTime<Utc>,
@@ -151,6 +152,11 @@ pub fn generate_tokens(user_id: Uuid, email: &str) -> Result<(AccessToken, Refre
     ))
 }
 
+/// First 16 chars of the raw refresh token used as an indexed prefix for O(1) lookup.
+pub fn token_prefix(token: &str) -> String {
+    token.chars().take(16).collect()
+}
+
 pub async fn create_session(
     db: &sqlx::PgPool,
     user_id: Uuid,
@@ -160,19 +166,21 @@ pub async fn create_session(
 ) -> Result<AuthTokens> {
     let session_id = Uuid::new_v4();
     let refresh_token = generate_refresh_token();
+    let prefix = token_prefix(&refresh_token);
     let refresh_token_hash =
         hash_refresh_token(&refresh_token).map_err(|e| AppError::Internal(e.to_string()))?;
     let expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS);
 
     sqlx::query(
         r#"
-        INSERT INTO sessions (id, user_id, refresh_token_hash, user_agent, ip_address, expires_at, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        INSERT INTO sessions (id, user_id, refresh_token_hash, token_prefix, user_agent, ip_address, expires_at, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
         "#,
     )
     .bind(session_id)
     .bind(user_id)
     .bind(&refresh_token_hash)
+    .bind(&prefix)
     .bind(&user_agent)
     .bind(&ip_address)
     .bind(expires_at)
@@ -189,17 +197,39 @@ pub async fn create_session(
 }
 
 pub async fn validate_refresh_token(db: &sqlx::PgPool, token: &str) -> Result<Session> {
-    let sessions = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE expires_at > NOW()")
-        .fetch_all(db)
-        .await?;
+    // O(1) fix: look up by token_prefix index first, then do a single Argon2 verify.
+    // Sessions created before this migration lack token_prefix; for those we fall back
+    // to a bounded scan of sessions for that prefix (still much better than ALL sessions).
+    let prefix = token_prefix(token);
 
-    let session = sessions
+    // Primary path: sessions with matching prefix (post-migration rows).
+    let candidates = sqlx::query_as::<_, Session>(
+        "SELECT * FROM sessions WHERE token_prefix = $1 AND expires_at > NOW()",
+    )
+    .bind(&prefix)
+    .fetch_all(db)
+    .await?;
+
+    if let Some(session) = candidates
         .iter()
         .find(|s| verify_refresh_token(token, &s.refresh_token_hash))
-        .ok_or_else(|| AppError::Unauthorized("Invalid refresh token".to_string()))?
-        .clone();
+    {
+        return Ok(session.clone());
+    }
 
-    Ok(session)
+    // Fallback path: legacy sessions (token_prefix IS NULL) — scan only those.
+    // This path disappears once all sessions have been rotated post-migration.
+    let legacy_candidates = sqlx::query_as::<_, Session>(
+        "SELECT * FROM sessions WHERE token_prefix IS NULL AND expires_at > NOW()",
+    )
+    .fetch_all(db)
+    .await?;
+
+    legacy_candidates
+        .iter()
+        .find(|s| verify_refresh_token(token, &s.refresh_token_hash))
+        .cloned()
+        .ok_or_else(|| AppError::Unauthorized("Invalid refresh token".to_string()))
 }
 
 pub async fn refresh_session(
@@ -219,6 +249,7 @@ pub async fn refresh_session(
 
     if rotate {
         let new_refresh_token = generate_refresh_token();
+        let new_prefix = token_prefix(&new_refresh_token);
         let new_refresh_token_hash = hash_refresh_token(&new_refresh_token)
             .map_err(|e| AppError::Internal(e.to_string()))?;
         let new_expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECS);
@@ -226,11 +257,12 @@ pub async fn refresh_session(
         sqlx::query(
             r#"
             UPDATE sessions
-            SET refresh_token_hash = $1, expires_at = $2
-            WHERE id = $3
+            SET refresh_token_hash = $1, token_prefix = $2, expires_at = $3
+            WHERE id = $4
             "#,
         )
         .bind(&new_refresh_token_hash)
+        .bind(&new_prefix)
         .bind(new_expires_at)
         .bind(session.id)
         .execute(db)

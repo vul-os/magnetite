@@ -179,13 +179,19 @@ pub async fn get_my_history(
     ))
 }
 
-/// GET /points/history/:user_id — another user's history (admin use).
+/// GET /points/history/:user_id — another user's history.
+/// Allowed if the caller is the same user OR the caller is an admin.
 pub async fn get_user_history(
     State(pool): State<PgPool>,
-    Extension(_caller_id): Extension<Uuid>,
+    Extension(caller_id): Extension<Uuid>,
     Path(user_id): Path<Uuid>,
     Query(q): Query<HistoryQuery>,
 ) -> Result<Json<response::PaginatedResponse<LedgerEntry>>> {
+    // Allow if caller is the owner; otherwise require admin.
+    if caller_id != user_id {
+        require_admin(&pool, caller_id).await?;
+    }
+
     let limit = q.limit.unwrap_or(50).min(200);
     let offset = q.offset.unwrap_or(0).max(0);
 

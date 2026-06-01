@@ -1,14 +1,16 @@
-// User profile API — avatar, stats, public profiles; platform surface, not yet wired.
-#![allow(dead_code)]
+// User profile API — avatar, stats, public profiles.
 
 use axum::{
     extract::{Extension, Path, State},
-    Json,
+    middleware::from_fn_with_state,
+    routing::{get, post, put},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::api::middleware;
 use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -341,4 +343,25 @@ pub async fn serve_avatar(
         .header("Cache-Control", "public, max-age=31536000")
         .body(axum::body::Body::from(data))
         .unwrap())
+}
+
+pub fn router(pool: PgPool) -> Router {
+    let auth_routes = Router::new()
+        .route("/me", get(get_me))
+        .route("/me", put(update_me))
+        .route("/me/avatar", post(upload_avatar))
+        .layer(from_fn_with_state(
+            pool.clone(),
+            middleware::auth_middleware,
+        ));
+
+    let public_routes = Router::new()
+        .route("/:id", get(get_user))
+        .route("/:id/stats", get(get_user_stats))
+        .route("/me/avatar/:filename", get(serve_avatar));
+
+    Router::new()
+        .merge(auth_routes)
+        .merge(public_routes)
+        .with_state(pool)
 }

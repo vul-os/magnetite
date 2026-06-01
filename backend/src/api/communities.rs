@@ -54,6 +54,24 @@ pub struct MembersResponse {
     pub members: Vec<svc::CommunityMember>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct VoiceRoomInfo {
+    pub id: Uuid,
+    pub channel_id: Option<Uuid>,
+    pub room_token: String,
+    pub max_participants: i32,
+    pub is_active: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceJoinTokenResponse {
+    /// The room_token the client should pass as ?room=<token> when connecting
+    /// to the /ws/voice WebSocket endpoint.
+    pub room_token: String,
+    pub room_id: Uuid,
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -203,6 +221,51 @@ pub async fn set_member_role(
     Ok(response::success_response(member))
 }
 
+/// GET /api/v1/communities/:id/voice-rooms — list active voice rooms in a community.
+/// Voice rooms are attached to voice-kind channels.
+pub async fn list_voice_rooms(
+    State(pool): State<PgPool>,
+    Path(community_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<Vec<VoiceRoomInfo>>>> {
+    let rooms = sqlx::query_as::<_, VoiceRoomInfo>(
+        r#"
+        SELECT vr.id, vr.channel_id, vr.room_token, vr.max_participants, vr.is_active, vr.created_at
+        FROM voice_rooms vr
+        JOIN channels c ON vr.channel_id = c.id
+        WHERE c.community_id = $1 AND vr.is_active = true
+        ORDER BY vr.created_at ASC
+        "#,
+    )
+    .bind(community_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    Ok(response::success_response(rooms))
+}
+
+/// POST /api/v1/voice-rooms/:id/join — return a join token for the given voice room.
+/// The token is already stored in the DB; this endpoint just looks it up.
+pub async fn get_voice_join_token(
+    State(pool): State<PgPool>,
+    Extension(_user_id): Extension<Uuid>,
+    Path(room_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<VoiceJoinTokenResponse>>> {
+    let row = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, room_token FROM voice_rooms WHERE id = $1 AND is_active = true",
+    )
+    .bind(room_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?
+    .ok_or_else(|| AppError::NotFound("Voice room not found or inactive".to_string()))?;
+
+    Ok(response::success_response(VoiceJoinTokenResponse {
+        room_id: row.0,
+        room_token: row.1,
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -224,10 +287,27 @@ pub fn router(pool: PgPool) -> Router {
     let public_routes = Router::new()
         .route("/", get(list_communities))
         .route("/:id", get(get_community))
-        .route("/:id/members", get(list_members));
+        .route("/:id/members", get(list_members))
+        // Voice rooms for a community — public list; join requires auth (separate router)
+        .route("/:id/voice-rooms", get(list_voice_rooms));
 
     Router::new()
         .merge(auth_routes)
         .merge(public_routes)
+        .with_state(pool)
+}
+
+/// Voice-rooms top-level router — mounted at /voice-rooms in main.rs.
+/// Exposes POST /voice-rooms/:id/join (auth-required) which returns the room_token
+/// the client needs to connect to /ws/voice?token=<jwt>&room=<room_token>.
+pub fn voice_rooms_router(pool: PgPool) -> Router {
+    Router::new()
+        .route(
+            "/:id/join",
+            post(get_voice_join_token).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
         .with_state(pool)
 }

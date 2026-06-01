@@ -17,30 +17,41 @@ export function useGameSession(gameId) {
     setSessionStatus('connecting');
   }, [gameId]);
 
-  // Transition to 'active' once the WS opens and request initial state
+  // Transition to 'active' once the WS opens.
+  // Backend has no 'join_game' variant — PlayerJoin is the server-emitted event,
+  // not a client command. Just mark as active once connected.
   useEffect(() => {
     if (isConnected && sessionStatus === 'connecting') {
       setSessionStatus('active');
-      sendMessage({ type: 'join_game', gameId });
     }
-  }, [isConnected, sessionStatus, sendMessage, gameId]);
+  }, [isConnected, sessionStatus]);
 
   useEffect(() => {
-    if (lastMessage?.type === 'game_state' || lastMessage?.type === 'game_state_update') {
+    // Backend GameMessage with rename_all="snake_case" emits:
+    //   state_update  { state: GameState }
+    //   player_join   { player_id }
+    //   player_leave  { player_id }
+    //   chat          { player_id, message }
+    // Keep legacy aliases (game_state, game_state_update) for compatibility
+    // with any older backend build until the rename lands.
+    const t = lastMessage?.type;
+    if (t === 'state_update' || t === 'game_state' || t === 'game_state_update') {
       if (lastMessage.state) setGameState(lastMessage.state);
       if (Array.isArray(lastMessage.players)) setPlayers(lastMessage.players);
     }
-    if (lastMessage?.type === 'player_joined') {
-      setPlayers((p) => [...p, lastMessage.player]);
+    if (t === 'player_join' || t === 'player_joined') {
+      const player = lastMessage.player ?? { id: lastMessage.player_id };
+      setPlayers((p) => [...p, player]);
     }
-    if (lastMessage?.type === 'player_left') {
-      setPlayers((p) => p.filter((pl) => pl.id !== lastMessage.playerId));
+    if (t === 'player_leave' || t === 'player_left') {
+      const id = lastMessage.player_id ?? lastMessage.playerId;
+      setPlayers((p) => p.filter((pl) => pl.id !== id));
     }
-    if (lastMessage?.type === 'game_over') {
+    if (t === 'game_over') {
       setSessionStatus('finished');
-      setGameState(lastMessage.finalState);
+      setGameState(lastMessage.finalState ?? lastMessage.state ?? null);
     }
-    if (lastMessage?.type === 'error') {
+    if (t === 'error') {
       setSessionError(lastMessage.message);
     }
   }, [lastMessage]);

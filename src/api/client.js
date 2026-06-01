@@ -1,5 +1,17 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
+/**
+ * Normalise an endpoint path so that any /api/... path that is NOT already
+ * /api/v1/... gets rewritten to /api/v1/...  This fixes the 64-call prefix
+ * mismatch in a single place without changing callers.
+ */
+function normaliseEndpoint(endpoint) {
+  if (endpoint.startsWith('/api/') && !endpoint.startsWith('/api/v1/')) {
+    return '/api/v1/' + endpoint.slice('/api/'.length);
+  }
+  return endpoint;
+}
+
 async function request(endpoint, options = {}) {
   const token = localStorage.getItem('token');
   const headers = {
@@ -8,7 +20,9 @@ async function request(endpoint, options = {}) {
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const normalisedEndpoint = normaliseEndpoint(endpoint);
+
+  const response = await fetch(`${API_BASE}${normalisedEndpoint}`, {
     ...options,
     headers,
   });
@@ -22,7 +36,7 @@ async function request(endpoint, options = {}) {
 }
 
 export const getOAuthUrl = (provider) => {
-  return `${API_BASE}/api/auth/${provider}`;
+  return `${API_BASE}/api/v1/oauth/${provider}`;
 };
 
 export const api = {
@@ -48,8 +62,8 @@ export const api = {
     setup2fa: () => request('/api/auth/2fa/setup', { method: 'POST' }),
     /** Verify and enable 2FA. POST /api/auth/2fa/verify */
     verify2fa: (code) => request('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
-    /** Disable 2FA. DELETE /api/auth/2fa */
-    disable2fa: (code) => request('/api/auth/2fa', { method: 'DELETE', body: JSON.stringify({ code }) }),
+    /** Disable 2FA. POST /api/v1/auth/2fa/disable */
+    disable2fa: (code) => request('/api/v1/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) }),
   },
   wallet: {
     balance: () => request('/api/wallet/balance'),
@@ -71,13 +85,25 @@ export const api = {
     status: () => request('/api/matchmaking/status'),
   },
   subscriptions: {
-    plans: () => request('/api/subscriptions/plans'),
-    current: () => request('/api/subscriptions/current'),
+    /** GET /api/v1/subscriptions — list available tiers/plans */
+    plans: () => request('/api/v1/subscriptions'),
+    /** GET /api/v1/subscriptions/me — current user's active subscription */
+    current: () => request('/api/v1/subscriptions/me'),
     create: (data) => request('/api/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
-    cancel: () => request('/api/subscriptions/cancel', { method: 'POST' }),
-    upgrade: (planId) => request('/api/subscriptions/upgrade', { method: 'POST', body: JSON.stringify({ plan_id: planId }) }),
-    hours: () => request('/api/subscriptions/hours'),
-    usage: () => request('/api/subscriptions/usage'),
+    /** DELETE /api/v1/subscriptions — cancel the active subscription */
+    cancel: () => request('/api/v1/subscriptions', { method: 'DELETE' }),
+    /**
+     * POST /api/v1/subscriptions/upgrade — upgrade/downgrade tier.
+     * NOTE: this endpoint does not yet exist on the backend (AUDIT critical).
+     * The call is preserved so the UI receives an honest error rather than faking success.
+     */
+    upgrade: (planId) => request('/api/v1/subscriptions/upgrade', { method: 'POST', body: JSON.stringify({ plan_id: planId }) }),
+    /**
+     * /hours and /usage have no backend implementation (AUDIT high).
+     * Kept here so the UI can display an honest error; will be implemented in a later wave.
+     */
+    hours: () => request('/api/v1/subscriptions/hours'),
+    usage: () => request('/api/v1/subscriptions/usage'),
   },
   search: {
     query: (q, searchType = 'all', limit = 20, offset = 0) =>
@@ -96,12 +122,15 @@ export const api = {
     leaderboard: () => request('/api/achievements/leaderboard'),
   },
   profile: {
-    get: (username) => request(`/api/users/${username}`),
-    update: (data) => request('/api/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
+    /** GET /api/v1/users/by-username/:username — look up profile by username string */
+    get: (username) => request(`/api/v1/users/by-username/${encodeURIComponent(username)}`),
+    /** PUT /api/v1/profile — update the authenticated user's profile */
+    update: (data) => request('/api/v1/profile', { method: 'PUT', body: JSON.stringify(data) }),
   },
   social: {
     friends: () => request('/api/friends'),
-    addFriend: (userId) => request('/api/friends', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+    /** POST /api/v1/friends/request — send a friend request; body uses to_user_id per backend */
+    addFriend: (userId) => request('/api/v1/friends/request', { method: 'POST', body: JSON.stringify({ to_user_id: userId }) }),
     removeFriend: (userId) => request(`/api/friends/${userId}`, { method: 'DELETE' }),
     searchUsers: (q) => request(`/api/users/search?q=${encodeURIComponent(q)}`),
     invites: () => request('/api/invites'),
@@ -125,8 +154,8 @@ export const api = {
       request(`/api/games/${gameId}/reviews/${reviewId}/report`, { method: 'POST' }),
   },
   contact: {
-    /** Submit a contact form message. POST /api/contact */
-    submit: (data) => request('/api/contact', { method: 'POST', body: JSON.stringify(data) }),
+    /** Submit a contact form message. POST /api/v1/contact */
+    submit: (data) => request('/api/v1/contact', { method: 'POST', body: JSON.stringify(data) }),
   },
 
   platform: {
@@ -158,14 +187,17 @@ export const api = {
 
     // ── Payout request (D-PAY-4) ─────────────────────────────────────────
     /**
-     * POST /api/v1/developer/payout
+     * POST /api/v1/developer/payouts
      * data: { amount: number }
      * Creates a payout_requests row; processed async by the payout job via Wise.
      */
     requestPayout: (data) =>
-      request('/api/v1/developer/payout', { method: 'POST', body: JSON.stringify(data) }),
-    /** GET /api/v1/developer/payout-status — list payout requests with status */
-    payoutStatus: () => request('/api/v1/developer/payout-status'),
+      request('/api/v1/developer/payouts', { method: 'POST', body: JSON.stringify(data) }),
+    /**
+     * GET /api/v1/developer/payouts — list payout requests with status.
+     * (Was /payout-status — that route does not exist; /payouts serves both create and history.)
+     */
+    payoutStatus: () => request('/api/v1/developer/payouts'),
   },
 
   // ── Wave 6: Comms Core ────────────────────────────────────────────────────
@@ -217,45 +249,58 @@ export const api = {
   },
 
   voice: {
-    /** List voice rooms in a community. */
-    rooms: (communityId) => request(`/api/communities/${communityId}/voice-rooms`),
-    /** Obtain a join token for a voice room. Returns { token, room_id }. */
-    joinToken: (roomId) => request(`/api/voice-rooms/${roomId}/join`, { method: 'POST' }),
+    /**
+     * GET /api/v1/communities/:id/voice-rooms — list voice channels in a community.
+     * NOTE: this REST endpoint is being added by agent 2 (AX1 backend wave).
+     * Until it is live the call will return an honest 404.
+     */
+    rooms: (communityId) => request(`/api/v1/communities/${communityId}/voice-rooms`),
+    /**
+     * POST /api/v1/voice-rooms/:id/join — obtain a join token for a voice room.
+     * NOTE: this REST endpoint is being added by agent 2.
+     */
+    joinToken: (roomId) => request(`/api/v1/voice-rooms/${roomId}/join`, { method: 'POST' }),
   },
 
   streams: {
     /**
      * List live streams.
-     * communityId = 'global' → platform-wide listing (/api/streams/live)
-     * communityId = specific id → community-scoped listing (/api/communities/:id/streams)
+     * communityId = 'global' → platform-wide listing (/api/v1/streams/live)
+     * communityId = specific id → community-scoped listing (/api/v1/communities/:id/streams)
+     * NOTE: community-scoped stream routes are being added by agent 2.
      */
     list: (communityId) =>
       communityId === 'global'
-        ? request('/api/streams/live').catch(() => request('/api/streams'))
-        : request(`/api/communities/${communityId}/streams`),
+        ? request('/api/v1/streams/live').catch(() => request('/api/v1/streams'))
+        : request(`/api/v1/communities/${communityId}/streams`),
 
-    /** Start streaming. Tries community-scoped endpoint first; falls back to /api/streams */
+    /**
+     * Start streaming.
+     * Tries community-scoped endpoint first (being added by agent 2);
+     * falls back to /api/v1/streams for global/un-scoped streams.
+     */
     goLive: (communityId, data) =>
       communityId && communityId !== 'global'
-        ? request(`/api/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) })
-        : request('/api/streams', { method: 'POST', body: JSON.stringify(data) }),
+        ? request(`/api/v1/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) })
+        : request('/api/v1/streams', { method: 'POST', body: JSON.stringify(data) }),
 
-    /** Stop / end a stream by id. */
-    end: (streamId) => request(`/api/streams/${streamId}`, { method: 'DELETE' }),
+    /** Stop / end a stream by id. DELETE /api/v1/streams/:id */
+    end: (streamId) => request(`/api/v1/streams/${streamId}`, { method: 'DELETE' }),
 
     /**
-     * Get a watch token / HLS manifest URL for a stream.
-     * Returns { hls_url, watch_url, token? }
+     * Get stream detail (title, status, etc). There is no /watch sub-route on the backend.
+     * Use hlsUrl() to obtain the HLS playlist for playback.
+     * GET /api/v1/streams/:id
      */
-    watch: (streamId) => request(`/api/streams/${streamId}/watch`),
+    watch: (streamId) => request(`/api/v1/streams/${streamId}`),
 
     /**
-     * Get the HLS playlist URL for embedding.
-     * Returns the URL as a string or { url } object.
+     * Get the canonical HLS playlist URL.
+     * Backend registers /:id/hls — no /index.m3u8 suffix.
      */
     hlsUrl: (streamId) => {
       const base = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-      return `${base}/api/streams/${streamId}/hls/index.m3u8`;
+      return `${base}/api/v1/streams/${streamId}/hls`;
     },
   },
 
@@ -298,38 +343,41 @@ export const api = {
   },
 
   stores: {
-    /** List all public stores. params: { game_id?, limit?, offset? } */
+    /**
+     * List all public stores. params: { game_id?, limit?, offset? }
+     * Backend namespace is /api/v1/marketplace/stores (not /api/stores).
+     */
     list: (params = {}) => {
       const qs = new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
       ).toString();
-      return request(`/api/stores${qs ? `?${qs}` : ''}`);
+      return request(`/api/v1/marketplace/stores${qs ? `?${qs}` : ''}`);
     },
     /** Fetch a single store. */
-    get: (storeId) => request(`/api/stores/${storeId}`),
+    get: (storeId) => request(`/api/v1/marketplace/stores/${storeId}`),
     /** Create a developer store. data: { name, game_id, description? } */
-    create: (data) => request('/api/stores', { method: 'POST', body: JSON.stringify(data) }),
+    create: (data) => request('/api/v1/marketplace/stores', { method: 'POST', body: JSON.stringify(data) }),
     /** Update store metadata. */
-    update: (storeId, data) => request(`/api/stores/${storeId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    update: (storeId, data) => request(`/api/v1/marketplace/stores/${storeId}`, { method: 'PUT', body: JSON.stringify(data) }),
     /** Delete a store. */
-    delete: (storeId) => request(`/api/stores/${storeId}`, { method: 'DELETE' }),
+    delete: (storeId) => request(`/api/v1/marketplace/stores/${storeId}`, { method: 'DELETE' }),
     /** List items in a store. */
-    items: (storeId) => request(`/api/stores/${storeId}/items`),
+    items: (storeId) => request(`/api/v1/marketplace/stores/${storeId}/items`),
     /** Add an item to a store. data: { name, description, price_points, price_usd, item_type, metadata? } */
     addItem: (storeId, data) =>
-      request(`/api/stores/${storeId}/items`, { method: 'POST', body: JSON.stringify(data) }),
+      request(`/api/v1/marketplace/stores/${storeId}/items`, { method: 'POST', body: JSON.stringify(data) }),
     /** Update a store item. */
     updateItem: (storeId, itemId, data) =>
-      request(`/api/stores/${storeId}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
+      request(`/api/v1/marketplace/stores/${storeId}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
     /** Remove an item from a store. */
     removeItem: (storeId, itemId) =>
-      request(`/api/stores/${storeId}/items/${itemId}`, { method: 'DELETE' }),
+      request(`/api/v1/marketplace/stores/${storeId}/items/${itemId}`, { method: 'DELETE' }),
     /** Purchase an item. data: { currency: 'points' | 'usd' } */
     purchase: (storeId, itemId, data) =>
-      request(`/api/stores/${storeId}/items/${itemId}/purchase`, { method: 'POST', body: JSON.stringify(data) }),
+      request(`/api/v1/marketplace/stores/${storeId}/items/${itemId}/purchase`, { method: 'POST', body: JSON.stringify(data) }),
     /** Current user's entitlements (purchased items). */
-    entitlements: () => request('/api/stores/entitlements'),
+    entitlements: () => request('/api/v1/marketplace/entitlements'),
     /** Developer sales summary for owned stores. */
-    sales: (storeId) => request(`/api/stores/${storeId}/sales`),
+    sales: (storeId) => request(`/api/v1/marketplace/stores/${storeId}/sales`),
   },
 };

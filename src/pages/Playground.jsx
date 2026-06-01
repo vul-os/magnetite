@@ -66,26 +66,48 @@ export default function Playground() {
       wsUrl = `${protocol}//${window.location.host}/ws/game/${gameId}`;
     }
 
+    // Append ?token=<jwt> so the backend can authenticate this connection.
+    const token = localStorage.getItem('token');
+    if (token) {
+      const sep = wsUrl.includes('?') ? '&' : '?';
+      wsUrl = `${wsUrl}${sep}token=${encodeURIComponent(token)}`;
+    }
+
     const ws        = new WebSocket(wsUrl);
     wsRef.current   = ws;
 
     ws.onopen = () => {
       setConnectionStatus('connected');
-      ws.send(JSON.stringify({ type: 'join_game', playerId: userIdRef.current }));
+      // Backend has no 'join_game' ClientMessage variant; the server emits
+      // PlayerJoin when the WS connection is authenticated. No client init
+      // message is needed here.
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       switch (data.type) {
-        case 'game_state':
-          setGameState(data.state);
-          setPlayers(data.players);
+        // Backend GameMessage with rename_all="snake_case":
+        case 'state_update':   // after backend rename fix
+        case 'game_state':     // legacy compat alias
+          if (data.state) setGameState(data.state);
+          if (Array.isArray(data.players)) setPlayers(data.players);
           break;
-        case 'player_update':
-          setPlayers(prev => prev.map(p => p.id === data.player.id ? data.player : p));
+        case 'player_join':    // after backend rename fix
+        case 'player_joined':  // legacy alias
+          if (data.player || data.player_id) {
+            const p = data.player ?? { id: data.player_id };
+            setPlayers(prev => [...prev, p]);
+          }
           break;
-        case 'chat_message':
-          setChatMessages(prev => [...prev, data.message]);
+        case 'player_leave':   // after backend rename fix
+        case 'player_left': {  // legacy alias
+          const pid = data.player_id ?? data.playerId;
+          setPlayers(prev => prev.filter(p => p.id !== pid));
+          break;
+        }
+        case 'chat':           // backend GameMessage::Chat
+        case 'chat_message':   // legacy alias
+          setChatMessages(prev => [...prev, data.message ?? data]);
           break;
         case 'pong':
           setLatency(Date.now() - data.timestamp);

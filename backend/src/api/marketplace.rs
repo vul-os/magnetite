@@ -229,6 +229,54 @@ pub async fn store_revenue(
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
+/// Stores sub-router — mounted at /api/v1/stores so the frontend's client.stores.*
+/// calls (GET/POST/PUT/DELETE /api/v1/stores/*) resolve correctly.
+/// Mirrors the relevant routes from the main marketplace router.
+pub fn stores_router(pool: PgPool) -> Router {
+    Router::new()
+        // Public
+        .route("/:store_id", get(get_store_for_game))
+        .route("/:store_id/items", get(list_items))
+        // Developer-auth routes
+        .route(
+            "/",
+            get(list_my_stores).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:store_id",
+            put(update_store).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:store_id/items",
+            post(create_item).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/:store_id/revenue",
+            get(store_revenue).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // Buyer routes
+        .route(
+            "/entitlements",
+            get(list_my_entitlements).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .with_state(pool)
+}
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         // ── Public ──────────────────────────────────────────────────────────

@@ -620,9 +620,26 @@ pub fn invites_router(pool: PgPool) -> Router {
         .with_state(pool)
 }
 
+pub async fn get_user_by_username(
+    State(pool): State<PgPool>,
+    Path(username): Path<String>,
+) -> Result<Json<response::ApiResponse<User>>> {
+    let user = sqlx::query_as::<_, User>(
+        "SELECT id, username, avatar_url, created_at FROM users WHERE username = $1",
+    )
+    .bind(&username)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    Ok(response::success_response(user))
+}
+
 pub fn users_router(pool: PgPool) -> Router {
     Router::new()
         .route("/search", get(search_users))
+        // by-username lookup — must be before /:id so the literal segment matches first
+        .route("/by-username/:username", get(get_user_by_username))
         .route("/:id", get(get_user_profile))
         .with_state(pool)
 }

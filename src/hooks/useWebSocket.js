@@ -57,6 +57,14 @@ export function useWebSocket(url, options = {}) {
       wsUrl = `${getWsBase()}${url}`;
     }
 
+    // Append ?token=<jwt> so every backend WS handler can authenticate the connection.
+    // backend/src/ws/comms.rs, voice.rs, and game.rs all require validate_token(query.token).
+    const token = localStorage.getItem('token');
+    if (token) {
+      const sep = wsUrl.includes('?') ? '&' : '?';
+      wsUrl = `${wsUrl}${sep}token=${encodeURIComponent(token)}`;
+    }
+
     // Use a real browser WebSocket by default.
     // Only substitute the mock implementation when VITE_USE_MOCK_WS === 'true'
     // (local dev without a backend).

@@ -29,6 +29,10 @@ pub struct WalletBalance {
 
 #[derive(Debug, Deserialize)]
 pub struct DepositRequest {
+    /// Kept for API compatibility; the actual credited amount is derived from the
+    /// Paystack-VERIFIED amount converted at the server-authoritative ZAR_USD_RATE.
+    /// A caller cannot self-credit an arbitrary amount by manipulating this field.
+    #[allow(dead_code)]
     pub amount: Decimal,
     /// Paystack payment reference to verify before crediting the USD balance.
     pub payment_id: String,
@@ -103,6 +107,21 @@ pub async fn deposit(
         ));
     }
 
+    // --- Idempotency: reject if this payment_id has already been credited. ---
+    let existing: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM wallet_transactions WHERE reference_id = $1 LIMIT 1")
+            .bind(&payload.payment_id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+    if existing.is_some() {
+        return Err(AppError::BadRequest(format!(
+            "Payment '{}' has already been credited — replay rejected",
+            payload.payment_id
+        )));
+    }
+
     let payment_svc = PaymentService::from_env();
 
     // Verify the Paystack payment before crediting.
@@ -119,12 +138,25 @@ pub async fn deposit(
         )));
     }
 
-    // Credit the USD amount declared in the request (the ZAR verification amount is only for
-    // authenticity; the admin-configured USD equivalent is what the user deposited).
-    // For simplicity the caller supplies the USD amount; the Paystack check is the gate.
-    let credit_amount = payload.amount;
+    // Use the Paystack-VERIFIED amount (in ZAR) converted to USD at the server-authoritative
+    // exchange rate.  The rate is read from the ZAR_USD_RATE env var (default: 0.054, i.e.
+    // 1 ZAR ≈ 0.054 USD at time of writing).  A user cannot self-credit an arbitrary amount
+    // by manipulating the JSON body — the credited amount is always derived from the amount
+    // that Paystack actually charged.
+    let zar_usd_rate: Decimal = std::env::var("ZAR_USD_RATE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| Decimal::new(54, 3)); // 0.054
 
-    // Credit the wallet with the verified USD amount.
+    let credit_amount = verification.amount * zar_usd_rate;
+
+    if credit_amount <= Decimal::ZERO {
+        return Err(AppError::Internal(
+            "Computed credit amount is zero — check ZAR_USD_RATE env var".to_string(),
+        ));
+    }
+
+    // Credit the wallet with the Paystack-verified USD amount.
     sqlx::query(
         "INSERT INTO wallet_balances (id, user_id, currency, balance)
          VALUES ($1, $2, 'USD', $3)

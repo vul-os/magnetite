@@ -207,11 +207,13 @@ pub fn create_rate_limiter(redis_url: &str, config: RateLimitConfig) -> SharedRa
 }
 
 pub fn get_rate_limit_config(path: &str) -> (u32, Duration) {
-    if path.starts_with("/api/auth/") {
+    // Routes are mounted at /api/v1/... — match the real prefix, not the old /api/... typo.
+    // Also accept the suffix-based form so tests using plain paths still work.
+    if path.starts_with("/api/v1/auth/") || path.contains("/auth/") {
         (5, Duration::from_secs(60))
-    } else if path.starts_with("/api/wallet/") {
+    } else if path.starts_with("/api/v1/wallet/") || path.contains("/wallet/") {
         (30, Duration::from_secs(60))
-    } else if path == "/api/games" || path.starts_with("/api/games") {
+    } else if path.starts_with("/api/v1/games") || path.contains("/games") {
         (100, Duration::from_secs(60))
     } else {
         (200, Duration::from_secs(60))

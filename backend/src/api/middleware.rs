@@ -15,6 +15,17 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 
+/// Check whether `user_id` is an admin, using the DB as the authoritative source.
+async fn check_is_admin(pool: &PgPool, user_id: Uuid) -> Result<bool> {
+    let is_admin = sqlx::query_scalar::<_, bool>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+        .unwrap_or(false);
+    Ok(is_admin)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String,
@@ -77,8 +88,20 @@ pub async fn optional_auth(headers: HeaderMap) -> Option<Uuid> {
     Uuid::parse_str(&claims.sub).ok()
 }
 
+/// Dummy synchronous guard — kept for call-sites that do not have pool access.
+/// Prefer `admin_guard_with_pool` for middleware use.
 pub async fn admin_guard(_user_id: Uuid) -> Result<()> {
+    // Callers that can provide a pool should use admin_guard_with_pool instead.
     Err(AppError::Forbidden("Admin access required".to_string()))
+}
+
+/// DB-backed admin guard — checks the `is_admin` flag in the users table.
+pub async fn admin_guard_with_pool(pool: &PgPool, user_id: Uuid) -> Result<()> {
+    if check_is_admin(pool, user_id).await? {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden("Admin access required".to_string()))
+    }
 }
 
 pub async fn auth_middleware(
@@ -96,7 +119,7 @@ pub async fn auth_middleware(
 }
 
 pub async fn admin_middleware(
-    State(_pool): State<PgPool>,
+    State(pool): State<PgPool>,
     mut request: Request,
     next: Next,
 ) -> Response {
@@ -105,7 +128,8 @@ pub async fn admin_middleware(
         Err(e) => return e.into_response(),
     };
 
-    match admin_guard(user_id).await {
+    // Check the DB for the real is_admin flag — do NOT rely on the JWT claim alone.
+    match admin_guard_with_pool(&pool, user_id).await {
         Ok(_) => {}
         Err(e) => return e.into_response(),
     };

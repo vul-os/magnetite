@@ -115,21 +115,25 @@ pub async fn get_game(
 
 pub async fn update_game(
     State(pool): State<PgPool>,
+    Extension(developer_id): Extension<Uuid>,
     Path(game_id): Path<Uuid>,
     Json(payload): Json<UpdateGameRequest>,
 ) -> Result<Json<crate::api::response::ApiResponse<Game>>> {
+    // Ownership check: only the developer who owns the game may update it.
+    // Return 404 (not 403) to avoid leaking whether the game exists to non-owners.
     let game = sqlx::query_as::<_, Game>(
         "UPDATE games SET
          title = COALESCE($1, title),
          description = COALESCE($2, description),
          status = COALESCE($3, status)
-         WHERE id = $4 AND active = true
+         WHERE id = $4 AND developer_id = $5 AND active = true
          RETURNING id, developer_id, github_repo, title, description, status, active, created_at",
     )
     .bind(&payload.title)
     .bind(&payload.description)
     .bind(&payload.status)
     .bind(game_id)
+    .bind(developer_id)
     .fetch_optional(&pool)
     .await?
     .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
@@ -139,12 +143,20 @@ pub async fn update_game(
 
 pub async fn delete_game(
     State(pool): State<PgPool>,
+    Extension(caller_id): Extension<Uuid>,
     Path(game_id): Path<Uuid>,
 ) -> Result<Json<crate::api::response::ApiResponse<()>>> {
-    sqlx::query("UPDATE games SET active = false WHERE id = $1")
+    // Admin middleware ensures only admins reach this handler, but we still verify
+    // the game exists before returning success to avoid leaking IDs.
+    let result = sqlx::query("UPDATE games SET active = false WHERE id = $1")
         .bind(game_id)
         .execute(&pool)
         .await?;
+
+    let _ = caller_id; // admin middleware has already verified the caller
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Game not found".to_string()));
+    }
 
     Ok(response::success_response(()))
 }

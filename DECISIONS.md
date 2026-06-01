@@ -1167,3 +1167,154 @@ Audit (AUDIT.md): 16 critical, 36 high. Fix program + the user's "develop games 
   or a provisioned runtime instance via the play manifest.
 Each wave: ≤5 Sonnet agents, strictly disjoint files (ONE owns backend main.rs/mod.rs/config.rs; ONE runs the
 frontend build). Verify green after each; commit; loop until critical/high fixed + game-dev shipped.
+
+## AX1 — Agent 2 (Backend Routing + Registration) — DONE (2026-06-01)
+
+**Files owned and changed:** `backend/src/main.rs`, `backend/src/api/mod.rs`,
+`backend/src/api/wishlist.rs`, `backend/src/api/search.rs`,
+`backend/src/api/subscriptions.rs`, `backend/src/api/profile.rs`,
+`backend/src/api/social.rs`, `backend/src/api/streaming.rs`,
+`backend/src/api/marketplace.rs`, `backend/src/api/communities.rs`
+
+### Route gaps fixed
+
+| Finding | Fix |
+|---|---|
+| Wishlist: no router(), not mounted | Added `wishlist::router()` (GET /, POST /:game_id, DELETE /:game_id, GET /:game_id/check) + auth middleware; nested at `/wishlist` in main.rs |
+| Search: no router(), not mounted, not in mod.rs | Added `search::router()` (GET /); added `pub mod search` to mod.rs; nested at `/search` in main.rs |
+| Contact at /games/contact instead of /api/v1/contact | Added `.route("/contact", post(reviews::submit_contact).with_state(pool))` directly on api_v1 |
+| Subscriptions: /plans, /current, /cancel, /upgrade, /hours, /usage missing | Added `/plans` (alias GET /), `/current` (alias /me), POST `/cancel` (alias for DELETE /), POST `/upgrade` (cancel + re-subscribe), GET `/hours` (tier quota stub), GET `/usage` (game slot usage) |
+| profile.update: no profile router() | Added `profile::router()` (GET/PUT /me, POST /me/avatar, GET /:id, GET /:id/stats); mounted at `/profile` |
+| users/by-username: GET /users/:username fails for UUIDs | Added `get_user_by_username` handler + route `/by-username/:username` in `social::users_router()` |
+| stores namespace: all 11 client.stores.* calls 404 | Added `marketplace::stores_router()` mirroring store routes; nested at `/stores` in main.rs |
+| voice.rooms + voice.joinToken: no REST endpoints | Added `GET /communities/:id/voice-rooms` (list active voice rooms via channel join), `voice_rooms_router()` with POST `/:id/join` (returns room_token); mounted at `/voice-rooms` |
+| streams.watch: no /watch route | Added `watch_stream` handler (returns WatchInfoResponse with hls_url + watch_url); route `/:id/watch` in streaming router |
+| streams community-scoped: /communities/:id/streams not mounted | Added `community_streams_router()` (GET + POST /); nested at `/communities/:community_id/streams` in main.rs |
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| AX2-R1 | Contact route state | `.with_state(pool.clone())` on the individual route | Axum requires state for a handler extracted via State; `.with_state()` on the MethodRouter is the correct pattern for a single route not inside a nested Router. |
+| AX2-R2 | Wishlist POST vs body for game_id | PUT game_id in path (POST /:game_id) | Frontend calls `POST /api/wishlist` with game_id in path per client.js; matches the AUDIT's intended DELETE /:game_id pattern. |
+| AX2-R3 | Voice rooms list | JOIN channels ON community_id | voice_rooms rows have channel_id FK; community rooms are those whose channel.community_id matches. Simple JOIN, no extra service layer needed. |
+| AX2-R4 | Subscription hours/usage | Stub returns tier-level quota + live game count | Full usage tracking (compute hours) is AX2 feature work; stub prevents 404 while the frontend can render the data it has. |
+| AX2-R5 | stores_router path collision /:store_id vs /entitlements | Literal /entitlements route registered before /:store_id wildcard | Axum routes literal segments before wildcards so /entitlements matches first; no collision. |
+| AX2-R6 | profile router /me/stats | Removed from auth routes (Path extractor requires :id param); kept only at /:id/stats (public) | The profile.rs `get_user_stats` uses `Path(user_id)` from the URL — can't be used at /me without a separate handler. Acceptable: auth users call /me for full stats (games_played etc. returned inline). |
+
+### Verify (written to /tmp/ax1b.txt)
+- `cargo check` — **0 warnings, exit 0**
+- `cargo fmt --check` — **clean, exit 0**
+- `cargo test --no-run` — **all 6 test executables compile, exit 0**
+
+### Final paths registered
+
+```
+POST   /api/v1/contact
+GET    /api/v1/wishlist/
+POST   /api/v1/wishlist/:game_id
+DELETE /api/v1/wishlist/:game_id
+GET    /api/v1/wishlist/:game_id/check
+GET    /api/v1/search/?q=&search_type=&limit=&offset=
+GET    /api/v1/subscriptions/plans
+GET    /api/v1/subscriptions/current
+POST   /api/v1/subscriptions/cancel
+POST   /api/v1/subscriptions/upgrade
+GET    /api/v1/subscriptions/hours
+GET    /api/v1/subscriptions/usage
+GET    /api/v1/profile/me
+PUT    /api/v1/profile/me
+POST   /api/v1/profile/me/avatar
+GET    /api/v1/profile/:id
+GET    /api/v1/profile/:id/stats
+GET    /api/v1/users/by-username/:username
+GET    /api/v1/stores/               (list my stores)
+GET    /api/v1/stores/:store_id
+GET    /api/v1/stores/:store_id/items
+GET    /api/v1/stores/:store_id/revenue
+GET    /api/v1/stores/entitlements
+GET    /api/v1/communities/:id/voice-rooms
+POST   /api/v1/voice-rooms/:id/join
+GET    /api/v1/streams/:id/watch
+GET    /api/v1/communities/:community_id/streams
+POST   /api/v1/communities/:community_id/streams
+```
+
+## §7b — AX1 Frontend Wiring (2026-06-01): Agent 1 Decisions
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AX1-F1 | /api→/api/v1 prefix rewrite | Single `normaliseEndpoint()` helper in request() | Fixes 64-call mismatch in ONE place; existing /api/v1 calls pass through unchanged; no nginx rewrite (hides the bug) needed. |
+| AX1-F2 | profile.get(username) path | GET /api/v1/users/by-username/:username | Backend UUID parse fails for string usernames; agent 2 adds the by-username route. |
+| AX1-F3 | profile.update path | PUT /api/v1/profile | Backend profile.rs has no router(); agent 2 adds it. Path /api/v1/profile avoids confusion with auth routes. |
+| AX1-F4 | auth.disable2fa | POST /api/v1/auth/2fa/disable | Backend registers POST /2fa/disable; client was using DELETE which has no backend handler. |
+| AX1-F5 | subscriptions.cancel | DELETE /api/v1/subscriptions | Backend registers DELETE /; was POST /cancel (no such route). |
+| AX1-F6 | stores namespace | /api/v1/marketplace/stores/* | Backend marketplace router uses /marketplace/stores/:id; no /stores nest exists. Updating client is cleaner than adding a new nest alias. |
+| AX1-F7 | streams.watch | GET /api/v1/streams/:id | No /watch sub-route on backend; stream detail endpoint gives enough info; hlsUrl() provides playback URL. |
+| AX1-F8 | WS token injection | In useWebSocket.connect() — appended to every URL | Centralised; fixes comms+voice+game in one change; backend handlers all accept ?token= query param. |
+| AX1-F9 | Voice WS lazy connect | voiceWsUrl state null until initPeer(); dummy path when null | Prevents immediate connection without ?room=; avoids silent backend drop (voice.rs returns immediately if room_token_param is None). |
+| AX1-F10 | Voice ICE routing | to_user_id from remotePeersRef populated via room_state frame | Backend requires targeted peer routing; room_state snapshot on join gives all participant IDs. |
+| AX1-F11 | GameLobby WS path | /ws/game/:id (was /ws/lobby/:id) | /ws/lobby has no backend handler; game WS handles PlayerJoin/Chat/StateUpdate already. |
+| AX1-F12 | Game message types | Listen for state_update + legacy game_state compat | Backend rename_all="snake_case" is agent 2's change; keeping both aliases ensures continuity during rollout. |
+| AX1-F13 | Playground join_game removal | Removed send on open | Backend has no join_game ClientMessage variant; removing avoids silent ignore and the spurious confusion. |
+
+## §7b — Agent 5 (Frontend/Transport Security) — Progress (2026-06-01)
+
+**Files owned (all changed):**
+- `nginx.conf` — Added `Content-Security-Policy` header; changed `X-Frame-Options` to `DENY`; CSP allows `'self'` + Google Fonts (stylesheet + webfont), `wss:` + `https:` for connect-src (API + WebSocket), `data:` + `picsum.photos` for img-src, `blob:` for media/worker, `'unsafe-inline'` for style-src (Vite requirement), `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`.
+- `frontend/nginx.fly.conf` — Added the full security header block (X-Frame-Options DENY, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Content-Security-Policy matching nginx.conf, plus HSTS since Fly.io always terminates TLS at the edge).
+- `src/pages/AuthCallback.jsx` — (1) **Open redirect fix:** replaced raw `searchParams.get('destination') || '/'` with `sanitizeRedirect(rawDestination, '/')` which rejects absolute URLs and protocol-relative URLs. (2) **OAuth CSRF state validation:** reads `?state=` from the callback URL and compares against `sessionStorage.getItem('oauth_state_nonce')` (stored by Login.jsx before redirecting); clears the nonce immediately; rejects with an error on mismatch. (3) **Token URL-cleanse:** removes `?token=` from the URL via `history.replaceState` immediately after extraction to prevent history/referrer leakage.
+- `src/utils/sanitize.js` (NEW) — `escapeHtml()`, `sanitizeText()`, `sanitizeRedirect()`. Used in AuthCallback for redirect validation. Provides a single auditable choke-point for XSS-hardening; JSX text-node rendering in ReviewList/MessageList/Profile is already safe (no dangerouslySetInnerHTML found — audit confirmed).
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AX5-1 | CSP `style-src 'unsafe-inline'` | Kept | Vite injects hashed CSS at build time; removing unsafe-inline would require nonce injection at the nginx level (not yet wired). Acceptable trade-off: XSS is blocked by other headers; inline style is a low-severity CSP relaxation. |
+| AX5-2 | CSP `connect-src wss: https:` | Broad wildcard for both | The WS backends (comms/voice/game) and the API origin may differ across deploy environments; hard-coding hostnames would break dev/staging. The CSP still blocks all non-HTTPS/WSS origins. |
+| AX5-3 | `X-Frame-Options DENY` vs `SAMEORIGIN` | Changed to `DENY` | Magnetite has no legitimate use case for being embedded in an iframe anywhere. `frame-ancestors 'none'` in CSP also enforces this for modern browsers. |
+| AX5-4 | State validation — allow missing state | Allow (warn) | Some OAuth flows (e.g., link-account redirect from within the app) do not go through Login.jsx and therefore have no stored nonce. Requiring state unconditionally would break those. Mismatch (state present on both sides but not equal) is still rejected. |
+| AX5-5 | ReviewList/MessageList/Profile XSS | No change needed | AUDIT.md confirms: "No dangerouslySetInnerHTML was found. React renders user-supplied content safely via JSX text nodes." These files already satisfy the hardening requirement. sanitize.js is available for future use. |
+
+### Verify
+
+- `npx eslint src/pages/AuthCallback.jsx src/components/ReviewList.jsx src/components/comms/MessageList.jsx src/pages/Profile.jsx src/utils/sanitize.js` → **exit 0, 0 errors, 1 warning** (project-wide experimental `react-hooks/set-state-in-effect` on `warn`, not `error`; same pattern used throughout the codebase). Written to `/tmp/ax1s.txt`.
+
+## §7b — AX1 Agent 3 (Auth & Session Security) — DONE (2026-06-01)
+
+**Files owned and changed:**
+- `backend/src/api/auth.rs`
+- `backend/src/services/auth.rs`
+- `backend/src/services/session.rs`
+- `backend/migrations/20260601_auth_security.sql` (NEW)
+
+(services/verification.rs and api/oauth.rs read but no changes needed.)
+
+### Crossroads
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| AX1-A1 | TOTP secret encryption scheme | HMAC-SHA256 CTR-mode XOR, key from `TOTP_ENC_KEY` (hex 32B), stored as `enc:hex(nonce\|\|ct)` | No `aes-gcm` crate in Cargo.toml; avoids a new dep by reusing existing `hmac` + `sha2`. Provides confidentiality and forward-safety (nonce per encryption). Legacy plaintext still accepted on read (backward-compatible). |
+| AX1-A2 | Email verification at login | Block login entirely (401 with clear message) | Simpler than a restricted token — no extra middleware layer needed. Users are told to verify before logging in. Matches the AUDIT.md finding "at minimum, block deposit/withdraw/publish" — blocking at login is the strongest option. |
+| AX1-A3 | TOTP at login: missing vs wrong code | Two distinct 401 messages: `"2fa_required: ..."` if code absent, `"Invalid TOTP code"` if wrong | Allows the frontend to distinguish "user hasn't opened authenticator yet" from "user entered wrong code" and show appropriate UI. |
+| AX1-A4 | Refresh-token O(N) fix: approach | `token_prefix` column (first 16 chars, indexed) in sessions table; lookup by prefix → single Argon2 verify | Immediately reduces from O(N×100ms) to O(1) for new sessions. Legacy sessions (token_prefix IS NULL) still use a bounded NULL-set scan; that set shrinks as tokens rotate. Migration is non-destructive (column is nullable). |
+
+### Fixes applied
+
+1. **TOTP secret encrypted at rest** — `services/auth.rs`: `encrypt_totp_secret()`, `decrypt_totp_secret()`, `verify_totp_stored()`. `api/auth.rs` `totp_setup()` encrypts before write; `totp_verify`, `totp_disable`, and `login` all use `verify_totp_stored()`.
+2. **TOTP enforced at login** — `login()` now queries `totp_enabled` + `totp_secret`; blocks with 401 if code missing/invalid.
+3. **Email verification enforced at login** — `login()` queries `email_verified`; blocks with 401 + resend hint if not verified.
+4. **Refresh-token O(N) DoS fixed** — `Session` struct adds `token_prefix`; `create_session` / `refresh_session` write prefix; `validate_refresh_token` does prefix index-lookup first.
+5. **PUT /password added** — `update_password()` handler; verifies current password, rehashes, updates. Route: `PUT /password` in `auth::router()`.
+6. **GET/POST/DELETE /linked-accounts added** — `list_linked_accounts`, `link_account`, `unlink_account` handlers against `oauth_identities` table. Routes inside `auth::router()`.
+7. **DELETE /2fa alias added** — `DELETE /2fa` → `totp_disable` in `auth::router()` (frontend calls DELETE; backend had POST only).
+
+### Migration: `20260601_auth_security.sql`
+- `sessions.token_prefix VARCHAR(32)` + index `idx_sessions_token_prefix`
+- `users.totp_secret` widened to `VARCHAR(256)` (for hex-encoded ciphertext)
+- `oauth_identities` table (id, user_id FK, provider, provider_id, email, created_at; UNIQUE(provider, provider_id))
+
+### Verify (written to /tmp/ax1a.txt)
+- `cargo check` — **0 errors, 0 warnings in owned files, exit 0**
+- `cargo fmt --check` (owned files) — **clean, exit 0**
+- `cargo test --no-run` — **all 5 test executables compile, exit 0**
