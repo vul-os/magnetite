@@ -1,19 +1,17 @@
 //! Authoritative game-server host.
 //!
-//! [`GameServer::serve`] is the single entry point.  It:
+//! ## Entry points
 //!
-//! 1. Binds a TCP listener on `config.bind_addr`.
-//! 2. Spawns a [`TickScheduler`] task for the authoritative tick loop.
-//! 3. Accepts WebSocket connections in a loop, spawning a handler task per
-//!    connection.
-//!
-//! ## Topology dispatch
-//!
-//! | Topology | Behavior |
+//! | Method | Description |
 //! |---|---|
-//! | [`Topology::SingleRoom`] | All players in one room; identical to Dedicated but capped at 16. |
-//! | [`Topology::Dedicated`] | Standard authoritative + interest-filtered delta path. |
-//! | [`Topology::Sharded`] | Uses the [`ShardManager`] seam; single-shard in N1. |
+//! | [`GameServer::serve`] | Native executor (backward-compatible) |
+//! | [`GameServer::serve_wasm`] | Sandboxed Wasm executor via `magnetite-sandbox` |
+//! | [`GameServer::with_executor`] | Generic: bring your own `GameExecutor` |
+//! | [`GameServer::serve_with_shutdown`] | Native executor + explicit shutdown handle |
+//! | [`GameServer::serve_wasm_with_shutdown`] | Wasm executor + explicit shutdown handle |
+//!
+//! All entry points share the same inner serve loop; the executor is the only
+//! difference between them.
 //!
 //! ## WebSocket protocol
 //!
@@ -23,6 +21,20 @@
 //!                 → server sends ServerNet::Ack / Reject / Delta / Snapshot
 //! Client disconnects → server removes connection + calls on_leave
 //! ```
+//!
+//! ## Topology dispatch
+//!
+//! | Topology | Behavior |
+//! |---|---|
+//! | [`Topology::SingleRoom`] | All players in one room; identical to Dedicated but capped at 16. |
+//! | [`Topology::Dedicated`] | Standard authoritative + interest-filtered delta path. |
+//! | [`Topology::Sharded`] | Single-process multi-shard; [`ShardManager`] routes players. |
+//!
+//! ## Anticheat
+//!
+//! The tick loop always has an anticheat pipeline.  By default it uses the SDK
+//! built-ins (`RateLimit` + `InputSchema`).  Pass a custom [`Anticheat`] via
+//! [`GameServerConfig::anticheat`] to add game-specific validators.
 
 use std::net::SocketAddr;
 
@@ -33,7 +45,9 @@ use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info, warn};
 
-use magnetite_sdk::authority::{GameExecutor, MatchConfig, Topology};
+use magnetite_anticheat::{Anticheat, AnticheatConfig};
+use magnetite_sandbox::{LimitsConfig, WasmExecutor};
+use magnetite_sdk::authority::{GameExecutor, MatchConfig, Topology, ValidatorChain};
 use magnetite_sdk::protocol::{ClientNet, ServerNet};
 use magnetite_sdk::state::PlayerId;
 
@@ -45,9 +59,9 @@ use crate::tick::TickScheduler;
 // Error types
 // ---------------------------------------------------------------------------
 
-/// Fatal server error (e.g. TCP bind failure).
+/// Fatal server error (e.g. TCP bind failure, wasm load failure).
 #[derive(Debug)]
-pub struct ServerError(String);
+pub struct ServerError(pub(crate) String);
 
 impl std::fmt::Display for ServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -73,8 +87,10 @@ impl std::error::Error for SendError {}
 // Configuration
 // ---------------------------------------------------------------------------
 
-/// Configuration for [`GameServer::serve`].
-#[derive(Debug, Clone)]
+/// Configuration for [`GameServer`].
+///
+/// Note: does not implement `Clone` because [`Anticheat`] is not `Clone`.
+/// Move or reconstruct the config when multiple servers are needed.
 pub struct GameServerConfig {
     /// Address to bind the WebSocket listener.
     ///
@@ -83,6 +99,15 @@ pub struct GameServerConfig {
 
     /// Match configuration (topology, tick rate, seed, …).
     pub match_config: MatchConfig,
+
+    /// Optional custom anticheat pipeline.
+    ///
+    /// When `None`, the server uses the default chain:
+    /// `RateLimit(120)` + `InputSchema`.
+    ///
+    /// Set this to `Some(anticheat)` to add game-specific validators (e.g.
+    /// `AimbotSnap`, `PositionTeleport`) or tune kick/ban thresholds.
+    pub anticheat: Option<Anticheat>,
 }
 
 impl Default for GameServerConfig {
@@ -90,31 +115,32 @@ impl Default for GameServerConfig {
         Self {
             bind_addr: "127.0.0.1:9000".to_string(),
             match_config: MatchConfig::auto(4),
+            anticheat: None,
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// GameServer
+// ---------------------------------------------------------------------------
+
 /// Authoritative game-server host.
 ///
 /// Stateless entry point — all state lives in the executor, connection manager,
-/// and shard manager.
+/// shard manager, and anticheat pipeline.
 pub struct GameServer;
 
 impl GameServer {
-    /// Start the authoritative server.
+    // ---------------------------------------------------------------------- //
+    // Native (backward-compatible) entry points                              //
+    // ---------------------------------------------------------------------- //
+
+    /// Start the authoritative server with a native (in-process) executor.
     ///
-    /// Blocks until a fatal error occurs or the process is killed.  For graceful
-    /// shutdown in tests, use [`GameServer::serve_with_shutdown`].
+    /// This is the **primary entry point** and is backward-compatible with all
+    /// existing callers.  It blocks until a fatal error or process kill.
     ///
-    /// # Arguments
-    ///
-    /// * `executor` — any [`GameExecutor`] (typically [`NativeExecutor`] or
-    ///   `WasmExecutor` from `magnetite-sandbox`).
-    /// * `config` — server + match configuration.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the TCP listener cannot bind to `config.bind_addr`.
+    /// For graceful shutdown in tests, use [`GameServer::serve_with_shutdown`].
     pub async fn serve(
         executor: impl GameExecutor + 'static,
         config: GameServerConfig,
@@ -123,13 +149,119 @@ impl GameServer {
         Self::serve_with_shutdown(executor, config, shutdown_rx, shutdown_tx).await
     }
 
-    /// Start the server with an explicit shutdown signal.
+    /// Start the server with a native executor and an explicit shutdown signal.
     ///
-    /// Send `true` on `shutdown_tx` to trigger graceful shutdown.  This is
-    /// used internally by the acceptance loop and is the recommended pattern
-    /// for tests.
+    /// Send `true` on `shutdown_tx` to trigger graceful shutdown.
     pub async fn serve_with_shutdown(
         executor: impl GameExecutor + 'static,
+        config: GameServerConfig,
+        shutdown_rx: watch::Receiver<bool>,
+        shutdown_tx: watch::Sender<bool>,
+    ) -> Result<(), ServerError> {
+        Self::serve_inner(Box::new(executor), config, shutdown_rx, shutdown_tx).await
+    }
+
+    // ---------------------------------------------------------------------- //
+    // Wasm (sandboxed) entry points                                          //
+    // ---------------------------------------------------------------------- //
+
+    /// Start the authoritative server with a sandboxed Wasm executor.
+    ///
+    /// Loads the game module from `wasm_path`, applies `limits` for
+    /// fuel/memory/epoch budgets, and serves the match exactly like
+    /// [`GameServer::serve`].  The only difference is that the game logic runs
+    /// inside a Wasmtime sandbox.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `.wasm` file cannot be read/compiled or the TCP
+    /// listener cannot bind.
+    pub async fn serve_wasm(
+        wasm_path: impl AsRef<std::path::Path>,
+        limits: LimitsConfig,
+        config: GameServerConfig,
+    ) -> Result<(), ServerError> {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        Self::serve_wasm_with_shutdown(wasm_path, limits, config, shutdown_rx, shutdown_tx).await
+    }
+
+    /// Start the server with a Wasm executor and an explicit shutdown signal.
+    pub async fn serve_wasm_with_shutdown(
+        wasm_path: impl AsRef<std::path::Path>,
+        limits: LimitsConfig,
+        config: GameServerConfig,
+        shutdown_rx: watch::Receiver<bool>,
+        shutdown_tx: watch::Sender<bool>,
+    ) -> Result<(), ServerError> {
+        let executor = WasmExecutor::from_file(wasm_path, config.match_config.clone(), limits)
+            .map_err(|e| ServerError(format!("wasm load error: {e}")))?;
+        Self::serve_inner(Box::new(executor), config, shutdown_rx, shutdown_tx).await
+    }
+
+    // ---------------------------------------------------------------------- //
+    // Generic entry point                                                     //
+    // ---------------------------------------------------------------------- //
+
+    /// Start the server with **any** [`GameExecutor`] you supply.
+    ///
+    /// This is the most flexible entry point.  It is equivalent to
+    /// [`GameServer::serve`] for native executors and [`GameServer::serve_wasm`]
+    /// for `WasmExecutor`, but lets you pass any custom implementation.
+    ///
+    /// ```rust,no_run
+    /// use magnetite_runtime::{GameServer, GameServerConfig};
+    /// use magnetite_sdk::authority::{MatchConfig, NativeExecutor};
+    /// // (provide a game type that impls AuthoritativeGame)
+    /// # struct MyGame;
+    /// # impl magnetite_sdk::authority::AuthoritativeGame for MyGame {
+    /// #   type Snapshot = (); type Delta = (); type View = (); type Command = ();
+    /// #   fn init(_: &MatchConfig) -> Self { MyGame }
+    /// #   fn validate(&self,_:magnetite_sdk::state::PlayerId,_:&magnetite_sdk::input::Input,_:magnetite_sdk::authority::Tick)->Result<Vec<()>,magnetite_sdk::authority::RejectReason>{Ok(vec![])}
+    /// #   fn step(&mut self,_:&mut magnetite_sdk::authority::StepCtx,_:&[(magnetite_sdk::state::PlayerId,())]) {}
+    /// #   fn snapshot(&self)->() {}
+    /// #   fn restore(_:&(),_:&MatchConfig)->Self{MyGame}
+    /// #   fn delta(&self,_:&())->() {}
+    /// #   fn view_for(&self,_:magnetite_sdk::state::PlayerId)->() {}
+    /// # }
+    ///
+    /// # async fn run() -> Result<(), magnetite_runtime::ServerError> {
+    /// let cfg = MatchConfig::auto(4);
+    /// let executor = NativeExecutor::<MyGame>::new(cfg.clone());
+    /// let server_cfg = GameServerConfig {
+    ///     bind_addr: "127.0.0.1:9000".to_string(),
+    ///     match_config: cfg,
+    ///     anticheat: None,
+    /// };
+    /// GameServer::with_executor(Box::new(executor), server_cfg).await
+    /// # }
+    /// ```
+    pub async fn with_executor(
+        executor: Box<dyn GameExecutor + 'static>,
+        config: GameServerConfig,
+    ) -> Result<(), ServerError> {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        Self::serve_inner(executor, config, shutdown_rx, shutdown_tx).await
+    }
+
+    // ---------------------------------------------------------------------- //
+    // Utility                                                                 //
+    // ---------------------------------------------------------------------- //
+
+    /// Return the topology-specific player cap.
+    pub fn player_cap(topology: &Topology) -> u32 {
+        match topology {
+            Topology::SingleRoom => 16,
+            Topology::Dedicated { .. } => 256,
+            Topology::Sharded { max_per_shard, .. } => *max_per_shard,
+        }
+    }
+
+    // ---------------------------------------------------------------------- //
+    // Shared inner serve loop                                                 //
+    // ---------------------------------------------------------------------- //
+
+    async fn serve_inner(
+        executor: Box<dyn GameExecutor + 'static>,
         config: GameServerConfig,
         mut shutdown_rx: watch::Receiver<bool>,
         _shutdown_tx: watch::Sender<bool>,
@@ -145,14 +277,23 @@ impl GameServer {
         // Build shared connection manager and shard manager.
         let conn_mgr = ConnectionManager::new();
         let shard_mgr = ShardManager::new(config.match_config.topology.clone());
-        // Shard manager is single-threaded in N1 (all mutations happen on the
-        // accept task which is single-threaded per connection).
         let shard_mgr = std::sync::Arc::new(tokio::sync::Mutex::new(shard_mgr));
+
+        // Build the anticheat pipeline.
+        let anticheat = config.anticheat.unwrap_or_else(|| {
+            Anticheat::new(
+                ValidatorChain::new()
+                    .add(magnetite_sdk::authority::RateLimit::new(120))
+                    .add(magnetite_sdk::authority::InputSchema::default()),
+                AnticheatConfig::default(),
+            )
+        });
 
         // Spawn the tick scheduler.
         let tick_conn_mgr = conn_mgr.clone();
         let tick_config = config.match_config.clone();
-        let scheduler = TickScheduler::new(executor, tick_conn_mgr, tick_config);
+        let scheduler =
+            TickScheduler::with_anticheat(executor, tick_conn_mgr, tick_config, anticheat);
         let tick_shutdown = shutdown_rx.clone();
         tokio::spawn(async move {
             scheduler.run(tick_shutdown).await;
@@ -194,15 +335,6 @@ impl GameServer {
 
         Ok(())
     }
-
-    /// Return the topology-specific player cap.
-    pub fn player_cap(topology: &Topology) -> u32 {
-        match topology {
-            Topology::SingleRoom => 16,
-            Topology::Dedicated { .. } => 256,
-            Topology::Sharded { max_per_shard, .. } => *max_per_shard,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +342,6 @@ impl GameServer {
 // ---------------------------------------------------------------------------
 
 /// Drive a single WebSocket connection.
-///
-/// Performs the WS handshake, sends `ServerNet::Welcome`, then enters a loop
-/// that forwards inbound `ClientNet` frames to the connection manager and
-/// forwards outbound `ServerNet` frames from the tick loop to the client.
 async fn handle_connection(
     stream: TcpStream,
     peer_addr: SocketAddr,
@@ -421,6 +549,7 @@ mod tests {
         let server_cfg = GameServerConfig {
             bind_addr: "127.0.0.1:0".to_string(), // OS-assigned port
             match_config: cfg,
+            anticheat: None,
         };
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -431,13 +560,8 @@ mod tests {
                 .unwrap();
         });
 
-        // Give the server a moment to bind, then shut it down.
         tokio::time::sleep(Duration::from_millis(50)).await;
-
-        // The server should still be running.
         assert!(!handle.is_finished());
-
-        // Abort (process-level shutdown).
         handle.abort();
     }
 
@@ -448,14 +572,14 @@ mod tests {
         let cfg = MatchConfig::auto(4);
         let executor = NativeExecutor::<NopGame>::new(cfg.clone());
 
-        // Bind on port 0 to let the OS pick an available port.
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        drop(listener); // release so the server can bind
+        drop(listener);
 
         let server_cfg = GameServerConfig {
             bind_addr: addr.to_string(),
             match_config: cfg.clone(),
+            anticheat: None,
         };
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -466,14 +590,11 @@ mod tests {
                 .unwrap();
         });
 
-        // Give server time to bind.
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Connect a WebSocket client.
         let url = format!("ws://{addr}");
         let (mut ws, _) = connect_async(&url).await.expect("WebSocket connect failed");
 
-        // First message should be ServerNet::Welcome.
         if let Some(Ok(Message::Text(text))) = ws.next().await {
             let msg: ServerNet =
                 serde_json::from_str(&text).expect("should parse ServerNet::Welcome");
@@ -485,8 +606,61 @@ mod tests {
             panic!("expected text message from server");
         }
 
-        // Close the connection.
         let _ = ws.close(None).await;
         server_handle.abort();
+    }
+
+    /// `GameServer::with_executor` should compile and work identically to `serve`.
+    #[tokio::test]
+    async fn with_executor_starts_and_accepts() {
+        use tokio_tungstenite::connect_async;
+
+        let cfg = MatchConfig::auto(4);
+        let executor = NativeExecutor::<NopGame>::new(cfg.clone());
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        let server_cfg = GameServerConfig {
+            bind_addr: addr.to_string(),
+            match_config: cfg,
+            anticheat: None,
+        };
+
+        let handle = tokio::spawn(async move {
+            GameServer::with_executor(Box::new(executor), server_cfg)
+                .await
+                .unwrap();
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let url = format!("ws://{addr}");
+        let (mut ws, _) = connect_async(&url).await.expect("WebSocket connect failed");
+
+        if let Some(Ok(Message::Text(text))) = ws.next().await {
+            let msg: ServerNet = serde_json::from_str(&text).expect("should parse ServerNet");
+            assert!(matches!(msg, ServerNet::Welcome { .. }));
+        } else {
+            panic!("expected Welcome");
+        }
+
+        let _ = ws.close(None).await;
+        handle.abort();
+    }
+
+    /// `GameServerConfig::anticheat` field accepts a custom `Anticheat`.
+    #[test]
+    fn server_config_with_custom_anticheat() {
+        let chain = ValidatorChain::new();
+        let ac = Anticheat::new(chain, AnticheatConfig::default());
+        let cfg = GameServerConfig {
+            bind_addr: "127.0.0.1:9000".to_string(),
+            match_config: MatchConfig::auto(4),
+            anticheat: Some(ac),
+        };
+        // `anticheat` field is `Some` — assert it holds a value.
+        assert!(cfg.anticheat.is_some());
     }
 }

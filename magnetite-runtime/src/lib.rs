@@ -2,9 +2,12 @@
 //!
 //! **Authoritative game-server host** for the Magnetite platform.
 //!
-//! This crate sits between [`magnetite_sdk`] and the network: it drives the
-//! authoritative tick scheduler, manages WebSocket connections, and broadcasts
-//! interest-filtered state to each player every tick.
+//! This crate integrates:
+//! - [`magnetite-sdk`] — `GameExecutor`, `AuthoritativeGame`, `MatchConfig`,
+//!   `Topology`, netcode frames, SDK validators.
+//! - [`magnetite-sandbox`] — `WasmExecutor` (sandboxed Wasmtime executor).
+//! - [`magnetite-anticheat`] — `Anticheat`, `AnticheatConfig`, composable
+//!   validators, replay verifier.
 //!
 //! ## Architecture
 //!
@@ -18,13 +21,21 @@
 //! └───────────────┬────────────────────┘
 //!                 │ Vec<(PlayerId, Input)>
 //!                 ▼
+//! ┌────────────────────────────────────────────────┐
+//! │  TickScheduler (tick_hz timer)                 │
+//! │  per tick:                                     │
+//! │    Anticheat::inspect → drop/reject flagged    │
+//! │    GameExecutor::step (native or sandboxed)    │
+//! │    → ServerNet::Delta per player               │
+//! │    → ServerNet::Snapshot every N               │
+//! │    → ServerNet::Ack / Reject                   │
+//! └────────────────────────────────────────────────┘
+//!                 │
+//!                 ▼
 //! ┌────────────────────────────────────┐
-//! │  TickScheduler (tick_hz timer)     │
-//! │  per tick:                         │
-//! │    GameExecutor::step              │
-//! │    → ServerNet::Delta per player   │
-//! │    → ServerNet::Snapshot every N   │
-//! │    → ServerNet::Ack                │
+//! │  ShardManager                      │  ← spatial routing (Sharded topology)
+//! │  Sharded: cell_size grid → shard   │
+//! │  HANDOFF on cell crossing          │
 //! └────────────────────────────────────┘
 //! ```
 //!
@@ -34,9 +45,9 @@
 //! |---|---|---|
 //! | [`Topology::SingleRoom`] | ≲16 | All players in one room; broadcast all |
 //! | [`Topology::Dedicated`] | ≲256 | Authoritative + interest-filtered snapshots |
-//! | [`Topology::Sharded`] | AAA | [`ShardManager`] seam (N2: multi-shard handoff) |
+//! | [`Topology::Sharded`] | AAA | Spatial cells; per-shard executors; HANDOFF |
 //!
-//! ## Quick start
+//! ## Quick start — native executor
 //!
 //! ```rust,no_run
 //! use magnetite_runtime::{GameServer, GameServerConfig};
@@ -49,13 +60,10 @@
 //!
 //! #[derive(serde::Serialize, serde::Deserialize, Clone)]
 //! struct MySnap { tick: u64 }
-//!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! struct MyDelta {}
-//!
 //! #[derive(serde::Serialize)]
 //! struct MyView {}
-//!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! struct MyCmd;
 //!
@@ -85,8 +93,30 @@
 //!     let server_cfg = GameServerConfig {
 //!         bind_addr: "127.0.0.1:9000".to_string(),
 //!         match_config: cfg,
+//!         anticheat: None,
 //!     };
 //!     GameServer::serve(executor, server_cfg).await.unwrap();
+//! }
+//! ```
+//!
+//! ## Quick start — Wasm (sandboxed) executor
+//!
+//! ```rust,no_run
+//! use magnetite_runtime::{GameServer, GameServerConfig};
+//! use magnetite_sandbox::LimitsConfig;
+//! use magnetite_sdk::authority::MatchConfig;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let cfg = MatchConfig::auto(4);
+//!     let server_cfg = GameServerConfig {
+//!         bind_addr: "127.0.0.1:9000".to_string(),
+//!         match_config: cfg,
+//!         anticheat: None,
+//!     };
+//!     GameServer::serve_wasm("game.wasm", LimitsConfig::default(), server_cfg)
+//!         .await
+//!         .unwrap();
 //! }
 //! ```
 
@@ -96,7 +126,16 @@ pub mod shard;
 pub mod tick;
 
 pub use server::{GameServer, GameServerConfig, ServerError};
-pub use shard::ShardManager;
+pub use shard::{HandoffEvent, ShardId, ShardManager};
+pub use tick::ServerAnticheatConfig;
+
+// Re-export key sandbox types so callers get `serve_wasm` without a direct
+// `magnetite-sandbox` dep in their Cargo.toml.
+pub use magnetite_sandbox::LimitsConfig;
+
+// Re-export anticheat types so callers can configure the pipeline without
+// needing a direct `magnetite-anticheat` dep.
+pub use magnetite_anticheat::{Anticheat, AnticheatConfig, Decision};
 
 // Re-export commonly used SDK types so downstream crates don't need to
 // depend on magnetite-sdk directly for the runtime API surface.

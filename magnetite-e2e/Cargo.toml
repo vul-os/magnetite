@@ -1,0 +1,30 @@
+[package]
+name = "magnetite-e2e"
+version = "0.1.0"
+edition = "2021"
+description = "End-to-end integration tests and scale harness for the Magnetite MOAT stack."
+license = "MIT"
+
+[dependencies]
+magnetite-runtime = { path = "../magnetite-runtime" }
+magnetite-anticheat = { path = "../magnetite-anticheat" }
+magnetite-sdk = { path = "../backend/magnetite-sdk" }
+game-template-authoritative = { path = "../game-template-authoritative" }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.24" }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+magnetite-runtime = { path = "../magnetite-runtime" }
+magnetite-anticheat = { path = "../magnetite-anticheat" }
+magnetite-sdk = { path = "../backend/magnetite-sdk" }
+game-template-authoritative = { path = "../game-template-authoritative" }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.24" }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

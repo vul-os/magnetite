@@ -1,4 +1,5 @@
-//! `single_room` — minimal example: a SingleRoom authoritative server.
+//! `single_room` — minimal example: a SingleRoom authoritative server with
+//! anticheat enabled.
 //!
 //! Run with:
 //! ```shell
@@ -11,11 +12,17 @@
 //! Send `{"type":"input_frame","seq":1,"tick":0,"input":{...}}` to submit input.
 //!
 //! This example uses a trivial "counter" game that increments a tick counter
-//! on every authoritative tick.
+//! on every authoritative tick.  The anticheat pipeline uses the SDK built-ins
+//! plus `AimbotSnap` and `PositionTeleport` from `magnetite-anticheat`.
 
+use magnetite_anticheat::{
+    validators::{AimbotSnap, PositionTeleport},
+    Anticheat, AnticheatConfig,
+};
 use magnetite_runtime::{GameServer, GameServerConfig};
 use magnetite_sdk::authority::{
-    AuthoritativeGame, MatchConfig, NativeExecutor, RejectReason, StepCtx, Tick, Topology,
+    AuthoritativeGame, InputSchema, MatchConfig, NativeExecutor, RateLimit, RejectReason, StepCtx,
+    Tick, Topology, ValidatorChain,
 };
 use magnetite_sdk::input::Input;
 use magnetite_sdk::state::PlayerId;
@@ -141,10 +148,37 @@ async fn main() -> Result<(), magnetite_runtime::ServerError> {
         "starting CounterGame in SingleRoom topology"
     );
 
+    // Build a composable anticheat pipeline for this game.
+    //
+    // SDK built-ins:
+    //   RateLimit(120)   — drop inputs faster than 120/s
+    //   InputSchema      — reject inputs with out-of-range fields
+    //
+    // magnetite-anticheat validators:
+    //   AimbotSnap(45°)           — detect instant aimbot snaps
+    //   PositionTeleport(20 u/t)  — detect speed-hack / teleport
+    let chain = ValidatorChain::new()
+        .add(RateLimit::new(120))
+        .add(InputSchema::default())
+        .add(AimbotSnap::new(45.0))
+        .add(PositionTeleport::new(20.0));
+
+    let anticheat = Anticheat::new(
+        chain,
+        AnticheatConfig {
+            warn_threshold: 3,
+            kick_threshold: 8,
+            ban_threshold: 15,
+            decay_interval_ticks: 600, // ~10s at 60 Hz
+            decay_amount: 1,
+        },
+    );
+
     let executor = NativeExecutor::<CounterGame>::new(match_config.clone());
     let server_cfg = GameServerConfig {
         bind_addr: "127.0.0.1:9000".to_string(),
         match_config,
+        anticheat: Some(anticheat),
     };
 
     GameServer::serve(executor, server_cfg).await

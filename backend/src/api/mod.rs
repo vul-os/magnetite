@@ -20,6 +20,7 @@ pub mod oauth;
 pub mod platform;
 pub mod points;
 pub mod profile;
+pub mod provisioning;
 pub mod response;
 pub mod social;
 pub mod streaming;

@@ -7,6 +7,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
+use crate::services::provisioning;
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -308,14 +309,22 @@ pub async fn get_play_manifest(pool: &PgPool, game_id: Uuid) -> Result<PlayManif
             )
         })?;
 
+    // Overlay: if there is a running runtime instance for this game, use its
+    // ws_endpoint as the authoritative server_url for the play flow.  This
+    // supersedes any static artifact_url that happens to be called "server-*".
+    let runtime_ws = provisioning::get_running_endpoint(pool, game_id).await?;
+    let effective_server_url = runtime_ws.or_else(|| {
+        server_artifact
+            .as_ref()
+            .and_then(|a| a.artifact_url.clone())
+    });
+
     Ok(PlayManifest {
         game_id,
         version: version.version.clone(),
         commit_sha: version.commit_sha.clone(),
         wasm_url: wasm_artifact.as_ref().and_then(|a| a.artifact_url.clone()),
-        server_url: server_artifact
-            .as_ref()
-            .and_then(|a| a.artifact_url.clone()),
+        server_url: effective_server_url,
         artifact_type: primary.artifact_type.clone(),
         sha256_hash: primary.sha256_hash.clone(),
         file_size_bytes: primary.file_size_bytes,

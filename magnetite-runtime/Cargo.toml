@@ -9,6 +9,8 @@ categories = ["game-engines", "network-programming"]
 
 [dependencies]
 magnetite-sdk = { path = "../backend/magnetite-sdk" }
+magnetite-sandbox = { path = "../magnetite-sandbox" }
+magnetite-anticheat = { path = "../magnetite-anticheat" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = [] }
 futures-util = "0.3"

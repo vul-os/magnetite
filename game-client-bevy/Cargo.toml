@@ -1,0 +1,55 @@
+[package]
+name = "game-client-bevy"
+version = "0.1.0"
+edition = "2021"
+description = "Reference Bevy client for the Magnetite authoritative server — client-side prediction + reconciliation."
+license = "MIT"
+keywords = ["game", "bevy", "netcode", "prediction", "magnetite"]
+categories = ["game-engines", "network-programming"]
+
+# ── Feature flags ──────────────────────────────────────────────────────────────
+#
+# `render`  (default, native) — Full Bevy rendering stack.
+#            `cargo check` is fine on this flag; full `cargo build` is slow.
+# `wasm`    — tokio-tungstenite → ewebsock; wasm32-unknown-unknown target.
+#             `cargo check --target wasm32-unknown-unknown --features wasm`
+# (no render) — `cargo check --no-default-features` for lightweight CI check.
+[features]
+default = ["render"]
+render = ["bevy/default"]
+wasm = ["ewebsock"]
+
+[[bin]]
+name = "game-client-bevy"
+path = "src/main.rs"
+required-features = ["render"]
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+[dependencies]
+magnetite-sdk           = { path = "../backend/magnetite-sdk" }
+game-template-authoritative = { path = "../game-template-authoritative" }
+
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Bevy — default feature set gives the full render stack.
+# Disable with --no-default-features for a quick cargo check.
+bevy = { version = "0.15", optional = true }
+
+# Async runtime + WS (native).
+tokio            = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"], optional = false }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util     = "0.3"
+
+# WASM websocket (replaces tokio-tungstenite on wasm).
+ewebsock = { version = "0.6", optional = true }
+
+[dev-dependencies]
+# Tests that don't need Bevy — only sdk + game-template types.
+magnetite-sdk           = { path = "../backend/magnetite-sdk" }
+game-template-authoritative = { path = "../game-template-authoritative" }
+
+# ── Build profiles ─────────────────────────────────────────────────────────────
+[profile.release]
+opt-level = 3
+lto = "thin"

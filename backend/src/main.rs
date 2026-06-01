@@ -34,6 +34,7 @@ use crate::api::metrics;
 use crate::api::notifications;
 use crate::api::oauth;
 use crate::api::points;
+use crate::api::provisioning;
 use crate::api::social;
 use crate::api::streaming;
 use crate::api::subscriptions;
@@ -76,6 +77,7 @@ async fn main() {
         .nest("/wallet", wallet::router(pool.clone()))
         .nest("/games", games::router(pool.clone()))
         .nest("/distribution", distribution::router(pool.clone()))
+        .nest("/provisioning", provisioning::router(pool.clone()))
         .nest("/categories", categories::router(pool.clone()))
         .nest("/leaderboard", leaderboard::router(pool.clone()))
         .nest("/matchmaking", matchmaking::router(pool.clone()))
