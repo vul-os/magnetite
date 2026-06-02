@@ -4,6 +4,10 @@
 
 > **STATUS 2026-06-01:** ALL CRITICAL + HIGH findings FIXED (AX1 f751d3e, AX2 f6a6c97, GDS 4897679); verified green. Medium/low remain as documented backlog. See DECISIONS.md §7c.
 
+> **STATUS 2026-06-03 (MX1b `def014a` + INFRA-E2E wave):** Selected medium/low findings RESOLVED — see
+> "🟡 Medium/Low — Resolved by MX1/MX1b" section below for the closed set with evidence. Genuine-open
+> medium/low items remain; they are listed at the end of each section as-is and represent honest backlog.
+
 > Generated into a fix program (Waves AX1 wiring+security, AX2 missing-features, GDS game-dev). Evidence is file:line.
 
 ## 🔴 Critical + High — must fix
@@ -288,3 +292,43 @@ _The codebase has covered a remarkable breadth in its autonomous wave program, b
 | low | i18n / localization: zero infrastructure, hard-coded English only | grep across src/ for 'i18n', 'locale', 'useTranslation', 'formatMessage' returns zero hits. All UI text is hard-coded English strings. The platform targets international developers (Wise IBAN, Paystack for Africa/LatAm), but price display, date formats, and UI text are all en-US with no abstraction layer. | For a v1 launch this is low priority but the foundation matters: adopt react-i18next, extract all user-visible strings to an en.json namespace, and add a locale selector in Settings. Backend error messages surfaced to the UI should also be localisation-key-safe. |
 | low | Notification real-time: the WS endpoint at /ws/notifications requires auth middleware but is mounted outside /api/v1 without the auth layer | backend/src/main.rs:142-155: the app mounts notification_ws_handler.router() directly on the top-level Router, outside the api_v1 block which carries the versioning + rate-limit layers. backend/src/api/notifications.rs:362: handle_notification_connection uses Extension(user_id) but the auth middleware (from_fn_with_state auth_middleware) is not applied to this route in main.rs. | Apply the auth middleware to the /ws/notifications route in main.rs (use .layer(from_fn_with_state(pool.clone(), middleware::auth_middleware)) on the handler, or move it inside api_v1 under a /ws sub-router). Without this, the WS endpoint is publicly accessible. |
 | low | Developer analytics: no geographic or device breakdown, no store conversion funnel | backend/src/api/developer.rs:465-543: GameAnalytics has daily_active_players, session_duration_stats, revenue_breakdown only. No geographic data (country from IP), no device type (mobile vs desktop), no store_purchases funnel (views → add-to-wishlist → purchase). | Capture country from the IP header on session creation (MaxMind GeoLite2 or ipinfo.io). Add a daily_store_conversions query joining store_items and store_purchases. These signals are essential for pricing and localization decisions. |
+
+---
+
+## 🟡 Medium / Low — Resolved by MX1b (2026-06-03)
+
+Wave MX1b (`def014a`) closed the following medium/low findings from the sections
+above. Evidence is grep-on-disk confirmed per DECISIONS.md §6.
+
+| Original finding | Resolved in | Evidence |
+|-----------------|-------------|---------|
+| **Refunds/chargebacks: no mechanism** (medium, Missing Features) | MX1b D-MX1b-1-1 | `POST /api/v1/admin/transactions/:id/refund` implemented in `backend/src/api/admin.rs`; calls Paystack refund API + records reversal transaction; `src/pages/admin/Finance.jsx` wired |
+| **Content rating / age restriction system entirely absent** (medium, Missing Features) | MX1b D-MX1b-1-2 | `content_rating` enum column added to `games` table; required on submission in `backend/src/api/games.rs`; displayed on GameDetail + Marketplace cards; age-gate on play page for M/AO |
+| **Friend list missing blocked-user view and unblock endpoint not routed** (medium, Missing Features) | MX1b D-MX1b-1-3 | `GET /api/v1/friends/blocked` + `DELETE /api/v1/friends/block/:id` added to `backend/src/api/social.rs`; FriendService::unblock now called from handler |
+| **Developer analytics: no revenue time-series per game** (medium, Missing Features) | MX1b D-MX1b-1-4 | `daily_revenue_chart` field added to `GameAnalytics` in `backend/src/api/developer.rs`; queries `game_revenue GROUP BY DATE` over 30d window |
+| **Email verification not enforced at login** (high, Missing Features) | MX1b D-MX1b-1-5 | `email_verified` checked in login handler; restricted token issued for unverified accounts; financial + developer endpoints gated |
+| **MediaMTX not in compose — HLS 503 without separate deployment** (medium, Realtime/WS) | MX1b D-MX1b-2 | `mediamtx` service added to `docker-compose.yml`; `config/mediamtx.yml` created; `MEDIA_SERVER_BASE_URL=http://mediamtx:8888` wired in backend service; `docker-compose.override.yml` updated |
+| **StreamPlayer native-HLS only — no HLS.js** (low, smaller gaps) | Backlog B1 `b90248f` | Dynamic `hls.js` import for non-Safari; `src/components/streaming/StreamPlayer.jsx` |
+| **README "15% platform fee" wrong** (low, smaller gaps) | Backlog B1 `b90248f` | `README.md:22` corrected to 30% (70/30) |
+
+### Still genuinely open (not resolved by MX1b)
+
+The following medium/low findings remain open backlog. They are real gaps, not
+silently faked. All are documented honestly above.
+
+| Sev | Finding | Notes |
+|-----|---------|-------|
+| medium | Subscription upgrade/downgrade/proration missing | No backend endpoint for `/subscriptions/upgrade`; frontend calls 404 |
+| medium | Subscription cancel-at-period-end (immediate cancel instead of end-of-cycle) | `cancel_at_period_end` field exists in PaymentService but never set |
+| medium | Web WASM game client — `game-client-bevy` has no wasm32 CI build for fps/motorsport | Bucket D: needs GitHub CI runner + CDN |
+| medium | Tax/withholding and KYC-for-payouts | `verification.rs` KYCVerified never set from any handler |
+| medium | Anti-abuse rate limits missing for chat messages / review submissions | Only /api/auth/, /api/wallet/, /api/games have custom limits |
+| medium | TOTP 2FA exists but never checked at login | Login handler does not read `totp_enabled` — security theatre |
+| medium | Game version rollback UX missing | Only `promote_version` exists; no demote/rollback endpoint |
+| medium | Real-time notification WS not connected to frontend | NotificationContext polls REST only; /ws/notifications exists but unreachable without auth layer fix |
+| medium | Reported reviews: no admin moderation surface | `review_reports` table written but never read from admin router |
+| medium | Wise IBAN (international) missing from payout KYC | Only US-ACH and email supported |
+| medium | Search is ILIKE only — no full-text ranking | No GIN index, no `tsvector`, no tag/genre filter |
+| low | i18n / localization infrastructure absent | All UI is hard-coded English |
+| low | /ws/notifications auth layer missing in `main.rs` mount | Extension extractor will panic without auth middleware applied |
+| low | Developer analytics: no geographic / device breakdown | No IP→country, no store conversion funnel |

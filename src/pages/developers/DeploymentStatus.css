@@ -6,9 +6,40 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out);
+  position: relative;
 }
 
 .deployment-status:hover { border-color: var(--color-border-strong); }
+
+/* Top accent bar — 2px coloured by status */
+.ds-status-bar {
+  height: 2px;
+  width: 100%;
+}
+.deployment-status[data-status="queued"]   .ds-status-bar,
+.deployment-status[data-status="pending"]  .ds-status-bar  { background: var(--color-text-muted); }
+.deployment-status[data-status="building"] .ds-status-bar  { background: var(--color-amber, #f5a524); box-shadow: 0 0 6px rgba(245,165,36,0.35); }
+.deployment-status[data-status="built"]    .ds-status-bar,
+.deployment-status[data-status="success"]  .ds-status-bar  { background: var(--color-success, #3ddc84); box-shadow: 0 0 6px rgba(61,220,132,0.35); }
+.deployment-status[data-status="failed"]   .ds-status-bar  { background: var(--color-error, #ff5468); box-shadow: 0 0 6px rgba(255,84,104,0.3); }
+
+/* Toggle button */
+.ds-toggle-btn {
+  background: transparent;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-xs);
+  transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.ds-toggle-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+}
 
 .deployment-header {
   display: flex;

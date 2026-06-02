@@ -242,10 +242,26 @@ pub async fn hls_manifest(State(pool): State<PgPool>, Path(id): Path<Uuid>) -> R
                 )
                     .into_response();
             }
-            // MediaMTX path convention: /live/<ingest_key>/index.m3u8
-            // The ingest_key is NOT returned by get_stream (public view).
-            // We redirect to a URL that the media server owns directly.
-            format!("{base}/live/{id}/index.m3u8")
+            // MediaMTX path convention: http://host:8888/<ingest_key>/index.m3u8
+            // The ingest_key is the stream name MediaMTX uses; the stream UUID
+            // is NOT the right path segment here.  Query ingest_key directly.
+            let key: Option<String> =
+                sqlx::query_scalar("SELECT ingest_key FROM streams WHERE id = $1")
+                    .bind(id)
+                    .fetch_optional(&pool)
+                    .await
+                    .ok()
+                    .flatten();
+            match key {
+                Some(k) => format!("{base}/live/{k}/index.m3u8"),
+                None => {
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Stream ingest key not found",
+                    )
+                        .into_response();
+                }
+            }
         }
     };
 

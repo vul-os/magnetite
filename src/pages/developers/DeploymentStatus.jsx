@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import BuildLogs from './BuildLogs';
+import BuildTimeline from './BuildTimeline';
 import './DeploymentStatus.css';
 
 const STATUS_CONFIG = {
@@ -11,17 +12,29 @@ const STATUS_CONFIG = {
     color: 'gray',
     description: 'Waiting to start build',
   },
+  queued: {
+    label: 'Queued',
+    variant: 'subtle',
+    color: 'gray',
+    description: 'Queued on self-hosted runner',
+  },
   building: {
     label: 'Building',
     variant: 'subtle',
     color: 'amber',
     description: 'Build in progress',
   },
-  success: {
-    label: 'Success',
+  built: {
+    label: 'Live',
     variant: 'solid',
     color: 'green',
-    description: 'Deployment ready',
+    description: 'Deployment live',
+  },
+  success: {
+    label: 'Live',
+    variant: 'solid',
+    color: 'green',
+    description: 'Deployment live',
   },
   failed: {
     label: 'Failed',
@@ -35,42 +48,36 @@ export default function DeploymentStatus({
   deployment,
   onRollback,
   onCancel,
+  onViewLogs,
+  onPromote,
 }) {
-  const [showLogs, setShowLogs] = useState(false);
+  const [showLogs, setShowLogs]           = useState(false);
+  const [showTimeline, setShowTimeline]   = useState(true);
 
   const status = deployment?.status || 'pending';
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
 
   const currentBuildLogs = useMemo(() => deployment?.logs || '', [deployment?.logs]);
 
-  const getProgressValue = () => {
-    switch (status) {
-      case 'pending': return 0;
-      case 'building': return deployment?.progress || 50;
-      case 'success': return 100;
-      case 'failed': return 100;
-      default: return 0;
-    }
-  };
-
-  const getProgressColor = () => {
-    switch (status) {
-      case 'pending': return 'gray';
-      case 'building': return 'warning';
-      case 'success': return 'success';
-      case 'failed': return 'danger';
-      default: return 'primary';
-    }
-  };
-
   const handleRollback = () => {
-    if (window.confirm('Are you sure you want to rollback to the previous version?')) {
-      onRollback?.(deployment?.id);
+    if (window.confirm('Roll back to the previous version?')) {
+      onRollback?.(deployment);
+    }
+  };
+
+  const handleViewLogs = () => {
+    if (onViewLogs) {
+      onViewLogs(deployment);
+    } else {
+      setShowLogs(v => !v);
     }
   };
 
   return (
-    <div className="deployment-status">
+    <div className="deployment-status" data-status={status}>
+      {/* Top accent bar by status */}
+      <div className="ds-status-bar" aria-hidden="true" />
+
       <div className="deployment-header">
         <div className="deployment-info">
           <div className="deployment-title">
@@ -88,24 +95,41 @@ export default function DeploymentStatus({
           )}
           {deployment?.startedAt && (
             <span className="deployment-time">
-              {new Date(deployment.startedAt).toLocaleString()}
+              {new Date(deployment.startedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
             </span>
           )}
+          <button
+            className="ds-toggle-btn"
+            onClick={() => setShowTimeline(v => !v)}
+            aria-expanded={showTimeline}
+            aria-label={showTimeline ? 'Collapse pipeline' : 'Expand pipeline'}
+            title={showTimeline ? 'Collapse pipeline' : 'Show pipeline'}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+              style={{ transform: showTimeline ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s ease' }}
+            >
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {status === 'building' && (
-        <div className="deployment-progress">
-          <div className="progress-bar">
-            <div
-              className={`progress-fill progress-${getProgressColor()}`}
-              style={{ width: `${getProgressValue()}%` }}
-            />
-          </div>
-          <span className="progress-text">{getProgressValue()}%</span>
-        </div>
+      {/* Build pipeline timeline */}
+      {showTimeline && (
+        <BuildTimeline
+          status={status}
+          startedAt={deployment?.startedAt}
+          duration={deployment?.duration}
+          commitSha={deployment?.commit}
+        />
       )}
 
+      {/* Detail grid — repo, branch, commit, duration */}
       <div className="deployment-details">
         <div className="detail-item">
           <span className="detail-label">Repository</span>
@@ -151,11 +175,12 @@ export default function DeploymentStatus({
         </div>
       )}
 
-      {showLogs && (
+      {/* Inline logs (fallback when no onViewLogs handler) */}
+      {showLogs && !onViewLogs && (
         <div className="deployment-logs">
           <BuildLogs
             logs={currentBuildLogs}
-            isBuilding={status === 'building'}
+            isBuilding={status === 'building' || status === 'queued'}
           />
         </div>
       )}
@@ -164,7 +189,7 @@ export default function DeploymentStatus({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowLogs(!showLogs)}
+          onClick={handleViewLogs}
           leftIcon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
@@ -172,20 +197,35 @@ export default function DeploymentStatus({
             </svg>
           }
         >
-          {showLogs ? 'Hide Logs' : 'View Logs'}
+          {onViewLogs ? 'View Logs' : (showLogs ? 'Hide Logs' : 'View Logs')}
         </Button>
 
-        {status === 'building' && onCancel && (
+        {(status === 'building' || status === 'queued') && onCancel && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onCancel(deployment?.id)}
           >
-            Cancel Build
+            Cancel
           </Button>
         )}
 
-        {status === 'success' && (
+        {(status === 'built' || status === 'success') && onPromote && (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => onPromote(deployment)}
+            leftIcon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12l7-7 7 7" />
+              </svg>
+            }
+          >
+            Promote Live
+          </Button>
+        )}
+
+        {(status === 'built' || status === 'success') && onRollback && (
           <Button
             variant="secondary"
             size="sm"
@@ -205,7 +245,7 @@ export default function DeploymentStatus({
           <Button
             variant="primary"
             size="sm"
-            onClick={() => onRollback(deployment?.id)}
+            onClick={() => onRollback(deployment)}
             leftIcon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
@@ -213,7 +253,7 @@ export default function DeploymentStatus({
               </svg>
             }
           >
-            Retry Build
+            Retry
           </Button>
         )}
       </div>

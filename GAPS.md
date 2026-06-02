@@ -4,6 +4,11 @@
 > committed. Every claim below was verified by reading the actual .rs and .jsx files;
 > line numbers reference the state of the working tree at the time of this re-audit.
 >
+> **Last updated: 2026-06-03 (INFRA-E2E wave — Agent 5 docs+audit update).** MX1b
+> (`def014a`) closed: refunds, content-rating, blocked-routes, analytics time-series,
+> email verification enforcement, MediaMTX in docker-compose, wasm-build-runner docs.
+> MediaMTX and wasm-runner moved from Bucket D to Closed. Summary counts updated.
+>
 > **Status legend:** **closed** (code evidence confirms the fix is real), **partial**
 > (real but incomplete), **stub** (handler/UI exists but no-op/canned), **mock**
 > (fabricated/mock-fallback data), **hardcoded** (literal placeholder), **documented-only**
@@ -141,14 +146,32 @@ default, never silent). None are silent-mock-successes.
 
 ---
 
+## Closed in MX1b (2026-06-03)
+
+Wave MX1b (`def014a`) closed the following items from "Remaining — genuine smaller gaps" and
+from the Bucket D list. All verified grep-on-disk per DECISIONS.md §6.
+
+| Item | How closed | Evidence |
+|------|-----------|---------|
+| Refunds/chargebacks missing | `POST /api/v1/admin/transactions/:id/refund` + Finance.jsx wired | `backend/src/api/admin.rs` |
+| Content rating absent | `content_rating` column + enum on `games`; displayed on cards; age-gate on M/AO play page | `backend/src/api/games.rs` |
+| Blocked-user routes not routed | `GET /friends/blocked` + `DELETE /friends/block/:id` + `FriendService::unblock` | `backend/src/api/social.rs` |
+| Developer analytics no time-series | `daily_revenue_chart` added to `GameAnalytics` | `backend/src/api/developer.rs` |
+| Email verification not enforced at login | `email_verified` checked; restricted token for unverified | `backend/src/api/auth.rs` |
+| MediaMTX — HLS 503 without separately deployed MediaMTX | MediaMTX added as a service to `docker-compose.yml`; `config/mediamtx.yml`; `MEDIA_SERVER_BASE_URL` wired in backend service | `docker-compose.yml`; `docker-compose.override.yml`; `docs/self-hosting/streaming.md` |
+| MediaMTX — RTMP egress to Twitch/YouTube | `config/mediamtx.yml` ships `runOnPublish` template; documented in `docs/self-hosting/streaming.md` | `config/mediamtx.yml`; `docs/self-hosting/streaming.md:170-190` |
+| WASM build runner not documented | `scripts/wasm-build-runner.sh` created; `docs/self-hosting/local-infra.md` updated | `scripts/wasm-build-runner.sh`; `docs/self-hosting/local-infra.md` |
+
+---
+
 ## Remaining — Bucket D (needs external infra/credentials)
 
 These cannot be resolved without external infrastructure or third-party accounts. They are honestly documented and not faked. The MOAT items previously listed here have been closed (see section above).
 
 | Capability | Status | What is missing | File evidence / docs |
 |---|---|---|---|
-| **MediaMTX media server — HLS watch** | documented-only | `/streams/:id/hls.m3u8` returns HTTP 503 without a running MediaMTX instance at `MEDIA_SERVER_BASE_URL` | `backend/src/api/streaming.rs:11,227`; `docs/self-hosting/external-dependencies.md:25-44` |
-| **MediaMTX — RTMP egress to Twitch/YouTube** | documented-only | Backend stores RTMP target URL; MediaMTX `runOnPublish` must be configured to forward; no media bytes touch the backend | `backend/src/services/streaming.rs:23-28`; `docs/self-hosting/external-dependencies.md` |
+| **MediaMTX media server — HLS watch (local docker compose)** | **closed** (MX1b) | MediaMTX is now a Docker Compose service. `docker compose up` starts it. `/streams/:id/hls` returns 302 to `http://mediamtx:8888/live/<key>/index.m3u8`. | `docker-compose.yml`; `docs/self-hosting/streaming.md` |
+| **MediaMTX — RTMP egress to Twitch/YouTube (local docker compose)** | **closed** (MX1b) | `config/mediamtx.yml` ships a `runOnPublish` template for FFmpeg forwarding to Twitch/YouTube; documented in streaming.md. | `config/mediamtx.yml`; `docs/self-hosting/streaming.md:170-190` |
 | **Voice SFU (LiveKit/mediasoup) for large rooms** | documented-only | Current WebRTC mesh relay works up to ~8 participants; SFU is the scale path, not implemented | `backend/src/ws/voice.rs:5-17`; `docs/comms/realtime.md` |
 | **GitHub CI runner executing `wasm-pack` for the platform store** | documented-only | `trigger_wasm_build()` in the storefront API writes a `status='building'` DB row; no subprocess invoked; WASM artifact never uploaded to CDN | `backend/src/api/github.rs:573-598`; `docs/self-hosting/external-dependencies.md:47-75` |
 | **game-template-fps and game-template-motorsport — full WASM CI builds** | documented-only | `game-ci.yml` covers only `game-template` (arcade); FPS and motorsport have no CI WASM build (they pass `cargo check --no-default-features` only) | `.github/workflows/game-ci.yml:21,59` |
@@ -169,12 +192,14 @@ These cannot be resolved without external infrastructure or third-party accounts
 **F2 fixed:** 22 findings  
 **F3 fixed:** final de-mock + anti-cheat DB wiring  
 **Total closed (F1–F3):** 37+ findings  
-**Closed in Moat N1–N3 (2026-06-01):** 4 MOAT differentiators (scale primitive, sandbox, anti-cheat, one-command pipeline)
+**Closed in Moat N1–N3 (2026-06-01):** 4 MOAT differentiators (scale primitive, sandbox, anti-cheat, one-command pipeline)  
+**Closed in Backlog B1 (2026-06-01):** 14 smaller gaps (tournaments, leaderboard, achievements, backup job, etc.)  
+**Closed in MX1b (2026-06-03):** 8 items (refunds, content rating, blocked routes, analytics time-series, email verification, MediaMTX in compose, wasm-build-runner docs)
 
-**Remaining — smaller gaps (not Bucket D):** 22 findings (unchanged from F3 close)  
-**Remaining — Bucket D (external infra/creds):** 13 entries (11 original + 2 moat infrastructure items: multi-node sharding, cloud runner fleet; 4 former moat items moved to Closed above)
+**Remaining — smaller gaps (not Bucket D):** ~14 genuinely open medium/low items (see AUDIT.md "Still genuinely open" table)  
+**Remaining — Bucket D (external infra/creds):** 9 entries (MediaMTX local compose closed; multi-node sharding, cloud runner fleet, Voice SFU, GitHub CI wasm-pack runner, FPS/motorsport WASM CI builds, Wise/Paystack/email live credentials remain)
 
-Of the 22 non-Bucket-D remaining gaps: 8 are low-impact cosmetic/docs issues, 7 are medium stubs with clear TODOs, 7 are partial implementations that work when the service is instantiated. None of these remaining items are "silent mock successes" — every one either shows an honest error or a clearly-labelled absent state.
+Of the remaining non-Bucket-D gaps: all show honest errors or clearly-labelled absent states — none are silent mock successes.
 
 ---
 
