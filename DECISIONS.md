@@ -1788,3 +1788,15 @@ binary; a full-stack e2e test (build game-template-authoritative -> wasm -> Wasm
 real WS -> client connects -> match converges, replay clean) + a topology perf/load bench; a web-client<->runtime
 node smoke + a MediaMTX HLS streaming smoke; Game Studio/play UX polish; docs + perf report. Verify-on-disk
 discipline continues (grep features, not just cargo check).
+
+---
+
+## §6 — SCALE+POLISH done; next = QUALITY-1 (2026-06-03)
+
+SCALE+POLISH (`b5181f1`): sharded topology (5/5 handoff e2e), analytics dashboard, frontend security mediums,
+i18n wiring. All green. **Next wave QUALITY-1 (chosen):** broad launchable-product quality — accessibility
+(a11y: roles/labels/focus/keyboard/contrast), mobile/responsive (360/768/1280, no overflow, tap targets), and
+i18n page coverage (using the existing src/i18n scaffold) — partitioned by DISJOINT page-slices so agents don't
+collide; plus one real feature: notification preferences (backend prefs + settings UI). Pure-quality agents
+verify via eslint on their slice; the feature agent owns client.js + runs the build; orchestrator runs the
+authoritative full build/lint/test after. Verify-on-disk + re-check-frontend-lint discipline continues.
