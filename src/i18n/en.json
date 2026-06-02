@@ -1,0 +1,206 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "close": "Close",
+    "search": "Search",
+    "submit": "Submit",
+    "or": "or",
+    "and": "and",
+    "yes": "Yes",
+    "no": "No",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Info",
+    "required": "Required",
+    "optional": "Optional"
+  },
+
+  "nav": {
+    "home": "Home",
+    "marketplace": "Marketplace",
+    "communities": "Communities",
+    "messages": "Messages",
+    "streams": "Streams",
+    "leaderboard": "Leaderboard",
+    "developers": "Developers",
+    "wallet": "Wallet",
+    "settings": "Settings",
+    "logout": "Sign out",
+    "login": "Sign in",
+    "register": "Create account"
+  },
+
+  "auth": {
+    "emailLabel": "Email address",
+    "passwordLabel": "Password",
+    "usernameLabel": "Username",
+    "loginTitle": "Welcome back",
+    "loginSubtitle": "Sign in to Magnetite",
+    "registerTitle": "Join Magnetite",
+    "registerSubtitle": "Create your account",
+    "forgotPassword": "Forgot password?",
+    "resetPassword": "Reset password",
+    "sendResetLink": "Send reset link",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "verifyEmail": "Verify your email",
+    "resendVerification": "Resend verification email",
+    "twoFactor": "Two-factor authentication",
+    "enterCode": "Enter authentication code",
+    "errors": {
+      "invalidCredentials": "Invalid email or password",
+      "emailTaken": "Email is already registered",
+      "usernameTaken": "Username is already taken",
+      "weakPassword": "Password is too weak",
+      "sessionExpired": "Your session has expired, please sign in again"
+    }
+  },
+
+  "games": {
+    "play": "Play",
+    "download": "Download",
+    "addToWishlist": "Add to wishlist",
+    "removeFromWishlist": "Remove from wishlist",
+    "writeReview": "Write a review",
+    "reviews": "Reviews",
+    "noReviews": "No reviews yet. Be the first to review!",
+    "rating": "Rating",
+    "contentRating": "Content rating",
+    "contentRatings": {
+      "everyone": "Everyone",
+      "teen": "Teen (13+)",
+      "mature": "Mature (17+)"
+    },
+    "developer": "Developer",
+    "category": "Category",
+    "releaseDate": "Release date",
+    "players": "players",
+    "sessions": "sessions"
+  },
+
+  "wallet": {
+    "title": "Wallet",
+    "balance": "Balance",
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "transactions": "Transactions",
+    "noTransactions": "No transactions yet",
+    "depositSuccess": "Deposit successful",
+    "withdrawSuccess": "Withdrawal request submitted",
+    "insufficientFunds": "Insufficient funds",
+    "amount": "Amount",
+    "currency": "Currency",
+    "transactionTypes": {
+      "deposit": "Deposit",
+      "withdrawal": "Withdrawal",
+      "refund": "Refund",
+      "fee": "Platform fee",
+      "payout": "Payout"
+    }
+  },
+
+  "social": {
+    "friends": "Friends",
+    "addFriend": "Add friend",
+    "removeFriend": "Remove friend",
+    "pendingRequests": "Pending requests",
+    "sentRequests": "Sent requests",
+    "acceptRequest": "Accept",
+    "rejectRequest": "Decline",
+    "cancelRequest": "Cancel request",
+    "blockUser": "Block user",
+    "unblockUser": "Unblock user",
+    "blockedUsers": "Blocked users",
+    "noFriends": "No friends yet. Search for users to connect.",
+    "noPendingRequests": "No pending friend requests",
+    "online": "Online",
+    "offline": "Offline",
+    "playing": "Playing"
+  },
+
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "noNotifications": "No notifications",
+    "types": {
+      "friendRequest": "Friend request",
+      "friendAccepted": "Friend request accepted",
+      "payoutComplete": "Payout complete",
+      "achievementUnlocked": "Achievement unlocked",
+      "gameInvite": "Game invite",
+      "system": "System notification"
+    }
+  },
+
+  "developer": {
+    "dashboard": "Developer Dashboard",
+    "myGames": "My Games",
+    "analytics": "Analytics",
+    "earnings": "Earnings",
+    "payouts": "Payouts",
+    "requestPayout": "Request payout",
+    "createGame": "Create new game",
+    "buildStatus": "Build status",
+    "revenue": "Revenue",
+    "dailyRevenue": "Daily revenue",
+    "totalRevenue": "Total revenue",
+    "platformFee": "Platform fee (30%)",
+    "developerEarnings": "Your earnings (70%)",
+    "activePlayers": "Active players",
+    "sessions": "Sessions",
+    "avgSession": "Avg. session duration"
+  },
+
+  "admin": {
+    "title": "Admin",
+    "users": "Users",
+    "games": "Games",
+    "transactions": "Transactions",
+    "refund": "Issue refund",
+    "refundSuccess": "Refund issued successfully",
+    "refundFailed": "Refund failed",
+    "reviewReports": "Review reports",
+    "dismissReport": "Dismiss report",
+    "removeReview": "Remove review",
+    "banUser": "Ban user",
+    "unbanUser": "Unban user",
+    "reason": "Reason"
+  },
+
+  "subscription": {
+    "title": "Subscription",
+    "currentPlan": "Current plan",
+    "upgrade": "Upgrade",
+    "cancel": "Cancel subscription",
+    "cancelConfirm": "Are you sure you want to cancel your subscription?",
+    "renewsOn": "Renews on",
+    "cancelledOn": "Cancels on",
+    "plans": {
+      "free": "Free",
+      "basic": "Basic",
+      "pro": "Pro",
+      "enterprise": "Enterprise"
+    }
+  },
+
+  "errors": {
+    "notFound": "Page not found",
+    "notFoundMessage": "The page you're looking for doesn't exist.",
+    "serverError": "Server error",
+    "serverErrorMessage": "Something went wrong on our end. Please try again.",
+    "unauthorized": "Not authorized",
+    "unauthorizedMessage": "You don't have permission to access this page.",
+    "networkError": "Network error",
+    "networkErrorMessage": "Unable to reach the server. Check your connection.",
+    "goHome": "Go to homepage",
+    "goBack": "Go back"
+  }
+}

@@ -105,14 +105,51 @@ pub async fn admin_guard_with_pool(pool: &PgPool, user_id: Uuid) -> Result<()> {
 }
 
 pub async fn auth_middleware(
-    State(_pool): State<PgPool>,
+    State(pool): State<PgPool>,
     mut request: Request,
     next: Next,
 ) -> Response {
-    let user_id = match auth_guard(request.headers().clone()).await {
-        Ok(id) => id,
+    let token = match extract_token_from_header(&request.headers().clone()) {
+        Ok(t) => t,
         Err(e) => return e.into_response(),
     };
+
+    let claims = match validate_token(&token) {
+        Ok(c) => c,
+        Err(e) => return e.into_response(),
+    };
+
+    let user_id = match Uuid::parse_str(&claims.sub) {
+        Ok(id) => id,
+        Err(_) => {
+            return AppError::Unauthorized("Invalid user ID in token".to_string()).into_response()
+        }
+    };
+
+    // Session revocation check: if the JWT contains a session_id, confirm the session
+    // still exists in the DB (deleted on logout, so revoked tokens stop working immediately).
+    // A missing session_id claim (legacy tokens) is still accepted — they expire naturally.
+    if let Some(sid_str) = &claims.session_id {
+        if let Ok(session_id) = Uuid::parse_str(sid_str) {
+            // Skip check for nil UUID (tokens created before session association).
+            if !session_id.is_nil() {
+                let exists: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1 AND expires_at > NOW())",
+                )
+                .bind(session_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap_or(false);
+
+                if !exists {
+                    return AppError::Unauthorized(
+                        "Session has been revoked or expired".to_string(),
+                    )
+                    .into_response();
+                }
+            }
+        }
+    }
 
     request.extensions_mut().insert(Extension(user_id));
     next.run(request).await

@@ -37,6 +37,15 @@ fn get_allowed_origins() -> AllowOrigin {
             "http://localhost:3000".parse().unwrap(),
         ])
     } else {
-        AllowOrigin::any()
+        // Production: default to denying all origins unless FRONTEND_URL is set.
+        // Set CORS_ALLOWED_ORIGINS (comma-separated) for a real allowlist, or
+        // set FRONTEND_URL as a single-origin fallback.
+        if let Ok(frontend_url) = std::env::var("FRONTEND_URL") {
+            if let Ok(origin) = frontend_url.parse() {
+                return AllowOrigin::list([origin]);
+            }
+        }
+        // No whitelist configured — deny all cross-origin requests in production.
+        AllowOrigin::list([])
     }
 }

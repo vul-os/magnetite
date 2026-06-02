@@ -455,7 +455,9 @@ pub async fn register_endpoint(
         }
     }
 
-    let secret = uuid::Uuid::new_v4().to_string();
+    // Generate a 32-byte CSPRNG URL-safe secret (256 bits of entropy).
+    // UUID v4 only provides 122 bits and uses a non-URL-safe format.
+    let secret = crate::services::session::generate_secure_token(32);
 
     let endpoint = sqlx::query_as::<_, (Uuid, chrono::DateTime<chrono::Utc>)>(
         "INSERT INTO webhook_endpoints (id, user_id, url, events, secret, active, created_at)

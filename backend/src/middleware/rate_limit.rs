@@ -210,8 +210,16 @@ pub fn get_rate_limit_config(path: &str) -> (u32, Duration) {
     // Routes are mounted at /api/v1/... — match the real prefix, not the old /api/... typo.
     // Also accept the suffix-based form so tests using plain paths still work.
     if path.starts_with("/api/v1/auth/") || path.contains("/auth/") {
+        // Auth endpoints: 5 req/min to limit brute-force.
         (5, Duration::from_secs(60))
     } else if path.starts_with("/api/v1/wallet/") || path.contains("/wallet/") {
+        // Wallet/payment endpoints: 30 req/min.
+        (30, Duration::from_secs(60))
+    } else if path.contains("/reviews") {
+        // Review submissions and listing: 5 req/min to prevent spam.
+        (5, Duration::from_secs(60))
+    } else if path.contains("/messages") {
+        // Chat message endpoints: 30 req/min per IP (WS per-connection limits apply separately).
         (30, Duration::from_secs(60))
     } else if path.starts_with("/api/v1/games") || path.contains("/games") {
         (100, Duration::from_secs(60))

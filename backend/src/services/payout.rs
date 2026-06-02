@@ -471,7 +471,10 @@ impl PayoutService {
         }))
     }
 
-    pub async fn cancel_payout(&self, payout_id: Uuid) -> Result<()> {
+    /// Cancel a pending payout.
+    /// `caller_user_id` must own the payout; pass `None` only from trusted admin code
+    /// that has already verified admin status (the DB-backed admin check in admin_middleware).
+    pub async fn cancel_payout(&self, payout_id: Uuid, caller_user_id: Option<Uuid>) -> Result<()> {
         let payout = sqlx::query_as::<_, Payout>(
             r#"
             SELECT id, user_id, amount, destination, status, created_at, processed_at
@@ -484,6 +487,15 @@ impl PayoutService {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| AppError::NotFound("Payout not found or already processed".to_string()))?;
+
+        // Ownership check: non-admin callers may only cancel their own payouts.
+        if let Some(uid) = caller_user_id {
+            if payout.user_id != uid {
+                return Err(AppError::Forbidden(
+                    "You do not own this payout".to_string(),
+                ));
+            }
+        }
 
         let mut tx = self.pool.begin().await?;
 

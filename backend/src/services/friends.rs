@@ -1,3 +1,7 @@
+// Friend service — social graph operations (send/accept/reject/remove/block/unblock).
+// Platform surface API; callers are api/social.rs and future SDK bindings.
+#![allow(dead_code)]
+
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -11,9 +15,16 @@ impl FriendService {
         Self
     }
 
-    pub async fn send_request(&self, pool: &PgPool, from_user_id: Uuid, to_user_id: Uuid) -> Result<FriendRequest> {
+    pub async fn send_request(
+        &self,
+        pool: &PgPool,
+        from_user_id: Uuid,
+        to_user_id: Uuid,
+    ) -> Result<FriendRequest> {
         if from_user_id == to_user_id {
-            return Err(AppError::BadRequest("Cannot send friend request to yourself".to_string()));
+            return Err(AppError::BadRequest(
+                "Cannot send friend request to yourself".to_string(),
+            ));
         }
 
         let existing = sqlx::query_as::<_, (Uuid,)>(
@@ -37,7 +48,9 @@ impl FriendService {
         .await?;
 
         if existing_request.is_some() {
-            return Err(AppError::BadRequest("Friend request already exists".to_string()));
+            return Err(AppError::BadRequest(
+                "Friend request already exists".to_string(),
+            ));
         }
 
         let blocked = sqlx::query_as::<_, (Uuid,)>(
@@ -49,7 +62,9 @@ impl FriendService {
         .await?;
 
         if blocked.is_some() {
-            return Err(AppError::Forbidden("Cannot send friend request to blocked user".to_string()));
+            return Err(AppError::Forbidden(
+                "Cannot send friend request to blocked user".to_string(),
+            ));
         }
 
         let request_id = Uuid::new_v4();
@@ -67,7 +82,12 @@ impl FriendService {
         Ok(request)
     }
 
-    pub async fn accept_request(&self, pool: &PgPool, request_id: Uuid, user_id: Uuid) -> Result<Friendship> {
+    pub async fn accept_request(
+        &self,
+        pool: &PgPool,
+        request_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Friendship> {
         let request = sqlx::query_as::<_, FriendRequest>(
             "SELECT id, from_user_id, to_user_id, status, created_at FROM friend_requests WHERE id = $1 AND to_user_id = $2 AND status = 'pending'",
         )
@@ -77,12 +97,10 @@ impl FriendService {
         .await?
         .ok_or_else(|| AppError::NotFound("Friend request not found".to_string()))?;
 
-        sqlx::query(
-            "UPDATE friend_requests SET status = 'accepted' WHERE id = $1",
-        )
-        .bind(request_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE friend_requests SET status = 'accepted' WHERE id = $1")
+            .bind(request_id)
+            .execute(pool)
+            .await?;
 
         let friendship_id = Uuid::new_v4();
         let friendship = sqlx::query_as::<_, Friendship>(
@@ -97,7 +115,12 @@ impl FriendService {
         Ok(friendship)
     }
 
-    pub async fn reject_request(&self, pool: &PgPool, request_id: Uuid, user_id: Uuid) -> Result<()> {
+    pub async fn reject_request(
+        &self,
+        pool: &PgPool,
+        request_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<()> {
         let result = sqlx::query(
             "UPDATE friend_requests SET status = 'rejected' WHERE id = $1 AND to_user_id = $2 AND status = 'pending'",
         )
@@ -175,13 +198,12 @@ impl FriendService {
     }
 
     pub async fn unblock(&self, pool: &PgPool, user_id: Uuid, blocked_id: Uuid) -> Result<()> {
-        let result = sqlx::query(
-            "DELETE FROM blocked_users WHERE user_id = $1 AND blocked_id = $2",
-        )
-        .bind(user_id)
-        .bind(blocked_id)
-        .execute(pool)
-        .await?;
+        let result =
+            sqlx::query("DELETE FROM blocked_users WHERE user_id = $1 AND blocked_id = $2")
+                .bind(user_id)
+                .bind(blocked_id)
+                .execute(pool)
+                .await?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound("Blocked user not found".to_string()));
@@ -206,7 +228,11 @@ impl FriendService {
         Ok(friends)
     }
 
-    pub async fn get_pending_requests(&self, pool: &PgPool, user_id: Uuid) -> Result<Vec<FriendRequest>> {
+    pub async fn get_pending_requests(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<FriendRequest>> {
         let requests = sqlx::query_as::<_, FriendRequest>(
             "SELECT id, from_user_id, to_user_id, status, created_at FROM friend_requests WHERE to_user_id = $1 AND status = 'pending' ORDER BY created_at DESC",
         )

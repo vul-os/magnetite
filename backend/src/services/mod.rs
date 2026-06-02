@@ -5,6 +5,7 @@ pub mod auth;
 pub mod communities;
 pub mod distribution;
 pub mod email;
+pub mod friends;
 pub mod games;
 pub mod health;
 pub mod invites;
