@@ -35,7 +35,9 @@
     "settings": "Settings",
     "logout": "Sign out",
     "login": "Sign in",
-    "register": "Create account"
+    "register": "Create account",
+    "about": "About",
+    "profile": "Profile"
   },
 
   "auth": {
@@ -202,5 +204,110 @@
     "networkErrorMessage": "Unable to reach the server. Check your connection.",
     "goHome": "Go to homepage",
     "goBack": "Go back"
+  },
+
+  "navbar": {
+    "logoLabel": "Magnetite home",
+    "siteNav": "Site sections",
+    "openSearch": "Open search",
+    "searchPlaceholder": "Search Rust games…",
+    "searchLabel": "Search games",
+    "walletLabel": "Wallet: {{amount}} USDC",
+    "directMessages": "Direct messages",
+    "notificationsLabel": "Notifications",
+    "notificationsUnread": "Notifications ({{count}} unread)",
+    "markAllRead": "Mark all read",
+    "noNotificationsYet": "No notifications yet",
+    "userMenuLabel": "User menu for {{username}}",
+    "statusLabel": "Status: {{status}}",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "mobileNav": "Mobile site sections",
+    "mobileNavDialog": "Mobile navigation",
+    "closeNav": "Close navigation",
+    "logOut": "Log out",
+    "logIn": "Log in",
+    "getStarted": "Get started",
+    "notificationsDialog": "Notifications"
+  },
+
+  "footer": {
+    "logoLabel": "Magnetite home",
+    "tagline": "The open-source platform for building, distributing, and monetizing Rust games — at any scale.",
+    "builtInRust": "Built in Rust",
+    "socialLinks": "Social media links",
+    "copyright": "© {{year}} Magnetite.",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "openSource": "MIT open source",
+    "techStack": "Rust · Bevy · WASM",
+    "columns": {
+      "platform": "Platform",
+      "developers": "Developers",
+      "company": "Company",
+      "legal": "Legal"
+    },
+    "links": {
+      "marketplace": "Marketplace",
+      "developers": "Developers",
+      "pricing": "Pricing",
+      "faq": "FAQ",
+      "sdk": "SDK",
+      "documentation": "Documentation",
+      "github": "GitHub",
+      "discord": "Discord",
+      "about": "About",
+      "careers": "Careers",
+      "contact": "Contact",
+      "blog": "Blog",
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "cookies": "Cookies"
+    },
+    "languageSelector": {
+      "label": "Language",
+      "english": "English"
+    }
+  },
+
+  "about": {
+    "kicker": "// ABOUT MAGNETITE",
+    "heroTitle": "Built for Rust developers,",
+    "heroTitleHighlight": "by Rust developers",
+    "heroSubtitle": "We believe game publishing should be fair, transparent, and open. Magnetite is the platform where developers own their games and earn what they deserve.",
+    "missionKicker": "// OUR MISSION",
+    "missionHeading": "Scaling Rust games from game-jam to AAA",
+    "missionP1": "Magnetite is building the full stack for Rust games — hosting, matchmaking, real-time netcode, payments, and analytics — so developers only write game logic. A tiny single-file arcade game and a 64-player multiplayer title use the same SDK.",
+    "missionP2": "Our platform pays 70% of revenue directly to developers via Wise — fast global bank transfers, weekly, with zero friction. Players get transparent, open-source games with provably fair matchmaking and no hidden mechanics.",
+    "teamKicker": "// THE TEAM",
+    "teamHeading": "Meet the team",
+    "teamSubtitle": "Engineers and designers building Magnetite",
+    "historyKicker": "// HISTORY",
+    "historyHeading": "Our journey",
+    "historyLabel": "Company timeline",
+    "openSourceKicker": "// OPEN SOURCE",
+    "openSourceHeading": "Open source commitment",
+    "openSourceBody": "All Magnetite platform code is MIT-licensed and available on GitHub. The SDK, game template, and docs are open for anyone to audit, fork, contribute to, or self-host. We believe in community-driven development.",
+    "viewOnGitHub": "View on GitHub",
+    "pressKicker": "// PRESS & MEDIA",
+    "pressHeading": "Press & media",
+    "pressBody": "Looking for press materials, brand assets, or company facts? Download our complete press kit with high-resolution images and media resources.",
+    "downloadPressKit": "Download Press Kit",
+    "contactKicker": "// REACH US",
+    "contactHeading": "Get in touch",
+    "contactSubtitle": "We'd love to hear from you",
+    "contactEmail": "Email",
+    "contactEmailAddress": "hello@magnetite.gg",
+    "contactDiscord": "Discord",
+    "contactDiscordCta": "Join our community",
+    "contactTwitter": "Twitter / X",
+    "contactTwitterHandle": "@MagnetiteGG",
+    "joinUsKicker": "// JOIN US",
+    "joinUsHeading": "Interested in joining the team?",
+    "joinUsBody": "We're always looking for talented Rust engineers and game designers.",
+    "viewCareers": "View Careers",
+    "footerTagline": "Open-source Rust gaming at any scale.",
+    "footerNav": "Footer navigation",
+    "footerCopyright": "© 2026 Magnetite. Open source under MIT License."
   }
 }

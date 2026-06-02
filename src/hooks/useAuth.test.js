@@ -16,7 +16,8 @@ vi.mock('../api/client', () => ({
 import { api } from '../api/client';
 
 describe('useAuth', () => {
-  const TOKEN_KEY = 'magnetite_token';
+  // Must match the canonical TOKEN_KEY in useAuth.js and client.js.
+  const TOKEN_KEY = 'token';
   const USER_KEY = 'magnetite_user';
 
   beforeEach(() => {

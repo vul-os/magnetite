@@ -1,4 +1,5 @@
 import './About.css';
+import { useTranslation } from '../i18n/useTranslation';
 
 const team = [
   { name: 'Alex Chen',       role: 'Founder & CEO',   initials: 'AC' },
@@ -16,6 +17,8 @@ const timeline = [
 ];
 
 export default function About() {
+  const { t } = useTranslation();
+
   return (
     <div className="about-page">
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
@@ -28,15 +31,12 @@ export default function About() {
           <div className="field-line field-line-5" />
         </div>
         <div className="hero-content reveal">
-          <span className="kicker reveal-1">// ABOUT MAGNETITE</span>
+          <span className="kicker reveal-1">{t('about.kicker')}</span>
           <h1 id="about-heading" className="hero-title reveal-2">
-            Built for Rust developers,<br />
-            <span className="gradient-text">by Rust developers</span>
+            {t('about.heroTitle')}<br />
+            <span className="gradient-text">{t('about.heroTitleHighlight')}</span>
           </h1>
-          <p className="hero-subtitle reveal-3">
-            We believe game publishing should be fair, transparent, and open.
-            Magnetite is the platform where developers own their games and earn what they deserve.
-          </p>
+          <p className="hero-subtitle reveal-3">{t('about.heroSubtitle')}</p>
         </div>
       </section>
 
@@ -44,18 +44,10 @@ export default function About() {
       <section className="mission-section">
         <div className="container">
           <div className="mission-content">
-            <span className="kicker">// OUR MISSION</span>
-            <h2>Scaling Rust games from game-jam to AAA</h2>
-            <p>
-              Magnetite is building the full stack for Rust games — hosting, matchmaking,
-              real-time netcode, payments, and analytics — so developers only write game logic.
-              A tiny single-file arcade game and a 64-player multiplayer title use the same SDK.
-            </p>
-            <p>
-              Our platform pays 70% of revenue directly to developers via Wise — fast global
-              bank transfers, weekly, with zero friction. Players get transparent, open-source
-              games with provably fair matchmaking and no hidden mechanics.
-            </p>
+            <span className="kicker">{t('about.missionKicker')}</span>
+            <h2>{t('about.missionHeading')}</h2>
+            <p>{t('about.missionP1')}</p>
+            <p>{t('about.missionP2')}</p>
           </div>
         </div>
       </section>
@@ -63,9 +55,9 @@ export default function About() {
       {/* ── Team ───────────────────────────────────────────────────────────── */}
       <section className="team-section">
         <div className="container">
-          <span className="kicker">// THE TEAM</span>
-          <h2 className="section-title">Meet the team</h2>
-          <p className="section-subtitle">Engineers and designers building Magnetite</p>
+          <span className="kicker">{t('about.teamKicker')}</span>
+          <h2 className="section-title">{t('about.teamHeading')}</h2>
+          <p className="section-subtitle">{t('about.teamSubtitle')}</p>
           <div className="team-grid">
             {team.map((member, i) => (
               <div className="team-card" key={i}>
@@ -81,9 +73,9 @@ export default function About() {
       {/* ── Timeline ───────────────────────────────────────────────────────── */}
       <section className="timeline-section">
         <div className="container">
-          <span className="kicker">// HISTORY</span>
-          <h2 className="section-title">Our journey</h2>
-          <ol className="timeline" aria-label="Company timeline">
+          <span className="kicker">{t('about.historyKicker')}</span>
+          <h2 className="section-title">{t('about.historyHeading')}</h2>
+          <ol className="timeline" aria-label={t('about.historyLabel')}>
             {timeline.map((item, i) => (
               <li className="timeline-item" key={i}>
                 <span className="timeline-year">{item.year}</span>
@@ -101,13 +93,9 @@ export default function About() {
       <section className="opensource-section">
         <div className="container">
           <div className="opensource-content">
-            <span className="kicker">// OPEN SOURCE</span>
-            <h2>Open source commitment</h2>
-            <p>
-              All Magnetite platform code is MIT-licensed and available on GitHub.
-              The SDK, game template, and docs are open for anyone to audit, fork,
-              contribute to, or self-host. We believe in community-driven development.
-            </p>
+            <span className="kicker">{t('about.openSourceKicker')}</span>
+            <h2>{t('about.openSourceHeading')}</h2>
+            <p>{t('about.openSourceBody')}</p>
             <a
               href="https://github.com"
               target="_blank"
@@ -117,7 +105,7 @@ export default function About() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
               </svg>
-              View on GitHub
+              {t('about.viewOnGitHub')}
             </a>
           </div>
         </div>
@@ -127,14 +115,11 @@ export default function About() {
       <section className="press-section">
         <div className="container">
           <div className="press-content">
-            <span className="kicker">// PRESS & MEDIA</span>
-            <h2>Press &amp; media</h2>
-            <p>
-              Looking for press materials, brand assets, or company facts?
-              Download our complete press kit with high-resolution images and media resources.
-            </p>
+            <span className="kicker">{t('about.pressKicker')}</span>
+            <h2>{t('about.pressHeading')}</h2>
+            <p>{t('about.pressBody')}</p>
             <a href="/press-kit" className="btn btn-secondary btn-lg">
-              Download Press Kit
+              {t('about.downloadPressKit')}
             </a>
           </div>
         </div>
@@ -143,9 +128,9 @@ export default function About() {
       {/* ── Contact ────────────────────────────────────────────────────────── */}
       <section className="contact-section">
         <div className="container">
-          <span className="kicker">// REACH US</span>
-          <h2 className="section-title">Get in touch</h2>
-          <p className="section-subtitle">We&apos;d love to hear from you</p>
+          <span className="kicker">{t('about.contactKicker')}</span>
+          <h2 className="section-title">{t('about.contactHeading')}</h2>
+          <p className="section-subtitle">{t('about.contactSubtitle')}</p>
           <div className="contact-grid">
             <div className="contact-info">
               <div className="contact-item">
@@ -156,8 +141,8 @@ export default function About() {
                   </svg>
                 </div>
                 <div>
-                  <h4>Email</h4>
-                  <a href="mailto:hello@magnetite.gg">hello@magnetite.gg</a>
+                  <h4>{t('about.contactEmail')}</h4>
+                  <a href={`mailto:${t('about.contactEmailAddress')}`}>{t('about.contactEmailAddress')}</a>
                 </div>
               </div>
               <div className="contact-item">
@@ -167,8 +152,8 @@ export default function About() {
                   </svg>
                 </div>
                 <div>
-                  <h4>Discord</h4>
-                  <a href="#" rel="noopener noreferrer">Join our community</a>
+                  <h4>{t('about.contactDiscord')}</h4>
+                  <a href="#" rel="noopener noreferrer">{t('about.contactDiscordCta')}</a>
                 </div>
               </div>
               <div className="contact-item">
@@ -178,17 +163,17 @@ export default function About() {
                   </svg>
                 </div>
                 <div>
-                  <h4>Twitter / X</h4>
-                  <a href="#" rel="noopener noreferrer">@MagnetiteGG</a>
+                  <h4>{t('about.contactTwitter')}</h4>
+                  <a href="#" rel="noopener noreferrer">{t('about.contactTwitterHandle')}</a>
                 </div>
               </div>
             </div>
 
             <div className="careers-preview">
-              <span className="kicker">// JOIN US</span>
-              <h4>Interested in joining the team?</h4>
-              <p>We&apos;re always looking for talented Rust engineers and game designers.</p>
-              <a href="/careers" className="btn btn-primary">View Careers</a>
+              <span className="kicker">{t('about.joinUsKicker')}</span>
+              <h4>{t('about.joinUsHeading')}</h4>
+              <p>{t('about.joinUsBody')}</p>
+              <a href="/careers" className="btn btn-primary">{t('about.viewCareers')}</a>
             </div>
           </div>
         </div>
@@ -203,17 +188,17 @@ export default function About() {
                 <div className="logo-icon" aria-hidden="true">M</div>
                 <span>Magnetite</span>
               </div>
-              <p>Open-source Rust gaming at any scale.</p>
+              <p>{t('about.footerTagline')}</p>
             </div>
-            <nav className="footer-links" aria-label="Footer navigation">
-              <a href="/marketplace">Marketplace</a>
-              <a href="/about">About</a>
-              <a href="/careers">Careers</a>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <nav className="footer-links" aria-label={t('about.footerNav')}>
+              <a href="/marketplace">{t('footer.links.marketplace')}</a>
+              <a href="/about">{t('nav.about')}</a>
+              <a href="/careers">{t('footer.links.careers')}</a>
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer">{t('footer.links.github')}</a>
             </nav>
           </div>
           <div className="footer-bottom">
-            <p>© 2026 Magnetite. Open source under MIT License.</p>
+            <p>{t('about.footerCopyright')}</p>
           </div>
         </div>
       </footer>

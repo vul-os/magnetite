@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
 import { usePresence } from '../hooks/usePresence';
+import { useTranslation } from '../i18n/useTranslation';
 import {
   MenuIcon,
   CloseIcon,
@@ -37,11 +38,11 @@ function DmIcon(props) {
 }
 
 const NAV_LINKS = [
-  { path: '/',             label: 'Marketplace', icon: HomeIcon },
-  { path: '/communities',  label: 'Communities', icon: UsersIcon },
-  { path: '/developers',   label: 'Developers',  icon: UsersIcon },
-  { path: '/leaderboard',  label: 'Leaderboard', icon: TrophyIcon },
-  { path: '/about',        label: 'About',       icon: UsersIcon },
+  { path: '/',             labelKey: 'nav.marketplace', icon: HomeIcon },
+  { path: '/communities',  labelKey: 'nav.communities', icon: UsersIcon },
+  { path: '/developers',   labelKey: 'nav.developers',  icon: UsersIcon },
+  { path: '/leaderboard',  labelKey: 'nav.leaderboard', icon: TrophyIcon },
+  { path: '/about',        labelKey: 'nav.about',       icon: UsersIcon },
 ];
 
 /** Map a presence status to its dot CSS class. */
@@ -56,9 +57,9 @@ function presenceDotClass(status) {
 }
 
 const USER_MENU_ITEMS = [
-  { path: '/profile',  label: 'Profile',  icon: UsersIcon },
-  { path: '/settings', label: 'Settings', icon: SettingsIcon },
-  { path: '/earnings', label: 'Earnings', icon: WalletIcon },
+  { path: '/profile',  labelKey: 'nav.profile',  icon: UsersIcon },
+  { path: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
+  { path: '/earnings', labelKey: 'developer.earnings', icon: WalletIcon },
 ];
 
 // Sample notifications — in production, these come from the notification API
@@ -69,6 +70,7 @@ const SAMPLE_NOTIFICATIONS = [
 ];
 
 export default function Navbar() {
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const { balance } = useWallet();
   const navigate   = useNavigate();
@@ -138,7 +140,7 @@ export default function Navbar() {
     navigate('/');
   }, [logout, navigate]);
 
-  const handleSearch = useCallback((e) => {
+  const handleSearch = (e) => {
     e.preventDefault();
     const q = searchQuery.trim();
     if (q) {
@@ -146,7 +148,7 @@ export default function Navbar() {
       setSearchQuery('');
       setIsSearchOpen(false);
     }
-  }, [searchQuery, navigate]);
+  };
 
   const unreadCount = SAMPLE_NOTIFICATIONS.filter(n => n.unread).length;
 
@@ -158,20 +160,20 @@ export default function Navbar() {
 
           {/* Left: logo + nav links */}
           <div className="navbar-left">
-            <Link to="/home" className="navbar-logo" aria-label="Magnetite home">
+            <Link to="/home" className="navbar-logo" aria-label={t('navbar.logoLabel')}>
               <div className="logo-icon" aria-hidden="true">M</div>
               <span className="logo-text">Magnetite</span>
             </Link>
 
-            <nav className="navbar-nav" aria-label="Site sections">
-              {NAV_LINKS.map(({ path, label }) => (
+            <nav className="navbar-nav" aria-label={t('navbar.siteNav')}>
+              {NAV_LINKS.map(({ path, labelKey }) => (
                 <Link
                   key={path}
                   to={path}
                   className={`nav-link${location.pathname === path ? ' active' : ''}`}
                   aria-current={location.pathname === path ? 'page' : undefined}
                 >
-                  {label}
+                  {t(labelKey)}
                 </Link>
               ))}
             </nav>
@@ -185,7 +187,7 @@ export default function Navbar() {
               <button
                 className="search-toggle"
                 onClick={() => setIsSearchOpen(v => !v)}
-                aria-label="Open search"
+                aria-label={t('navbar.openSearch')}
                 aria-expanded={isSearchOpen}
               >
                 <SearchIcon />
@@ -193,11 +195,11 @@ export default function Navbar() {
               <form onSubmit={handleSearch} className="search-form" role="search">
                 <input
                   type="search"
-                  placeholder="Search Rust games…"
+                  placeholder={t('navbar.searchPlaceholder')}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="search-input"
-                  aria-label="Search games"
+                  aria-label={t('navbar.searchLabel')}
                   autoFocus={isSearchOpen}
                 />
               </form>
@@ -206,7 +208,7 @@ export default function Navbar() {
             {user ? (
               <>
                 {/* Wallet balance */}
-                <Link to="/wallet" className="wallet-balance" aria-label={`Wallet: ${balance?.toFixed(2)} USDC`}>
+                <Link to="/wallet" className="wallet-balance" aria-label={t('navbar.walletLabel', { amount: balance?.toFixed(2) ?? '0.00' })}>
                   <WalletIcon className="wallet-icon" aria-hidden="true" />
                   <span className="balance-amount">{balance?.toFixed(2) ?? '0.00'}</span>
                   <span className="balance-currency">USDC</span>
@@ -216,7 +218,7 @@ export default function Navbar() {
                 <Link
                   to="/messages"
                   className={`dm-nav-btn${location.pathname === '/messages' ? ' active' : ''}`}
-                  aria-label="Direct messages"
+                  aria-label={t('navbar.directMessages')}
                   aria-current={location.pathname === '/messages' ? 'page' : undefined}
                 >
                   <DmIcon />
@@ -227,7 +229,7 @@ export default function Navbar() {
                   <button
                     className="notifications-btn"
                     onClick={() => setIsNotificationsOpen(v => !v)}
-                    aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+                    aria-label={unreadCount > 0 ? t('navbar.notificationsUnread', { count: unreadCount }) : t('navbar.notificationsLabel')}
                     aria-expanded={isNotificationsOpen}
                     aria-haspopup="true"
                   >
@@ -238,11 +240,11 @@ export default function Navbar() {
                   </button>
 
                   {isNotificationsOpen && (
-                    <div className="notification-dropdown" role="dialog" aria-label="Notifications">
+                    <div className="notification-dropdown" role="dialog" aria-label={t('navbar.notificationsDialog')}>
                       <div className="dropdown-header">
-                        <h3>Notifications</h3>
+                        <h3>{t('notifications.title')}</h3>
                         {unreadCount > 0 && (
-                          <button className="mark-all-read">Mark all read</button>
+                          <button className="mark-all-read">{t('navbar.markAllRead')}</button>
                         )}
                       </div>
                       <div className="notification-list">
@@ -267,7 +269,7 @@ export default function Navbar() {
                         ) : (
                           <div className="empty-state">
                             <BellIcon />
-                            <p>No notifications yet</p>
+                            <p>{t('navbar.noNotificationsYet')}</p>
                           </div>
                         )}
                       </div>
@@ -282,13 +284,13 @@ export default function Navbar() {
                     onClick={() => setIsUserMenuOpen(v => !v)}
                     aria-expanded={isUserMenuOpen}
                     aria-haspopup="true"
-                    aria-label={`User menu for ${user.username ?? 'account'}`}
+                    aria-label={t('navbar.userMenuLabel', { username: user.username ?? 'account' })}
                   >
                     <div className="user-avatar-wrapper" aria-hidden="true">
                       <div className="user-avatar">
                         {user.username?.charAt(0).toUpperCase() ?? 'U'}
                       </div>
-                      <span className={`navbar-presence-dot ${myDotClass}`} aria-label={`Status: ${myPresence.status}`} />
+                      <span className={`navbar-presence-dot ${myDotClass}`} aria-label={t('navbar.statusLabel', { status: myPresence.status })} />
                     </div>
                     <ChevronDownIcon className={`chevron${isUserMenuOpen ? ' open' : ''}`} aria-hidden="true" />
                   </button>
@@ -300,7 +302,7 @@ export default function Navbar() {
                         <div className="dropdown-email">{user.email}</div>
                       </div>
                       <div className="dropdown-divider" role="separator" />
-                      {USER_MENU_ITEMS.map(({ path, label, icon: Icon }) => (
+                      {USER_MENU_ITEMS.map(({ path, labelKey, icon: Icon }) => (
                         <Link
                           key={path}
                           to={path}
@@ -309,7 +311,7 @@ export default function Navbar() {
                           onClick={() => setIsUserMenuOpen(false)}
                         >
                           <Icon className="dropdown-icon" aria-hidden="true" />
-                          {label}
+                          {t(labelKey)}
                         </Link>
                       ))}
                       <div className="dropdown-divider" role="separator" />
@@ -319,7 +321,7 @@ export default function Navbar() {
                         role="menuitem"
                       >
                         <LogoutIcon className="dropdown-icon" aria-hidden="true" />
-                        Log out
+                        {t('navbar.logOut')}
                       </button>
                     </div>
                   )}
@@ -327,8 +329,8 @@ export default function Navbar() {
               </>
             ) : (
               <div className="auth-buttons">
-                <Link to="/login"    className="btn btn-secondary">Log in</Link>
-                <Link to="/register" className="btn btn-primary">Get started</Link>
+                <Link to="/login"    className="btn btn-secondary">{t('navbar.logIn')}</Link>
+                <Link to="/register" className="btn btn-primary">{t('navbar.getStarted')}</Link>
               </div>
             )}
 
@@ -336,7 +338,7 @@ export default function Navbar() {
             <button
               className="mobile-menu-toggle"
               onClick={() => setIsMobileMenuOpen(v => !v)}
-              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-label={isMobileMenuOpen ? t('navbar.closeMenu') : t('navbar.openMenu')}
               aria-expanded={isMobileMenuOpen}
               aria-controls="mobile-nav-drawer"
             >
@@ -361,7 +363,7 @@ export default function Navbar() {
         className={`mobile-menu${isMobileMenuOpen ? ' open' : ''}`}
         aria-hidden={!isMobileMenuOpen}
         role="dialog"
-        aria-label="Mobile navigation"
+        aria-label={t('navbar.mobileNavDialog')}
       >
         <div className="mobile-menu-header">
           <Link to="/" className="navbar-logo" onClick={() => setIsMobileMenuOpen(false)}>
@@ -371,7 +373,7 @@ export default function Navbar() {
           <button
             className="mobile-menu-close"
             onClick={() => setIsMobileMenuOpen(false)}
-            aria-label="Close navigation"
+            aria-label={t('navbar.closeNav')}
           >
             <CloseIcon />
           </button>
@@ -381,17 +383,17 @@ export default function Navbar() {
           <form onSubmit={handleSearch} role="search">
             <input
               type="search"
-              placeholder="Search Rust games…"
+              placeholder={t('navbar.searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="search-input"
-              aria-label="Search games"
+              aria-label={t('navbar.searchLabel')}
             />
           </form>
         </div>
 
-        <nav className="mobile-nav" aria-label="Mobile site sections">
-          {NAV_LINKS.map(({ path, label, icon: Icon }) => (
+        <nav className="mobile-nav" aria-label={t('navbar.mobileNav')}>
+          {NAV_LINKS.map(({ path, labelKey, icon: Icon }) => (
             <Link
               key={path}
               to={path}
@@ -399,7 +401,7 @@ export default function Navbar() {
               aria-current={location.pathname === path ? 'page' : undefined}
             >
               <Icon className="mobile-nav-icon" aria-hidden="true" />
-              <span>{label}</span>
+              <span>{t(labelKey)}</span>
             </Link>
           ))}
         </nav>
@@ -416,7 +418,7 @@ export default function Navbar() {
                   <div className="mobile-balance">{balance?.toFixed(2) ?? '0.00'} USDC</div>
                 </div>
               </div>
-              {USER_MENU_ITEMS.map(({ path, label, icon: Icon }) => (
+              {USER_MENU_ITEMS.map(({ path, labelKey, icon: Icon }) => (
                 <Link
                   key={path}
                   to={path}
@@ -424,18 +426,18 @@ export default function Navbar() {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Icon className="mobile-dropdown-icon" aria-hidden="true" />
-                  {label}
+                  {t(labelKey)}
                 </Link>
               ))}
               <button onClick={handleLogout} className="mobile-dropdown-item logout">
                 <LogoutIcon className="mobile-dropdown-icon" aria-hidden="true" />
-                Log out
+                {t('navbar.logOut')}
               </button>
             </>
           ) : (
             <div className="mobile-auth-buttons">
-              <Link to="/login"    className="btn btn-secondary">Log in</Link>
-              <Link to="/register" className="btn btn-primary">Get started</Link>
+              <Link to="/login"    className="btn btn-secondary">{t('navbar.logIn')}</Link>
+              <Link to="/register" className="btn btn-primary">{t('navbar.getStarted')}</Link>
             </div>
           )}
         </div>

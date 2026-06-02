@@ -126,7 +126,9 @@ pub mod shard;
 pub mod tick;
 
 pub use server::{GameServer, GameServerConfig, ServerError};
-pub use shard::{HandoffEvent, ShardId, ShardManager};
+pub use shard::{
+    ExecutorFactory, HandoffEvent, ShardId, ShardManager, ShardedRuntime, ShardedStepOutput,
+};
 pub use tick::ServerAnticheatConfig;
 
 // Re-export key sandbox types so callers get `serve_wasm` without a direct

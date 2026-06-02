@@ -6,12 +6,12 @@ import WithdrawForm from './WithdrawForm';
 export default function PaymentModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('deposit');
 
-  const handleSuccess = (result) => {
-    console.log('Payment success:', result);
+  const handleSuccess = (_result) => {
+    // Intentionally silent — payment result may contain sensitive data.
   };
 
-  const handleError = (error) => {
-    console.error('Payment error:', error);
+  const handleError = (_error) => {
+    // Errors are surfaced to the user by DepositForm / WithdrawForm directly.
   };
 
   return (

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
-const TOKEN_KEY = 'magnetite_token';
+// Single canonical token key shared across all auth modules and client.js.
+// client.js (not owned by this agent) reads localStorage.getItem('token') —
+// keeping the same key here eliminates the former magnetite_token/token split.
+const TOKEN_KEY = 'token';
 const USER_KEY = 'magnetite_user';
 
 export function useAuth() {
@@ -42,8 +45,6 @@ export function useAuth() {
     const userData = result.user || result;
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
-      // Also set under the key used by client.js
-      localStorage.setItem('token', token);
     }
     localStorage.setItem(USER_KEY, JSON.stringify(userData));
     setUser(userData);
@@ -55,7 +56,6 @@ export function useAuth() {
     const userData = result.user || result;
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem('token', token);
     }
     localStorage.setItem(USER_KEY, JSON.stringify(userData));
     setUser(userData);
@@ -64,7 +64,6 @@ export function useAuth() {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
-    localStorage.removeItem('token');
     setUser(null);
   }, []);
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 import {
@@ -71,6 +71,7 @@ const getActivityIcon = (type) => {
 };
 
 export default function DeveloperDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats]         = useState(USE_MOCKS ? MOCK_STATS : null);
   const [games, setGames]         = useState(USE_MOCKS ? MOCK_GAMES : []);
   const [revenueData, setRevenueData] = useState([]);
@@ -301,7 +302,12 @@ export default function DeveloperDashboard() {
                           <button className="action-btn edit" title="Edit" aria-label={`Edit ${game.title}`}>
                             ✏️
                           </button>
-                          <button className="action-btn analytics" title="View Analytics" aria-label={`Analytics for ${game.title}`}>
+                          <button
+                            className="action-btn analytics"
+                            title="View Analytics"
+                            aria-label={`Analytics for ${game.title}`}
+                            onClick={() => navigate(`/developers/analytics/${game.id}`)}
+                          >
                             📊
                           </button>
                           <button
@@ -340,7 +346,10 @@ export default function DeveloperDashboard() {
                     <small>SDK, API refs &amp; tutorials</small>
                   </span>
                 </Link>
-                <Link to="/analytics" className="quick-action-btn">
+                <Link
+                  to={games.length > 0 ? `/developers/analytics/${games[0].id}` : '#'}
+                  className="quick-action-btn"
+                >
                   <span className="action-icon" aria-hidden="true">📈</span>
                   <span className="action-text">
                     <strong>View Analytics</strong>

@@ -49,9 +49,9 @@
 
 use std::collections::HashMap;
 
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-use magnetite_sdk::authority::Topology;
+use magnetite_sdk::authority::{GameExecutor, MatchConfig, StepOutput, Tick, Topology};
 use magnetite_sdk::input::Input;
 use magnetite_sdk::state::PlayerId;
 
@@ -318,6 +318,208 @@ fn pos_to_shard(x: f64, y: f64, cell_size: f64) -> ShardId {
         0
     };
     ShardId::from_cell(cell_x, cell_y)
+}
+
+// ---------------------------------------------------------------------------
+// ShardedRuntime
+// ---------------------------------------------------------------------------
+
+/// Output of one multi-shard tick.
+///
+/// Each shard's [`StepOutput`] is returned alongside its [`ShardId`] so the
+/// caller can fan-out `ServerNet` frames to the players on each shard.
+pub struct ShardedStepOutput {
+    /// Per-shard step results.
+    pub shard_outputs: Vec<(ShardId, StepOutput)>,
+    /// Players that crossed a cell boundary this tick.
+    pub handoffs: Vec<HandoffEvent>,
+}
+
+/// Factory closure type for creating new shard executors on demand.
+pub type ExecutorFactory = Box<dyn Fn(ShardId, &MatchConfig) -> Box<dyn GameExecutor> + Send>;
+
+/// Single-process, multi-shard executor dispatcher.
+///
+/// `ShardedRuntime` owns one [`GameExecutor`] per active shard and uses a
+/// [`ShardManager`] to route player inputs to the correct executor.  On a
+/// cell crossing, it:
+///
+/// 1. Takes a full snapshot from the *source* shard's executor.
+/// 2. Provisions (or reuses) the *target* shard's executor.
+/// 3. Calls `restore` on the target executor so the full world state is
+///    available there (single-process: state is cheap to copy).
+/// 4. Updates the `ShardManager` routing table.
+/// 5. Returns a [`HandoffEvent`] so the caller can send
+///    `ServerNet::Snapshot` to the migrated player.
+///
+/// ## Multi-node seam
+///
+/// In a future multi-node deployment, step 3 would be replaced with a network
+/// call to the target shard's provisioning API.  The `target_addr` field in
+/// [`HandoffEvent`] is reserved for that purpose.
+pub struct ShardedRuntime {
+    /// The match configuration (shared across all shards).
+    config: MatchConfig,
+    /// Per-shard executors, keyed by [`ShardId`].
+    executors: HashMap<ShardId, Box<dyn GameExecutor>>,
+    /// Spatial routing table + proxy positions.
+    shard_mgr: ShardManager,
+    /// Factory for creating a new executor when a player moves to an
+    /// unprovisioned shard.
+    executor_factory: ExecutorFactory,
+}
+
+impl ShardedRuntime {
+    /// Create a new `ShardedRuntime`.
+    ///
+    /// `executor_factory` is called whenever a player moves to a shard that
+    /// does not yet have an executor.  The factory receives the [`ShardId`]
+    /// (unused in single-process mode, but useful for routing hints) and the
+    /// shared [`MatchConfig`].
+    ///
+    /// The initial (origin) shard executor is created immediately so that
+    /// newly-joined players have somewhere to land.
+    pub fn new(config: MatchConfig, executor_factory: ExecutorFactory) -> Self {
+        let shard_mgr = ShardManager::new(config.topology.clone());
+        let origin_executor = executor_factory(ShardId::LOCAL, &config);
+        let mut executors: HashMap<ShardId, Box<dyn GameExecutor>> = HashMap::new();
+        executors.insert(ShardId::LOCAL, origin_executor);
+        Self {
+            config,
+            executors,
+            shard_mgr,
+            executor_factory,
+        }
+    }
+
+    /// Register a new player (assigns them to the origin shard).
+    ///
+    /// Returns the shard the player was placed in.
+    pub fn join(&mut self, player: PlayerId) -> ShardId {
+        self.shard_mgr.assign(player)
+    }
+
+    /// Remove a player on disconnect.
+    pub fn leave(&mut self, player: PlayerId) {
+        self.shard_mgr.remove(player);
+    }
+
+    /// Current shard for a player, if known.
+    pub fn shard_of(&self, player: PlayerId) -> Option<ShardId> {
+        self.shard_mgr.shard_of(player)
+    }
+
+    /// Return the set of currently active shard IDs.
+    pub fn active_shards(&self) -> Vec<ShardId> {
+        self.shard_mgr.active_shards()
+    }
+
+    /// Return all players on a given shard.
+    pub fn players_in_shard(&self, shard: ShardId) -> Vec<PlayerId> {
+        self.shard_mgr.players_in_shard(shard)
+    }
+
+    /// Retrieve an immutable reference to a shard's executor, if it exists.
+    pub fn executor(&self, shard: ShardId) -> Option<&dyn GameExecutor> {
+        self.executors.get(&shard).map(|e| e.as_ref())
+    }
+
+    /// Advance all active shards by one tick.
+    ///
+    /// `inputs` is the full list of `(player_id, input)` pairs for this tick.
+    /// Inputs are routed to each player's current shard before `step` is
+    /// called.  After stepping, player positions are updated from their inputs;
+    /// cell crossings are detected and handled as HANDOFF events.
+    ///
+    /// Returns a [`ShardedStepOutput`] containing per-shard results and any
+    /// handoffs that occurred.
+    pub fn step(&mut self, tick: Tick, inputs: &[(PlayerId, Input)]) -> ShardedStepOutput {
+        // 1. Route inputs to shards.
+        let mut per_shard_inputs: HashMap<ShardId, Vec<(PlayerId, Input)>> = HashMap::new();
+        for (player, input) in inputs {
+            if let Some(shard) = self.shard_mgr.shard_of(*player) {
+                per_shard_inputs
+                    .entry(shard)
+                    .or_default()
+                    .push((*player, *input));
+            }
+        }
+
+        // 2. Step each shard's executor.
+        let active = self.shard_mgr.active_shards();
+        let mut shard_outputs = Vec::with_capacity(active.len());
+        for shard_id in &active {
+            let shard_inputs = per_shard_inputs
+                .get(shard_id)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+            if let Some(exec) = self.executors.get_mut(shard_id) {
+                let out = exec.step(tick, shard_inputs);
+                shard_outputs.push((*shard_id, out));
+            }
+        }
+
+        // 3. Update proxy positions and detect cell crossings.
+        let mut handoffs: Vec<HandoffEvent> = Vec::new();
+        for (player, input) in inputs {
+            if let Some(event) = self.shard_mgr.update_position(*player, input) {
+                handoffs.push(event);
+            }
+        }
+
+        // 4. Execute handoffs: copy full snapshot from source shard to target.
+        for event in &handoffs {
+            // Capture the full world snapshot from the *source* executor.
+            let state_blob = if let Some(src_exec) = self.executors.get(&event.from_shard) {
+                src_exec.snapshot()
+            } else {
+                warn!(
+                    from = %event.from_shard,
+                    "handoff: source executor not found — skipping state transfer"
+                );
+                continue;
+            };
+
+            // Provision the target shard executor if it does not yet exist.
+            if !self.executors.contains_key(&event.to_shard) {
+                let new_exec = (self.executor_factory)(event.to_shard, &self.config);
+                self.executors.insert(event.to_shard, new_exec);
+                info!(shard = %event.to_shard, "provisioned new shard executor");
+            }
+
+            // Restore state on the target executor so it has the full world.
+            if let Some(dst_exec) = self.executors.get_mut(&event.to_shard) {
+                dst_exec.restore(&state_blob);
+                info!(
+                    player = %event.player,
+                    from = %event.from_shard,
+                    to = %event.to_shard,
+                    blob_len = state_blob.len(),
+                    "handoff: state transferred (single-process)"
+                );
+            }
+
+            // Notify the seam layer (no-op in N2).
+            self.shard_mgr.apply_handoff(event, &state_blob);
+        }
+
+        ShardedStepOutput {
+            shard_outputs,
+            handoffs,
+        }
+    }
+
+    /// Take a full snapshot from a specific shard's executor.
+    ///
+    /// Returns `None` if the shard has no executor.
+    pub fn snapshot_shard(&self, shard: ShardId) -> Option<Vec<u8>> {
+        self.executors.get(&shard).map(|e| e.snapshot())
+    }
+
+    /// Number of currently-provisioned shard executors.
+    pub fn executor_count(&self) -> usize {
+        self.executors.len()
+    }
 }
 
 // ---------------------------------------------------------------------------

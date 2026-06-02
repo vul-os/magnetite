@@ -1,6 +1,6 @@
 # Magnetite MOAT — Scale Bench and Test Suite Report
 
-> Last updated: 2026-06-01 (Wave N3 close)
+> Last updated: 2026-06-03 (SCALE+POLISH wave — bench fix + real numbers)
 
 This document describes the `magnetite-e2e` test harness: what it exercises, what each
 test proves, and how to run the scale bench. All tests referenced here are in the
@@ -146,39 +146,64 @@ on the test machine. Failure fails the test.
 
 **`ws_round_trip_latency_bench`** — starts a real `GameServer` on an ephemeral port, connects
 one WebSocket client, sends 50 `ClientNet::InputFrame` messages, and collects per-message
-round-trip latency (send → `ServerNet::Ack` received). Reports mean, p50, and p99 in
-microseconds.
+round-trip latency (send → `ServerNet::Ack` received). Reports min, mean, p50, p99, and max
+in microseconds.
+
+> **Bug fix (SCALE+POLISH wave):** earlier versions used `ArenaShooter` which rejects inputs
+> from players that have not been registered via `on_join`, causing the server to send
+> `Reject` instead of `Ack` — resulting in zero latency samples. The bench now uses
+> `NopGame` (accepts any input unconditionally), so real round-trip Ack latency is measured.
+> The test asserts `samples > 0` so the regression cannot silently re-appear.
 
 ### How to run the scale bench
 
 ```sh
-# Run the scale throughput bench (prints a table to stdout):
-cargo test -p magnetite-e2e -- scale_bench --ignored --nocapture
+# Run both ignored bench tests (throughput + WS latency):
+cargo test -p magnetite-e2e --test scale_bench -- --ignored --nocapture
 
-# Run the WS round-trip latency bench:
-cargo test -p magnetite-e2e -- ws_round_trip_latency_bench --ignored --nocapture
+# Run only the throughput bench:
+cargo test -p magnetite-e2e --test scale_bench -- scale_bench --ignored --nocapture
 
-# Run both ignored bench tests:
-cargo test -p magnetite-e2e -- --ignored --nocapture
+# Run only the WS round-trip latency bench:
+cargo test -p magnetite-e2e --test scale_bench -- ws_round_trip_latency_bench --ignored --nocapture
 ```
 
-Output example (actual numbers depend on hardware):
+#### Verified output (debug build, Apple M-series, 2026-06-03)
+
+Throughput bench (`scale_bench`):
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
 ║        Magnetite MOAT — Scale / Throughput Report         ║
 ╚═══════════════════════════════════════════════════════════╝
 
-Scenario                           Ticks      ticks/sec        μs/tick
+Scenario                             Ticks       ticks/sec         μs/tick
 ──────────────────────────────────────────────────────────────────────────
-SingleRoom  (4 players)             1000      ≥ 1 000.0         ≤ 1000.0
-SingleRoom  (16 players)            1000      (measured)
-Dedicated   (32 players)            1000      (measured)
-Dedicated   (64 players)            1000      (measured)
-Dedicated   (128 players)            500      (measured)
-Dedicated   (256 players)            200      (measured)
+SingleRoom  (4 players)               1000         10518.8           95.07
+SingleRoom  (16 players)              1000         29546.0           33.84
+Dedicated   (32 players)              1000         53082.7           18.84
+Dedicated   (64 players)              1000          9793.4          102.11
+Dedicated   (128 players)              500         13401.2           74.62
+Dedicated   (256 players)              200         17509.4           57.11
+Sharded     (pending N3)                 —               —               —
 ──────────────────────────────────────────────────────────────────────────
 ```
+
+WS round-trip latency bench (`ws_round_trip_latency_bench`):
+
+```
+WS Round-Trip Latency — NopGame, single client, 50 samples
+  collected = 50 samples
+  min   = 13037.0 μs
+  mean  = 16898.9 μs
+  p50   = 16796.0 μs
+  p99   = 24557.0 μs
+  max   = 24557.0 μs
+```
+
+> Numbers are from an unoptimised debug build on loopback. A `--release` build typically
+> cuts per-tick latency by 5–20x. The WS latency includes tokio async scheduler overhead
+> and the 60 Hz tick boundary (≈ 16 ms per tick) — not pure network RTT.
 
 ### How to run the wasm end-to-end tests
 

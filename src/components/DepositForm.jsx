@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Input from './common/Input';
 import Button from './common/Button';
 import { api } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
 
@@ -12,6 +13,7 @@ const SUBSCRIPTION_PLANS = [
 ];
 
 export default function DepositForm({ onSuccess, onError }) {
+  const { user } = useAuth();
   const [amount, setAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState(null);
@@ -26,7 +28,7 @@ export default function DepositForm({ onSuccess, onError }) {
         key: PAYSTACK_PUBLIC_KEY,
         amount: parseFloat(amount) * 100,
         currency: 'USD',
-        email: 'user@example.com',
+        email: user?.email ?? '',
         callback: (response) => {
           setStatus('success');
           onSuccess?.(response);

@@ -249,6 +249,21 @@ export const api = {
     payouts: () => request('/api/developer/payouts'),
     analytics: (gameId) => request(`/api/developer/analytics/${gameId}`),
 
+    /**
+     * GET /api/v1/developer/games/:id/analytics
+     * Returns per-game 30-day analytics:
+     *   { game_id, game_title, summary: { total_revenue, active_players, total_sessions },
+     *     daily_revenue: [{ date, revenue }],
+     *     daily_playtime: [{ date, minutes }] }
+     * params: { from?, to? } — ISO date strings for date-range filtering
+     */
+    gameAnalytics: (gameId, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/developer/games/${gameId}/analytics${qs ? `?${qs}` : ''}`);
+    },
+
     // ── GDS: Game scaffold ───────────────────────────────────────────────────
     /**
      * POST /api/v1/developer/games/scaffold

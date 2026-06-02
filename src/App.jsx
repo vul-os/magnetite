@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AccessibilityProvider } from './components/AccessibilityProvider';
 import { CommsProvider } from './context/CommsContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { I18nProvider } from './i18n/I18nProvider';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import Toast from './components/Toast';
 import PageLoader from './components/PageLoader';
@@ -30,6 +31,7 @@ const LinkAccount = lazy(() => import('./pages/LinkAccount'));
 const ConnectedAccounts = lazy(() => import('./pages/ConnectedAccounts'));
 const DeveloperDashboard = lazy(() => import('./pages/DeveloperDashboard'));
 const GameDeploy = lazy(() => import('./pages/developers/GameDeploy'));
+const GameAnalytics = lazy(() => import('./pages/GameAnalytics'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const GameStudio = lazy(() => import('./pages/GameStudio'));
 const Earnings = lazy(() => import('./pages/Earnings'));
@@ -116,6 +118,7 @@ function AppContent() {
 
 function App() {
   return (
+    <I18nProvider>
     <AccessibilityProvider>
       <ThemeProvider>
         <AnnouncementProvider announcement="Magnetite v2.0 launching soon! New features and improvements coming your way.">
@@ -153,6 +156,7 @@ function App() {
                       <Route path="/developers/studio" element={<GameStudio />} />
                       <Route path="/developers/deploy" element={<GameDeploy />} />
                       <Route path="/developers/earnings" element={<Earnings />} />
+                      <Route path="/developers/analytics/:gameId" element={<GameAnalytics />} />
                       <Route path="/developers/settings" element={<Settings />} />
                       <Route path="/wallet" element={<Wallet />} />
                       <Route path="/friends" element={<Friends />} />
@@ -199,6 +203,7 @@ function App() {
         </AnnouncementProvider>
       </ThemeProvider>
     </AccessibilityProvider>
+    </I18nProvider>
   );
 }
 

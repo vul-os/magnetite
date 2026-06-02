@@ -1,43 +1,52 @@
 import { Link } from 'react-router-dom';
 import { GithubIcon, TwitterIcon, DiscordIcon } from '../assets/icons';
+import { useTranslation } from '../i18n/useTranslation';
 import './Footer.css';
 
+// Column definitions use i18n keys; labels are resolved via t() in the component.
 const LINK_COLUMNS = [
   {
-    title: 'Platform',
+    titleKey: 'footer.columns.platform',
     links: [
-      { label: 'Marketplace', path: '/marketplace' },
-      { label: 'Developers',  path: '/developers' },
-      { label: 'Pricing',     path: '/pricing' },
-      { label: 'FAQ',         path: '/faq' },
+      { labelKey: 'footer.links.marketplace', path: '/marketplace' },
+      { labelKey: 'footer.links.developers',  path: '/developers' },
+      { labelKey: 'footer.links.pricing',     path: '/pricing' },
+      { labelKey: 'footer.links.faq',         path: '/faq' },
     ],
   },
   {
-    title: 'Developers',
+    titleKey: 'footer.columns.developers',
     links: [
-      { label: 'SDK',           path: '/developers/sdk' },
-      { label: 'Documentation', path: '/docs' },
-      { label: 'GitHub',        path: 'https://github.com/anomalyco/magnetite', external: true },
-      { label: 'Discord',       path: 'https://discord.gg/magnetite',           external: true },
+      { labelKey: 'footer.links.sdk',           path: '/developers/sdk' },
+      { labelKey: 'footer.links.documentation', path: '/docs' },
+      { labelKey: 'footer.links.github',        path: 'https://github.com/anomalyco/magnetite', external: true },
+      { labelKey: 'footer.links.discord',       path: 'https://discord.gg/magnetite',           external: true },
     ],
   },
   {
-    title: 'Company',
+    titleKey: 'footer.columns.company',
     links: [
-      { label: 'About',    path: '/about' },
-      { label: 'Careers',  path: '/careers' },
-      { label: 'Contact',  path: '/contact' },
-      { label: 'Blog',     path: '/blog' },
+      { labelKey: 'footer.links.about',    path: '/about' },
+      { labelKey: 'footer.links.careers',  path: '/careers' },
+      { labelKey: 'footer.links.contact',  path: '/contact' },
+      { labelKey: 'footer.links.blog',     path: '/blog' },
     ],
   },
   {
-    title: 'Legal',
+    titleKey: 'footer.columns.legal',
     links: [
-      { label: 'Terms',   path: '/terms' },
-      { label: 'Privacy', path: '/privacy' },
-      { label: 'Cookies', path: '/cookies' },
+      { labelKey: 'footer.links.terms',   path: '/terms' },
+      { labelKey: 'footer.links.privacy', path: '/privacy' },
+      { labelKey: 'footer.links.cookies', path: '/cookies' },
     ],
   },
+];
+
+/** Supported locales for the language selector (scaffold for future additions). */
+const SUPPORTED_LOCALES = [
+  { code: 'en', labelKey: 'footer.languageSelector.english' },
+  // Future: { code: 'fr', labelKey: 'footer.languageSelector.french' },
+  // Future: { code: 'de', labelKey: 'footer.languageSelector.german' },
 ];
 
 const SOCIAL_LINKS = [
@@ -71,6 +80,7 @@ function RustIcon({ size = 16 }) {
 }
 
 export default function Footer() {
+  const { t, locale, setLocale } = useTranslation();
   const year = new Date().getFullYear();
 
   return (
@@ -82,27 +92,23 @@ export default function Footer() {
 
           {/* Brand column */}
           <div className="footer-brand">
-            <Link to="/" className="footer-logo" aria-label="Magnetite home">
+            <Link to="/" className="footer-logo" aria-label={t('footer.logoLabel')}>
               <div className="logo-icon" aria-hidden="true">M</div>
               <span className="logo-text">Magnetite</span>
             </Link>
 
-            <p className="footer-tagline">
-              The open-source platform for building,<br />
-              distributing, and monetizing Rust games<br />
-              — at any scale.
-            </p>
+            <p className="footer-tagline">{t('footer.tagline')}</p>
 
             {/* Rust badge */}
-            <div className="footer-rust-badge" aria-label="Built in Rust">
+            <div className="footer-rust-badge" aria-label={t('footer.builtInRust')}>
               <div className="rust-lang-icon">
                 <RustIcon size={14} />
               </div>
-              <span className="kicker-label">Built in Rust</span>
+              <span className="kicker-label">{t('footer.builtInRust')}</span>
             </div>
 
             {/* Social */}
-            <div className="footer-social" aria-label="Social media links">
+            <div className="footer-social" aria-label={t('footer.socialLinks')}>
               {SOCIAL_LINKS.map(({ href, Icon, label }) => (
                 <a
                   key={label}
@@ -116,16 +122,36 @@ export default function Footer() {
                 </a>
               ))}
             </div>
+
+            {/* ── Language selector ─────────────────────────────────────── */}
+            <div className="footer-lang-selector">
+              <label htmlFor="footer-lang-select" className="footer-lang-label">
+                {t('footer.languageSelector.label')}
+              </label>
+              <select
+                id="footer-lang-select"
+                className="footer-lang-select"
+                value={locale}
+                onChange={e => setLocale(e.target.value)}
+                aria-label={t('footer.languageSelector.label')}
+              >
+                {SUPPORTED_LOCALES.map(({ code, labelKey }) => (
+                  <option key={code} value={code}>
+                    {t(labelKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Link columns */}
           <div className="footer-links">
             {LINK_COLUMNS.map(column => (
-              <div key={column.title} className="footer-column">
-                <h3 className="footer-column-title">{column.title}</h3>
+              <div key={column.titleKey} className="footer-column">
+                <h3 className="footer-column-title">{t(column.titleKey)}</h3>
                 <ul className="footer-column-links">
                   {column.links.map(link => (
-                    <li key={link.label}>
+                    <li key={link.labelKey}>
                       {link.external || link.path.startsWith('http') ? (
                         <a
                           href={link.path}
@@ -133,11 +159,11 @@ export default function Footer() {
                           rel="noopener noreferrer"
                           className="footer-link"
                         >
-                          {link.label}
+                          {t(link.labelKey)}
                         </a>
                       ) : (
                         <Link to={link.path} className="footer-link">
-                          {link.label}
+                          {t(link.labelKey)}
                         </Link>
                       )}
                     </li>
@@ -154,9 +180,9 @@ export default function Footer() {
         {/* ── Bottom bar ──────────────────────────────────────────────────── */}
         <div className="footer-bottom">
           <p className="footer-copyright">
-            &copy; {year} Magnetite.{' '}
-            <Link to="/terms">Terms</Link>{' · '}
-            <Link to="/privacy">Privacy</Link>
+            {t('footer.copyright', { year })}{' '}
+            <Link to="/terms">{t('footer.terms')}</Link>{' · '}
+            <Link to="/privacy">{t('footer.privacy')}</Link>
           </p>
 
           <div className="footer-bottom-right">
@@ -166,15 +192,15 @@ export default function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                MIT open source
+                {t('footer.openSource')}
               </a>
             </span>
 
-            <div className="footer-badge" aria-label="Built with Rust">
+            <div className="footer-badge" aria-label={t('footer.builtInRust')}>
               <span className="badge-icon">
                 <RustIcon size={13} />
               </span>
-              <span>Rust · Bevy · WASM</span>
+              <span>{t('footer.techStack')}</span>
             </div>
           </div>
         </div>

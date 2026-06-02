@@ -4,7 +4,8 @@ import { api } from '../api/client';
 import { sanitizeRedirect } from '../utils/sanitize';
 import './auth.css';
 
-const TOKEN_KEY  = 'magnetite_token';
+// Single canonical key — must match useAuth.js and client.js.
+const TOKEN_KEY  = 'token';
 const USER_KEY   = 'magnetite_user';
 // sessionStorage key where Login.jsx stores the generated CSRF state nonce.
 const STATE_KEY  = 'oauth_state_nonce';
@@ -37,13 +38,35 @@ export default function AuthCallback() {
   const processedRef = useRef(false);
 
   const errorParam   = searchParams.get('error');
-  const initialError = errorParam ? decodeURIComponent(errorParam) : '';
 
-  const [callbackState, setCallbackState] = useState(
-    initialError
-      ? { type: 'error', error: initialError, success: '' }
-      : { type: 'processing', error: '', success: '' }
-  );
+  // --- CSRF STATE VALIDATION (eager, before first render) ---
+  // Login.jsx generates crypto.randomUUID(), stores it in sessionStorage under STATE_KEY,
+  // and appends ?state=<nonce> when redirecting to the OAuth provider.
+  // The provider echoes the value; we validate it here once, synchronously, as initial state
+  // so the effect body never needs to call setState synchronously (avoids cascading renders).
+  //
+  // Compute once at module-load time for this component instance.  searchParams is stable
+  // on the first render so reading it here (outside the effect) is safe.
+  const [callbackState, setCallbackState] = useState(() => {
+    if (errorParam) {
+      return { type: 'error', error: decodeURIComponent(errorParam), success: '' };
+    }
+
+    const returnedState = searchParams.get('state');
+    const storedState   = sessionStorage.getItem(STATE_KEY);
+    // Consume the nonce immediately — it must not be reusable.
+    sessionStorage.removeItem(STATE_KEY);
+
+    if (returnedState && storedState && returnedState !== storedState) {
+      return {
+        type: 'error',
+        error: 'OAuth state mismatch — possible CSRF detected. Please try again.',
+        success: '',
+      };
+    }
+
+    return { type: 'processing', error: '', success: '' };
+  });
 
   useEffect(() => {
     if (callbackState.type === 'error' || processedRef.current) return;
@@ -57,27 +80,6 @@ export default function AuthCallback() {
     // and anything that does not start with a single '/'.
     const rawDestination = searchParams.get('destination');
     const destination    = sanitizeRedirect(rawDestination, '/');
-
-    // --- CSRF STATE VALIDATION ---
-    // Login.jsx must generate crypto.randomUUID(), store it in sessionStorage under
-    // STATE_KEY, and append it as ?state=<nonce> when redirecting to the OAuth provider.
-    // The provider echoes the state param back; we verify it here before trusting the token.
-    const returnedState = searchParams.get('state');
-    const storedState   = sessionStorage.getItem(STATE_KEY);
-    // Clear the nonce immediately so it cannot be reused.
-    sessionStorage.removeItem(STATE_KEY);
-
-    // If the backend included a state param, validate it.
-    // If neither side has a state, we allow it (legacy/non-OAuth flows), but log a warning.
-    if (returnedState && storedState && returnedState !== storedState) {
-      // State mismatch — possible CSRF; reject the callback entirely.
-      setCallbackState({
-        type: 'error',
-        error: 'OAuth state mismatch — possible CSRF detected. Please try again.',
-        success: '',
-      });
-      return;
-    }
 
     let token = searchParams.get('token');
     // Remove the token from the URL immediately to avoid history/referrer leakage.

@@ -31,7 +31,16 @@ export default function Login() {
   const handleOAuth = (provider) => {
     setOauthLoading(provider);
     setError('');
-    window.location.href = getOAuthUrl(provider);
+
+    // Generate a CSRF state nonce and persist it in sessionStorage so
+    // AuthCallback.jsx can validate that the OAuth provider echoed the same value.
+    // crypto.randomUUID() is available in all modern browsers and in the test env.
+    const stateNonce = crypto.randomUUID();
+    sessionStorage.setItem('oauth_state_nonce', stateNonce);
+
+    const oauthUrl = new URL(getOAuthUrl(provider));
+    oauthUrl.searchParams.set('state', stateNonce);
+    window.location.href = oauthUrl.toString();
   };
 
   return (

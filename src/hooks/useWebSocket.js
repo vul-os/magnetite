@@ -57,8 +57,12 @@ export function useWebSocket(url, options = {}) {
       wsUrl = `${getWsBase()}${url}`;
     }
 
+    // Keep a token-free copy of the URL for safe use in error logs.
+    const wsUrlSafe = wsUrl;
+
     // Append ?token=<jwt> so every backend WS handler can authenticate the connection.
     // backend/src/ws/comms.rs, voice.rs, and game.rs all require validate_token(query.token).
+    // The token is NEVER written to any log — only wsUrlSafe (without the token) is logged.
     const token = localStorage.getItem('token');
     if (token) {
       const sep = wsUrl.includes('?') ? '&' : '?';
@@ -75,8 +79,8 @@ export function useWebSocket(url, options = {}) {
       try {
         ws = new WebSocket(wsUrl);
       } catch (err) {
-        // If the URL is invalid we surface the error rather than silently mocking.
-        console.error('[useWebSocket] Failed to construct WebSocket:', wsUrl, err);
+        // Log the token-free URL only — never log the full wsUrl which contains the JWT.
+        console.error('[useWebSocket] Failed to construct WebSocket:', wsUrlSafe, err);
         return null;
       }
     }
@@ -100,7 +104,8 @@ export function useWebSocket(url, options = {}) {
     };
 
     ws.onerror = (event) => {
-      console.error('[useWebSocket] error on', wsUrl, event);
+      // Log the token-free URL — wsUrl (which carries the JWT) is never logged.
+      console.error('[useWebSocket] error on', wsUrlSafe, event);
     };
 
     ws.onmessage = (event) => {
