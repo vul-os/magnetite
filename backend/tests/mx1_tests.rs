@@ -337,6 +337,8 @@ mod analytics_time_series_tests {
                 developer_earnings: dec!(700.00),
                 session_count: 100,
             },
+            daily_revenue: vec![],
+            daily_playtime: vec![],
         };
 
         let json = serde_json::to_string(&analytics).unwrap();
@@ -421,6 +423,8 @@ mod analytics_time_series_tests {
                 developer_earnings: dec!(0),
                 session_count: 0,
             },
+            daily_revenue: vec![],
+            daily_playtime: vec![],
         };
 
         let json = serde_json::to_string(&analytics).unwrap();

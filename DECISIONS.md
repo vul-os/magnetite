@@ -23,7 +23,82 @@
 > Single source of truth for the autonomous multi-wave rebuild. Every agent reads this
 > file before working. The orchestrator audits against it every 30 minutes.
 
-Last updated: 2026-06-01 (Wave PAY — Agent B: money-core + config)
+Last updated: 2026-06-03 (MX1b — Agent 1 FIXUP: backend feature code actually landed)
+
+---
+
+## MX1b — Agent 1 FIXUP: Backend Feature Code (2026-06-03)
+
+**D-MX1b-1-1 — REFUNDS (admin.rs):**
+Added `AdminRefundRequest` / `AdminRefundResponse` structs and handler
+`admin_refund_transaction` (POST `/api/v1/admin/transactions/:id/refund`).
+Logic: (1) fetch original wallet_transaction, (2) credit wallet_balances via upsert,
+(3) insert reversal wallet_transactions row, (4) mark original as 'refunded',
+(5) if tx_type='deposit' and `PAYSTACK_SECRET_KEY` is set, call Paystack `/refund`;
+if unconfigured record status='provider_unconfigured', still credit the user,
+(6) write refund_records row with provider/provider_ref/status. Admin-guarded.
+Route registered in admin::router().
+
+**D-MX1b-1-2 — CONTENT RATING (games.rs):**
+Added `content_rating: String` to `Game` struct, `GamePlayMetadata` struct,
+`CreateGameRequest` (optional, default "everyone"), `UpdateGameRequest` (optional).
+Server-side validates against ["everyone", "teen", "mature"]. All SELECT/INSERT/UPDATE
+SQL updated to read/write the column (exists in migration 20260702_content_rating_refunds.sql).
+
+**D-MX1b-1-3 — BLOCKED USERS ROUTES (social.rs):**
+Added `BlockedUser` struct, `list_blocked_users` handler (GET `/friends/blocked`),
+and `unblock_user` handler (DELETE `/friends/block/:id`). Both mounted in
+`social::router()` with auth middleware. Block-check path already existed.
+
+**D-MX1b-1-4 — ANALYTICS TIME-SERIES (developer.rs):**
+Added `DailyRevenue` and `DailyPlaytime` structs and corresponding fields to
+`GameAnalytics`. The `get_game_analytics` handler now fetches 30-day daily revenue
+buckets from `game_revenue` and 30-day daily playtime buckets from `game_sessions`.
+Alias route `/api/v1/developer/games/:id/analytics` added alongside existing
+`/games/:id/players` route. Tests in mx1_tests.rs updated with new required fields.
+
+**D-MX1b-1-5 — VERIFICATION:**
+cargo check: 0 warnings. cargo fmt --check: clean. cargo test: 29/29 passed.
+
+---
+
+## MX1b — Agent 2: MediaMTX Compose + Streaming Infra (2026-06-03)
+
+**D-MX1b-2-1 — MediaMTX service added to docker-compose.yml:**
+Added `bluenviron/mediamtx:latest` as a first-class service in `docker-compose.yml`.
+Exposes RTMP :1935, HLS :8888, WebRTC/WHIP :8889, RTSP :8554. All ports are
+overridable via `MEDIAMTX_*_PORT` env vars. Healthcheck polls the MediaMTX REST
+API (`/v3/config/global/get`). Config file `config/mediamtx.yml` is bind-mounted
+read-only at `/mediamtx.yml` in the container. Service joins the `magnetite` bridge
+network.
+
+**D-MX1b-2-2 — Backend wired to MediaMTX intra-compose:**
+`MEDIA_SERVER_BASE_URL` defaulted to `http://mediamtx:8888` in the backend
+environment block. Backend `depends_on: mediamtx: condition: service_healthy` so
+it waits for MediaMTX to pass health before starting.
+
+**D-MX1b-2-3 — Override file wires dev-mode:**
+`docker-compose.override.yml` sets `MTX_LOGLEVEL: debug` and mounts
+`config/mediamtx.yml` for the mediamtx service; explicitly sets
+`MEDIA_SERVER_BASE_URL: http://mediamtx:8888` and `depends_on: mediamtx` in the
+backend dev override. This means `docker compose up` in dev gets MediaMTX
+automatically, no manual env var needed.
+
+**D-MX1b-2-4 — Minimal mediamtx.yml config:**
+Created `config/mediamtx.yml` enabling RTMP, HLS (2 s segments), WebRTC/WHIP, and
+RTSP. Default paths allow all ingest without auth (dev-safe). Commented example for
+`runOnPublish` Twitch/YouTube egress. Port addresses match the compose mappings.
+
+**D-MX1b-2-5 — Streaming guide:**
+Created `docs/self-hosting/streaming.md` documenting: architecture diagram, all
+four ports, full go-live -> RTMP ingest -> HLS watch flow (OBS config + FFmpeg
+example), backend URL construction, WebRTC/WHIP ingest, RTMP egress to
+Twitch/YouTube, config knobs, and troubleshooting. Referenced from
+`external-dependencies.md`.
+
+Verification: `docker compose config --services` lists `mediamtx`; merged config
+shows all four ports, health check, volume mount, and `MEDIA_SERVER_BASE_URL`
+wired to backend. Grep confirms 9 mediamtx references across both compose files.
 
 ---
 

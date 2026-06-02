@@ -1197,6 +1197,195 @@ pub struct ReviewReportActionRequest {
     pub note: Option<String>,
 }
 
+// ── Admin refund ──────────────────────────────────────────────────────────────
+//
+// POST /admin/transactions/:id/refund
+//   • Reverses the user's wallet balance (credits them back).
+//   • Writes a reversal wallet_transactions row.
+//   • Writes a refund_records row (always, so audit trail exists regardless of
+//     provider outcome).
+//   • For deposits (tx_type = 'deposit'), optionally calls Paystack refund API
+//     when PAYSTACK_SECRET_KEY is configured; otherwise records status =
+//     'provider_unconfigured' and still credits the user.
+
+#[derive(Debug, Deserialize)]
+pub struct AdminRefundRequest {
+    /// Human-readable reason for the refund (stored in refund_records.reason).
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminRefundResponse {
+    pub refund_id: uuid::Uuid,
+    pub transaction_id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub amount: rust_decimal::Decimal,
+    pub provider: String,
+    pub provider_ref: Option<String>,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn admin_refund_transaction(
+    State(pool): State<PgPool>,
+    Extension(admin_id): Extension<Uuid>,
+    Path(tx_id): Path<Uuid>,
+    Json(payload): Json<AdminRefundRequest>,
+) -> Result<Json<AdminRefundResponse>> {
+    require_admin(&pool, admin_id).await?;
+
+    // ── 1. Fetch the original wallet transaction ──────────────────────────────
+    let tx = sqlx::query_as::<_, (Uuid, String, rust_decimal::Decimal, String)>(
+        "SELECT user_id, tx_type, amount, status FROM wallet_transactions WHERE id = $1",
+    )
+    .bind(tx_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Transaction not found".to_string()))?;
+
+    let (user_id, tx_type, amount, tx_status) = tx;
+
+    if tx_status == "refunded" {
+        return Err(AppError::BadRequest(
+            "Transaction has already been refunded".to_string(),
+        ));
+    }
+
+    // ── 2. Credit the user's wallet balance ──────────────────────────────────
+    // Upsert wallet_balances row so the query never silently no-ops.
+    sqlx::query(
+        "INSERT INTO wallet_balances (id, user_id, currency, balance)
+         VALUES ($1, $2, 'USD', $3)
+         ON CONFLICT (user_id, currency)
+         DO UPDATE SET balance = wallet_balances.balance + EXCLUDED.balance",
+    )
+    .bind(Uuid::new_v4())
+    .bind(user_id)
+    .bind(amount)
+    .execute(&pool)
+    .await?;
+
+    // ── 3. Insert a reversal wallet_transactions row ──────────────────────────
+    let reversal_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, status, reference_id, created_at)
+         VALUES ($1, $2, 'refund', $3, 'completed', $4, NOW())",
+    )
+    .bind(reversal_id)
+    .bind(user_id)
+    .bind(amount)
+    .bind(tx_id.to_string())
+    .execute(&pool)
+    .await?;
+
+    // Mark the original transaction as refunded.
+    sqlx::query("UPDATE wallet_transactions SET status = 'refunded' WHERE id = $1")
+        .bind(tx_id)
+        .execute(&pool)
+        .await?;
+
+    // ── 4. Optionally call Paystack for deposit transactions ──────────────────
+    let (provider, provider_ref, refund_status) = if tx_type == "deposit" {
+        let paystack_key = std::env::var("PAYSTACK_SECRET_KEY").ok();
+        if let Some(key) = paystack_key {
+            // Retrieve the Paystack reference stored in the original tx.
+            let paystack_ref: Option<String> =
+                sqlx::query_scalar("SELECT reference_id FROM wallet_transactions WHERE id = $1")
+                    .bind(tx_id)
+                    .fetch_optional(&pool)
+                    .await?
+                    .flatten();
+
+            if let Some(ref ps_ref) = paystack_ref {
+                let client = reqwest::Client::new();
+                // Amount in kobo (ZAR cents).
+                let amount_kobo = (amount * rust_decimal::Decimal::new(100, 0)).to_string();
+                let resp = client
+                    .post("https://api.paystack.co/refund")
+                    .header("Authorization", format!("Bearer {}", key))
+                    .json(&serde_json::json!({
+                        "transaction": ps_ref,
+                        "amount": amount_kobo
+                    }))
+                    .send()
+                    .await;
+
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        let body: serde_json::Value = r.json().await.unwrap_or_default();
+                        let ps_refund_ref = body["data"]["id"].as_i64().map(|id| id.to_string());
+                        (
+                            "paystack".to_string(),
+                            ps_refund_ref,
+                            "completed".to_string(),
+                        )
+                    }
+                    Ok(r) => {
+                        tracing::warn!(
+                            "Paystack refund API returned non-success status {} for tx {}",
+                            r.status(),
+                            tx_id
+                        );
+                        ("paystack".to_string(), None, "failed".to_string())
+                    }
+                    Err(e) => {
+                        tracing::warn!("Paystack refund request error for tx {}: {}", tx_id, e);
+                        ("paystack".to_string(), None, "failed".to_string())
+                    }
+                }
+            } else {
+                // No Paystack reference found — platform-credit-only refund.
+                ("none".to_string(), None, "completed".to_string())
+            }
+        } else {
+            tracing::info!(
+                "PAYSTACK_SECRET_KEY not configured; recording refund for tx {} as provider_unconfigured",
+                tx_id
+            );
+            (
+                "none".to_string(),
+                None,
+                "provider_unconfigured".to_string(),
+            )
+        }
+    } else {
+        // Non-deposit transaction — no provider to call.
+        ("none".to_string(), None, "completed".to_string())
+    };
+
+    // ── 5. Write the refund_records row ──────────────────────────────────────
+    let refund_id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO refund_records
+             (id, transaction_id, user_id, admin_id, amount, provider, provider_ref, status, reason, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)",
+    )
+    .bind(refund_id)
+    .bind(tx_id)
+    .bind(user_id)
+    .bind(admin_id)
+    .bind(amount)
+    .bind(&provider)
+    .bind(&provider_ref)
+    .bind(&refund_status)
+    .bind(payload.reason.as_deref())
+    .bind(now)
+    .execute(&pool)
+    .await?;
+
+    Ok(Json(AdminRefundResponse {
+        refund_id,
+        transaction_id: tx_id,
+        user_id,
+        amount,
+        provider,
+        provider_ref,
+        status: refund_status,
+        created_at: now,
+    }))
+}
+
 pub async fn list_review_reports(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
@@ -1543,6 +1732,15 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/review-reports/:id/action",
             post(act_on_review_report).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // ── Refunds ────────────────────────────────────────────────────────────
+        // POST /admin/transactions/:id/refund — reverse wallet balance + write refund_records
+        .route(
+            "/transactions/:id/refund",
+            post(admin_refund_transaction).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

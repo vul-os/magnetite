@@ -3,6 +3,7 @@ import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Pagination from '../../components/Pagination';
 import Button from '../../components/common/Button';
+import { api } from '../../api/client';
 import './admin.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
@@ -63,6 +64,10 @@ export default function Finance() {
   const [currentPage, setCurrentPage]             = useState(1);
   const [processingPayout, setProcessingPayout]   = useState(null);
   const [payoutError, setPayoutError]             = useState(null);
+  const [refundingTxn, setRefundingTxn]           = useState(null);   // txn being refunded
+  const [refundReason, setRefundReason]           = useState('');
+  const [refundError, setRefundError]             = useState(null);
+  const [refundSuccess, setRefundSuccess]         = useState(null);
   const perPage = 10;
 
   const fetchData = useCallback(async () => {
@@ -169,6 +174,23 @@ export default function Finance() {
     setProcessingPayout(null);
   };
 
+  const handleRefundConfirm = async () => {
+    if (!refundingTxn) return;
+    setRefundError(null);
+    try {
+      await api.admin.refundTransaction(refundingTxn.id, { reason: refundReason || undefined });
+      setRefundSuccess(`Refund initiated for transaction ${String(refundingTxn.id).slice(0, 12)}`);
+      setRefundingTxn(null);
+      setRefundReason('');
+      // Mark the transaction as refunded in local state
+      setTransactions(prev =>
+        prev.map(t => t.id === refundingTxn.id ? { ...t, status: 'refunded' } : t)
+      );
+    } catch (err) {
+      setRefundError(err.message || 'Refund failed');
+    }
+  };
+
   const displayStats = stats || { totalRevenue: 0, monthlyRevenue: 0, platformFees: 0, pendingPayouts: 0 };
 
   return (
@@ -198,6 +220,92 @@ export default function Finance() {
             <div className="admin-error-banner" role="alert">
               <span className="auth-error-icon" aria-hidden="true">!</span>
               {payoutError}
+            </div>
+          )}
+
+          {refundError && (
+            <div className="admin-error-banner" role="alert">
+              <span className="auth-error-icon" aria-hidden="true">!</span>
+              Refund error: {refundError}
+              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={() => setRefundError(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {refundSuccess && (
+            <div className="admin-success-banner" role="status" style={{ padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: 'var(--radius)', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--color-success, #22c55e)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
+              {refundSuccess}
+              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={() => setRefundSuccess(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Refund confirmation modal */}
+          {refundingTxn && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="refund-dialog-title"
+              style={{
+                position: 'fixed', inset: 0, zIndex: 'var(--z-modal, 1000)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+              }}
+            >
+              <div style={{
+                background: 'var(--color-bg-elevated)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '2rem',
+                maxWidth: 420,
+                width: '90%',
+              }}>
+                <h2 id="refund-dialog-title" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)', marginBottom: '0.5rem', color: 'var(--color-text-primary)' }}>
+                  // CONFIRM REFUND
+                </h2>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: '1.25rem' }}>
+                  Refund transaction <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-accent)' }}>{String(refundingTxn.id).slice(0, 12)}</code> of <strong>${Math.abs(refundingTxn.amount).toFixed(2)}</strong> for user <strong>{refundingTxn.user}</strong>?
+                </p>
+                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: '0.4rem' }}>
+                  Reason (optional)
+                </label>
+                <textarea
+                  value={refundReason}
+                  onChange={e => setRefundReason(e.target.value)}
+                  placeholder="e.g. duplicate charge, user request"
+                  rows={2}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'var(--color-bg-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius)',
+                    padding: '0.6rem 0.75rem',
+                    color: 'var(--color-text-primary)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-sm)',
+                    resize: 'vertical',
+                    marginBottom: '1.25rem',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setRefundingTxn(null); setRefundReason(''); setRefundError(null); }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleRefundConfirm}
+                  >
+                    Confirm Refund
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -342,6 +450,7 @@ export default function Finance() {
                       <th>Amount</th>
                       <th>Date</th>
                       <th>Status</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -367,6 +476,18 @@ export default function Finance() {
                         </td>
                         <td>
                           <span className={`status-badge ${txn.status}`}>{txn.status}</span>
+                        </td>
+                        <td>
+                          {txn.status !== 'refunded' && txn.amount > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setRefundingTxn(txn); setRefundError(null); setRefundSuccess(null); }}
+                              aria-label={`Refund transaction ${String(txn.id).slice(0, 12)}`}
+                            >
+                              Refund
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}

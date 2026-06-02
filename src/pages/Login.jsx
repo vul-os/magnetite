@@ -67,8 +67,8 @@ export default function Login() {
                 <span className="auth-hero-stat-label">platform fee</span>
               </div>
               <div className="auth-hero-stat">
-                <span className="auth-hero-stat-value">USDC</span>
-                <span className="auth-hero-stat-label">instant payouts</span>
+                <span className="auth-hero-stat-value">USD</span>
+                <span className="auth-hero-stat-label">Wise payouts</span>
               </div>
               <div className="auth-hero-stat">
                 <span className="auth-hero-stat-value">MIT</span>

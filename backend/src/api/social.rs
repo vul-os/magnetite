@@ -286,6 +286,55 @@ pub async fn remove_friend(
     Ok(response::success_response(()))
 }
 
+/// GET /friends/blocked — list all users that `user_id` has blocked.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct BlockedUser {
+    pub id: Uuid,
+    pub username: String,
+    pub avatar_url: Option<String>,
+    pub blocked_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn list_blocked_users(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<response::PaginatedResponse<BlockedUser>>> {
+    let blocked = sqlx::query_as::<_, BlockedUser>(
+        r#"
+        SELECT u.id, u.username, u.avatar_url, bu.created_at AS blocked_at
+        FROM blocked_users bu
+        JOIN users u ON bu.blocked_id = u.id
+        WHERE bu.user_id = $1
+        ORDER BY bu.created_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let total = blocked.len() as u64;
+    Ok(response::paginated(blocked, 1, 100, total))
+}
+
+/// DELETE /friends/block/:id — unblock a previously blocked user.
+pub async fn unblock_user(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(blocked_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<()>>> {
+    let result = sqlx::query("DELETE FROM blocked_users WHERE user_id = $1 AND blocked_id = $2")
+        .bind(user_id)
+        .bind(blocked_id)
+        .execute(&pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Block record not found".to_string()));
+    }
+
+    Ok(response::success_response(()))
+}
+
 pub async fn block_user(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
@@ -676,6 +725,22 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/block/:id",
             post(block_user).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // GET  /friends/blocked   — list blocked users
+        // DELETE /friends/block/:id — unblock
+        .route(
+            "/blocked",
+            get(list_blocked_users).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/block/:id",
+            delete(unblock_user).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

@@ -1,0 +1,74 @@
+# MediaMTX configuration for Magnetite local development.
+# Mounted into the mediamtx container at /mediamtx.yml.
+# Docs: https://github.com/bluenviron/mediamtx
+
+###############################################################################
+# Global settings
+###############################################################################
+
+# Log level: debug | info | warn | error
+logLevel: info
+
+# Addresses
+rtmpAddress:    :1935
+hlsAddress:     :8888
+webrtcAddress:  :8889
+rtspAddress:    :8554
+rtspEncAddress: :8322
+
+###############################################################################
+# HLS
+###############################################################################
+
+hls: yes
+
+# Segment duration (lower = lower latency, higher = better stability).
+hlsSegmentDuration: 2s
+
+# Number of segments to keep in memory.
+hlsSegmentCount: 7
+
+# Allow HLS to be consumed without authentication.
+hlsAlwaysRemux: no
+
+###############################################################################
+# WebRTC / WHIP
+###############################################################################
+
+webrtc: yes
+
+# WebRTC ICE servers — empty = use the built-in STUN server.
+# webrtcICEServers:
+#   - url: stun:stun.l.google.com:19302
+
+###############################################################################
+# RTMP
+###############################################################################
+
+rtmp: yes
+
+###############################################################################
+# Paths (stream paths)
+###############################################################################
+
+# Default path settings — applied to every stream path unless overridden.
+paths:
+  # Allow all ingest/egress without credentials in local dev.
+  # For production, add publishUser / readUser per path.
+  all_others:
+
+  # Named path for OBS / FFmpeg RTMP ingest.
+  # Push to:  rtmp://localhost:1935/live/<stream-key>
+  # Watch at: http://localhost:8888/live/<stream-key>/index.m3u8
+  live:
+
+  # Uncomment and customise to forward a stream to Twitch or YouTube.
+  # Replace YOUR_STREAM_KEY with your platform stream key.
+  #
+  # live:
+  #   runOnPublish: >
+  #     ffmpeg -i rtsp://127.0.0.1:8554/live/$MTX_PATH
+  #     -c:v libx264 -preset veryfast -b:v 3000k
+  #     -c:a aac -b:a 128k
+  #     -f flv rtmp://live.twitch.tv/app/YOUR_STREAM_KEY
+  #   runOnPublishRestart: yes

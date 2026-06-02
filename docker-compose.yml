@@ -37,6 +37,27 @@ services:
     networks:
       - magnetite
 
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    environment:
+      MTX_LOGLEVEL: ${MTX_LOGLEVEL:-info}
+    volumes:
+      - ./config/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "${MEDIAMTX_RTMP_PORT:-1935}:1935"       # RTMP ingest (OBS / FFmpeg)
+      - "${MEDIAMTX_HLS_PORT:-8888}:8888"         # HLS watch + MediaMTX REST API
+      - "${MEDIAMTX_WEBRTC_PORT:-8889}:8889"      # WebRTC / WHIP
+      - "${MEDIAMTX_RTSP_PORT:-8554}:8554"        # RTSP
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8888/v3/config/global/get"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - magnetite
+
   backend:
     build:
       context: .
@@ -50,6 +71,7 @@ services:
       SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
       SERVER_PORT: ${SERVER_PORT:-8080}
       RUST_LOG: ${RUST_LOG:-info}
+      MEDIA_SERVER_BASE_URL: ${MEDIA_SERVER_BASE_URL:-http://mediamtx:8888}
       # OAuth
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -88,6 +110,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mediamtx:
         condition: service_healthy
     ports:
       - "${BACKEND_PORT:-8080}:8080"

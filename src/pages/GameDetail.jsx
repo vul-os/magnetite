@@ -63,6 +63,44 @@ const MOCK_REVIEWS = [
 
 const TABS = ['Overview', 'Leaderboard', 'Reviews'];
 
+// Content rating configuration
+const CONTENT_RATING_META = {
+  everyone: { label: 'E',  title: 'Everyone',   color: 'var(--color-success,  #22c55e)', description: 'Suitable for all ages' },
+  teen:     { label: 'T',  title: 'Teen',        color: 'var(--color-warning,  #f59e0b)', description: 'Suitable for ages 13+' },
+  mature:   { label: 'M',  title: 'Mature',      color: 'var(--color-error,    #ef4444)', description: 'Suitable for ages 17+' },
+};
+
+function ContentRatingBadge({ rating }) {
+  const meta = CONTENT_RATING_META[rating] ?? CONTENT_RATING_META.everyone;
+  return (
+    <span
+      className="content-rating-badge"
+      title={`${meta.title} — ${meta.description}`}
+      aria-label={`Content rating: ${meta.title}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 28,
+        height: 28,
+        borderRadius: 4,
+        border: `2px solid ${meta.color}`,
+        color: meta.color,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 'var(--text-xs)',
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        lineHeight: 1,
+        flexShrink: 0,
+      }}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
+const AGE_GATE_REQUIRED_AGE = { everyone: 0, teen: 13, mature: 17 };
+
 function StarRating({ rating, size = 'md' }) {
   const fullStars  = Math.floor(rating);
   const hasHalf    = rating % 1 >= 0.5;
@@ -136,6 +174,7 @@ export default function GameDetail() {
   const [showShareToast, setShowShareToast]     = useState(false);
   const [stickyBarVisible, setStickyBarVisible] = useState(false);
   const [userTier] = useState('basic');
+  const [ageGatePassed, setAgeGatePassed] = useState(false);
   const heroRef = useRef(null);
 
   // Show sticky buy bar once hero scrolls out of view
@@ -369,6 +408,48 @@ export default function GameDetail() {
     );
   }
 
+  // Age gate — show blocking screen for mature/teen-rated games on first visit
+  const contentRating = game?.content_rating ?? game?.contentRating ?? 'everyone';
+  const requiredAge   = AGE_GATE_REQUIRED_AGE[contentRating] ?? 0;
+  if (requiredAge > 0 && !ageGatePassed) {
+    return (
+      <Layout>
+        <div
+          className="game-detail"
+          style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}
+        >
+          <div style={{
+            maxWidth: 400, width: '100%', textAlign: 'center',
+            background: 'var(--color-bg-elevated)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '2.5rem 2rem',
+          }}>
+            <ContentRatingBadge rating={contentRating} />
+            <h2 style={{ fontFamily: 'var(--font-mono)', marginTop: '1.25rem', color: 'var(--color-text-primary)' }}>
+              Age Confirmation Required
+            </h2>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', margin: '0.75rem 0 1.75rem' }}>
+              <strong>{game.title}</strong> is rated <strong>{CONTENT_RATING_META[contentRating]?.title}</strong> and contains content suitable for ages {requiredAge}+.
+              You must confirm your age to continue.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setAgeGatePassed(true)}
+              >
+                I am {requiredAge} or older
+              </button>
+              <a href="/marketplace" className="btn btn-secondary">
+                Go Back
+              </a>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="game-detail">
@@ -413,6 +494,9 @@ export default function GameDetail() {
                 <span className="tier-badge">
                   {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']} Tier
                 </span>
+              )}
+              {(game.content_rating || game.contentRating) && (
+                <ContentRatingBadge rating={game.content_rating ?? game.contentRating} />
               )}
             </div>
             <div className="hero-main reveal-2">

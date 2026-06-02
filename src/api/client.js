@@ -233,6 +233,13 @@ export const api = {
     /** POST /api/v1/admin/users/:id/unban — unban a user */
     unbanUser: (userId) =>
       request(`/api/v1/admin/users/${userId}/unban`, { method: 'POST' }),
+    /**
+     * POST /api/v1/admin/transactions/:id/refund — initiate a refund for a transaction.
+     * data: { reason?: string }
+     * Returns a refund_records row: { id, transaction_id, user_id, amount, provider, status, ... }
+     */
+    refundTransaction: (transactionId, data = {}) =>
+      request(`/api/v1/admin/transactions/${transactionId}/refund`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   developer: {

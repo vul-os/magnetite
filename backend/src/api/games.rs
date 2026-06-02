@@ -12,6 +12,9 @@ use crate::api::middleware;
 use crate::api::response::{self, PaginatedResponse};
 use crate::error::{AppError, Result};
 
+/// Valid content_rating values enforced at the DB level (games.content_rating CHECK constraint).
+const VALID_CONTENT_RATINGS: &[&str] = &["everyone", "teen", "mature"];
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Game {
     pub id: Uuid,
@@ -21,6 +24,7 @@ pub struct Game {
     pub description: Option<String>,
     pub status: String,
     pub active: bool,
+    pub content_rating: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -33,6 +37,7 @@ pub struct GamePlayMetadata {
     pub description: Option<String>,
     pub status: String,
     pub github_repo: String,
+    pub content_rating: String,
     pub live_version: Option<String>,
     pub has_playable_artifact: bool,
     pub artifact_type: Option<String>,
@@ -43,6 +48,8 @@ pub struct CreateGameRequest {
     pub github_repo: String,
     pub title: String,
     pub description: Option<String>,
+    /// Optional content rating; defaults to "everyone" if omitted.
+    pub content_rating: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +57,7 @@ pub struct UpdateGameRequest {
     pub title: Option<String>,
     pub description: Option<String>,
     pub status: Option<String>,
+    pub content_rating: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -67,7 +75,7 @@ pub struct LeaderboardQuery {
 
 pub async fn list_games(State(pool): State<PgPool>) -> Result<Json<PaginatedResponse<Game>>> {
     let games = sqlx::query_as::<_, Game>(
-        "SELECT id, developer_id, github_repo, title, description, status, active, created_at
+        "SELECT id, developer_id, github_repo, title, description, status, active, content_rating, created_at
          FROM games WHERE active = true",
     )
     .fetch_all(&pool)
@@ -81,17 +89,26 @@ pub async fn create_game(
     Extension(developer_id): Extension<Uuid>,
     Json(payload): Json<CreateGameRequest>,
 ) -> Result<Json<crate::api::response::ApiResponse<Game>>> {
+    let content_rating = payload.content_rating.as_deref().unwrap_or("everyone");
+    if !VALID_CONTENT_RATINGS.contains(&content_rating) {
+        return Err(AppError::Validation(format!(
+            "Invalid content_rating '{}'. Must be one of: everyone, teen, mature",
+            content_rating
+        )));
+    }
+
     let game_id = Uuid::new_v4();
     let game = sqlx::query_as::<_, Game>(
-        "INSERT INTO games (id, developer_id, github_repo, title, description, status, active, created_at)
-         VALUES ($1, $2, $3, $4, $5, 'draft', true, NOW())
-         RETURNING id, developer_id, github_repo, title, description, status, active, created_at",
+        "INSERT INTO games (id, developer_id, github_repo, title, description, content_rating, status, active, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'draft', true, NOW())
+         RETURNING id, developer_id, github_repo, title, description, status, active, content_rating, created_at",
     )
     .bind(game_id)
     .bind(developer_id)
     .bind(&payload.github_repo)
     .bind(&payload.title)
     .bind(&payload.description)
+    .bind(content_rating)
     .fetch_one(&pool)
     .await?;
 
@@ -103,7 +120,7 @@ pub async fn get_game(
     Path(game_id): Path<Uuid>,
 ) -> Result<Json<crate::api::response::ApiResponse<Game>>> {
     let game = sqlx::query_as::<_, Game>(
-        "SELECT id, developer_id, github_repo, title, description, status, active, created_at
+        "SELECT id, developer_id, github_repo, title, description, status, active, content_rating, created_at
          FROM games WHERE id = $1 AND active = true",
     )
     .bind(game_id)
@@ -119,19 +136,31 @@ pub async fn update_game(
     Path(game_id): Path<Uuid>,
     Json(payload): Json<UpdateGameRequest>,
 ) -> Result<Json<crate::api::response::ApiResponse<Game>>> {
+    // Validate content_rating if provided.
+    if let Some(ref cr) = payload.content_rating {
+        if !VALID_CONTENT_RATINGS.contains(&cr.as_str()) {
+            return Err(AppError::Validation(format!(
+                "Invalid content_rating '{}'. Must be one of: everyone, teen, mature",
+                cr
+            )));
+        }
+    }
+
     // Ownership check: only the developer who owns the game may update it.
     // Return 404 (not 403) to avoid leaking whether the game exists to non-owners.
     let game = sqlx::query_as::<_, Game>(
         "UPDATE games SET
          title = COALESCE($1, title),
          description = COALESCE($2, description),
-         status = COALESCE($3, status)
-         WHERE id = $4 AND developer_id = $5 AND active = true
-         RETURNING id, developer_id, github_repo, title, description, status, active, created_at",
+         status = COALESCE($3, status),
+         content_rating = COALESCE($4, content_rating)
+         WHERE id = $5 AND developer_id = $6 AND active = true
+         RETURNING id, developer_id, github_repo, title, description, status, active, content_rating, created_at",
     )
     .bind(&payload.title)
     .bind(&payload.description)
     .bind(&payload.status)
+    .bind(&payload.content_rating)
     .bind(game_id)
     .bind(developer_id)
     .fetch_optional(&pool)
@@ -212,7 +241,7 @@ pub async fn get_game_play_metadata(
     Path(game_id): Path<Uuid>,
 ) -> Result<Json<crate::api::response::ApiResponse<GamePlayMetadata>>> {
     let game = sqlx::query_as::<_, Game>(
-        "SELECT id, developer_id, github_repo, title, description, status, active, created_at
+        "SELECT id, developer_id, github_repo, title, description, status, active, content_rating, created_at
          FROM games WHERE id = $1 AND active = true",
     )
     .bind(game_id)
@@ -254,6 +283,7 @@ pub async fn get_game_play_metadata(
         description: game.description,
         status: game.status,
         github_repo: game.github_repo,
+        content_rating: game.content_rating,
         live_version,
         has_playable_artifact,
         artifact_type,

@@ -1,6 +1,12 @@
 version: "3.9"
 
 services:
+  mediamtx:
+    environment:
+      MTX_LOGLEVEL: debug
+    volumes:
+      - ./config/mediamtx.yml:/mediamtx.yml:ro
+
   backend:
     build:
       context: .
@@ -11,6 +17,7 @@ services:
       RUST_LOG: debug
       DATABASE_URL: postgres://magnetite:magnetite_dev_password@postgres:5432/magnetite
       REDIS_URL: redis://redis:6379
+      MEDIA_SERVER_BASE_URL: http://mediamtx:8888
     volumes:
       - ./backend:/app
       - cargo_cache:/app/target
@@ -18,6 +25,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mediamtx:
         condition: service_healthy
 
   frontend:

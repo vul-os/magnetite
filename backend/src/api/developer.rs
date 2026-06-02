@@ -107,6 +107,10 @@ pub struct GameAnalytics {
     pub daily_active_players: Vec<DailyPlayerData>,
     pub session_duration_stats: SessionStats,
     pub revenue_breakdown: RevenueBreakdown,
+    /// 30-day daily revenue buckets (date → USD amount).
+    pub daily_revenue: Vec<DailyRevenue>,
+    /// 30-day daily playtime buckets (date → total minutes).
+    pub daily_playtime: Vec<DailyPlaytime>,
 }
 
 #[derive(Debug, Serialize)]
@@ -129,6 +133,20 @@ pub struct RevenueBreakdown {
     pub platform_fee: Decimal,
     pub developer_earnings: Decimal,
     pub session_count: i64,
+}
+
+/// One daily revenue bucket for a developer's game.
+#[derive(Debug, Serialize)]
+pub struct DailyRevenue {
+    pub date: String,
+    pub revenue_usd: Decimal,
+}
+
+/// One daily playtime bucket for a developer's game (total minutes played by all users).
+#[derive(Debug, Serialize)]
+pub struct DailyPlaytime {
+    pub date: String,
+    pub total_minutes: i64,
 }
 
 // ---------------------------------------------------------------------------
@@ -542,6 +560,47 @@ pub async fn get_game_analytics(
     let platform_fee = total_revenue * Decimal::from_str_exact("0.30").unwrap_or(Decimal::ZERO);
     let developer_earnings = total_revenue - platform_fee;
 
+    // ── Daily revenue time-series (30 days) ──────────────────────────────────
+    let daily_revenue_rows = sqlx::query_as::<_, (String, Decimal)>(
+        "SELECT DATE(created_at)::text AS date, COALESCE(SUM(amount), 0) AS revenue_usd
+         FROM game_revenue
+         WHERE game_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
+         GROUP BY DATE(created_at)
+         ORDER BY date",
+    )
+    .bind(game_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let daily_revenue: Vec<DailyRevenue> = daily_revenue_rows
+        .into_iter()
+        .map(|(date, revenue_usd)| DailyRevenue { date, revenue_usd })
+        .collect();
+
+    // ── Daily playtime time-series (30 days) ─────────────────────────────────
+    // game_sessions stores started_at + ended_at; derive minutes from the interval.
+    let daily_playtime_rows = sqlx::query_as::<_, (String, i64)>(
+        "SELECT DATE(started_at)::text AS date,
+                COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - started_at)) / 60)::bigint, 0) AS total_minutes
+         FROM game_sessions
+         WHERE game_id = $1
+           AND started_at >= NOW() - INTERVAL '30 days'
+           AND ended_at IS NOT NULL
+         GROUP BY DATE(started_at)
+         ORDER BY date",
+    )
+    .bind(game_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let daily_playtime: Vec<DailyPlaytime> = daily_playtime_rows
+        .into_iter()
+        .map(|(date, total_minutes)| DailyPlaytime {
+            date,
+            total_minutes,
+        })
+        .collect();
+
     Ok(Json(GameAnalytics {
         game_id: game.0,
         daily_active_players: daily_active,
@@ -556,6 +615,8 @@ pub async fn get_game_analytics(
             developer_earnings,
             session_count,
         },
+        daily_revenue,
+        daily_playtime,
     }))
 }
 
@@ -1020,6 +1081,14 @@ pub fn router(pool: PgPool) -> Router {
         )
         .route(
             "/games/:id/players",
+            get(get_game_analytics).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // Canonical analytics route: /api/v1/developer/games/:id/analytics
+        .route(
+            "/games/:id/analytics",
             get(get_game_analytics).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
