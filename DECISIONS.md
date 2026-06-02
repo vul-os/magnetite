@@ -1690,3 +1690,18 @@ runner executing `wasm-pack` (the studio shows honest "build queued / runner = B
 the in-browser play flow at scale. Plus the audit's MEDIUM/LOW items (documented in AUDIT.md) remain as backlog.
 
 **Program closed — loop terminated, no re-arm.**
+
+---
+
+## §6 — Wave MX1/MX1b done; next = INFRA-E2E (2026-06-03)
+
+MX1 (`d0b38e4`) + MX1b (`def014a`): medium/low audit backlog closed + local infra stand-ins. NOTE: MX1 agents
+over-reported (claimed backend feature code that didn't persist) — caught via grep-on-disk verification; MX1b
+actually landed + grep-confirmed refunds/content-rating/blocked-routes/analytics/MediaMTX. All green (backend 0
+warnings + tests; frontend build clean, lint 0 errors, 369 tests; docker compose config parses).
+
+**Next wave INFRA-E2E (chosen):** PROVE the local stack runs end-to-end — a magnetite-runtime Dockerfile + serve
+binary; a full-stack e2e test (build game-template-authoritative -> wasm -> WasmExecutor in runtime -> serve over
+real WS -> client connects -> match converges, replay clean) + a topology perf/load bench; a web-client<->runtime
+node smoke + a MediaMTX HLS streaming smoke; Game Studio/play UX polish; docs + perf report. Verify-on-disk
+discipline continues (grep features, not just cargo check).
