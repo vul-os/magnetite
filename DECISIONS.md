@@ -2103,7 +2103,8 @@ the read-only pages lacked (`backend/src/superadmin/ops.rs`, audited + CSRF):
   the code's 15%, so wiring it would silently change money splits). Shared pages.rs helpers made `pub(super)`.
 - **Moderation** (`/superadmin/moderation`): comms-moderation queue over `chat_flags` (pending/resolved/dismissed/
   all); resolve/dismiss a pending flag (super-admin isn't a users row so `resolved_by` is NULL, actor in note +
-  audit). Author links to user page for a ban.
+  audit). Author links to user page for a ban. Plus a second **Reported reviews** queue (`review_reports`):
+  remove (DELETE the review, cascades the report) or dismiss. Completes content moderation (chat + reviews).
 Verified: 0 warnings/fmt + 16 superadmin tests (ops-routes-require-session covers payouts/settings/moderation).
 
 ### Adversarial security review of the super-admin module (+ 2 fixes)

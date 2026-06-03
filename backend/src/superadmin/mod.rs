@@ -109,6 +109,7 @@ pub async fn router(pool: PgPool, geo: Arc<GeoResolver>) -> Option<Router> {
         .route("/settings/update", post(ops::setting_update))
         .route("/moderation", get(ops::moderation_list))
         .route("/moderation/:id/act", post(ops::moderation_act))
+        .route("/review-reports/:id/act", post(ops::review_report_act))
         .route("/analytics", get(pages::analytics_page))
         .route("/audit", get(pages::audit_page))
         .route("/logout", get(logout))
