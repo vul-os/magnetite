@@ -2074,4 +2074,27 @@ about billing model and if its following it." This wave delivers exactly that, p
 `SUPERADMIN_IP_ALLOWLIST` (IP/CIDR csv), `SUPERADMIN_SESSION_TTL_SECS`, `SUPERADMIN_SECURE_COOKIE`,
 `ANALYTICS_ENABLED`, `GEOIP_DB_PATH`, `TRUST_PROXY`.
 
+### Hardening pass (same day, user: "fix all these best effort make system robust and secure")
+Closed the four limitations I'd flagged:
+1. **Sessions + lockout are now Redis-backed when reachable** (`redis::aio::ConnectionManager`) → shared across
+   replicas + survive restart; graceful in-memory fallback (`SUPERADMIN_SESSION_BACKEND=memory` forces it).
+   The brute-force lockout in Redis means an attacker can't dodge it by spreading attempts across instances.
+   Session record is JSON in `sa:sess:{token}` (EX ttl) + a `sa:sess:idx` zset for accurate active counts;
+   lockout uses `sa:fail:{ip}` (INCR+EXPIRE) → `sa:lock:{ip}` (EX). Store methods are now async.
+2. **GeoIP best-effort:** added a CDN country-header fallback (`GEO_COUNTRY_HEADER`, default `cf-ipcountry`,
+   only trusted when `TRUST_PROXY`) so geo works behind Cloudflare with no local DB; plus `scripts/fetch-geoip.sh`
+   to pull GeoLite2-City with a free MaxMind license key.
+3. **Analytics scale:** `ANALYTICS_SAMPLE_RATE` (errors always kept, successes sampled) + a 12-hourly retention
+   job pruning rows older than `ANALYTICS_RETENTION_DAYS` (default 90).
+4. **Route-level integration tests** for the super-admin handlers (lazy fast-fail pool + `tower` `oneshot`):
+   login renders + sets CSRF cookie + security headers; protected route → login redirect; IP allowlist
+   block/permit; CSRF mismatch rejected; correct creds → session cookie; wrong creds rejected. (7 route tests
+   + the 8 unit tests.)
+
+### Developer tools — already integrated (GDS wave, earlier)
+Confirmed present + routed: in-browser **Game Studio** (`/developers/studio`, Monaco), **Deploy** flow
+(`/developers/deploy` with BuildLogs/BuildTimeline/DeploymentStatus), **Developer Dashboard** (`/developers`),
+GameAnalytics; the **`magnetite` CLI** (`new|build|dev|deploy`, all implemented); `magnetite-sdk` authority
+contract; `magnetite-web-client` browser authoritative client; `developer.rs` API (~10 routes).
+
 Recommendation to the user: open a PR / merge when ready; provide the external credentials + infra to go live.

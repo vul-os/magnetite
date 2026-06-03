@@ -186,7 +186,7 @@ pub async fn overview(
 </div>",
         email = esc(&sess.email),
         since = dt(sess.created),
-        sessions = state.sessions.active_count(),
+        sessions = state.sessions.active_count().await,
         geo = if state.geo.enabled() { "<span class=\"ok\">on</span>" } else { "<span class=\"muted\">off</span>" },
         users = kpi("Users", &k.users.to_string(), ""),
         devs = kpi("Developers", &k.developers.to_string(), ""),

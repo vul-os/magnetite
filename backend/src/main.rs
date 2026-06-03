@@ -226,7 +226,7 @@ async fn main() {
         .merge(game_ws_handler.router());
 
     // Hardened super-admin panel — mounted only when a super credential is set.
-    match superadmin::router(pool.clone(), Arc::clone(&geo)) {
+    match superadmin::router(pool.clone(), Arc::clone(&geo)).await {
         Some(sa) => app = app.nest("/superadmin", sa),
         None => tracing::info!(
             "Super-admin panel disabled (set SUPERADMIN_EMAIL + SUPERADMIN_PASSWORD_HASH to enable)"
@@ -302,6 +302,34 @@ async fn main() {
             match backup::create_backup(&backup_pool).await {
                 Ok(filename) => tracing::info!("Backup completed: {}", filename),
                 Err(e) => tracing::warn!("Backup failed (non-fatal): {}", e),
+            }
+        }
+    });
+
+    // Analytics retention: prune analytics_events older than the retention window
+    // (ANALYTICS_RETENTION_DAYS, default 90) every 12 hours so the table stays lean.
+    let analytics_pool = pool.clone();
+    tokio::spawn(async move {
+        let days: i64 = std::env::var("ANALYTICS_RETENTION_DAYS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|d| *d > 0)
+            .unwrap_or(90);
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(12 * 3600));
+        loop {
+            ticker.tick().await;
+            match sqlx::query(
+                "DELETE FROM analytics_events WHERE occurred_at < NOW() - ($1 || ' days')::interval",
+            )
+            .bind(days.to_string())
+            .execute(&analytics_pool)
+            .await
+            {
+                Ok(r) if r.rows_affected() > 0 => {
+                    tracing::info!("Analytics retention: pruned {} old events", r.rows_affected())
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!("Analytics retention prune failed (non-fatal): {}", e),
             }
         }
     });

@@ -49,11 +49,17 @@ pub struct SuperAdminState {
 }
 
 /// Build the super-admin router, or `None` if no super credential is configured.
-/// Shares the `GeoResolver` with the analytics recorder.
-pub fn router(pool: PgPool, geo: Arc<GeoResolver>) -> Option<Router> {
+/// Shares the `GeoResolver` with the analytics recorder. Sessions + lockout use
+/// Redis when reachable (multi-replica safe, survives restart), else in-memory.
+pub async fn router(pool: PgPool, geo: Arc<GeoResolver>) -> Option<Router> {
     let config = SuperAdminConfig::from_env()?;
+
+    let redis = build_session_redis().await;
+    let sessions = auth::SessionStore::new(redis.clone());
+    let guard = auth::LoginGuard::new(redis);
+
     tracing::info!(
-        "Super-admin panel enabled at /superadmin (ip-allowlist: {}, secure-cookie: {})",
+        "Super-admin panel enabled at /superadmin (ip-allowlist: {}, secure-cookie: {}, session-backend: {})",
         if std::env::var("SUPERADMIN_IP_ALLOWLIST")
             .map(|v| !v.trim().is_empty())
             .unwrap_or(false)
@@ -63,23 +69,24 @@ pub fn router(pool: PgPool, geo: Arc<GeoResolver>) -> Option<Router> {
             "off"
         },
         config.secure_cookie,
+        sessions.backend_name(),
     );
 
     let state = Arc::new(SuperAdminState {
         pool,
         config,
-        sessions: auth::SessionStore::new(),
-        guard: auth::LoginGuard::new(),
+        sessions,
+        guard,
         geo,
     });
 
-    // Periodic sweep of expired in-memory sessions.
+    // Periodic sweep of expired sessions (TTL also handles this in Redis).
     let sweep_state = Arc::clone(&state);
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(300));
         loop {
             ticker.tick().await;
-            sweep_state.sessions.sweep();
+            sweep_state.sessions.sweep().await;
         }
     });
 
@@ -173,8 +180,11 @@ async fn require_session(
     mut request: Request<Body>,
     next: Next,
 ) -> Response<Body> {
-    let token = auth::token_from_cookies(request.headers());
-    match token.and_then(|t| state.sessions.get(&t)) {
+    let session = match auth::token_from_cookies(request.headers()) {
+        Some(token) => state.sessions.get(&token).await,
+        None => None,
+    };
+    match session {
         Some(session) => {
             request.extensions_mut().insert(session);
             next.run(request).await
@@ -228,7 +238,7 @@ async fn login_submit(
     let ip = client_ip(&headers, Some(peer.ip()), state.config.trust_proxy);
 
     // Brute-force lockout.
-    if let Err(secs) = state.guard.check(&ip) {
+    if let Err(secs) = state.guard.check(&ip).await {
         audit_event(
             &state.pool,
             &state.config.email,
@@ -249,11 +259,11 @@ async fn login_submit(
     }
 
     if state.config.verify_credentials(&form.email, &form.password) {
-        state.guard.record_success(&ip);
-        let (token, _session) =
-            state
-                .sessions
-                .create(&state.config.email, &ip, state.config.session_ttl);
+        state.guard.record_success(&ip).await;
+        let (token, _session) = state
+            .sessions
+            .create(&state.config.email, &ip, state.config.session_ttl)
+            .await;
         audit_event(
             &state.pool,
             &state.config.email,
@@ -286,7 +296,7 @@ async fn login_submit(
         );
         resp
     } else {
-        state.guard.record_failure(&ip);
+        state.guard.record_failure(&ip).await;
         audit_event(
             &state.pool,
             &form.email,
@@ -303,7 +313,7 @@ async fn login_submit(
 
 async fn logout(State(state): State<Arc<SuperAdminState>>, headers: HeaderMap) -> Response<Body> {
     if let Some(token) = auth::token_from_cookies(&headers) {
-        state.sessions.remove(&token);
+        state.sessions.remove(&token).await;
     }
     let mut resp = redirect_to("/superadmin/login?err=Signed+out.");
     resp.headers_mut().append(
@@ -345,4 +355,184 @@ async fn audit_event(
     .bind(outcome)
     .execute(pool)
     .await;
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::extract::ConnectInfo;
+    use axum::http::Request;
+    use std::net::SocketAddr;
+    use tower::ServiceExt;
+
+    // Lazy pool pointed at a closed port so any DB call fails fast (handlers that
+    // touch the DB only run after auth; the routes we test never reach a query, or
+    // ignore its result as with the audit insert).
+    fn test_pool() -> PgPool {
+        sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(std::time::Duration::from_millis(150))
+            .connect_lazy("postgres://127.0.0.1:1/none")
+            .unwrap()
+    }
+
+    async fn build(extra: &[(&str, Option<&str>)]) -> Router {
+        let mut vars: Vec<(&str, Option<&str>)> = vec![
+            ("SUPERADMIN_EMAIL", Some("admin@x.com")),
+            ("SUPERADMIN_PASSWORD", Some("secret")),
+            ("SUPERADMIN_PASSWORD_HASH", None),
+            ("SUPERADMIN_IP_ALLOWLIST", None),
+            ("SUPERADMIN_SESSION_BACKEND", Some("memory")),
+            ("GEOIP_DB_PATH", None),
+        ];
+        vars.extend_from_slice(extra);
+        temp_env::async_with_vars(vars, async {
+            router(test_pool(), Arc::new(GeoResolver::from_env()))
+                .await
+                .expect("panel should be enabled")
+        })
+        .await
+    }
+
+    fn request(method: &str, uri: &str) -> Request<Body> {
+        let mut r = Request::builder()
+            .method(method)
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap();
+        r.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40000))));
+        r
+    }
+
+    fn header(resp: &Response<Body>, name: &str) -> String {
+        resp.headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string()
+    }
+
+    fn set_cookies(resp: &Response<Body>) -> String {
+        resp.headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
+    #[tokio::test]
+    async fn login_form_renders_and_sets_csrf_cookie() {
+        let app = build(&[]).await;
+        let resp = app.oneshot(request("GET", "/login")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(set_cookies(&resp).contains(CSRF_COOKIE));
+        // Strict security headers are applied to every response.
+        assert_eq!(header(&resp, "x-frame-options"), "DENY");
+        assert!(header(&resp, "content-security-policy").contains("default-src 'none'"));
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("Magnetite Control"));
+    }
+
+    #[tokio::test]
+    async fn protected_route_without_session_redirects_to_login() {
+        let app = build(&[]).await;
+        let resp = app.oneshot(request("GET", "/")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        assert_eq!(header(&resp, "location"), "/superadmin/login");
+    }
+
+    #[tokio::test]
+    async fn ip_allowlist_blocks_disallowed_source() {
+        let app = build(&[("SUPERADMIN_IP_ALLOWLIST", Some("10.0.0.0/8"))]).await;
+        // Request originates from 127.0.0.1 (set in `request`), outside 10/8.
+        let resp = app.oneshot(request("GET", "/login")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn ip_allowlist_permits_listed_source() {
+        let app = build(&[("SUPERADMIN_IP_ALLOWLIST", Some("127.0.0.0/8"))]).await;
+        let resp = app.oneshot(request("GET", "/login")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn login_rejects_csrf_mismatch() {
+        let app = build(&[]).await;
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/login")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("cookie", "mag_sa_csrf=aaa")
+            .body(Body::from("email=admin%40x.com&password=secret&csrf=bbb"))
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40000))));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        assert!(header(&resp, "location").contains("err="));
+    }
+
+    #[tokio::test]
+    async fn login_succeeds_and_sets_session_cookie() {
+        let app = build(&[]).await;
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/login")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("cookie", "mag_sa_csrf=tok123")
+            .body(Body::from(
+                "email=admin%40x.com&password=secret&csrf=tok123",
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40000))));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        assert_eq!(header(&resp, "location"), "/superadmin");
+        assert!(set_cookies(&resp).contains(auth::COOKIE));
+    }
+
+    #[tokio::test]
+    async fn login_fails_with_wrong_password() {
+        let app = build(&[]).await;
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/login")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("cookie", "mag_sa_csrf=tok123")
+            .body(Body::from("email=admin%40x.com&password=wrong&csrf=tok123"))
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40000))));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        assert!(header(&resp, "location").contains("Invalid+credentials"));
+    }
+}
+
+/// Build a Redis connection for session + lockout storage when reachable.
+/// Honoured opt-out: `SUPERADMIN_SESSION_BACKEND=memory` forces in-memory.
+/// Otherwise uses `REDIS_URL` if a connection succeeds; falls back to in-memory.
+async fn build_session_redis() -> Option<redis::aio::ConnectionManager> {
+    if std::env::var("SUPERADMIN_SESSION_BACKEND").as_deref() == Ok("memory") {
+        return None;
+    }
+    let url = std::env::var("REDIS_URL")
+        .ok()
+        .filter(|u| !u.trim().is_empty())?;
+    let client = redis::Client::open(url).ok()?;
+    match redis::aio::ConnectionManager::new(client).await {
+        Ok(cm) => Some(cm),
+        Err(e) => {
+            tracing::warn!(
+                "super-admin: Redis session backend unavailable ({e}); using in-memory sessions"
+            );
+            None
+        }
+    }
 }

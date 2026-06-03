@@ -29,6 +29,11 @@ pub struct AnalyticsState {
     pub geo: Arc<GeoResolver>,
     pub trust_proxy: bool,
     pub enabled: bool,
+    /// Fraction of successful (<400) requests to persist; errors are always kept.
+    pub sample_rate: f64,
+    /// Header carrying a CDN-resolved country code (e.g. Cloudflare `CF-IPCountry`),
+    /// used as a geo fallback when no GeoIP database resolves the IP.
+    pub country_header: String,
 }
 
 impl AnalyticsState {
@@ -36,12 +41,36 @@ impl AnalyticsState {
         let enabled = std::env::var("ANALYTICS_ENABLED")
             .map(|v| v != "false")
             .unwrap_or(true);
+        let sample_rate = std::env::var("ANALYTICS_SAMPLE_RATE")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .map(|r| r.clamp(0.0, 1.0))
+            .unwrap_or(1.0);
+        let country_header = std::env::var("GEO_COUNTRY_HEADER")
+            .ok()
+            .filter(|h| !h.trim().is_empty())
+            .unwrap_or_else(|| "cf-ipcountry".to_string())
+            .to_lowercase();
         Self {
             pool,
             geo,
             trust_proxy,
             enabled,
+            sample_rate,
+            country_header,
         }
+    }
+}
+
+/// CDN-provided 2-letter country code, normalised. Ignores placeholders like
+/// `XX`/`T1` that CDNs use for unknown/anonymised sources.
+fn cdn_country(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
+    let raw = headers.get(name)?.to_str().ok()?.trim().to_uppercase();
+    if raw.len() == 2 && raw != "XX" && raw != "T1" && raw.chars().all(|c| c.is_ascii_alphabetic())
+    {
+        Some(raw)
+    } else {
+        None
     }
 }
 
@@ -78,16 +107,28 @@ pub async fn record_analytics(
     let user_id = best_effort_user(&headers);
     let user_agent = header_str(&headers, "user-agent");
     let referer = header_str(&headers, "referer");
+    // CDN-resolved country (only trusted behind a proxy) — geo fallback.
+    let cdn_country = if state.trust_proxy {
+        cdn_country(&headers, &state.country_header)
+    } else {
+        None
+    };
 
     let started = Instant::now();
     let response = next.run(request).await;
     let duration_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
     let status = response.status().as_u16() as i32;
 
+    // Sampling: always keep errors (>=400); sample the rest at sample_rate.
+    if status < 400 && state.sample_rate < 1.0 && rand::random::<f64>() >= state.sample_rate {
+        return response;
+    }
+
     // Fire-and-forget: geo lookup + insert off the request path.
     let state2 = Arc::clone(&state);
     tokio::spawn(async move {
         let loc = state2.geo.lookup(&ip);
+        let country = loc.country.or(cdn_country);
         let ip_opt = if ip.is_empty() { None } else { Some(ip) };
         let _ = sqlx::query(
             "INSERT INTO analytics_events
@@ -95,7 +136,7 @@ pub async fn record_analytics(
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
         )
         .bind(ip_opt)
-        .bind(loc.country)
+        .bind(country)
         .bind(loc.region)
         .bind(loc.city)
         .bind(method)

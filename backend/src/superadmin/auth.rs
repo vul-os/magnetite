@@ -25,6 +25,8 @@ use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::http::HeaderMap;
 use chrono::{DateTime, Utc};
 use rand::RngCore;
+use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
 
 pub const COOKIE: &str = "mag_superadmin";
 
@@ -199,83 +201,147 @@ fn parse_allowlist(raw: &str) -> Vec<IpRule> {
 }
 
 // ── Sessions ────────────────────────────────────────────────────────────────
+//
+// Backed by Redis when a connection is available (so sessions survive a restart
+// and are shared across replicas behind a load balancer), falling back to an
+// in-process map otherwise. Either way the cookie holds only an opaque random
+// token; the session record never contains a reusable secret.
 
-#[derive(Clone)]
+const SESS_PREFIX: &str = "sa:sess:";
+const SESS_INDEX: &str = "sa:sess:idx";
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Session {
     pub email: String,
     pub csrf: String,
     pub created: DateTime<Utc>,
     pub ip: String,
-    expires: Instant,
+    pub expires_at: DateTime<Utc>,
 }
 
 pub struct SessionStore {
-    inner: Mutex<HashMap<String, Session>>,
+    memory: Mutex<HashMap<String, Session>>,
+    redis: Option<redis::aio::ConnectionManager>,
 }
 
 impl SessionStore {
-    pub fn new() -> Self {
+    pub fn new(redis: Option<redis::aio::ConnectionManager>) -> Self {
         Self {
-            inner: Mutex::new(HashMap::new()),
+            memory: Mutex::new(HashMap::new()),
+            redis,
+        }
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        if self.redis.is_some() {
+            "redis"
+        } else {
+            "in-memory"
         }
     }
 
     /// Create a session and return `(cookie_token, session)`.
-    pub fn create(&self, email: &str, ip: &str, ttl: Duration) -> (String, Session) {
+    pub async fn create(&self, email: &str, ip: &str, ttl: Duration) -> (String, Session) {
         let token = random_hex(32);
+        let now = Utc::now();
+        let expires_at = now
+            + chrono::Duration::from_std(ttl).unwrap_or_else(|_| chrono::Duration::seconds(7200));
         let session = Session {
             email: email.to_string(),
             csrf: random_hex(32),
-            created: Utc::now(),
+            created: now,
             ip: ip.to_string(),
-            expires: Instant::now() + ttl,
+            expires_at,
         };
-        self.inner
-            .lock()
-            .unwrap()
-            .insert(token.clone(), session.clone());
+        if let Some(mut conn) = self.redis.clone() {
+            if let Ok(json) = serde_json::to_string(&session) {
+                let key = format!("{SESS_PREFIX}{token}");
+                let _: Result<(), _> = conn.set_ex(&key, json, ttl.as_secs()).await;
+                let _: Result<(), _> = conn.zadd(SESS_INDEX, &token, expires_at.timestamp()).await;
+            }
+        } else {
+            self.memory
+                .lock()
+                .unwrap()
+                .insert(token.clone(), session.clone());
+        }
         (token, session)
     }
 
-    pub fn get(&self, token: &str) -> Option<Session> {
-        let mut map = self.inner.lock().unwrap();
-        match map.get(token) {
-            Some(s) if s.expires > Instant::now() => Some(s.clone()),
-            Some(_) => {
-                map.remove(token);
+    pub async fn get(&self, token: &str) -> Option<Session> {
+        if let Some(mut conn) = self.redis.clone() {
+            let key = format!("{SESS_PREFIX}{token}");
+            let json: Option<String> = conn.get(&key).await.ok().flatten();
+            let session: Session = serde_json::from_str(&json?).ok()?;
+            if session.expires_at > Utc::now() {
+                Some(session)
+            } else {
+                let _: Result<(), _> = conn.del(&key).await;
+                let _: Result<(), _> = conn.zrem(SESS_INDEX, token).await;
                 None
             }
-            None => None,
+        } else {
+            let mut map = self.memory.lock().unwrap();
+            match map.get(token) {
+                Some(s) if s.expires_at > Utc::now() => Some(s.clone()),
+                Some(_) => {
+                    map.remove(token);
+                    None
+                }
+                None => None,
+            }
         }
     }
 
-    pub fn remove(&self, token: &str) {
-        self.inner.lock().unwrap().remove(token);
+    pub async fn remove(&self, token: &str) {
+        if let Some(mut conn) = self.redis.clone() {
+            let key = format!("{SESS_PREFIX}{token}");
+            let _: Result<(), _> = conn.del(&key).await;
+            let _: Result<(), _> = conn.zrem(SESS_INDEX, token).await;
+        } else {
+            self.memory.lock().unwrap().remove(token);
+        }
     }
 
-    pub fn sweep(&self) {
-        let now = Instant::now();
-        self.inner.lock().unwrap().retain(|_, s| s.expires > now);
+    pub async fn sweep(&self) {
+        if let Some(mut conn) = self.redis.clone() {
+            let now = Utc::now().timestamp();
+            let _: Result<(), _> = conn.zrembyscore(SESS_INDEX, i64::MIN, now).await;
+        } else {
+            let now = Utc::now();
+            self.memory
+                .lock()
+                .unwrap()
+                .retain(|_, s| s.expires_at > now);
+        }
     }
 
-    pub fn active_count(&self) -> usize {
-        let now = Instant::now();
-        self.inner
-            .lock()
-            .unwrap()
-            .values()
-            .filter(|s| s.expires > now)
-            .count()
-    }
-}
-
-impl Default for SessionStore {
-    fn default() -> Self {
-        Self::new()
+    pub async fn active_count(&self) -> usize {
+        if let Some(mut conn) = self.redis.clone() {
+            let now = Utc::now().timestamp();
+            let _: Result<(), _> = conn.zrembyscore(SESS_INDEX, i64::MIN, now).await;
+            let n: i64 = conn.zcard(SESS_INDEX).await.unwrap_or(0);
+            n.max(0) as usize
+        } else {
+            let now = Utc::now();
+            self.memory
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|s| s.expires_at > now)
+                .count()
+        }
     }
 }
 
 // ── Brute-force lockout ─────────────────────────────────────────────────────
+//
+// Redis-backed when available so the lockout is enforced across replicas (an
+// attacker can't dodge it by spreading attempts over instances); in-memory
+// otherwise.
+
+const FAIL_PREFIX: &str = "sa:fail:";
+const LOCK_PREFIX: &str = "sa:lock:";
 
 struct Attempts {
     failures: u32,
@@ -283,61 +349,81 @@ struct Attempts {
 }
 
 pub struct LoginGuard {
-    inner: Mutex<HashMap<String, Attempts>>,
+    memory: Mutex<HashMap<String, Attempts>>,
+    redis: Option<redis::aio::ConnectionManager>,
     max_failures: u32,
     lock_for: Duration,
 }
 
 impl LoginGuard {
-    pub fn new() -> Self {
+    pub fn new(redis: Option<redis::aio::ConnectionManager>) -> Self {
         Self {
-            inner: Mutex::new(HashMap::new()),
+            memory: Mutex::new(HashMap::new()),
+            redis,
             max_failures: 5,
             lock_for: Duration::from_secs(15 * 60),
         }
     }
 
     /// `Ok(())` if a login attempt is allowed, `Err(seconds_remaining)` if locked.
-    pub fn check(&self, ip: &str) -> Result<(), u64> {
-        let map = self.inner.lock().unwrap();
-        if let Some(a) = map.get(ip) {
-            if let Some(until) = a.locked_until {
-                let now = Instant::now();
-                if until > now {
-                    return Err((until - now).as_secs() + 1);
+    pub async fn check(&self, ip: &str) -> Result<(), u64> {
+        if let Some(mut conn) = self.redis.clone() {
+            let key = format!("{LOCK_PREFIX}{ip}");
+            let ttl: i64 = conn.ttl(&key).await.unwrap_or(-2);
+            if ttl > 0 {
+                return Err(ttl as u64);
+            }
+            Ok(())
+        } else {
+            let map = self.memory.lock().unwrap();
+            if let Some(a) = map.get(ip) {
+                if let Some(until) = a.locked_until {
+                    let now = Instant::now();
+                    if until > now {
+                        return Err((until - now).as_secs() + 1);
+                    }
                 }
             }
+            Ok(())
         }
-        Ok(())
     }
 
-    pub fn record_failure(&self, ip: &str) {
-        let mut map = self.inner.lock().unwrap();
-        let entry = map.entry(ip.to_string()).or_insert(Attempts {
-            failures: 0,
-            locked_until: None,
-        });
-        // Reset a stale lock window before counting.
-        if let Some(until) = entry.locked_until {
-            if until <= Instant::now() {
-                entry.failures = 0;
-                entry.locked_until = None;
+    pub async fn record_failure(&self, ip: &str) {
+        if let Some(mut conn) = self.redis.clone() {
+            let fkey = format!("{FAIL_PREFIX}{ip}");
+            let count: i64 = conn.incr(&fkey, 1).await.unwrap_or(0);
+            let _: Result<(), _> = conn.expire(&fkey, self.lock_for.as_secs() as i64).await;
+            if count >= self.max_failures as i64 {
+                let lkey = format!("{LOCK_PREFIX}{ip}");
+                let _: Result<(), _> = conn.set_ex(&lkey, "1", self.lock_for.as_secs()).await;
+                let _: Result<(), _> = conn.del(&fkey).await;
+            }
+        } else {
+            let mut map = self.memory.lock().unwrap();
+            let entry = map.entry(ip.to_string()).or_insert(Attempts {
+                failures: 0,
+                locked_until: None,
+            });
+            if let Some(until) = entry.locked_until {
+                if until <= Instant::now() {
+                    entry.failures = 0;
+                    entry.locked_until = None;
+                }
+            }
+            entry.failures += 1;
+            if entry.failures >= self.max_failures {
+                entry.locked_until = Some(Instant::now() + self.lock_for);
             }
         }
-        entry.failures += 1;
-        if entry.failures >= self.max_failures {
-            entry.locked_until = Some(Instant::now() + self.lock_for);
+    }
+
+    pub async fn record_success(&self, ip: &str) {
+        if let Some(mut conn) = self.redis.clone() {
+            let _: Result<(), _> = conn.del(&format!("{FAIL_PREFIX}{ip}")).await;
+            let _: Result<(), _> = conn.del(&format!("{LOCK_PREFIX}{ip}")).await;
+        } else {
+            self.memory.lock().unwrap().remove(ip);
         }
-    }
-
-    pub fn record_success(&self, ip: &str) {
-        self.inner.lock().unwrap().remove(ip);
-    }
-}
-
-impl Default for LoginGuard {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -453,25 +539,27 @@ mod tests {
         assert!(cfg.ip_allowed("8.8.8.8"));
     }
 
-    #[test]
-    fn lockout_after_five_failures() {
-        let g = LoginGuard::new();
-        assert!(g.check("1.1.1.1").is_ok());
+    #[tokio::test]
+    async fn lockout_after_five_failures() {
+        let g = LoginGuard::new(None);
+        assert!(g.check("1.1.1.1").await.is_ok());
         for _ in 0..5 {
-            g.record_failure("1.1.1.1");
+            g.record_failure("1.1.1.1").await;
         }
-        assert!(g.check("1.1.1.1").is_err());
-        g.record_success("1.1.1.1");
-        assert!(g.check("1.1.1.1").is_ok());
+        assert!(g.check("1.1.1.1").await.is_err());
+        g.record_success("1.1.1.1").await;
+        assert!(g.check("1.1.1.1").await.is_ok());
     }
 
-    #[test]
-    fn sessions_create_and_expire() {
-        let store = SessionStore::new();
-        let (tok, sess) = store.create("a@b.c", "1.2.3.4", Duration::from_secs(60));
-        assert_eq!(store.get(&tok).unwrap().email, "a@b.c");
+    #[tokio::test]
+    async fn sessions_create_and_expire() {
+        let store = SessionStore::new(None);
+        let (tok, sess) = store
+            .create("a@b.c", "1.2.3.4", Duration::from_secs(60))
+            .await;
+        assert_eq!(store.get(&tok).await.unwrap().email, "a@b.c");
         assert_eq!(sess.csrf.len(), 64);
-        store.remove(&tok);
-        assert!(store.get(&tok).is_none());
+        store.remove(&tok).await;
+        assert!(store.get(&tok).await.is_none());
     }
 }

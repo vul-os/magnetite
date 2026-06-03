@@ -49,5 +49,5 @@ maxminddb = "0.24"
 [dev-dependencies]
 tokio-test = "0.4"
 rust_decimal_macros = "1"
-temp-env = "0.3"
+temp-env = { version = "0.3", features = ["async_closure"] }
 magnetite-sdk = { path = "magnetite-sdk" }
