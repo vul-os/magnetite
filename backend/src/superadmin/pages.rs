@@ -34,6 +34,7 @@ pub(super) fn nav(active: &str) -> Vec<Nav<'static>> {
         ("/superadmin/payouts", "Payouts", "payouts"),
         ("/superadmin/billing", "Billing compliance", "billing"),
         ("/superadmin/settings", "Platform settings", "settings"),
+        ("/superadmin/moderation", "Moderation", "moderation"),
         ("", "", "sep"),
         ("/superadmin/analytics", "Analytics", "analytics"),
         ("/superadmin/audit", "Audit log", "audit"),

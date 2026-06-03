@@ -237,6 +237,178 @@ pub async fn payout_process(
     ))
 }
 
+// ── Moderation queue (flagged chat messages) ────────────────────────────────
+
+#[derive(FromRow)]
+struct FlagRow {
+    id: Uuid,
+    author_id: Uuid,
+    author: Option<String>,
+    content: String,
+    flag_reasons: String,
+    status: String,
+    created_at: DateTime<Utc>,
+    resolution_note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModQuery {
+    pub status: Option<String>,
+    #[serde(flatten)]
+    pub flash: FlashQuery,
+}
+
+pub async fn moderation_list(
+    State(state): State<Arc<SuperAdminState>>,
+    Query(q): Query<ModQuery>,
+    sess: axum::Extension<Session>,
+) -> Html<String> {
+    // Default to the pending queue; allow viewing resolved/dismissed/all.
+    let filter = q.status.clone().unwrap_or_else(|| "pending".to_string());
+
+    let rows = sqlx::query_as::<_, FlagRow>(
+        "SELECT cf.id, cf.author_id, u.username AS author, cf.content, cf.flag_reasons,
+                cf.status, cf.created_at, cf.resolution_note
+         FROM chat_flags cf LEFT JOIN users u ON u.id = cf.author_id
+         WHERE ($1 = 'all' OR cf.status = $1)
+         ORDER BY (cf.status='pending') DESC, cf.created_at DESC
+         LIMIT 200",
+    )
+    .bind(&filter)
+    .fetch_all(&state.pool)
+    .await
+    .unwrap_or_default();
+
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_flags WHERE status='pending'")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+
+    let csrf = esc(&sess.csrf);
+    let mut tbody = String::new();
+    for r in &rows {
+        let st = match r.status.as_str() {
+            "resolved" => pill("ok", "resolved"),
+            "dismissed" => pill("mute", "dismissed"),
+            _ => pill("warn", "pending"),
+        };
+        let actions = if r.status == "pending" {
+            format!(
+                "<form class=\"inline\" method=\"post\" action=\"/superadmin/moderation/{id}/act\">\
+<input type=\"hidden\" name=\"csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"action\" value=\"resolve\">\
+<button class=\"btn danger\" type=\"submit\">Resolve</button></form> \
+<form class=\"inline\" method=\"post\" action=\"/superadmin/moderation/{id}/act\">\
+<input type=\"hidden\" name=\"csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"action\" value=\"dismiss\">\
+<button class=\"btn\" type=\"submit\">Dismiss</button></form>",
+                id = r.id,
+                csrf = csrf
+            )
+        } else {
+            format!(
+                "<span class=\"muted\">{}</span>",
+                esc(r.resolution_note.as_deref().unwrap_or("—"))
+            )
+        };
+        tbody.push_str(&format!(
+            "<tr><td class=\"muted\">{when}</td>\
+<td><a href=\"/superadmin/users/{aid}\">{author}</a></td>\
+<td class=\"wrap\">{content}</td><td>{reasons}</td><td>{st}</td><td class=\"row\">{actions}</td></tr>",
+            when = dt(r.created_at),
+            aid = r.author_id,
+            author = esc(r.author.as_deref().unwrap_or("—")),
+            content = esc(&r.content),
+            reasons = esc(&r.flag_reasons),
+            st = st,
+            actions = actions,
+        ));
+    }
+    if rows.is_empty() {
+        tbody.push_str("<tr><td colspan=\"6\" class=\"muted\">Nothing in this queue.</td></tr>");
+    }
+
+    let filters = ["pending", "resolved", "dismissed", "all"]
+        .iter()
+        .map(|s| {
+            let on = if **s == filter {
+                " style=\"border-color:var(--accent);color:var(--accent)\""
+            } else {
+                ""
+            };
+            format!(
+                "<a class=\"btn\" href=\"/superadmin/moderation?status={s}\"{on}>{s}</a>",
+                s = s,
+                on = on
+            )
+        })
+        .collect::<String>();
+
+    let body = format!(
+        "<h1>Moderation</h1>{flash}\
+<p class=\"sub\">Auto-flagged chat messages. Resolve (uphold the flag) or dismiss (false positive). \
+The message itself is retained; use the author link to ban a repeat offender. \
+<span class=\"amber\">{pending} pending</span>.</p>\
+<div class=\"row\" style=\"margin:16px 0\">{filters}</div>\
+<table><tr><th>When</th><th>Author</th><th>Message</th><th>Reasons</th><th>Status</th><th>Actions</th></tr>{tbody}</table>",
+        flash = flash(&q.flash),
+        pending = pending,
+        filters = filters,
+        tbody = tbody,
+    );
+    Html(html::page("Moderation", &nav("moderation"), &body))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModActForm {
+    pub csrf: String,
+    pub action: String,
+}
+
+pub async fn moderation_act(
+    State(state): State<Arc<SuperAdminState>>,
+    Path(id): Path<Uuid>,
+    sess: axum::Extension<Session>,
+    Form(f): Form<ModActForm>,
+) -> Resp {
+    if !csrf_ok(&sess, &f.csrf) {
+        return redirect("/superadmin/moderation?err=CSRF+check+failed");
+    }
+    let status = match f.action.as_str() {
+        "resolve" => "resolved",
+        "dismiss" => "dismissed",
+        _ => return redirect("/superadmin/moderation?err=Unknown+action"),
+    };
+    // The super-admin is an env credential, not a users row, so resolved_by stays
+    // NULL and the actor is recorded in the note + the audit log.
+    let note = format!("by superadmin {}", sess.email);
+    let res = sqlx::query(
+        "UPDATE chat_flags SET status=$2, resolved_at=NOW(), resolution_note=$3
+         WHERE id=$1 AND status='pending'",
+    )
+    .bind(id)
+    .bind(status)
+    .bind(&note)
+    .execute(&state.pool)
+    .await;
+    let (msg, outcome) = match res {
+        Ok(r) if r.rows_affected() > 0 => ("Flag updated", "ok"),
+        Ok(_) => ("Flag was not pending", "denied"),
+        Err(_) => ("Update failed", "error"),
+    };
+    audit(
+        &state.pool,
+        &sess,
+        &format!("moderation.{}", f.action),
+        &id.to_string(),
+        "",
+        outcome,
+    )
+    .await;
+    redirect(&format!(
+        "/superadmin/moderation?msg={}",
+        msg.replace(' ', "+")
+    ))
+}
+
 // ── Platform settings ───────────────────────────────────────────────────────
 
 #[derive(FromRow)]
