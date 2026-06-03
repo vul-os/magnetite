@@ -15,12 +15,12 @@ export function AnnouncementProvider({ children, announcement = null }) {
     }
   });
 
+  // Reconcile visibility whenever the announcement prop or dismissed state
+  // changes. dismiss()/show() also imperatively toggle visibility, so a single
+  // source of truth via an effect keeps the two paths consistent.
   useEffect(() => {
-    if (announcement && !isDismissed) {
-      setIsVisible(true);
-    } else {
-      setIsVisible(false);
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsVisible(Boolean(announcement) && !isDismissed);
   }, [announcement, isDismissed]);
 
   const dismiss = useCallback(() => {
@@ -46,6 +46,8 @@ export function AnnouncementProvider({ children, announcement = null }) {
   );
 }
 
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAnnouncementContext() {
   const context = useContext(AnnouncementContext);
   if (!context) throw new Error('useAnnouncementContext must be used within AnnouncementProvider');

@@ -10,8 +10,12 @@ export default function LoadingOverlay({
 }) {
   const [shouldRender, setShouldRender] = useState(visible);
 
+  // Mount immediately when shown, but defer unmount by 300ms so the exit
+  // animation can play. The delayed unmount is an intentional synchronization
+  // with the CSS transition, which requires driving render state from an effect.
   useEffect(() => {
     if (visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShouldRender(true);
     } else {
       const timer = setTimeout(() => setShouldRender(false), 300);

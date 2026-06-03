@@ -139,6 +139,8 @@ export default function GameDeploy() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('installation_id') || params.get('setup_action') === 'install') {
       window.history.replaceState({}, '', window.location.pathname);
+      // Reacting to the GitHub OAuth callback in the URL (external system).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setGithubConnected(true);
       setStep(2);
     }
@@ -162,7 +164,9 @@ export default function GameDeploy() {
     }
   }, []);
 
+  // Load repos from the API (external system) once GitHub is connected.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (githubConnected) loadRepos();
   }, [githubConnected, loadRepos]);
 

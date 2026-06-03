@@ -84,6 +84,8 @@ export default function Users() {
     }
   }, []);
 
+  // Fetch users from the admin API (external system) on mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const filteredUsers = useMemo(() => {

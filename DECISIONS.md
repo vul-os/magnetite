@@ -2027,4 +2027,51 @@ rebuild waves 1–5.
 - Re-do the page-level a11y axe suite under a single-thread vitest config (axe-in-jsdom is flaky in parallel).
 - ~78 intentional lint warnings (experimental react-hooks rules).
 
+---
+
+## SUPERADMIN + ANALYTICS + BILLING-COMPLIANCE WAVE (2026-06-03, reopened on user request)
+
+User asked to "do all low value polish, have a super admin api which serves simple html pages to manage
+everything which are extra hardened, have a super email password to login to this, it must have access to
+everything and a simple analytics system too in house get ip location etc user management, also shows data
+about billing model and if its following it." This wave delivers exactly that, plus the polish tail above.
+
+### Decisions
+- **Separate surface, not the JSON admin API.** New `backend/src/superadmin/` mounted at `/superadmin` serves
+  server-rendered HTML (no SPA, no JS framework). Distinct from `/api/v1/admin` (JSON, `is_admin` users) — the
+  super-admin is a *single env credential*, intentionally not a DB row, so a DB compromise can't mint it.
+- **Disabled-by-default.** The whole panel returns 404 unless `SUPERADMIN_EMAIL` + a password/hash are set —
+  zero attack surface when unused.
+- **"Extra hardened" =** argon2 (or dev-only plaintext) credential with constant-time checks; opaque in-memory
+  sessions (never persisted; restart logs everyone out); HttpOnly + SameSite=Strict + Path-scoped (+Secure in
+  prod) cookies; per-IP brute-force lockout (5 fails → 15 min); optional IP/CIDR allowlist gating the whole
+  surface; CSRF token on every mutating form (double-submit on login, session-bound after); strict per-response
+  security headers (`CSP default-src 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `no-store`,
+  Permissions-Policy, COOP); append-only audit log of every action. HTML loads **no external resources** so it
+  runs under the locked-down CSP.
+- **In-house analytics, no third parties.** A fire-and-forget middleware records every (non-infra) request —
+  method/path/status/latency, best-effort user (decoded from bearer), client IP. IP→location is **offline**:
+  a local MaxMind GeoLite2 `.mmdb` via `GEOIP_DB_PATH` (`maxminddb` crate, no network calls so user IPs never
+  leave the host); degrades to NULL / "Local" when absent. Drives the Analytics page (totals, top
+  countries/endpoints/users, 14-day request chart, error rate, recent requests with geo).
+- **Billing-compliance is a real reconciliation, not a dashboard.** `billing.rs` re-derives the model from
+  first principles and flags drift: session split 15/85 (`game_revenue`), store split 30/70
+  (`store_purchases`), payouts ≤ accrued developer share, no negative wallet balances, subscription charge =
+  tier list price, plus a best-effort wallet ledger reconciliation (labelled "review", not "fail", to avoid
+  false alarms on ambiguous tx_types). Each check shows pass/review/fail + offending rows.
+- **Observability gauges wired** (was the optional tail): comms/voice/game sockets now increment a live
+  WS-connection gauge via an RAII `ConnGuard` (correct on every exit path); `GameManager` updates the
+  active-game-session gauge on insert/cleanup. `/metrics` now reports real numbers.
+
+### Files
+- `backend/migrations/20260706_superadmin_analytics.sql` — `analytics_events`, `superadmin_audit_log`.
+- `backend/src/superadmin/{mod,auth,html,geo,analytics,billing,pages}.rs` — the panel.
+- `backend/src/ws/{gauges,comms,voice,game}.rs` + `main.rs` — gauge wiring + mount + connect-info serve.
+- `backend/Cargo.toml` — `maxminddb = "0.24"`. `backend/.env.example` — documented all new env vars.
+
+### Env (all optional; panel off unless first two set)
+`SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD_HASH` (argon2 PHC) or `SUPERADMIN_PASSWORD` (dev plaintext),
+`SUPERADMIN_IP_ALLOWLIST` (IP/CIDR csv), `SUPERADMIN_SESSION_TTL_SECS`, `SUPERADMIN_SECURE_COOKIE`,
+`ANALYTICS_ENABLED`, `GEOIP_DB_PATH`, `TRUST_PROXY`.
+
 Recommendation to the user: open a PR / merge when ready; provide the external credentials + infra to go live.

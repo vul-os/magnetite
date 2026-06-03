@@ -43,6 +43,8 @@ export default function LinkAccount() {
       navigate('/login', { replace: true });
       return;
     }
+    // Load linked accounts from the auth API (external system).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLinkedAccounts();
   }, [navigate, loadLinkedAccounts]);
 

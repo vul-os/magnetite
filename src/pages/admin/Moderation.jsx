@@ -352,6 +352,8 @@ export default function Moderation() {
     }
   }, [statusFilter, page]);
 
+  // Load moderation reports from the admin API (external system).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadReports(); }, [loadReports]);
 
   // ── Handle moderation actions ──────────────────────────────────────────────

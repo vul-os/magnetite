@@ -155,6 +155,8 @@ export function NotificationProvider({ children }) {
   );
 }
 
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useNotificationContext() {
   const context = useContext(NotificationContext);
   if (!context) {

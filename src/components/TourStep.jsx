@@ -19,6 +19,9 @@ export default function TourStep({
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
   const [isVisible, setIsVisible] = useState(false);
   const [finalPosition, setFinalPosition] = useState(position);
+  // Tooltip dimensions are measured from the DOM in an effect and stored here so
+  // render never reads the live ref (which is impure during render).
+  const [tooltipSize, setTooltipSize] = useState({ width: 200, height: 0 });
   const tooltipRef = useRef(null);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function TourStep({
   useEffect(() => {
     if (isVisible && tooltipRef.current) {
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
+      setTooltipSize({ width: tooltipRect.width, height: tooltipRect.height });
       const viewportHeight = window.innerHeight;
       const viewportWidth = window.innerWidth;
       const margin = 12;
@@ -85,7 +89,7 @@ export default function TourStep({
   switch (finalPosition) {
     case 'top':
       tooltipStyle = {
-        top: coords.top - tooltipRef.current?.offsetHeight - margin - 8,
+        top: coords.top - tooltipSize.height - margin - 8,
         left: coords.left + coords.width / 2,
       };
       break;
@@ -98,7 +102,7 @@ export default function TourStep({
     case 'left':
       tooltipStyle = {
         top: coords.top + coords.height / 2,
-        left: coords.left - (tooltipRef.current?.offsetWidth || 200) - margin - 8,
+        left: coords.left - (tooltipSize.width || 200) - margin - 8,
       };
       break;
     case 'right':

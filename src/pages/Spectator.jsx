@@ -69,6 +69,7 @@ export default function Spectator() {
 
     switch (lastMessage.type) {
       case 'players_update':
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPlayers(lastMessage.players);
         if (cameraMode === 'follow') {
           const updated = lastMessage.players.find(p => p.id === followedPlayer?.id);
@@ -91,8 +92,10 @@ export default function Spectator() {
   }, [lastMessage]);
 
   // Fetch recent replays for this game
+  // Fetch recent replays from the API (external system).
   useEffect(() => {
     if (!gameId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReplaysLoading(true);
     const fetch = USE_MOCKS
       ? Promise.resolve(MOCK_REPLAYS)

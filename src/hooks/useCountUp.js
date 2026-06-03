@@ -5,8 +5,11 @@ export function useCountUp(end, duration = 2000) {
   const startTimeRef = useRef(null);
   const rafRef = useRef(null);
 
+  // Animates a count via requestAnimationFrame, an external timing system that
+  // legitimately drives state from inside the effect.
   useEffect(() => {
     if (end === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCount(0);
       return;
     }

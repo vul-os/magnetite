@@ -21,6 +21,7 @@ export function useGameLobby(lobbyId, currentUser) {
   // When invalid lobby/user, mark as invalid immediately
   useEffect(() => {
     if (!lobbyId || !currentUser) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLobbyState('invalid');
     }
   }, [lobbyId, currentUser]);
@@ -28,6 +29,7 @@ export function useGameLobby(lobbyId, currentUser) {
   // Transition from 'connecting' to 'waiting' once the WS is live
   useEffect(() => {
     if (isConnected && lobbyState === 'connecting') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLobbyState('waiting');
       // Request current lobby state from the server
       sendMessage({ type: 'get_lobby_state' });
@@ -40,12 +42,14 @@ export function useGameLobby(lobbyId, currentUser) {
     };
   }, []);
 
+  // Inbound WebSocket frames (external system) drive lobby state below.
   useEffect(() => {
     if (!lastMessage) return;
 
     switch (lastMessage.type) {
       case 'lobby_state': {
         // Full lobby snapshot sent on join
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (Array.isArray(lastMessage.players)) setPlayers(lastMessage.players);
         if (lastMessage.rules) setGameRules(lastMessage.rules);
         if (lastMessage.state) setLobbyState(lastMessage.state);

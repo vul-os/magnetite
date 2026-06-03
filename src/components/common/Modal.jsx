@@ -28,9 +28,13 @@ export default function Modal({
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
 
+  // Drive enter/exit animation state: mount on open, then defer unmount until
+  // the close transition finishes. This is intentional synchronization with the
+  // CSS animation and document.body scroll lock, so setState here is required.
   useEffect(() => {
     if (isOpen) {
       previousActiveElement.current = document.activeElement;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsVisible(true);
       requestAnimationFrame(() => {
         setIsAnimating(true);

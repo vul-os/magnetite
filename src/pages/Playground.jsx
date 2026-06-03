@@ -43,8 +43,11 @@ export default function Playground() {
   const comms                       = useComms();
   const { balance }                 = usePoints();
   const [showStore, setShowStore]   = useState(false);
-  // Stable ref for user id so connectWebSocket doesn't re-mount on user changes
+  // Stable ref for user id so connectWebSocket doesn't re-mount on user changes.
+  // Intentionally kept in sync during render so the latest id is available to
+  // imperative WS callbacks without retriggering the connection effect.
   const userIdRef = useRef(null);
+  // eslint-disable-next-line react-hooks/refs
   userIdRef.current = user?.id ?? null;
 
   // ── Play manifest — resolve live ws_endpoint from the distribution API ────

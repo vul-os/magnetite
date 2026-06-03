@@ -118,7 +118,7 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
         <div className="card-meta">
           <StarRating rating={game.rating ?? 0} />
           {playersOnline > 0 && (
-            <span className="players-online" aria-label={`${playersOnline.toLocaleString()} ${t('games.players')} online`}>
+            <span className="players-online" role="img" aria-label={`${playersOnline.toLocaleString()} ${t('games.players')} online`}>
               <svg className="online-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />
               </svg>
@@ -128,7 +128,7 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
         </div>
 
         <div className="card-footer">
-          <span className="price" aria-label={`${game.fee_per_session} USD per session`}>
+          <span className="price" role="img" aria-label={`${game.fee_per_session} USD per session`}>
             <span className="price-value" aria-hidden="true">{game.fee_per_session}</span>
             <span className="price-currency" aria-hidden="true">USDC</span>
             <span className="price-period" aria-hidden="true">/{t('games.sessions')}</span>

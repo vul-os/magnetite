@@ -93,6 +93,8 @@ export default function AdminSettings() {
     }
   }, []);
 
+  // Fetch admin settings from the API (external system) on mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   const handleSave = async (e) => {

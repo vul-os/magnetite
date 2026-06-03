@@ -32,10 +32,12 @@ export default function Matchmaking() {
   const [match, setMatch]               = useState(null);
 
   // ── Fetch game list ────────────────────────────────────────────────────────
+  // Fetch the game list from the API (external system) on mount.
   useEffect(() => {
     if (USE_MOCKS) return;
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGamesLoading(true);
     setGamesError(null);
 
@@ -83,10 +85,11 @@ export default function Matchmaking() {
     }
   }, [wsConnected, status, wsSend]);
 
-  // Handle WS messages from the matchmaking server
+  // Handle WS messages from the matchmaking server (external system).
   useEffect(() => {
     if (!wsMessage) return;
     if (wsMessage.type === 'queue_update') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQueueInfo({
         waitTime: wsMessage.waitTime ?? wsMessage.wait_seconds ?? queueInfo.waitTime,
         playersInQueue: wsMessage.playersInQueue ?? wsMessage.players_in_queue ?? queueInfo.playersInQueue,

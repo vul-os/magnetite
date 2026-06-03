@@ -8,8 +8,11 @@ export function useLeaderboard(gameId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Fetches leaderboard data (external API); loading/reset state is necessarily
+  // driven from within the effect.
   useEffect(() => {
     if (!gameId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }

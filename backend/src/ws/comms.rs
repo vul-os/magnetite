@@ -177,6 +177,7 @@ impl Default for ChannelRegistry {
 pub struct CommsState {
     pub pool: PgPool,
     pub registry: ChannelRegistry,
+    pub gauges: Arc<crate::ws::gauges::WsGauges>,
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +214,9 @@ async fn handle_comms_socket(
         },
         None => return,
     };
+
+    // Count this authenticated socket in the live WS gauge for its whole lifetime.
+    let _conn = crate::ws::gauges::ConnGuard::new(Arc::clone(&state.gauges));
 
     // Mark user online.
     let _ = presence_svc::set_presence(&state.pool, user_id, "online", None, None).await;
@@ -421,9 +425,13 @@ async fn handle_comms_socket(
 // Router
 // ---------------------------------------------------------------------------
 
-pub fn router(pool: PgPool) -> Router {
+pub fn router(pool: PgPool, gauges: Arc<crate::ws::gauges::WsGauges>) -> Router {
     let registry = ChannelRegistry::new();
-    let state = CommsState { pool, registry };
+    let state = CommsState {
+        pool,
+        registry,
+        gauges,
+    };
     Router::new()
         .route("/ws/comms", get(ws_handler))
         .with_state(state)

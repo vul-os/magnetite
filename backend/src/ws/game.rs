@@ -363,6 +363,8 @@ fn now_as_f64() -> f64 {
 pub struct GameManager {
     sessions: Arc<Mutex<HashMap<String, Arc<Mutex<GameSession>>>>>,
     tick_interval: Duration,
+    /// Live observability gauge; updated whenever the sessions map changes.
+    gauges: Option<Arc<crate::ws::gauges::WsGauges>>,
 }
 
 impl GameManager {
@@ -370,7 +372,25 @@ impl GameManager {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             tick_interval: Duration::from_millis(16),
+            gauges: None,
         }
+    }
+
+    /// Attach the live-session gauge (called from `GameWsHandler::new`).
+    pub fn with_gauges(mut self, gauges: Arc<crate::ws::gauges::WsGauges>) -> Self {
+        self.gauges = Some(gauges);
+        self
+    }
+
+    fn sync_session_gauge(&self, count: usize) {
+        if let Some(g) = &self.gauges {
+            g.set_game_sessions(count as u64);
+        }
+    }
+
+    /// A clone of the gauges handle, if attached (used to count game sockets).
+    pub fn gauges_handle(&self) -> Option<Arc<crate::ws::gauges::WsGauges>> {
+        self.gauges.clone()
     }
 
     pub async fn get_or_create_session(&self, game_id: &str) -> Arc<Mutex<GameSession>> {
@@ -381,6 +401,7 @@ impl GameManager {
         let session = GameSession::new(game_id.to_string());
         let arc = Arc::new(Mutex::new(session));
         sessions.insert(game_id.to_string(), Arc::clone(&arc));
+        self.sync_session_gauge(sessions.len());
         arc
     }
 
@@ -428,6 +449,7 @@ impl GameManager {
             tracing::info!("Cleaning up empty game session: {}", id);
             sessions.remove(&id);
         }
+        self.sync_session_gauge(sessions.len());
     }
 
     pub async fn get_session(&self, game_id: &str) -> Option<Arc<Mutex<GameSession>>> {
@@ -450,9 +472,9 @@ pub struct GameWsHandler {
 }
 
 impl GameWsHandler {
-    pub fn new(pool: sqlx::PgPool) -> Self {
+    pub fn new(pool: sqlx::PgPool, gauges: Arc<crate::ws::gauges::WsGauges>) -> Self {
         Self {
-            manager: Arc::new(GameManager::new()),
+            manager: Arc::new(GameManager::new().with_gauges(gauges)),
             pool,
         }
     }
@@ -530,7 +552,10 @@ async fn handle_game_connection(
     let manager = handler.get_manager();
     let pool = handler.pool.clone();
 
+    let conn_gauges = manager.gauges_handle();
     ws.on_upgrade(move |socket| async move {
+        // Count this game socket in the live WS gauge for its whole lifetime.
+        let _conn = conn_gauges.map(crate::ws::gauges::ConnGuard::new);
         let (mut write, mut read) = socket.split();
         let (tx, mut rx) = broadcast::channel::<GameMessage>(100);
 

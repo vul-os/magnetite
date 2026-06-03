@@ -41,10 +41,14 @@ export function ThemeProvider({ children }) {
   );
 }
 
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) throw new Error('useTheme must be used within ThemeProvider');
   return context;
 }
 
+// Re-export of the theme constants imported from themeConstants for convenience.
+// eslint-disable-next-line react-refresh/only-export-components
 export { themes };

@@ -9,8 +9,10 @@ export function useGameSession(gameId) {
   const [sessionStatus, setSessionStatus] = useState('connecting');
   const [sessionError, setSessionError] = useState(null);
 
+  // Reset session status when the target game changes.
   useEffect(() => {
     if (!gameId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionStatus('invalid');
       return;
     }
@@ -22,6 +24,7 @@ export function useGameSession(gameId) {
   // not a client command. Just mark as active once connected.
   useEffect(() => {
     if (isConnected && sessionStatus === 'connecting') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionStatus('active');
     }
   }, [isConnected, sessionStatus]);
@@ -34,6 +37,8 @@ export function useGameSession(gameId) {
     //   chat          { player_id, message }
     // Keep legacy aliases (game_state, game_state_update) for compatibility
     // with any older backend build until the rename lands.
+    // Incoming WebSocket messages (an external system) drive all of this state.
+    /* eslint-disable react-hooks/set-state-in-effect */
     const t = lastMessage?.type;
     if (t === 'state_update' || t === 'game_state' || t === 'game_state_update') {
       if (lastMessage.state) setGameState(lastMessage.state);
@@ -54,6 +59,7 @@ export function useGameSession(gameId) {
     if (t === 'error') {
       setSessionError(lastMessage.message);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [lastMessage]);
 
   const makeMove = useCallback((cellIndex) => {

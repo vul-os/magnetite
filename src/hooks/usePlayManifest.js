@@ -43,8 +43,11 @@ export function usePlayManifest(gameId) {
 
   const reload = () => setRev((r) => r + 1);
 
+  // Loads the play manifest for a game from the API (external system); resetting
+  // state when gameId clears is part of that synchronization.
   useEffect(() => {
     if (!gameId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setManifest(null);
       setLoading(false);
       setError(null);

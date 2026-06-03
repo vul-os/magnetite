@@ -22,8 +22,11 @@ export default function Wishlist() {
   const [removingId, setRemovingId]       = useState(null);
   const [loading, setLoading]             = useState(true);
 
+  // Load the wishlist from the API (external system); the mock branch resolves
+  // loading synchronously.
   useEffect(() => {
     if (useMocks) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }

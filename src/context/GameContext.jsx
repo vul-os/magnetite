@@ -39,6 +39,8 @@ export function GameProvider({ children }) {
   );
 }
 
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useGames() {
   const context = useContext(GameContext);
   if (!context) throw new Error('useGames must be used within GameProvider');

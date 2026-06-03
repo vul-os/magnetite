@@ -258,9 +258,11 @@ export default function GameStudio() {
   const [previewEndpoint, setPreviewEndpoint] = useState('');
 
   // ── Load templates ───────────────────────────────────────────────────────
+  // Fetch templates from the API (external system) on mount.
   useEffect(() => {
     if (USE_MOCKS) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTemplatesLoading(true);
     setTemplatesError(null);
 

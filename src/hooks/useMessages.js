@@ -42,6 +42,7 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
   // Reset when channel/DM target changes
   useEffect(() => {
     if (!channelId && !isDM) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages([]);
     setError(null);
     oldestIdRef.current = null;
@@ -97,8 +98,10 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
     return () => { cancelled = true; };
   }, [channelId, isDM, dmUserId]);
 
+  // Fetch messages from the API (external system) when the target changes.
   useEffect(() => {
     if (channelId || (isDM && dmUserId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchMessages({ limit: 50 });
     }
   }, [fetchMessages, channelId, isDM, dmUserId]);

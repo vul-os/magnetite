@@ -51,3 +51,21 @@ impl Default for WsGauges {
         Self::new()
     }
 }
+
+/// RAII guard that increments the live WS-connection gauge on creation and
+/// decrements it on drop, so the count stays correct across every exit path
+/// (clean close, error, panic) of a socket handler.
+pub struct ConnGuard(std::sync::Arc<WsGauges>);
+
+impl ConnGuard {
+    pub fn new(gauges: std::sync::Arc<WsGauges>) -> Self {
+        gauges.ws_connect();
+        Self(gauges)
+    }
+}
+
+impl Drop for ConnGuard {
+    fn drop(&mut self) {
+        self.0.ws_disconnect();
+    }
+}

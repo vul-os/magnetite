@@ -27,6 +27,8 @@ export function ToastProvider({ children }) {
   );
 }
 
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) throw new Error('useToast must be used within ToastProvider');

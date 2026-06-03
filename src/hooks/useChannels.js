@@ -20,8 +20,11 @@ export function useChannels(communityId) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Loads channels for a community; resetting/loading state is driven from the
+  // effect because it synchronizes with an async API (external system).
   useEffect(() => {
     if (!communityId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChannels([]);
       return;
     }

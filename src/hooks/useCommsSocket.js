@@ -117,6 +117,8 @@ export function useCommsSocket({
       case 'typing_notify': {
         const uid = msg.user_id;
         if (typingTimersRef.current[uid]) clearTimeout(typingTimersRef.current[uid]);
+        // Driven by an inbound WebSocket frame (external system).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTypingUsers((prev) => ({ ...prev, [uid]: msg.username ?? uid }));
         typingTimersRef.current[uid] = setTimeout(() => {
           setTypingUsers((prev) => {
@@ -226,8 +228,11 @@ export function useCommsSocket({
 
   // Cleanup typing timers on unmount
   useEffect(() => {
+    // Capture the timers map at mount so the cleanup clears the same object
+    // (and not a later-reassigned ref value).
+    const timers = typingTimersRef.current;
     return () => {
-      Object.values(typingTimersRef.current).forEach(clearTimeout);
+      Object.values(timers).forEach(clearTimeout);
     };
   }, []);
 

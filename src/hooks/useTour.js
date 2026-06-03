@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 
 export function useTour(initialSteps = [], options = {}) {
+  const { onComplete, onSkip } = options;
   const [currentStep, setCurrentStep] = useState(0);
   const [isActive, setIsActive] = useState(false);
   const [steps] = useState(initialSteps);
@@ -19,22 +20,22 @@ export function useTour(initialSteps = [], options = {}) {
     setCurrentStep((prev) => {
       const maxStep = steps.length - 1;
       if (prev >= maxStep) {
-        if (options.onComplete) options.onComplete();
+        if (onComplete) onComplete();
         stop();
         return prev;
       }
       return prev + 1;
     });
-  }, [steps.length, options.onComplete, stop]);
+  }, [steps.length, onComplete, stop]);
 
   const back = useCallback(() => {
     setCurrentStep((prev) => Math.max(0, prev - 1));
   }, []);
 
   const skip = useCallback(() => {
-    if (options.onSkip) options.onSkip();
+    if (onSkip) onSkip();
     stop();
-  }, [options.onSkip, stop]);
+  }, [onSkip, stop]);
 
   const goToStep = useCallback((stepIndex) => {
     if (stepIndex >= 0 && stepIndex < steps.length) {

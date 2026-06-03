@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useId } from 'react';
+import { useState, useRef, useEffect, useId, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
@@ -23,7 +23,7 @@ export default function Tooltip({
   const timeoutRef = useRef(null);
   const tooltipId = useId();
 
-  const calculatePosition = (rect, tooltipRect) => {
+  const calculatePosition = useCallback((rect, tooltipRect) => {
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
     const margin = 8;
@@ -65,7 +65,7 @@ export default function Tooltip({
     top = Math.max(margin, Math.min(top, viewportHeight - tooltipRect.height - margin));
 
     return { top, left, position: newPosition };
-  };
+  }, [initialPosition]);
 
   const showTooltip = () => {
     timeoutRef.current = setTimeout(() => {
@@ -100,7 +100,7 @@ export default function Tooltip({
       setCoords((prev) => ({ ...prev, top, left }));
       setPosition(finalPosition);
     }
-  }, [isVisible, coords.top, coords.left, coords.width, coords.height]);
+  }, [isVisible, coords.top, coords.left, coords.width, coords.height, calculatePosition]);
 
   useEffect(() => {
     return () => {

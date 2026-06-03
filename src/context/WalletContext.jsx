@@ -4,7 +4,8 @@ const WalletContext = createContext();
 
 export function WalletProvider({ children }) {
   const [balance, setBalance] = useState(100);
-  const [transactions, setTransactions] = useState([
+  // Lazy initializer keeps the impure Date.now() call out of render.
+  const [transactions, setTransactions] = useState(() => [
     { id: 1, type: 'deposit', amount: 100, currency: 'USD', timestamp: Date.now() - 86400000, status: 'completed' },
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +38,8 @@ export function WalletProvider({ children }) {
   );
 }
 
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWallet() {
   const context = useContext(WalletContext);
   if (!context) throw new Error('useWallet must be used within WalletProvider');

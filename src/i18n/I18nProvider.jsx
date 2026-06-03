@@ -28,6 +28,8 @@ import {
 import enMessages from './en.json';
 
 /** @type {React.Context<import('./useTranslation').I18nContextValue|null>} */
+// Context object is colocated with its Provider component by design.
+// eslint-disable-next-line react-refresh/only-export-components
 export const I18nContext = createContext(null);
 
 /** localStorage key used to persist the user's locale choice. */

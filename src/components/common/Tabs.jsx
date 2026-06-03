@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import './Tabs.css';
 
 export default function Tabs({
@@ -14,11 +14,7 @@ export default function Tabs({
   const [indicatorStyle, setIndicatorStyle] = useState({});
   const [_focusedIndex, setFocusedIndex] = useState(-1);
 
-  useEffect(() => {
-    updateIndicator();
-  }, [activeTab, orientation]);
-
-  const updateIndicator = () => {
+  const updateIndicator = useCallback(() => {
     if (!tabsListRef.current) return;
     const activeButton = tabsListRef.current.querySelector(`[data-tab-id="${activeTab}"]`);
     if (!activeButton) return;
@@ -34,7 +30,11 @@ export default function Tabs({
         height: activeButton.offsetHeight,
       });
     }
-  };
+  }, [activeTab, orientation]);
+
+  useEffect(() => {
+    updateIndicator();
+  }, [updateIndicator]);
 
   const handleKeyDown = (e) => {
     const currentIndex = tabs.findIndex((t) => t.id === activeTab);

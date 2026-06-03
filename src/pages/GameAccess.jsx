@@ -54,8 +54,11 @@ export default function GameAccess() {
 
   const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
+  // Load games/tier from the API (external system); the mock branch seeds the
+  // same state synchronously.
   useEffect(() => {
     if (useMocks) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setGames(PLACEHOLDER_GAMES);
       setCurrentTier('free');
       return;

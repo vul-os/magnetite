@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './CookieConsent.css';
 
 const CONSENT_KEY = 'cookie_consent';
 
 export default function CookieConsent() {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const consent = localStorage.getItem(CONSENT_KEY);
-    if (!consent) {
-      setIsVisible(true);
+  // Derive initial visibility from storage via a lazy initializer so we never
+  // call setState inside an effect just to read a synchronous value on mount.
+  const [isVisible, setIsVisible] = useState(() => {
+    try {
+      return !localStorage.getItem(CONSENT_KEY);
+    } catch {
+      return false;
     }
-  }, []);
+  });
 
   const handleAccept = () => {
     localStorage.setItem(CONSENT_KEY, 'accepted');

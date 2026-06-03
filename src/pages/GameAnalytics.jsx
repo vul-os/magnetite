@@ -161,7 +161,9 @@ export default function GameAnalytics() {
     }
   }, [gameId, t]);
 
+  // Load analytics from the API (external system) on mount / when inputs change.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, [loadData]);
 

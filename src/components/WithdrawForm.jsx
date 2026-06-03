@@ -25,9 +25,12 @@ export default function WithdrawForm({ onSuccess, onError }) {
   const [savingRecipient, setSavingRecipient] = useState(false);
   const [recipientError, setRecipientError] = useState(null);
 
+  // Fetch the saved Wise recipient on mount; setting the loading flag at the
+  // start of the request is the standard data-fetching effect pattern.
   useEffect(() => {
     if (USE_MOCKS) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecipientLoading(true);
     api.developer.getWiseRecipient()
       .then(res => {

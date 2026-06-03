@@ -272,6 +272,7 @@ impl Default for VoiceRegistry {
 pub struct VoiceState {
     pub pool: PgPool,
     pub registry: VoiceRegistry,
+    pub gauges: Arc<crate::ws::gauges::WsGauges>,
 }
 
 // ---------------------------------------------------------------------------
@@ -327,6 +328,9 @@ async fn handle_voice_socket(
         Ok(Some((id,))) => id,
         _ => return, // room not found or DB error — reject silently
     };
+
+    // Count this accepted voice socket in the live WS gauge for its lifetime.
+    let _conn = crate::ws::gauges::ConnGuard::new(Arc::clone(&state.gauges));
 
     let room_arc = state.registry.get_or_create(room_id, &room_token).await;
 
@@ -556,9 +560,13 @@ pub async fn create_voice_room(
 // Router
 // ---------------------------------------------------------------------------
 
-pub fn router(pool: PgPool) -> Router {
+pub fn router(pool: PgPool, gauges: Arc<crate::ws::gauges::WsGauges>) -> Router {
     let registry = VoiceRegistry::new();
-    let state = VoiceState { pool, registry };
+    let state = VoiceState {
+        pool,
+        registry,
+        gauges,
+    };
     Router::new()
         .route("/ws/voice", get(voice_ws_handler))
         .with_state(state)

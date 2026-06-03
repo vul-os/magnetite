@@ -52,7 +52,10 @@ export function useCommunities() {
     return () => { cancelled = true; };
   }, []);
 
+  // Initial data fetch on mount; fetchCommunities synchronizes with the
+  // communities API (external system) and manages its own loading state.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCommunities();
   }, [fetchCommunities]);
 

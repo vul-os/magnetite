@@ -5,6 +5,7 @@ mod error;
 mod jobs;
 mod middleware;
 mod services;
+mod superadmin;
 mod ws;
 
 use axum::{
@@ -196,24 +197,55 @@ async fn main() {
         notification_broadcaster,
     ));
 
-    let game_ws_handler = std::sync::Arc::new(ws_game::GameWsHandler::new(pool.clone()));
+    let game_ws_handler = std::sync::Arc::new(ws_game::GameWsHandler::new(
+        pool.clone(),
+        Arc::clone(&ws_gauges),
+    ));
 
-    let app = Router::new()
+    // ── In-house analytics + super-admin control surface ────────────────────
+    // One shared offline GeoIP resolver feeds both the analytics recorder (IP
+    // enrichment) and the super-admin panel (geo display).
+    let geo = Arc::new(superadmin::GeoResolver::from_env());
+    let trust_proxy = std::env::var("TRUST_PROXY")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    let analytics_state = Arc::new(superadmin::analytics::AnalyticsState::from_env(
+        pool.clone(),
+        Arc::clone(&geo),
+        trust_proxy,
+    ));
+
+    let mut app = Router::new()
         .nest("/api/v1", api_v1)
         .merge(health_metrics)
         .merge(notification_ws_handler.router())
         // Wave 6: real-time comms and voice signaling WebSocket endpoints
-        .merge(comms::router(pool.clone()))
-        .merge(voice::router(pool.clone()))
+        .merge(comms::router(pool.clone(), Arc::clone(&ws_gauges)))
+        .merge(voice::router(pool.clone(), Arc::clone(&ws_gauges)))
         // Game WebSocket: mount the game loop router (was unmounted — now wired)
-        .merge(game_ws_handler.router())
+        .merge(game_ws_handler.router());
+
+    // Hardened super-admin panel — mounted only when a super credential is set.
+    match superadmin::router(pool.clone(), Arc::clone(&geo)) {
+        Some(sa) => app = app.nest("/superadmin", sa),
+        None => tracing::info!(
+            "Super-admin panel disabled (set SUPERADMIN_EMAIL + SUPERADMIN_PASSWORD_HASH to enable)"
+        ),
+    }
+
+    let app = app
         .layer(cors_layer())
         .layer(from_fn_with_state(
             rate_limiter.clone(),
             rate_limit_middleware,
         ))
         .layer(from_fn(log_request))
-        .layer(from_fn(record_request_metrics));
+        .layer(from_fn(record_request_metrics))
+        // In-house request analytics (skips infra/static/superadmin paths).
+        .layer(from_fn_with_state(
+            Arc::clone(&analytics_state),
+            superadmin::analytics::record_analytics,
+        ));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     tracing::info!("Server running on {}", listener.local_addr().unwrap());
@@ -274,7 +306,12 @@ async fn main() {
         }
     });
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
 
 async fn health_check() -> &'static str {

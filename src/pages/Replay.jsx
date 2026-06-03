@@ -136,8 +136,9 @@ export default function Replay() {
       });
   }, []);
 
-  // Fetch replay
+  // Fetch the replay from the API (external system); reset playback state first.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     setCurrentTick(0);

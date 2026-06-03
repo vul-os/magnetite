@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:a11y": "vitest run --config vitest.a11y.config.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -1,6 +1,8 @@
 import { createContext, useState, useCallback } from 'react';
 import ConfirmDialog from './ConfirmDialog';
 
+// Context object is colocated with its Provider component by design.
+// eslint-disable-next-line react-refresh/only-export-components
 export const ConfirmDialogContext = createContext();
 
 export function ConfirmDialogProvider({ children }) {

@@ -285,6 +285,8 @@ export function CommsProvider({ children }) {
  * useComms — consume the comms context.
  * Must be used inside <CommsProvider>.
  */
+// Provider + its consumer hook are intentionally colocated.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useComms() {
   const context = useContext(CommsContext);
   if (!context) {

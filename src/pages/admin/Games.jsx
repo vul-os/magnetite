@@ -77,6 +77,8 @@ export default function Games() {
     }
   }, []);
 
+  // Fetch games from the admin API (external system) on mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchGames(); }, [fetchGames]);
 
   const developers = useMemo(

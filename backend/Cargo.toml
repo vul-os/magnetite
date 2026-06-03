@@ -41,6 +41,10 @@ aws-sdk-s3 = "1"
 tokio-stream = "0.1"
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.18", default-features = false }
+# Offline, in-house IP geolocation for the super-admin analytics panel. Reads a
+# local MaxMind GeoLite2 .mmdb file when GEOIP_DB_PATH is set; makes no network
+# calls. Geo fields degrade gracefully to NULL when no database is configured.
+maxminddb = "0.24"
 
 [dev-dependencies]
 tokio-test = "0.4"

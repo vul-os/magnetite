@@ -112,8 +112,11 @@ export default function GamePreview({
   const [devUrl, setDevUrl]     = useState('ws://localhost:9001');
   const [activeUrl, setActiveUrl] = useState(wsEndpoint);
 
-  // Sync activeUrl when wsEndpoint prop changes (e.g. manifest loaded after mount)
+  // Sync activeUrl when wsEndpoint prop changes (e.g. manifest loaded after mount).
+  // This mirrors an async-arriving prop into local state that the user can also
+  // override in devMode, so deriving during render is not possible here.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (wsEndpoint) setActiveUrl(wsEndpoint);
   }, [wsEndpoint]);
 
@@ -203,7 +206,9 @@ export default function GamePreview({
     return client;
   }, [token, pingHandle]);
 
-  // Auto-connect when activeUrl becomes available (and not in devMode waiting for input)
+  // Auto-connect when activeUrl becomes available (and not in devMode waiting for
+  // input). This effect manages the WebSocket/mock-renderer lifecycle, so it must
+  // drive connection status state from within the effect.
   useEffect(() => {
     if (!activeUrl && USE_MOCKS && canvasRef.current) {
       // Show mock demo
@@ -213,6 +218,7 @@ export default function GamePreview({
     }
 
     if (!activeUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('idle');
       return;
     }

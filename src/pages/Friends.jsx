@@ -8,6 +8,13 @@ import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
+// Pure date formatter: returns a localized date string, or an em-dash when the
+// value is missing. Avoids calling Date.now() during render (impure fallback).
+function formatRequestDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString();
+}
+
 export default function Friends() {
   const { t } = useTranslation();
   const [friends, setFriends]               = useState([]);
@@ -325,7 +332,7 @@ export default function Friends() {
                     <div className="request-info">
                       <h4>{request.username ?? request.from_username ?? t('friends.unknownUser')}</h4>
                       <span>
-                        {t('friends.sentDate', { date: new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString() })}
+                        {t('friends.sentDate', { date: formatRequestDate(request.created_at ?? request.sentAt) })}
                       </span>
                     </div>
                     <div className="request-actions">
@@ -365,7 +372,7 @@ export default function Friends() {
                     <div className="request-info">
                       <h4>{request.username ?? request.to_username ?? t('friends.unknownUser')}</h4>
                       <span>
-                        {t('friends.sentDate', { date: new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString() })}
+                        {t('friends.sentDate', { date: formatRequestDate(request.created_at ?? request.sentAt) })}
                       </span>
                     </div>
                     <div className="request-actions">

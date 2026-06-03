@@ -121,6 +121,8 @@ export default function Subscription() {
     }
   }, []);
 
+  // Fetch the subscription from the API (external system) on mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSubscription(); }, [fetchSubscription]);
 
   const handleSubscribe = async (tier) => {

@@ -95,9 +95,11 @@ export default function Leaderboard() {
     return () => { cancelled = true; };
   }, []);
 
+  // Fetch leaderboard entries from the API (external system) when inputs change.
   useEffect(() => {
     if (!selectedGame) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFetchError(null);
 
     if (USE_MOCKS) {

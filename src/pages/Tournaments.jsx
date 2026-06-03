@@ -313,6 +313,8 @@ export default function Tournaments() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
+  // Load tournaments from the API (external system) on mount / filter change.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadList(); }, [loadList]);
 
   // Load tournament detail

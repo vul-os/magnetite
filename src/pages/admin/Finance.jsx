@@ -121,6 +121,8 @@ export default function Finance() {
     }
   }, []);
 
+  // Fetch finance data from the admin API (external system) on mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filteredTransactions = transactions.filter(txn => {
