@@ -1964,3 +1964,17 @@ the existing canvas renderer with play/pause/seek/speed — no live server). (3)
 owner): a Replay Viewer page mounting the ReplayPlayer + Tournament bracket UX. (4) docs/AUDIT/GAPS. (5) tests.
 Clean ownership: 1 backend(+registration), 1 web-client, 1 frontend(+client.js+build), 1 docs, 1 tests. No new
 frontend dep (reuses magnetite-web-client) → no package.json contention.
+
+---
+
+## §6 — REPLAY+TOURNAMENT done; next = PRODUCTION-1 (2026-06-03)
+
+REPLAY+TOURNAMENT (`c16e3cf`): spectator/replay viewer on ReplayLog + tournament brackets. Caught+fixed 2 frontend
+lint errors (unused test imports). **Next wave PRODUCTION-1 (chosen):** launch-readiness — (1) frontend (sole
+client.js+package.json+build): PWA (installable + offline shell via vite-plugin-pwa, building on public/manifest.json
++ sw.js) + mobile bottom-nav + in-game store purchase UI; (2) production deploy manifests (k8s + nomad for backend/
+runtime/mediamtx/wasm-runner) + cloud-runner orchestration design doc; (3) i18n third locale (French fr.json) + RTL
+readiness (dir attribute scaffolding); (4) backend store-purchase hardening (history/receipt/entitlement-check/
+store-refund) + migration; (5) tests (backend store + frontend PWA/bottom-nav/store — test files only, no new dep).
+Clean ownership: one frontend agent (client.js+pkg+build), one deploy agent (new k8s/nomad dirs + docs), one i18n
+agent (src/i18n), one backend agent (marketplace.rs+migration), one tests agent. No shared-file contention.
