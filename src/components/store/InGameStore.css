@@ -376,3 +376,244 @@
   .igs-header      { flex-direction: column; gap: 0.75rem; }
   .igs-header-right { width: 100%; justify-content: space-between; }
 }
+
+/* ── Confirm modal ───────────────────────────────────────────────────────── */
+
+.igs-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 7, 11, 0.80);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: var(--radius-xl);
+  animation: igs-fade-in var(--t-fast) var(--ease-out);
+}
+
+@keyframes igs-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.igs-confirm-sheet {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  padding: 1.75rem 1.5rem 1.5rem;
+  width: calc(100% - 2.5rem);
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: var(--shadow-xl);
+  animation: igs-sheet-in var(--t-fast) var(--ease-out);
+}
+
+@keyframes igs-sheet-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+.igs-confirm-icon-wrap {
+  width: 48px;
+  height: 48px;
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.igs-confirm-icon-wrap svg { width: 22px; height: 22px; }
+
+.igs-confirm-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.igs-confirm-item-preview {
+  display: flex;
+  gap: 0.875rem;
+  align-items: center;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 0.875rem;
+  width: 100%;
+}
+
+.igs-confirm-item-img {
+  width: 80px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.igs-confirm-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.igs-confirm-item-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.igs-confirm-item-type {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+}
+
+.igs-confirm-item-desc {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.igs-confirm-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.625rem 0.875rem;
+}
+
+.igs-confirm-price-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.igs-confirm-price-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.igs-confirm-notice {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.igs-confirm-actions {
+  display: flex;
+  gap: 0.625rem;
+  width: 100%;
+}
+
+.igs-confirm-cancel,
+.igs-confirm-ok {
+  flex: 1;
+  justify-content: center;
+  font-size: var(--text-sm);
+}
+
+.igs-btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: var(--radius-full);
+  animation: igs-spin 0.65s linear infinite;
+}
+
+/* ── Receipt toast ───────────────────────────────────────────────────────── */
+
+.igs-receipt {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius);
+  padding: 0.625rem 0.875rem;
+  margin: 0 1.5rem;
+  flex-shrink: 0;
+  animation: igs-slide-down var(--t-fast) var(--ease-out);
+}
+
+@keyframes igs-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.igs-receipt-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-success);
+  flex-shrink: 0;
+}
+.igs-receipt-icon svg { width: 16px; height: 16px; }
+
+.igs-receipt-text {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--color-text-primary);
+}
+
+.igs-receipt-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  transition: color var(--t-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.igs-receipt-dismiss:hover { color: var(--color-text-primary); }
+.igs-receipt-dismiss svg   { width: 14px; height: 14px; }
+
+/* ── Insufficient / error badge ─────────────────────────────────────────────── */
+
+.igs-insufficient-badge,
+.igs-error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.igs-insufficient-badge       { color: var(--color-amber); }
+.igs-error-badge              { color: var(--color-error); }
+.igs-insufficient-badge svg,
+.igs-error-badge svg          { width: 12px; height: 12px; flex-shrink: 0; }

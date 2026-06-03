@@ -1,0 +1,97 @@
+# PostgreSQL — single-instance StatefulSet suitable for a small/medium deployment.
+#
+# For production at scale, replace with a managed service:
+#   - AWS RDS for PostgreSQL (recommended for AWS)
+#   - Google Cloud SQL (recommended for GCP)
+#   - Azure Database for PostgreSQL
+#   - Neon (serverless, easy branching for dev/staging)
+#
+# If using a managed service, delete this file and update DATABASE_URL in the
+# Secret (02-secret.yaml) to point at the managed endpoint.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: magnetite
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  # ClusterIP: not exposed externally — backend connects via DNS name "postgres".
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: magnetite
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: magnetite
+            - name: POSTGRES_USER
+              value: magnetite
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: magnetite-secrets
+                  key: DATABASE_URL
+                  # Note: This mounts the full URL as the password as a placeholder.
+                  # For a real deployment use a dedicated POSTGRES_PASSWORD secret key.
+                  optional: false
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "magnetite", "-d", "magnetite"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "magnetite", "-d", "magnetite"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

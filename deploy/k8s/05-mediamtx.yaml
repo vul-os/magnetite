@@ -1,0 +1,148 @@
+# MediaMTX — media server for HLS streaming, RTMP ingest, and WebRTC/WHIP.
+# Image: bluenviron/mediamtx:latest
+#
+# Ports:
+#   8888  — HLS watch + MediaMTX REST API
+#   1935  — RTMP ingest (OBS/FFmpeg push)
+#   8889  — WebRTC/WHIP ingest
+#   8554  — RTSP
+#
+# For production at scale, run MediaMTX on a dedicated node with sufficient
+# egress bandwidth, or replace with a managed SFU service (LiveKit, mediasoup,
+# Livekit Cloud). See docs/self-hosting/deploy.md for the scaling design.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx
+  namespace: magnetite
+  labels:
+    app: mediamtx
+spec:
+  selector:
+    app: mediamtx
+  ports:
+    # HLS + REST API — backend connects here for manifest generation.
+    - name: hls-api
+      port: 8888
+      targetPort: 8888
+      protocol: TCP
+    # RTMP ingest — must be accessible from the public internet (OBS/FFmpeg).
+    # Expose via a LoadBalancer or NodePort if external ingest is needed.
+    - name: rtmp
+      port: 1935
+      targetPort: 1935
+      protocol: TCP
+    # WebRTC/WHIP
+    - name: webrtc
+      port: 8889
+      targetPort: 8889
+      protocol: TCP
+    # RTSP
+    - name: rtsp
+      port: 8554
+      targetPort: 8554
+      protocol: TCP
+  # Use ClusterIP for intra-cluster access; change to LoadBalancer to expose
+  # RTMP/RTSP ingest to external OBS/FFmpeg clients.
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx
+  namespace: magnetite
+  labels:
+    app: mediamtx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+    spec:
+      containers:
+        - name: mediamtx
+          image: bluenviron/mediamtx:latest
+          ports:
+            - containerPort: 8888
+            - containerPort: 1935
+            - containerPort: 8889
+            - containerPort: 8554
+          env:
+            - name: MTX_LOGLEVEL
+              value: info
+          volumeMounts:
+            - name: mediamtx-config
+              mountPath: /mediamtx.yml
+              subPath: mediamtx.yml
+              readOnly: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /v3/config/global/get
+              port: 8888
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v3/config/global/get
+              port: 8888
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: mediamtx-config
+          configMap:
+            name: mediamtx-config
+---
+# Inline MediaMTX configuration.
+# For production, mount this from a separate ConfigMap or a Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mediamtx-config
+  namespace: magnetite
+data:
+  mediamtx.yml: |
+    # MediaMTX configuration — Magnetite production
+    logLevel: info
+    logDestinations: [stdout]
+
+    # HLS
+    hls: yes
+    hlsAddress: :8888
+    hlsAlwaysRemux: no
+    hlsSegmentDuration: 2s
+    hlsSegmentMaxSize: 50MB
+    hlsAllowOrigin: "*"
+
+    # RTMP ingest
+    rtmp: yes
+    rtmpAddress: :1935
+
+    # WebRTC / WHIP
+    webrtc: yes
+    webrtcAddress: :8889
+
+    # RTSP
+    rtsp: yes
+    rtspAddress: :8554
+
+    # Default path settings — allow all ingest without auth.
+    # Tighten with publishUser/readUser for production streams.
+    paths:
+      "~^.*$":
+        source: publisher

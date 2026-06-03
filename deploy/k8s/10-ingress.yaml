@@ -1,0 +1,99 @@
+# Ingress — routes public traffic to frontend and backend.
+#
+# Prerequisites:
+#   - An Ingress controller must be installed, e.g.:
+#       kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+#   - cert-manager for TLS:
+#       kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
+#   - A ClusterIssuer named "letsencrypt-prod" pointing at Let's Encrypt.
+#
+# Domains (update to your actual domains):
+#   magnetite.gg        → frontend (nginx SPA)
+#   api.magnetite.gg    → backend (/api/v1/*, /health, /ws/*)
+#
+# WebSocket traffic (game clients):
+#   runtime.magnetite.gg:9000  → magnetite-runtime LoadBalancer Service
+#   This is NOT routed through the Ingress because nginx Ingress does not
+#   support non-HTTP protocols on port 9000. The runtime Service is type
+#   LoadBalancer and gets its own external IP.
+#   Alternatively, use the nginx TCP proxy ConfigMap:
+#     data: {"9000": "magnetite/magnetite-runtime:9000"}
+#   See: https://kubernetes.github.io/ingress-nginx/user-guide/exposing-tcp-udp-services/
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: magnetite
+  namespace: magnetite
+  annotations:
+    # Use nginx Ingress controller.
+    kubernetes.io/ingress.class: nginx
+    # TLS certificate from cert-manager + Let's Encrypt.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Enable WebSocket upgrades for /ws/* paths.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Increase body size for game asset uploads.
+    nginx.ingress.kubernetes.io/proxy-body-size: "256m"
+    # HSTS — safe once TLS is confirmed working.
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+spec:
+  tls:
+    - hosts:
+        - magnetite.gg
+        - www.magnetite.gg
+      secretName: magnetite-gg-tls
+    - hosts:
+        - api.magnetite.gg
+      secretName: api-magnetite-gg-tls
+  rules:
+    # Frontend — catch-all for the SPA.
+    - host: magnetite.gg
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: www.magnetite.gg
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    # Backend API + WebSocket.
+    - host: api.magnetite.gg
+      http:
+        paths:
+          # REST API
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          # Health endpoint (used by load-balancer health checks).
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          # WebSocket — game WS, comms WS, voice signaling.
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080

@@ -1,0 +1,76 @@
+# Frontend — nginx serving the React SPA + proxying /api/ and /ws to backend.
+# Image: ghcr.io/magnetite/frontend:latest
+#   Build: Dockerfile.frontend
+#   Static files: /usr/share/nginx/html (built with npm run build)
+#   nginx config: nginx.conf (reverse-proxies /api/ → backend:8080, /ws → backend:8080)
+#   Port: 80
+#   Health: GET /health → 200 "OK"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: magnetite
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: magnetite
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: frontend
+          image: ghcr.io/magnetite/frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3

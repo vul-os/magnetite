@@ -46,7 +46,7 @@ const LINK_COLUMNS = [
 const SUPPORTED_LOCALES = [
   { code: 'en', labelKey: 'footer.languageSelector.english' },
   { code: 'es', labelKey: 'footer.languageSelector.spanish' },
-  // Future: { code: 'fr', labelKey: 'footer.languageSelector.french' },
+  { code: 'fr', labelKey: 'footer.languageSelector.french' },
   // Future: { code: 'de', labelKey: 'footer.languageSelector.german' },
 ];
 

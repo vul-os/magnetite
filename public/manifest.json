@@ -3,11 +3,48 @@
   "short_name": "Magnetite",
   "description": "Open source games. Real money. No middlemen.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0a0f",
-  "theme_color": "#f59e0b",
+  "orientation": "portrait-primary",
+  "background_color": "#07070b",
+  "theme_color": "#38e1c8",
+  "lang": "en",
+  "categories": ["games", "entertainment"],
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Marketplace",
+      "short_name": "Store",
+      "description": "Browse and buy games",
+      "url": "/marketplace",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Wallet",
+      "short_name": "Wallet",
+      "description": "View your USDC balance",
+      "url": "/wallet",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

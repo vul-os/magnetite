@@ -14,9 +14,23 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { AdminRoute } from './components/admin/AdminRoute';
 import { SearchModal } from './components';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
+import BottomNav from './components/BottomNav';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import './index.css';
 import './assets/skip-link.css';
+
+/* ── PWA Service Worker registration ──────────────────────────────────────── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        console.info('[PWA] Service worker registered, scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service worker registration failed:', err);
+      });
+  });
+}
 
 const LandingPage = lazy(() => import('./components/landing/LandingPage'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
@@ -133,6 +147,7 @@ function App() {
               </a>
               <AnnouncementBanner />
               <ToastContainer />
+              <BottomNav />
               <ErrorBoundary>
                 <BrowserRouter>
                   <AppContent />

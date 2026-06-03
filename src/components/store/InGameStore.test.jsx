@@ -166,8 +166,13 @@ describe('InGameStore', () => {
     mockPurchase.mockResolvedValue({ success: true });
     render(<InGameStore storeId="test-store" gameTitle="G" onClose={() => {}} pointBalance={5000} />);
 
+    // Click Buy to open confirm modal
     const buyBtn = screen.getByRole('button', { name: /buy neon helm skin/i });
     fireEvent.click(buyBtn);
+
+    // Confirm modal appears — click "Buy Now" to proceed
+    const confirmBtn = await screen.findByRole('button', { name: /buy now/i });
+    fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(mockPurchase).toHaveBeenCalledWith('test-store', 'igs1', 'points');
@@ -193,8 +198,14 @@ describe('InGameStore', () => {
     mockPurchase.mockResolvedValue({ success: true });
 
     render(<InGameStore storeId="test-store" gameTitle="G" onClose={() => {}} pointBalance={5000} />);
+
+    // Step 1: click Buy to open confirm modal
     const buyBtn = screen.getByRole('button', { name: /buy neon helm skin/i });
     fireEvent.click(buyBtn);
+
+    // Step 2: click "Buy Now" to confirm
+    const confirmBtn = await screen.findByRole('button', { name: /buy now/i });
+    fireEvent.click(confirmBtn);
 
     // After the async purchase resolves, "Purchased!" text should appear.
     await waitFor(

@@ -12,6 +12,40 @@ use uuid::Uuid;
 use crate::error::{AppError, Result};
 use crate::services::points::PointsService;
 
+// ─── Receipt (purchase + item detail joined) ──────────────────────────────────
+
+/// Full purchase receipt — joins store_purchases with store_items.
+/// Sourced from the `purchase_receipts` view.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct PurchaseReceipt {
+    pub purchase_id: Uuid,
+    pub user_id: Uuid,
+    pub item_id: Uuid,
+    pub store_id: Uuid,
+    pub game_id: Uuid,
+    pub item_sku: String,
+    pub item_name: String,
+    pub item_kind: String,
+    pub price_paid: Decimal,
+    pub currency: String,
+    pub developer_share: Option<Decimal>,
+    pub platform_fee: Option<Decimal>,
+    pub status: String,
+    pub idempotency_key: Option<String>,
+    pub metadata: Option<Value>,
+    pub purchased_at: DateTime<Utc>,
+    pub refunded_at: Option<DateTime<Utc>>,
+    pub refunded_by: Option<Uuid>,
+    pub refund_reason: Option<String>,
+}
+
+// ─── Refund request ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RefundRequest {
+    pub reason: Option<String>,
+}
+
 // ─── Revenue-share constants (mirrors payout.rs 70/30 split) ─────────────────
 
 fn developer_share_pct() -> Decimal {
@@ -69,6 +103,9 @@ pub struct StorePurchase {
     pub idempotency_key: Option<String>,
     pub metadata: Option<Value>,
     pub created_at: DateTime<Utc>,
+    pub refunded_at: Option<DateTime<Utc>>,
+    pub refunded_by: Option<Uuid>,
+    pub refund_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -528,7 +565,8 @@ impl MarketplaceService {
                  developer_share, platform_fee, status, idempotency_key, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, 'USD', $7, $8, 'completed', $9, NOW())
             RETURNING id, user_id, item_id, store_id, game_id, price_paid, currency,
-                      developer_share, platform_fee, status, idempotency_key, metadata, created_at
+                      developer_share, platform_fee, status, idempotency_key, metadata, created_at,
+                      refunded_at, refunded_by, refund_reason
             "#,
         )
         .bind(purchase_id)
@@ -573,7 +611,8 @@ impl MarketplaceService {
                  developer_share, platform_fee, status, idempotency_key, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, 'points', NULL, NULL, 'completed', $7, NOW())
             RETURNING id, user_id, item_id, store_id, game_id, price_paid, currency,
-                      developer_share, platform_fee, status, idempotency_key, metadata, created_at
+                      developer_share, platform_fee, status, idempotency_key, metadata, created_at,
+                      refunded_at, refunded_by, refund_reason
             "#,
         )
         .bind(Uuid::new_v4())
@@ -631,7 +670,8 @@ impl MarketplaceService {
         let purchases = sqlx::query_as::<_, StorePurchase>(
             r#"
             SELECT id, user_id, item_id, store_id, game_id, price_paid, currency,
-                   developer_share, platform_fee, status, idempotency_key, metadata, created_at
+                   developer_share, platform_fee, status, idempotency_key, metadata, created_at,
+                   refunded_at, refunded_by, refund_reason
             FROM store_purchases
             WHERE user_id = $1
             ORDER BY created_at DESC
@@ -717,7 +757,8 @@ impl MarketplaceService {
         let p = sqlx::query_as::<_, StorePurchase>(
             r#"
             SELECT id, user_id, item_id, store_id, game_id, price_paid, currency,
-                   developer_share, platform_fee, status, idempotency_key, metadata, created_at
+                   developer_share, platform_fee, status, idempotency_key, metadata, created_at,
+                   refunded_at, refunded_by, refund_reason
             FROM store_purchases WHERE idempotency_key = $1
             "#,
         )
@@ -725,6 +766,267 @@ impl MarketplaceService {
         .fetch_optional(&self.pool)
         .await?;
         Ok(p)
+    }
+
+    // ── Receipt (single purchase detail) ──────────────────────────────────────
+
+    /// Get a single purchase receipt. Enforces ownership: only the buyer or an admin
+    /// may retrieve a receipt. Pass `requesting_user` = the caller's user_id and
+    /// `is_admin` = whether the caller has admin rights.
+    pub async fn get_receipt(
+        &self,
+        purchase_id: Uuid,
+        requesting_user: Uuid,
+        is_admin: bool,
+    ) -> Result<PurchaseReceipt> {
+        let receipt = sqlx::query_as::<_, PurchaseReceipt>(
+            r#"
+            SELECT purchase_id, user_id, item_id, store_id, game_id,
+                   item_sku, item_name, item_kind,
+                   price_paid, currency, developer_share, platform_fee,
+                   status, idempotency_key, metadata, purchased_at,
+                   refunded_at, refunded_by, refund_reason
+            FROM purchase_receipts
+            WHERE purchase_id = $1
+            "#,
+        )
+        .bind(purchase_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Purchase not found".to_string()))?;
+
+        if !is_admin && receipt.user_id != requesting_user {
+            return Err(AppError::Forbidden(
+                "You do not have access to this receipt".to_string(),
+            ));
+        }
+
+        Ok(receipt)
+    }
+
+    // ── Purchase history with item detail (via view) ──────────────────────────
+
+    /// Return paginated purchase history for `user_id` with full item detail,
+    /// sourced from the `purchase_receipts` view.
+    pub async fn user_purchase_history(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<PurchaseReceipt>> {
+        let rows = sqlx::query_as::<_, PurchaseReceipt>(
+            r#"
+            SELECT purchase_id, user_id, item_id, store_id, game_id,
+                   item_sku, item_name, item_kind,
+                   price_paid, currency, developer_share, platform_fee,
+                   status, idempotency_key, metadata, purchased_at,
+                   refunded_at, refunded_by, refund_reason
+            FROM purchase_receipts
+            WHERE user_id = $1
+            ORDER BY purchased_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    // ── Store-initiated refund ─────────────────────────────────────────────────
+
+    /// Refund a store purchase (developer or admin). Steps:
+    ///  1. Verify the purchase exists, is `completed`, and has not already been refunded.
+    ///  2. Authorisation: admin OR the developer who owns the store.
+    ///  3. Reverse wallet/points debit back to the buyer.
+    ///  4. Revoke the entitlement.
+    ///  5. Mark the purchase `refunded` and stamp `refunded_at`.
+    pub async fn refund_purchase(
+        &self,
+        purchase_id: Uuid,
+        actor_id: Uuid,
+        is_admin: bool,
+        req: RefundRequest,
+    ) -> Result<PurchaseReceipt> {
+        // Load purchase
+        let purchase = sqlx::query_as::<_, StorePurchase>(
+            r#"
+            SELECT id, user_id, item_id, store_id, game_id, price_paid, currency,
+                   developer_share, platform_fee, status, idempotency_key, metadata, created_at,
+                   refunded_at, refunded_by, refund_reason
+            FROM store_purchases WHERE id = $1
+            "#,
+        )
+        .bind(purchase_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Purchase not found".to_string()))?;
+
+        // Guard: already refunded?
+        if purchase.status == "refunded" || purchase.refunded_at.is_some() {
+            return Err(AppError::Validation(
+                "Purchase has already been refunded".to_string(),
+            ));
+        }
+
+        // Guard: only completed purchases can be refunded
+        if purchase.status != "completed" {
+            return Err(AppError::Validation(format!(
+                "Cannot refund a purchase with status '{}'",
+                purchase.status
+            )));
+        }
+
+        // Authorisation: admin or the developer who owns this store
+        if !is_admin {
+            let store = self.get_store(purchase.store_id).await?;
+            if store.developer_id != actor_id {
+                return Err(AppError::Forbidden(
+                    "Only the store owner or an admin may issue refunds".to_string(),
+                ));
+            }
+        }
+
+        // For points refunds, award first (PointsService manages its own transaction).
+        // For USD, the whole reversal happens inside a single transaction.
+        match purchase.currency.as_str() {
+            "USD" => {
+                let mut tx = self.pool.begin().await?;
+
+                // Refund buyer's wallet
+                sqlx::query(
+                    r#"
+                    INSERT INTO wallet_balances (user_id, currency, balance, updated_at)
+                    VALUES ($1, 'USD', $2, NOW())
+                    ON CONFLICT (user_id, currency) DO UPDATE
+                        SET balance = wallet_balances.balance + $2, updated_at = NOW()
+                    "#,
+                )
+                .bind(purchase.user_id)
+                .bind(purchase.price_paid)
+                .execute(&mut *tx)
+                .await?;
+
+                // Claw back developer share
+                if let Some(dev_share) = purchase.developer_share {
+                    if dev_share > Decimal::ZERO {
+                        sqlx::query(
+                            "UPDATE developer_balances \
+                             SET balance = GREATEST(balance - $1, 0), updated_at = NOW()
+                             WHERE user_id = (SELECT developer_id FROM dev_stores WHERE id = $2)",
+                        )
+                        .bind(dev_share)
+                        .bind(purchase.store_id)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                }
+
+                // Revoke entitlement
+                sqlx::query(
+                    "UPDATE entitlements SET revoked = true \
+                     WHERE user_id = $1 AND item_id = $2",
+                )
+                .bind(purchase.user_id)
+                .bind(purchase.item_id)
+                .execute(&mut *tx)
+                .await?;
+
+                // Stamp the purchase as refunded
+                sqlx::query(
+                    r#"
+                    UPDATE store_purchases
+                    SET status = 'refunded',
+                        refunded_at = NOW(),
+                        refunded_by = $1,
+                        refund_reason = $2
+                    WHERE id = $3
+                    "#,
+                )
+                .bind(actor_id)
+                .bind(&req.reason)
+                .bind(purchase_id)
+                .execute(&mut *tx)
+                .await?;
+
+                tx.commit().await?;
+            }
+            "points" => {
+                // Award points back to buyer (PointsService uses its own internal tx).
+                let cost_pts: i64 = purchase.price_paid.try_into().unwrap_or(0);
+                if cost_pts > 0 {
+                    let ps = PointsService::new(self.pool.clone());
+                    ps.award(
+                        purchase.user_id,
+                        cost_pts,
+                        "store_refund",
+                        Some(purchase.game_id),
+                        Some(serde_json::json!({
+                            "purchase_id": purchase_id,
+                            "item_id": purchase.item_id
+                        })),
+                    )
+                    .await?;
+                }
+
+                // Revoke entitlement + stamp purchase
+                let mut tx = self.pool.begin().await?;
+
+                sqlx::query(
+                    "UPDATE entitlements SET revoked = true \
+                     WHERE user_id = $1 AND item_id = $2",
+                )
+                .bind(purchase.user_id)
+                .bind(purchase.item_id)
+                .execute(&mut *tx)
+                .await?;
+
+                sqlx::query(
+                    r#"
+                    UPDATE store_purchases
+                    SET status = 'refunded',
+                        refunded_at = NOW(),
+                        refunded_by = $1,
+                        refund_reason = $2
+                    WHERE id = $3
+                    "#,
+                )
+                .bind(actor_id)
+                .bind(&req.reason)
+                .bind(purchase_id)
+                .execute(&mut *tx)
+                .await?;
+
+                tx.commit().await?;
+            }
+            other => {
+                return Err(AppError::Validation(format!(
+                    "Unknown currency '{}' on purchase — cannot refund",
+                    other
+                )));
+            }
+        }
+
+        // Return updated receipt
+        self.get_receipt(purchase_id, actor_id, true).await
+    }
+
+    // ── Entitlement verification (strict) ─────────────────────────────────────
+
+    /// Strict entitlement check: returns Ok(()) if the user has a non-revoked,
+    /// non-expired entitlement for `item_id`; returns Err(Forbidden) otherwise.
+    /// Use this in game-server / access-gate paths.
+    pub async fn assert_entitlement(&self, user_id: Uuid, item_id: Uuid) -> Result<()> {
+        if self.has_entitlement(user_id, item_id).await? {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden(format!(
+                "User does not hold an active entitlement for item {}",
+                item_id
+            )))
+        }
     }
 }
 

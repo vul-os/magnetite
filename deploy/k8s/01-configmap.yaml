@@ -1,0 +1,53 @@
+# ConfigMap for non-sensitive configuration that can be committed.
+# Sensitive values (JWT_SECRET, PAYSTACK_SECRET_KEY, WISE_API_TOKEN, etc.)
+# must be provided via the Secret template in 02-secret.yaml — never here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: magnetite-config
+  namespace: magnetite
+data:
+  # ── Server ────────────────────────────────────────────────────────────────
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
+  APP_ENV: "production"
+  APP_URL: "https://api.magnetite.gg"
+  FRONTEND_URL: "https://magnetite.gg"
+  CORS_ALLOWED_ORIGINS: "https://magnetite.gg"
+
+  # ── Token expiry (seconds) ────────────────────────────────────────────────
+  ACCESS_TOKEN_EXPIRY: "900"
+  REFRESH_TOKEN_EXPIRY: "604800"
+
+  # ── Email defaults ────────────────────────────────────────────────────────
+  EMAIL_PROVIDER: "resend"
+  EMAIL_FROM_ADDRESS: "noreply@magnetite.gg"
+  EMAIL_FROM_NAME: "Magnetite"
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  # Override in Secret if using a managed Redis with AUTH.
+  REDIS_URL: "redis://redis:6379"
+
+  # ── Media / streaming ─────────────────────────────────────────────────────
+  MEDIA_SERVER_BASE_URL: "http://mediamtx:8888"
+
+  # ── Game server WebSocket ──────────────────────────────────────────────────
+  # Should point to the LoadBalancer/NodePort address of the runtime service.
+  # Override per-deployment or via Kustomize overlay.
+  GAME_SERVER_WS_BASE: "wss://runtime.magnetite.gg"
+
+  # ── Anti-cheat ────────────────────────────────────────────────────────────
+  ANTICHEAT_MAX_VELOCITY: "50.0"
+  ANTICHEAT_MAX_INPUT_RATE: "50.0"
+
+  # ── Payments sandbox (false = real providers required) ────────────────────
+  PAYMENTS_SANDBOX: "false"
+  WISE_SANDBOX: "false"
+
+  # ── Log level ─────────────────────────────────────────────────────────────
+  RUST_LOG: "info"
+
+  # ── Runtime service defaults ──────────────────────────────────────────────
+  RUNTIME_HOST: "0.0.0.0"
+  RUNTIME_PORT: "9000"
+  RUNTIME_WORKERS: "0"

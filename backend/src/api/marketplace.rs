@@ -12,11 +12,12 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::api::middleware;
+use crate::api::middleware::admin_guard_with_pool;
 use crate::api::response;
 use crate::error::Result;
 use crate::services::marketplace::{
-    CreateItemRequest, CreateStoreRequest, MarketplaceService, StorePurchase, UpdateItemRequest,
-    UpdateStoreRequest,
+    CreateItemRequest, CreateStoreRequest, MarketplaceService, PurchaseReceipt, RefundRequest,
+    StorePurchase, UpdateItemRequest, UpdateStoreRequest,
 };
 
 // ─── Query params ─────────────────────────────────────────────────────────────
@@ -162,17 +163,17 @@ pub async fn purchase_item(
     Ok(response::success_response(purchase))
 }
 
-/// GET /marketplace/purchases — caller's purchase history.
+/// GET /marketplace/purchases — caller's purchase history (rich: item name + price + date).
 pub async fn list_my_purchases(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
     Query(q): Query<PurchasesQuery>,
-) -> Result<Json<response::PaginatedResponse<StorePurchase>>> {
+) -> Result<Json<response::PaginatedResponse<PurchaseReceipt>>> {
     let limit = q.limit.unwrap_or(50).min(200);
     let offset = q.offset.unwrap_or(0).max(0);
 
     let svc = MarketplaceService::new(pool);
-    let purchases = svc.user_purchases(user_id, limit, offset).await?;
+    let purchases = svc.user_purchase_history(user_id, limit, offset).await?;
     let total = purchases.len() as u64 + offset as u64;
 
     let page = if limit > 0 {
@@ -181,6 +182,40 @@ pub async fn list_my_purchases(
         1
     };
     Ok(response::paginated(purchases, page, limit as u32, total))
+}
+
+/// GET /marketplace/purchases/:purchase_id — single purchase receipt.
+///
+/// Returns full purchase detail (item name, SKU, kind, price, date, refund state).
+/// Callers may only retrieve their own receipts unless they are admins.
+pub async fn get_purchase_receipt(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(purchase_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<PurchaseReceipt>>> {
+    let is_admin = admin_guard_with_pool(&pool, user_id).await.is_ok();
+    let svc = MarketplaceService::new(pool);
+    let receipt = svc.get_receipt(purchase_id, user_id, is_admin).await?;
+    Ok(response::success_response(receipt))
+}
+
+/// POST /marketplace/purchases/:purchase_id/refund — store-initiated refund.
+///
+/// Developer (store owner) or admin may call this. Reverses wallet/points, revokes
+/// the entitlement, and records `refunded_at` + `refund_reason` on the purchase.
+/// Idempotent: returns 400 if the purchase is already refunded.
+pub async fn refund_purchase_handler(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(purchase_id): Path<Uuid>,
+    Json(payload): Json<RefundRequest>,
+) -> Result<Json<response::ApiResponse<PurchaseReceipt>>> {
+    let is_admin = admin_guard_with_pool(&pool, user_id).await.is_ok();
+    let svc = MarketplaceService::new(pool);
+    let receipt = svc
+        .refund_purchase(purchase_id, user_id, is_admin, payload)
+        .await?;
+    Ok(response::success_response(receipt))
 }
 
 // ─── Entitlement handlers ─────────────────────────────────────────────────────
@@ -337,6 +372,20 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/purchases",
             get(list_my_purchases).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/purchases/:purchase_id",
+            get(get_purchase_receipt).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/purchases/:purchase_id/refund",
+            post(refund_purchase_handler).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

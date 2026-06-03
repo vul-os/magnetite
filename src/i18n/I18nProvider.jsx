@@ -34,7 +34,25 @@ export const I18nContext = createContext(null);
 const LOCALE_STORAGE_KEY = 'magnetite_locale';
 
 /** Supported locale codes (add new locales here when their JSON files are added). */
-const SUPPORTED_LOCALES = ['en', 'es'];
+const SUPPORTED_LOCALES = ['en', 'es', 'fr'];
+
+/**
+ * Locales that require right-to-left text direction.
+ * None are active yet; this set is the hook-point for Arabic (ar), Hebrew (he),
+ * Persian (fa), etc.  When a new RTL locale is added, include its code here and
+ * add a CSS logical-properties note:
+ *   - Use margin-inline-start / margin-inline-end instead of margin-left / margin-right
+ *   - Use padding-inline-start / padding-inline-end instead of padding-left / padding-right
+ *   - Use inset-inline-start / inset-inline-end instead of left / right
+ *   - Use border-inline-* instead of border-left-* / border-right-*
+ * The document <html dir="rtl"> attribute is set automatically below when the
+ * active locale appears in this set.
+ */
+const RTL_LOCALES = new Set([
+  // 'ar', // Arabic  — add ar.json + uncomment to activate
+  // 'he', // Hebrew  — add he.json + uncomment to activate
+  // 'fa', // Persian — add fa.json + uncomment to activate
+]);
 
 /**
  * Read the persisted locale from localStorage, falling back to browser
@@ -68,7 +86,7 @@ async function loadLocale(locale) {
     // locale JSON files are created under src/i18n/<locale>.json.
     const modules = {
       'es': () => import('./es.json'),
-      // 'fr': () => import('./fr.json'),
+      'fr': () => import('./fr.json'),
       // 'de': () => import('./de.json'),
     };
     if (modules[locale]) {
@@ -110,6 +128,16 @@ export function I18nProvider({ children, defaultLocale }) {
       if (!cancelled) setMessages(dict);
     });
     return () => { cancelled = true; };
+  }, [locale]);
+
+  // Set document direction for RTL locales.
+  // No RTL locales are active yet, but this effect is the scaffolding:
+  // when Arabic, Hebrew, or Persian is added to RTL_LOCALES the browser
+  // dir attribute will flip automatically, enabling CSS logical properties
+  // (margin-inline-start, padding-inline-end, inset-inline-start, etc.)
+  // throughout the app without any per-component changes.
+  useEffect(() => {
+    document.documentElement.dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr';
   }, [locale]);
 
   const setLocale = useCallback((newLocale) => {

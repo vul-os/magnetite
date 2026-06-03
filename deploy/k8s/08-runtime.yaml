@@ -1,0 +1,129 @@
+# magnetite-runtime — authoritative WASM game-server host.
+# Image: ghcr.io/magnetite/runtime:latest
+#   Build: magnetite-runtime/Dockerfile
+#   Binary: /usr/local/bin/magnetite-serve (magnetite-runtime crate, bin/serve.rs)
+#   Port: 9000 (WebSocket)
+#   Startup: CMD ["--host", "0.0.0.0", "--port", "9000"]
+#
+# Design:
+#   - One Pod per live game session is the ideal (Dedicated topology).
+#   - In the current implementation, the runtime supports SharedRoom (many sessions
+#     per process) and Dedicated (one session per process). The HPA scales
+#     horizontally across sessions.
+#   - Clients connect via ws://runtime.magnetite.gg (handled by the runtime Ingress
+#     or a separate LoadBalancer — see 10-ingress.yaml).
+#   - The provisioning API (backend) writes pending instances; the runtime Pods poll
+#     GET /api/v1/provisioning/pending and PATCH back ws_endpoint once bound.
+#   - Each Pod needs network access to the backend API for artifact resolution and
+#     the provisioning seam.
+#
+# See docs/self-hosting/deploy.md for the full scaling design (single-node → fleet).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: magnetite-runtime
+  namespace: magnetite
+  labels:
+    app: magnetite-runtime
+spec:
+  selector:
+    app: magnetite-runtime
+  ports:
+    - name: ws
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+  # LoadBalancer exposes the WebSocket port so clients can connect directly.
+  # On clusters without a LoadBalancer controller (bare-metal), change to
+  # NodePort and configure an external proxy (nginx/HAProxy) to route ws://
+  # traffic to the cluster node. See docs/self-hosting/deploy.md §bare-metal.
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magnetite-runtime
+  namespace: magnetite
+  labels:
+    app: magnetite-runtime
+spec:
+  # Initial replicas; HPA (09-hpa.yaml) scales based on CPU / custom session metrics.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: magnetite-runtime
+  strategy:
+    # Recreate so existing WS sessions are not split across old/new pods.
+    # If you add graceful session migration, switch back to RollingUpdate.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: magnetite-runtime
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: runtime
+          image: ghcr.io/magnetite/runtime:latest
+          imagePullPolicy: Always
+          args:
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "9000"
+          ports:
+            - containerPort: 9000
+          env:
+            - name: RUNTIME_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: magnetite-config
+                  key: RUNTIME_HOST
+            - name: RUNTIME_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: magnetite-config
+                  key: RUNTIME_PORT
+            - name: RUNTIME_WORKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: magnetite-config
+                  key: RUNTIME_WORKERS
+            - name: RUST_LOG
+              valueFrom:
+                configMapKeyRef:
+                  name: magnetite-config
+                  key: RUST_LOG
+            # Backend URL for provisioning poll + artifact resolution.
+            - name: MAGNETITE_API_URL
+              value: "http://backend:8080"
+            # Build runner token — allows PATCH /api/v1/provisioning/*/instances/*.
+            - name: BUILD_RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: magnetite-secrets
+                  key: BUILD_RUNNER_TOKEN
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          # WebSocket: there is no HTTP health endpoint built into magnetite-serve.
+          # Use a TCP probe on port 9000 — if the port is bound, the process is up.
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
