@@ -21,6 +21,7 @@ pub mod platform;
 pub mod points;
 pub mod profile;
 pub mod provisioning;
+pub mod replays;
 pub mod response;
 pub mod reviews;
 pub mod search;

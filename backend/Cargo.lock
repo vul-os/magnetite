@@ -2148,6 +2148,7 @@ dependencies = [
  "hmac 0.12.1",
  "jsonwebtoken",
  "lettre",
+ "magnetite-sdk",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "redis",
@@ -2171,6 +2172,14 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "magnetite-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

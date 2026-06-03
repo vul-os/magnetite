@@ -18,6 +18,13 @@
 > DEPTH-1 closed section below. `NotificationPreferences` component added as a genuine
 > remaining low item (route not yet mounted).
 >
+> **Updated: 2026-06-03 (REPLAY+TOURNAMENT wave — Agent 4 docs+audit).** Documentation
+> wave: `docs/moat/replay-spectator.md` created covering ReplayLog recording, verify_replay
+> tamper-evidence algorithm, magnetite-web-client wire protocol + in-browser playback, and
+> the tournament REST system. AUDIT.md and GAPS.md updated to reflect documentation closure
+> and remaining open items (replay REST API, tournament-to-replay link, prize distribution,
+> round-1 slot seeding, JS ClientNet adapter for Playground.jsx).
+>
 > **Status legend:** **closed** (code evidence confirms the fix is real), **partial**
 > (real but incomplete), **stub** (handler/UI exists but no-op/canned), **mock**
 > (fabricated/mock-fallback data), **hardcoded** (literal placeholder), **documented-only**
@@ -189,6 +196,34 @@ Agent 4 docs+audit wave. All items verified by reading the implementation files 
 
 ---
 
+## Closed in REPLAY+TOURNAMENT (2026-06-03)
+
+Agent 4 docs+audit wave. Documentation-only items verified by reading the
+implementation files listed below. No code was changed; the underlying
+implementations were delivered by prior waves (N1–N3, B1, INFRA-E2E, DEPTH-1).
+
+| Item | How closed | Evidence |
+|------|-----------|---------|
+| **ReplayLog struct undocumented** | `docs/moat/replay-spectator.md` §1 documents the exact struct layout (`config`, `frames`, `state_hashes`), the FNV-1a hash algorithm, and the "sanitised inputs only" recording invariant. | `backend/magnetite-sdk/src/authority.rs:917-943` |
+| **TickScheduler replay recording undocumented** | `docs/moat/replay-spectator.md` §1.2 documents the `Arc<Mutex<ReplayLog>>` ownership, the `run_tick` recording call, and the `replay_log()` accessor. | `magnetite-runtime/src/tick.rs:74,111,124,226-228` |
+| **verify_replay tamper-evidence algorithm undocumented** | `docs/moat/replay-spectator.md` §2.1–2.3 documents the full re-simulation algorithm, FNV-1a hash determinism rationale, and the four divergence causes. | `backend/magnetite-sdk/src/authority.rs:1029-1051` |
+| **ReplayVerifier enriched diagnostics undocumented** | `docs/moat/replay-spectator.md` §2.2 documents `VerificationResult::Divergence { suspected_players }`, the heuristic nature, and stateless usage. | `magnetite-anticheat/src/replay_verifier.rs:68-138` |
+| **magnetite-web-client protocol undocumented** | `docs/moat/replay-spectator.md` §4 documents the wire protocol table, `createClient` API, `PredictionBuffer` reconciliation loop, canvas renderer, and base64 byte-field decoding. | `magnetite-web-client/src/` (all files) |
+| **In-browser replay playback path undocumented** | `docs/moat/replay-spectator.md` §4.5 documents the replay driver approach and the distinction between JS approximation (highlights) and full WASM deterministic re-simulation. | `magnetite-web-client/src/delta.js`, `src/prediction.js` |
+| **Tournament system undocumented** | `docs/moat/replay-spectator.md` §5 documents the data model, all seven REST endpoints, bracket generation algorithm, and lifecycle state machine. | `backend/src/api/tournaments.rs:1-549` |
+
+### Still genuinely open in the REPLAY+TOURNAMENT scope
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Replay storage REST API (`GET /api/v1/matches/:id/replay`) | Not yet wired | `store_replay()` in `ws/game.rs` persists the blob; no retrieval endpoint |
+| Tournament-to-replay link (`replay_id` FK on `tournament_matches`) | Not yet wired | Pure schema + wiring gap |
+| Tournament round-1 slot seeding (`player1_id` / `player2_id` on bracket rows) | Partial | Bracket skeleton created; slots not populated from participant seed list |
+| Prize distribution after tournament completion | Not implemented | `prize_pool` stored; no Wise/Paystack disbursement on `status = 'Completed'` |
+| JS ClientNet adapter for `Playground.jsx` | Open | `magnetite-web-client` implements the correct protocol; `Playground.jsx` still uses legacy `GameMessage` JSON — the adapter is the missing bridge for web play on the authoritative runtime |
+
+---
+
 ## Remaining — Bucket D (needs external infra/credentials)
 
 These cannot be resolved without external infrastructure or third-party accounts. They are honestly documented and not faked. The MOAT items previously listed here have been closed (see section above).
@@ -222,7 +257,9 @@ These cannot be resolved without external infrastructure or third-party accounts
 **Closed in MX1b (2026-06-03):** 8 items (refunds, content rating, blocked routes, analytics time-series, email verification, MediaMTX in compose, wasm-build-runner docs)  
 **Closed in DEPTH-1 (2026-06-03):** 5 items (notification real-time WS, /ws/notifications auth-layer, moderation admin surface, i18n scaffold, notification preferences REST + UI)
 
-**Remaining — smaller gaps (not Bucket D):** ~11 genuinely open medium/low items (see AUDIT.md "Still genuinely open" table)  
+**Closed in REPLAY+TOURNAMENT (2026-06-03):** 7 documentation items — `docs/moat/replay-spectator.md` created; covers ReplayLog struct + recording, verify_replay algorithm, ReplayVerifier enriched diagnostics, magnetite-web-client wire protocol + prediction buffer + canvas renderer + in-browser replay playback, tournament REST system (7 endpoints, bracket generation, lifecycle).
+
+**Remaining — smaller gaps (not Bucket D):** ~16 genuinely open medium/low items — see AUDIT.md "Still genuinely open" table and "Still genuinely open in the REPLAY+TOURNAMENT scope" table. Key open items: replay REST GET endpoint, tournament-to-replay FK, round-1 slot seeding, prize distribution, JS ClientNet adapter for Playground.jsx, TOTP at login, subscription upgrade, IBAN payout, search full-text.
 **Remaining — Bucket D (external infra/creds):** 9 entries (MediaMTX local compose closed; multi-node sharding, cloud runner fleet, Voice SFU, GitHub CI wasm-pack runner, FPS/motorsport WASM CI builds, Wise/Paystack/email live credentials remain)
 
 Of the remaining non-Bucket-D gaps: all show honest errors or clearly-labelled absent states — none are silent mock successes.

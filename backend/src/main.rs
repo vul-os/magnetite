@@ -37,6 +37,7 @@ use crate::api::platform;
 use crate::api::points;
 use crate::api::profile;
 use crate::api::provisioning;
+use crate::api::replays;
 use crate::api::reviews;
 use crate::api::search;
 use crate::api::social;
@@ -149,6 +150,13 @@ async fn main() {
         .nest("/platform", platform::router(pool.clone()))
         // Tournaments: bracket management
         .nest("/tournaments", tournaments::router(pool.clone()))
+        // Replays: store + serve authoritative match ReplayLogs
+        .nest("/replays", replays::router(pool.clone()))
+        // Replay list scoped under a game: GET /api/v1/games/:id/replays
+        .nest(
+            "/games/:id/replays",
+            replays::game_replays_router(pool.clone()),
+        )
         .route("/health", get(health_check))
         .layer(axum::middleware::from_fn_with_state(
             versioning_state.clone(),

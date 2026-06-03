@@ -1,8 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import GameOverlay from '../components/GameOverlay';
+import { api } from '../api/client';
 import './Spectator.css';
+
+// ── Mock replays ──────────────────────────────────────────────────────────────
+const MOCK_REPLAYS = [
+  { id: 'mock-replay-1', recorded_at: new Date(Date.now() - 3600000).toISOString(), tick_count: 300, verdict: 'Clean' },
+  { id: 'mock-replay-2', recorded_at: new Date(Date.now() - 86400000).toISOString(), tick_count: 540, verdict: 'Clean' },
+];
 
 // ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 const MOCK_SPECTATORS = [
@@ -41,6 +48,8 @@ export default function Spectator() {
       : []
   );
   const [chatInput, setChatInput]       = useState('');
+  const [replays, setReplays]           = useState([]);
+  const [replaysLoading, setReplaysLoading] = useState(false);
 
   // camera position derived from followedPlayer — no extra state needed
   const cameraTranslate = cameraMode === 'follow' && followedPlayer
@@ -80,6 +89,19 @@ export default function Spectator() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessage]);
+
+  // Fetch recent replays for this game
+  useEffect(() => {
+    if (!gameId) return;
+    setReplaysLoading(true);
+    const fetch = USE_MOCKS
+      ? Promise.resolve(MOCK_REPLAYS)
+      : api.replays.list({ game_id: gameId, limit: 5 }).then((r) => r?.data ?? r);
+    fetch
+      .then(setReplays)
+      .catch(() => setReplays([]))
+      .finally(() => setReplaysLoading(false));
+  }, [gameId]);
 
   const handleSendChat = useCallback((e) => {
     e.preventDefault();
@@ -259,6 +281,37 @@ export default function Spectator() {
           </form>
         </aside>
       </div>
+
+      {/* Replays panel ─ links to /replay/:id */}
+      <aside className="spectator-replays" aria-label="Recent replays">
+        <h3 className="spectator-panel-title">// replays</h3>
+        {replaysLoading && (
+          <p className="spectator-empty">Loading…</p>
+        )}
+        {!replaysLoading && replays.length === 0 && (
+          <p className="spectator-empty">No replays yet.</p>
+        )}
+        <ul className="spectator-replays-list" role="list">
+          {replays.map((r) => (
+            <li key={r.id} role="listitem">
+              <Link
+                to={`/replay/${r.id}`}
+                className="spectator-replay-link"
+                aria-label={`Watch replay from ${new Date(r.recorded_at).toLocaleString()}`}
+              >
+                <span className="spectator-replay-id">{r.id.slice(0, 8)}</span>
+                <span className="spectator-replay-meta">
+                  {new Date(r.recorded_at).toLocaleDateString()}
+                  {r.tick_count ? ` · ${r.tick_count} ticks` : ''}
+                </span>
+                <span className={`spectator-replay-verdict ${r.verdict === 'Clean' ? 'srv--clean' : 'srv--dirty'}`}>
+                  {r.verdict || '—'}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </aside>
 
       {/* In-game comms overlay — chat + voice (Tab / ` to toggle) */}
       <GameOverlay

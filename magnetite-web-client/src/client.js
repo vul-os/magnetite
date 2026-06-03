@@ -424,3 +424,4 @@ export { ConnectionManager } from './connection.js';
 export { applyDeltaToSnapshot, snapshotToView } from './delta.js';
 export { encodeInputFrame, parseServerMessage, decodeBytes,
   defaultInput, defaultKeyState, defaultMouseState } from './protocol.js';
+export { ReplayPlayer } from './replay-player.js';

@@ -518,6 +518,101 @@ export const api = {
     get: (id) => request(`/api/v1/templates/${id}`),
   },
 
+  // ── Wave REPLAY+TOURNAMENT: Replays ──────────────────────────────────────────
+
+  replays: {
+    /**
+     * GET /api/v1/replays — list replay logs.
+     * params: { game_id?, limit?, offset? }
+     * Returns: { data: ReplaySummary[], total, page, per_page }
+     *   ReplaySummary: { id, game_id, game_title, recorded_at, tick_count, duration_ms, verdict }
+     */
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/replays${qs ? `?${qs}` : ''}`);
+    },
+
+    /**
+     * GET /api/v1/replays/:id — fetch a full ReplayLog.
+     * Returns: { id, config: MatchConfig, frames: [Tick, [PlayerId, Input][]][], state_hashes: [Tick, u64][], recorded_at, verdict }
+     */
+    get: (id) => request(`/api/v1/replays/${id}`),
+
+    /**
+     * DELETE /api/v1/replays/:id — delete a replay (admin/owner only).
+     */
+    delete: (id) => request(`/api/v1/replays/${id}`, { method: 'DELETE' }),
+  },
+
+  // ── Wave REPLAY+TOURNAMENT: Tournaments ───────────────────────────────────────
+
+  tournaments: {
+    /**
+     * GET /api/v1/tournaments — list tournaments.
+     * params: { status?, game_id?, page?, per_page? }
+     * Returns PaginatedResponse<Tournament>
+     *   Tournament: { id, name, game_id, status, max_players, entry_fee, prize_pool, start_time, created_at }
+     */
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/tournaments${qs ? `?${qs}` : ''}`);
+    },
+
+    /**
+     * GET /api/v1/tournaments/:id — get tournament details.
+     * Returns: { tournament: Tournament, participants: TournamentParticipant[], matches: TournamentMatch[] }
+     *   TournamentParticipant: { id, tournament_id, user_id, registered_at, status, seed }
+     *   TournamentMatch: { id, tournament_id, round, match_number, player1_id, player2_id, winner_id,
+     *                      player1_score, player2_score, status, scheduled_at, completed_at }
+     */
+    get: (id) => request(`/api/v1/tournaments/${id}`),
+
+    /**
+     * POST /api/v1/tournaments — create a tournament (auth required).
+     * data: { name, game_id, max_players?, entry_fee?, prize_pool?, start_time }
+     * Returns: Tournament
+     */
+    create: (data) =>
+      request('/api/v1/tournaments', { method: 'POST', body: JSON.stringify(data) }),
+
+    /**
+     * PUT /api/v1/tournaments/:id — update a tournament (Draft/Registration only; auth required).
+     * data: { name?, status?, max_players?, entry_fee?, prize_pool?, start_time? }
+     * Returns: Tournament
+     */
+    update: (id, data) =>
+      request(`/api/v1/tournaments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+    /**
+     * POST /api/v1/tournaments/:id/register — register the current user (auth required).
+     * Returns: TournamentParticipant
+     */
+    register: (id) =>
+      request(`/api/v1/tournaments/${id}/register`, { method: 'POST' }),
+
+    /**
+     * POST /api/v1/tournaments/:id/start — start the tournament (auth required).
+     * Generates bracket matches. Returns: Tournament
+     */
+    start: (id) =>
+      request(`/api/v1/tournaments/${id}/start`, { method: 'POST' }),
+
+    /**
+     * POST /api/v1/tournaments/:id/match/:matchId/result — submit match result (auth required).
+     * data: { winner_id, player1_score?, player2_score? }
+     * Returns: TournamentMatch
+     */
+    submitResult: (tournamentId, matchId, data) =>
+      request(`/api/v1/tournaments/${tournamentId}/match/${matchId}/result`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
   stores: {
     /**
      * List all public stores. params: { game_id?, limit?, offset? }

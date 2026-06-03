@@ -44,3 +44,4 @@ tokio-stream = "0.1"
 tokio-test = "0.4"
 rust_decimal_macros = "1"
 temp-env = "0.3"
+magnetite-sdk = { path = "magnetite-sdk" }

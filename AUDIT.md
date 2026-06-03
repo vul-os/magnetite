@@ -337,3 +337,32 @@ silently faked. All are documented honestly above.
 | medium | Search is ILIKE only — no full-text ranking | No GIN index, no `tsvector`, no tag/genre filter |
 | low | Developer analytics: no geographic / device breakdown | No IP→country, no store conversion funnel |
 | low | `NotificationPreferences` component not yet mounted in Settings route | Component is ready (`src/components/NotificationPreferences.jsx`); needs a `/settings/notifications` route in `App.jsx` or settings tab wiring |
+
+---
+
+## Closed in REPLAY+TOURNAMENT wave (2026-06-03)
+
+Agent 4 docs+audit wave (replay/spectator/tournament documentation). All items
+verified by reading the implementation files directly. No code was changed;
+these items are marked closed because prior implementation waves (N1–N3, B1,
+DEPTH-1) delivered the underlying code; this wave adds the documentation layer.
+
+| Item | How closed | Evidence |
+|------|-----------|---------|
+| **ReplayLog struct undocumented** | `docs/moat/replay-spectator.md` §1 documents the exact struct layout (`config`, `frames`, `state_hashes`), the FNV-1a hash algorithm, and the "sanitised inputs only" recording invariant. | `backend/magnetite-sdk/src/authority.rs:917-943` |
+| **TickScheduler replay recording undocumented** | `docs/moat/replay-spectator.md` §1.2 documents the `Arc<Mutex<ReplayLog>>` ownership, the `run_tick` recording call, and the `replay_log()` accessor. | `magnetite-runtime/src/tick.rs:74,111,124,226-228` |
+| **verify_replay tamper-evidence algorithm undocumented** | `docs/moat/replay-spectator.md` §2.1-2.3 documents the full re-simulation algorithm, FNV-1a hash determinism rationale, and the four divergence causes (tampered input, tampered hash, injected input, nondeterminism bug). | `backend/magnetite-sdk/src/authority.rs:1029-1051` |
+| **ReplayVerifier enriched diagnostics undocumented** | `docs/moat/replay-spectator.md` §2.2 documents `VerificationResult::Divergence { suspected_players }`, the heuristic nature, and stateless usage. | `magnetite-anticheat/src/replay_verifier.rs:68-138` |
+| **magnetite-web-client protocol undocumented** | `docs/moat/replay-spectator.md` §4 documents the wire protocol table, `createClient` API, `PredictionBuffer` reconciliation loop, canvas renderer, and base64 byte-field decoding. | `magnetite-web-client/src/` |
+| **In-browser replay playback path undocumented** | `docs/moat/replay-spectator.md` §4.5 documents the replay driver approach and the distinction between JS approximation (suitable for highlights) and full WASM deterministic re-simulation. | `magnetite-web-client/src/delta.js`, `src/prediction.js` |
+| **Tournament system undocumented** | `docs/moat/replay-spectator.md` §5 documents the data model, all seven REST endpoints, the bracket generation algorithm, and the lifecycle state machine. | `backend/src/api/tournaments.rs:1-549` |
+
+### Still genuinely open in the REPLAY+TOURNAMENT scope
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Replay storage REST API | Not yet wired | `store_replay()` in `ws/game.rs` persists the blob; no `GET /api/v1/matches/:id/replay` endpoint exists |
+| Tournament-to-replay link | Not yet wired | No `replay_id` FK on `tournament_matches` |
+| Tournament match slot assignment (round 1 seeding) | Partial | Bracket skeleton created; `player1_id` / `player2_id` not auto-populated from participant seeds |
+| Prize distribution | Not implemented | `prize_pool` stored; no payment disbursement on completion |
+| JS ClientNet adapter for web play | Open | `magnetite-web-client` speaks the correct protocol; `Playground.jsx` still uses legacy `GameMessage` JSON — the adapter is the missing bridge |

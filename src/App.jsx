@@ -75,6 +75,8 @@ const Streams = lazy(() => import('./pages/Streams'));
 const Points = lazy(() => import('./pages/Points'));
 const DevMarketplace = lazy(() => import('./pages/DevMarketplace'));
 const ControllerSettings = lazy(() => import('./pages/ControllerSettings'));
+const Replay = lazy(() => import('./pages/Replay'));
+const Tournaments = lazy(() => import('./pages/Tournaments'));
 
 function ToastContainer() {
   const { toasts, removeToast } = useToast();
@@ -194,6 +196,8 @@ function App() {
                       <Route path="/points" element={<Points />} />
                       <Route path="/developers/marketplace" element={<DevMarketplace />} />
                       <Route path="/settings/controller" element={<ControllerSettings />} />
+                      <Route path="/replay/:id" element={<Replay />} />
+                      <Route path="/tournaments" element={<Tournaments />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
