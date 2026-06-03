@@ -352,4 +352,20 @@
   .transactions-table,
   .payouts-table { display: block; overflow-x: auto; }
   .earnings-header h1 { font-size: var(--text-2xl); }
+  /* Adequate touch targets */
+  .tab-btn,
+  .withdraw-btn { min-height: 44px; }
+}
+
+/* ─── Screen-reader only utility ─────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

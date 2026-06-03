@@ -20,6 +20,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { createClient } from '../../magnetite-web-client/src/client.js';
+import { useTranslation } from '../i18n/useTranslation';
 import './GamePreview.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -96,6 +97,7 @@ export default function GamePreview({
   token = null,
   title = 'Game Preview',
 }) {
+  const { t } = useTranslation();
   const canvasRef   = useRef(null);
   const clientRef   = useRef(null);
   const mockCleanup = useRef(null);
@@ -286,11 +288,11 @@ export default function GamePreview({
   const isConnected  = status === 'connected';
 
   return (
-    <div className="game-preview" role="region" aria-label={`${title} — game preview`}>
+    <div className="game-preview" role="region" aria-label={t('game.previewGameLabel', { title })}>
       {/* Header bar */}
       <div className="gp-header">
         <div className="gp-title">
-          <span className="kicker gp-kicker">// PREVIEW</span>
+          <span className="kicker gp-kicker">{t('game.previewSection')}</span>
           <span className="gp-name">{title}</span>
         </div>
 
@@ -304,12 +306,12 @@ export default function GamePreview({
             >
               <span className="gp-dot" aria-hidden="true" />
               <span>
-                {status === 'connecting'  ? 'Connecting…' :
-                 status === 'connected'   ? 'Live'        :
-                 status === 'disconnected'? 'Disconnected': status}
+                {status === 'connecting'   ? t('game.previewConnecting')   :
+                 status === 'connected'    ? t('game.previewLive')         :
+                 status === 'disconnected' ? t('game.previewDisconnected') : status}
               </span>
               {isConnected && latency !== null && (
-                <span className="gp-latency">{latency}ms</span>
+                <span className="gp-latency" aria-label={t('game.latency', { ms: latency })}>{latency}ms</span>
               )}
               {isConnected && playerCount > 0 && (
                 <span className="gp-players">{playerCount} player{playerCount !== 1 ? 's' : ''}</span>
@@ -318,13 +320,13 @@ export default function GamePreview({
           )}
 
           {(isConnected || status === 'connecting') && (
-            <button className="gp-action-btn" onClick={handleDisconnect} aria-label="Disconnect">
-              Disconnect
+            <button className="gp-action-btn" onClick={handleDisconnect} aria-label={t('game.previewDisconnect')}>
+              {t('game.previewDisconnect')}
             </button>
           )}
 
           {onClose && (
-            <button className="gp-action-btn gp-close-btn" onClick={onClose} aria-label="Close preview">
+            <button className="gp-action-btn gp-close-btn" onClick={onClose} aria-label={t('game.previewClose')}>
               ✕
             </button>
           )}
@@ -344,18 +346,20 @@ export default function GamePreview({
         {/* Dev URL input overlay */}
         {devMode && showIdle && (
           <div className="gp-overlay gp-dev-overlay">
-            <span className="kicker" style={{ marginBottom: '0.5rem' }}>// DEV PREVIEW</span>
-            <h4>Connect to <code>magnetite dev</code></h4>
+            <span className="kicker" style={{ marginBottom: '0.5rem' }}>{t('game.previewDevTitle')}</span>
+            <h4>{t('game.previewDevHeading')}</h4>
             <p>Run <code>magnetite dev</code> in your game crate directory, then enter the WebSocket URL:</p>
             <div className="gp-dev-input-row">
+              <label htmlFor="gp-dev-url" className="gp-visually-hidden">{t('game.wsUrlLabel')}</label>
               <input
+                id="gp-dev-url"
                 type="text"
                 className="gp-url-input"
                 placeholder="ws://localhost:9001"
                 value={devUrl}
                 onChange={(e) => setDevUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleDevConnect(); }}
-                aria-label="WebSocket server URL"
+                aria-label={t('game.wsUrlLabel')}
               />
               <button
                 className="btn btn-primary gp-connect-btn"
@@ -372,8 +376,8 @@ export default function GamePreview({
         {!devMode && showIdle && (
           <div className="gp-overlay gp-empty">
             <div className="gp-empty-icon" aria-hidden="true">⬡</div>
-            <h4>No Game Server</h4>
-            <p>This game doesn&apos;t have a live server yet. Deploy it first, then come back to play.</p>
+            <h4>{t('game.previewNoServer')}</h4>
+            <p>{t('game.previewNoServerBody')}</p>
           </div>
         )}
 
@@ -381,13 +385,13 @@ export default function GamePreview({
         {showError && (
           <div className="gp-overlay gp-error-overlay" role="alert">
             <div className="gp-error-icon" aria-hidden="true">!</div>
-            <h4>Connection Failed</h4>
+            <h4>{t('game.previewConnFailed')}</h4>
             <p>{error}</p>
             <button
               className="btn btn-primary"
               onClick={() => { setStatus('idle'); setError(null); }}
             >
-              Try Again
+              {t('game.previewTryAgain')}
             </button>
           </div>
         )}
@@ -396,13 +400,13 @@ export default function GamePreview({
         {showDisconn && (
           <div className="gp-overlay gp-disconn-overlay" role="alert">
             <div className="gp-empty-icon" aria-hidden="true">◎</div>
-            <h4>Disconnected</h4>
+            <h4>{t('game.previewDisconnected')}</h4>
             <p>The server closed the connection.</p>
             <button
               className="btn btn-primary"
               onClick={() => activeUrl && startClient(activeUrl)}
             >
-              Reconnect
+              {t('game.previewReconnect')}
             </button>
           </div>
         )}
@@ -410,11 +414,11 @@ export default function GamePreview({
 
       {/* Keyboard hint */}
       {isConnected && (
-        <div className="gp-footer" aria-label="Controls hint">
-          <span>WASD / Arrows — Move</span>
-          <span>Mouse — Aim</span>
-          <span>LMB / Space — Shoot</span>
-          <span>Tab — Toggle overlay</span>
+        <div className="gp-footer" aria-label={t('game.controlsHint')}>
+          <span>{t('game.controlsMove')}</span>
+          <span>{t('game.controlsAim')}</span>
+          <span>{t('game.controlsShoot')}</span>
+          <span>{t('game.controlsOverlay')}</span>
         </div>
       )}
     </div>

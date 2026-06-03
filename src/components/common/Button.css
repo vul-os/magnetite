@@ -121,6 +121,22 @@
 
 @keyframes btn-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
 
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+  .variantPrimary:hover:not(:disabled),
+  .variantDanger:hover:not(:disabled) {
+    transform: none;
+  }
+  .spinner {
+    animation: none;
+    border-top-color: transparent;
+    border-left-color: currentColor;
+    border-right-color: currentColor;
+  }
+}
+
 .spinnerSm { width: 14px; height: 14px; }
 .spinnerMd { width: 16px; height: 16px; }
 .spinnerLg { width: 20px; height: 20px; }

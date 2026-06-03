@@ -5,6 +5,7 @@ import Button from '../components/common/Button';
 import EmptyState from '../components/empty/EmptyState';
 import { mockGames } from '../data/mockGames';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -16,6 +17,7 @@ const WishlistEmptyIcon = (
 );
 
 export default function Wishlist() {
+  const { t } = useTranslation();
   const [wishlistGames, setWishlistGames] = useState(useMocks ? mockGames.slice(0, 3) : []);
   const [removingId, setRemovingId]       = useState(null);
   const [loading, setLoading]             = useState(true);
@@ -52,18 +54,20 @@ export default function Wishlist() {
     setRemovingId(null);
   };
 
+  const gameCount = wishlistGames.length;
+
   return (
     <Layout>
       <div className="wishlist-page reveal">
         <header className="page-header reveal-1">
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <div>
-              <span className="kicker">// Saved Games</span>
-              <h1>My Wishlist</h1>
+              <span className="kicker">// {t('wishlist.kicker')}</span>
+              <h1>{t('wishlist.title')}</h1>
             </div>
             {!loading && (
-              <span className="wishlist-count" aria-live="polite">
-                {wishlistGames.length} {wishlistGames.length === 1 ? 'game' : 'games'}
+              <span className="wishlist-count" aria-live="polite" aria-label={t('wishlist.countLabel', { count: gameCount })}>
+                {gameCount} {gameCount === 1 ? t('wishlist.game') : t('wishlist.games')}
               </span>
             )}
           </div>
@@ -72,17 +76,17 @@ export default function Wishlist() {
         {loading ? (
           <div className="loading-state reveal-2" aria-live="polite" aria-busy="true">
             <span className="spinner" aria-hidden="true" />
-            <span>Loading wishlist&hellip;</span>
+            <span>{t('wishlist.loading')}</span>
           </div>
         ) : wishlistGames.length === 0 ? (
           <div className="reveal-2">
             <EmptyState
               icon={WishlistEmptyIcon}
-              title="Your wishlist is empty"
-              description="Save Rust games to your wishlist to revisit them later"
+              title={t('wishlist.emptyTitle')}
+              description={t('wishlist.emptyDesc')}
               action={
                 <Button onClick={() => window.location.href = '/marketplace'}>
-                  Browse Marketplace
+                  {t('wishlist.browseMarketplace')}
                 </Button>
               }
             />
@@ -98,9 +102,9 @@ export default function Wishlist() {
                   onClick={() => handleRemove(game.id)}
                   loading={removingId === game.id}
                   className="remove-button"
-                  aria-label={`Remove ${game.title} from wishlist`}
+                  aria-label={t('wishlist.removeLabel', { title: game.title })}
                 >
-                  Remove from Wishlist
+                  {t('wishlist.remove')}
                 </Button>
               </div>
             ))}

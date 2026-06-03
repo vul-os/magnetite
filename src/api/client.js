@@ -140,6 +140,24 @@ export const api = {
     markAsRead: (id) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
     markAllAsRead: () => request('/api/notifications/read-all', { method: 'PUT' }),
     delete: (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
+    /**
+     * GET /api/v1/notifications/preferences
+     * Returns the authenticated user's per-channel, per-category notification
+     * preferences.  A default row is created on first access.
+     */
+    getPreferences: () => request('/api/v1/notifications/preferences'),
+    /**
+     * PUT /api/v1/notifications/preferences
+     * Partial update — only supply the fields you want to change.
+     * data: Partial<{
+     *   payouts_email, payouts_in_app, payouts_push,
+     *   social_email, social_in_app, social_push,
+     *   achievements_email, achievements_in_app, achievements_push,
+     *   marketing_email, marketing_in_app, marketing_push,
+     * }>
+     */
+    updatePreferences: (data) =>
+      request('/api/v1/notifications/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   },
   achievements: {
     list: (userId) => request(`/api/achievements/${userId}`),

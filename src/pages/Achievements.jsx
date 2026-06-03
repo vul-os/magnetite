@@ -6,6 +6,7 @@ import EmptyState from '../components/empty/EmptyState';
 import Button from '../components/common/Button';
 import { mockAchievements, recentUnlocks } from '../data/mockAchievements';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -21,18 +22,21 @@ const TrophyIcon = (
 );
 
 const CATEGORIES = [
-  { key: 'all',      label: 'All'       },
-  { key: 'gameplay', label: 'Gameplay'  },
-  { key: 'social',   label: 'Social'    },
-  { key: 'economic', label: 'Economic'  },
+  { key: 'all',      label: 'achievements.cat.all'      },
+  { key: 'gameplay', label: 'achievements.cat.gameplay'  },
+  { key: 'social',   label: 'achievements.cat.social'    },
+  { key: 'economic', label: 'achievements.cat.economic'  },
 ];
 
 export default function Achievements() {
+  const { t } = useTranslation();
   const [category, setCategory]         = useState('all');
   const [showUnlocked, setShowUnlocked] = useState(true);
   const [achievements, setAchievements] = useState(useMocks ? mockAchievements : []);
   const [recent, setRecent]             = useState(useMocks ? recentUnlocks : []);
   const [loading, setLoading]           = useState(!useMocks);
+
+  const showUnlockedId = 'achievements-show-unlocked';
 
   useEffect(() => {
     if (useMocks) return;
@@ -88,8 +92,8 @@ export default function Achievements() {
     <Layout>
       <div className="achievements-page reveal">
         <header className="page-header reveal-1">
-          <span className="kicker">// Trophy Room</span>
-          <h1>Achievements</h1>
+          <span className="kicker">// {t('achievements.kicker')}</span>
+          <h1>{t('achievements.title')}</h1>
           {loading ? (
             <div style={{ marginTop: '0.5rem' }}>
               <Skeleton variant="text" width="180px" height="14px" />
@@ -97,7 +101,7 @@ export default function Achievements() {
           ) : (
             <>
               <p className="achievement-summary" aria-live="polite">
-                {unlockedCount}/{totalCount} unlocked &mdash; {progressPct}% complete
+                {t('achievements.summary', { unlocked: unlockedCount, total: totalCount, pct: progressPct })}
               </p>
               <div className="completion-bar" aria-hidden="true">
                 <div
@@ -107,15 +111,15 @@ export default function Achievements() {
                   aria-valuenow={progressPct}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-label={`${progressPct}% achievements unlocked`}
+                  aria-label={t('achievements.progressLabel', { pct: progressPct })}
                 />
               </div>
             </>
           )}
         </header>
 
-        <div className="recent-unlocks reveal-2" aria-label="Recent achievements">
-          <h3>// Recent Unlocks</h3>
+        <div className="recent-unlocks reveal-2" aria-label={t('achievements.recentLabel')}>
+          <h3>// {t('achievements.recentTitle')}</h3>
           <div className="recent-grid">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
@@ -136,7 +140,7 @@ export default function Achievements() {
         </div>
 
         <div className="achievements-controls reveal-3">
-          <div className="category-filters" role="group" aria-label="Category filter">
+          <div className="category-filters" role="group" aria-label={t('achievements.categoryFilter')}>
             {CATEGORIES.map(cat => (
               <button
                 key={cat.key}
@@ -145,20 +149,21 @@ export default function Achievements() {
                 aria-pressed={category === cat.key}
                 disabled={loading}
               >
-                {cat.label}
+                {t(cat.label)}
               </button>
             ))}
           </div>
 
           <div className="toggle-wrapper">
-            <label>
+            <label htmlFor={showUnlockedId}>
               <input
+                id={showUnlockedId}
                 type="checkbox"
                 checked={showUnlocked}
                 onChange={(e) => setShowUnlocked(e.target.checked)}
                 disabled={loading}
               />
-              Show unlocked only
+              {t('achievements.showUnlocked')}
             </label>
           </div>
         </div>
@@ -166,7 +171,7 @@ export default function Achievements() {
         <div
           className="achievements-grid reveal-4"
           role="list"
-          aria-label="Achievements"
+          aria-label={t('achievements.gridLabel')}
           aria-busy={loading}
         >
           {loading ? (
@@ -197,16 +202,16 @@ export default function Achievements() {
             <div role="listitem" style={{ gridColumn: '1 / -1' }}>
               <EmptyState
                 icon={TrophyIcon}
-                title="No achievements here"
+                title={t('achievements.emptyTitle')}
                 description={
                   category === 'all'
-                    ? 'Play games to start earning achievements.'
-                    : `No ${category} achievements found. Try a different category.`
+                    ? t('achievements.emptyDescAll')
+                    : t('achievements.emptyDescCategory', { category })
                 }
                 action={
                   category !== 'all' ? (
                     <Button variant="secondary" onClick={() => setCategory('all')}>
-                      Show All
+                      {t('achievements.showAll')}
                     </Button>
                   ) : null
                 }

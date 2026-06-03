@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import GamePreview from '../components/GamePreview';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './GameStudio.css';
 
 // ── SVG template preview art ──────────────────────────────────────────────────
@@ -228,6 +229,7 @@ const STEP_CONFIGURE = 'configure';
 const STEP_RESULT    = 'result';
 
 export default function GameStudio() {
+  const { t } = useTranslation();
   // ── Step 1: template gallery ─────────────────────────────────────────────
   const [templates, setTemplates]         = useState(USE_MOCKS ? MOCK_TEMPLATES : []);
   const [templatesLoading, setTemplatesLoading] = useState(!USE_MOCKS);
@@ -324,19 +326,19 @@ export default function GameStudio() {
     <Layout>
       <div className="game-studio">
         <header className="studio-header">
-          <span className="kicker">// RUST GAME STUDIO</span>
-          <h1>Game Studio</h1>
+          <span className="kicker">{t('game.studioKicker')}</span>
+          <h1>{t('game.studioTitle')}</h1>
           <p className="studio-subtitle">
-            Pick a template, name your game, and get the CLI commands to start building — then deploy to the platform.
+            {t('game.studioSubtitle')}
           </p>
         </header>
 
         {/* Step indicator */}
-        <div className="studio-steps" aria-label="Steps">
+        <div className="studio-steps" aria-label={t('game.stepsLabel')}>
           {[
-            { id: STEP_TEMPLATE,  label: 'Choose Template', n: 1 },
-            { id: STEP_CONFIGURE, label: 'Configure',        n: 2 },
-            { id: STEP_RESULT,    label: 'Get Started',      n: 3 },
+            { id: STEP_TEMPLATE,  label: t('game.stepChooseTemplate'), n: 1 },
+            { id: STEP_CONFIGURE, label: t('game.stepConfigure'),       n: 2 },
+            { id: STEP_RESULT,    label: t('game.stepGetStarted'),      n: 3 },
           ].map(({ id, label, n }) => {
             const done = (
               (id === STEP_TEMPLATE  && (step === STEP_CONFIGURE || step === STEP_RESULT)) ||
@@ -356,16 +358,16 @@ export default function GameStudio() {
         {step === STEP_TEMPLATE && (
           <section className="studio-section">
             <div className="studio-section-header">
-              <h2>Choose a Template</h2>
+              <h2>{t('game.chooseTemplateHeading')}</h2>
               <p className="studio-section-desc">
-                Each template implements <code>AuthoritativeGame</code> — pick one and we'll scaffold the Rust crate, ready for <code>magnetite build</code>.
+                {t('game.chooseTemplateDesc')}
               </p>
             </div>
 
             {templatesLoading && (
               <div className="studio-loading" aria-live="polite">
                 <span className="spinner" aria-hidden="true" />
-                Loading templates&hellip;
+                {t('game.loadingTemplates')}
               </div>
             )}
 
@@ -408,15 +410,15 @@ export default function GameStudio() {
 
                       <div className="template-meta">
                         <span className="meta-item">
-                          <span className="meta-label">Players</span>
+                          <span className="meta-label">{t('game.templatePlayers')}</span>
                           <span className="meta-value">{tpl.player_count ?? '?'}</span>
                         </span>
                         <span className="meta-item">
-                          <span className="meta-label">Tick</span>
+                          <span className="meta-label">{t('game.templateTick')}</span>
                           <span className="meta-value">{tpl.tick_hz ?? 60} Hz</span>
                         </span>
                         <span className="meta-item">
-                          <span className="meta-label">Topology</span>
+                          <span className="meta-label">{t('game.templateTopology')}</span>
                           <span className="meta-value">{TOPOLOGY_LABELS[tpl.topology] ?? tpl.topology ?? '—'}</span>
                         </span>
                       </div>
@@ -427,7 +429,7 @@ export default function GameStudio() {
                         ))}
                       </div>
 
-                      <span className="template-cta">Select template →</span>
+                      <span className="template-cta">{t('game.selectTemplate')}</span>
                     </button>
                   );
                 })}
@@ -440,12 +442,12 @@ export default function GameStudio() {
         {step === STEP_CONFIGURE && selectedTemplate && (
           <section className="studio-section">
             <div className="studio-section-header">
-              <button className="back-btn" onClick={handleBack} aria-label="Back to template gallery">
-                ← Templates
+              <button className="back-btn" onClick={handleBack} aria-label={t('game.backToTemplates')}>
+                {t('game.backLabel')}
               </button>
-              <h2>Configure Your Game</h2>
+              <h2>{t('game.configureHeading')}</h2>
               <p className="studio-section-desc">
-                Using template: <strong>{selectedTemplate.name}</strong>
+                {t('game.usingTemplate', { name: selectedTemplate.name })}
               </p>
             </div>
 
@@ -453,26 +455,31 @@ export default function GameStudio() {
               <div className="configure-form-card">
                 <form onSubmit={handleCreate} className="configure-form">
                   <div className="form-group">
-                    <label htmlFor="game-name">Game Name <span aria-hidden="true">*</span></label>
+                    <label htmlFor="game-name">
+                      {t('game.gameNameLabel')} <span aria-hidden="true">*</span>
+                      <span className="visually-hidden"> ({t('common.required')})</span>
+                    </label>
                     <input
                       id="game-name"
                       type="text"
-                      placeholder="my-awesome-game"
+                      placeholder={t('game.gameNamePlaceholder')}
                       value={gameName}
                       onChange={(e) => setGameName(e.target.value)}
                       required
                       autoFocus
                       pattern="[a-zA-Z0-9_\- ]+"
                       title="Letters, numbers, spaces, hyphens and underscores"
+                      aria-required="true"
+                      aria-describedby="game-name-hint"
                     />
-                    <span className="form-hint">Used as the Cargo crate name (alphanumeric + hyphens)</span>
+                    <span id="game-name-hint" className="form-hint">{t('game.gameNameHint')}</span>
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="game-desc">Description</label>
+                    <label htmlFor="game-desc">{t('game.gameDescLabel')}</label>
                     <textarea
                       id="game-desc"
-                      placeholder="Describe your game…"
+                      placeholder={t('game.gameDescPlaceholder')}
                       value={gameDesc}
                       onChange={(e) => setGameDesc(e.target.value)}
                       rows={3}
@@ -485,16 +492,17 @@ export default function GameStudio() {
 
                   <div className="form-actions">
                     <button type="button" className="btn btn-secondary" onClick={handleBack}>
-                      Back
+                      {t('game.back')}
                     </button>
                     <button
                       type="submit"
                       className="btn btn-primary"
                       disabled={creating || !gameName.trim()}
+                      aria-busy={creating}
                     >
                       {creating ? (
-                        <><span className="spinner" aria-hidden="true" /> Creating…</>
-                      ) : 'Create Game'}
+                        <><span className="spinner" aria-hidden="true" /> {t('game.creating')}</>
+                      ) : t('game.createGame')}
                     </button>
                   </div>
                 </form>
@@ -502,24 +510,24 @@ export default function GameStudio() {
 
               {/* Template summary */}
               <div className="template-summary-card">
-                <span className="kicker">// TEMPLATE SUMMARY</span>
+                <span className="kicker">{t('game.summaryKicker')}</span>
                 <h3>{selectedTemplate.name}</h3>
                 <p>{selectedTemplate.description}</p>
                 <div className="summary-grid">
                   <div className="summary-row">
-                    <span className="summary-label">Topology</span>
+                    <span className="summary-label">{t('game.summaryTopology')}</span>
                     <span className="summary-value mono">{TOPOLOGY_LABELS[selectedTemplate.topology] ?? selectedTemplate.topology}</span>
                   </div>
                   <div className="summary-row">
-                    <span className="summary-label">Tick rate</span>
+                    <span className="summary-label">{t('game.summaryTick')}</span>
                     <span className="summary-value mono">{selectedTemplate.tick_hz ?? 60} Hz</span>
                   </div>
                   <div className="summary-row">
-                    <span className="summary-label">Players</span>
+                    <span className="summary-label">{t('game.summaryPlayers')}</span>
                     <span className="summary-value mono">{selectedTemplate.player_count ?? '?'}</span>
                   </div>
                   <div className="summary-row">
-                    <span className="summary-label">Tier</span>
+                    <span className="summary-label">{t('game.summaryTier')}</span>
                     <span className="summary-value mono">{selectedTemplate.tier}</span>
                   </div>
                 </div>
@@ -538,19 +546,18 @@ export default function GameStudio() {
           <section className="studio-section">
             <div className="result-header">
               <div className="result-success-icon" aria-hidden="true">✓</div>
-              <h2>Game Created!</h2>
+              <h2>{t('game.gameCreated')}</h2>
               <p>
-                <strong>{result.name ?? gameName}</strong> is registered on Magnetite.
-                Follow the steps below to start building.
+                {t('game.gameRegistered', { name: result.name ?? gameName })}
               </p>
             </div>
 
             <div className="result-grid">
               {/* CLI instructions */}
               <div className="result-card cli-card">
-                <span className="kicker">// GET THE CODE</span>
-                <h3>CLI Setup</h3>
-                <p className="card-desc">Run these commands to scaffold and connect your local repository:</p>
+                <span className="kicker">{t('game.cliSetupKicker')}</span>
+                <h3>{t('game.cliSetupTitle')}</h3>
+                <p className="card-desc">{t('game.cliSetupDesc')}</p>
 
                 {result.cli_instructions ? (
                   <pre className="cli-block">{result.cli_instructions}</pre>
@@ -576,8 +583,8 @@ magnetite dev`}</pre>
 
               {/* Next steps */}
               <div className="result-card next-steps-card">
-                <span className="kicker">// NEXT STEPS</span>
-                <h3>What&apos;s Next</h3>
+                <span className="kicker">{t('game.nextStepsKicker')}</span>
+                <h3>{t('game.nextStepsTitle')}</h3>
                 <ol className="next-steps-list">
                   {(result.next_steps ?? [
                     'Run `magnetite new` to scaffold the crate locally',
@@ -592,10 +599,10 @@ magnetite dev`}</pre>
 
                 <div className="result-actions">
                   <a href="/developers/deploy" className="btn btn-primary">
-                    Connect GitHub &amp; Deploy
+                    {t('game.deployLink')}
                   </a>
                   <button className="btn btn-secondary" onClick={handleStartOver}>
-                    Create Another Game
+                    {t('game.createAnother')}
                   </button>
                 </div>
               </div>
@@ -604,18 +611,17 @@ magnetite dev`}</pre>
             {/* Live preview section */}
             <div className="preview-section">
               <div className="preview-section-header">
-                <span className="kicker">// PLAY IN BROWSER</span>
-                <h3>Preview in Browser</h3>
-                <p>
-                  Run <code>magnetite dev</code> in your game crate to start a local authoritative server on <code>ws://localhost:9001</code>.
-                  Then connect below — the Magnetite web client handles the full ServerNet protocol (Welcome / Snapshot / Delta / InputFrame).
-                </p>
+                <span className="kicker">{t('game.previewKicker')}</span>
+                <h3>{t('game.previewTitle')}</h3>
+                <p>{t('game.previewDesc')}</p>
               </div>
 
               {!showPreview ? (
                 <div className="preview-open-row">
                   <div className="preview-url-input-row">
+                    <label htmlFor="preview-ws-url" className="visually-hidden">{t('game.wsUrlLabel')}</label>
                     <input
+                      id="preview-ws-url"
                       type="text"
                       className="preview-url-input"
                       placeholder="ws://localhost:9001"
@@ -624,17 +630,17 @@ magnetite dev`}</pre>
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && previewEndpoint.trim()) setShowPreview(true);
                       }}
-                      aria-label="WebSocket server URL"
+                      aria-label={t('game.wsUrlLabel')}
                     />
                     <button
                       className="btn btn-accent"
                       onClick={() => setShowPreview(true)}
                       disabled={!previewEndpoint.trim()}
                     >
-                      Play in Browser
+                      {t('game.playInBrowser')}
                     </button>
                   </div>
-                  <span className="preview-hint">Requires a running <code>magnetite dev</code> server</span>
+                  <span className="preview-hint">{t('game.previewHint')}</span>
                 </div>
               ) : (
                 <GamePreview

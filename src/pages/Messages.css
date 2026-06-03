@@ -700,6 +700,19 @@
   .dm-spinner { animation: none; border-top-color: var(--color-accent); }
 }
 
+/* ── Screen-reader only utility ─────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Connection status bar ──────────────────────────────────────────────── */
 .dm-conn-banner {
   padding: 0.375rem 1.25rem;

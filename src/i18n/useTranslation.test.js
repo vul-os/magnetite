@@ -117,9 +117,16 @@ describe('useTranslation — variable interpolation', () => {
 // ── 4. Graceful fallback outside I18nProvider ─────────────────────────────────
 
 describe('useTranslation — outside I18nProvider', () => {
-  it('returns the key itself when called without a provider', () => {
+  it('resolves against the bundled English dictionary without a provider', () => {
     const { result } = renderHook(() => useTranslation());
-    expect(result.current.t('nav.home')).toBe('nav.home');
+    // Outside a provider the hook falls back to en.json so the UI shows real
+    // copy (not raw keys); a known key resolves to its English string.
+    expect(result.current.t('nav.home')).toBe('Home');
+  });
+
+  it('returns the key itself when the key is missing entirely', () => {
+    const { result } = renderHook(() => useTranslation());
+    expect(result.current.t('nope.not.a.real.key')).toBe('nope.not.a.real.key');
   });
 
   it('exposes a no-op setLocale function', () => {

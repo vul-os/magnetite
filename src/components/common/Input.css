@@ -78,6 +78,20 @@
 /* ── Helper text ── */
 .input-helper-text { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
 
+/* ── Required indicator ── */
+.input-required { color: var(--color-error); margin-left: 2px; }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .input-container,
+  .input-field,
+  .input-addon,
+  .input-floating-label,
+  .input-password-toggle {
+    transition: none;
+  }
+}
+
 /* ── Addons ── */
 .input-with-addons .input-field { padding-left: 0.75rem; }
 .input-addon                    { display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); transition: color var(--transition-fast); }

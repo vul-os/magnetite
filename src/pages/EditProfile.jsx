@@ -4,12 +4,14 @@ import Layout from '../components/Layout';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 const BLANK_PROFILE = { username: '', bio: '', location: '', avatar: '' };
 
 export default function EditProfile() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [formData, setFormData] = useState(BLANK_PROFILE);
   const [avatarFile, setAvatarFile] = useState(null);
@@ -76,7 +78,7 @@ export default function EditProfile() {
     <Layout>
       <div className="edit-profile-page">
         {loadError && (
-          <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+          <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
             <span className="auth-error-icon" aria-hidden="true">!</span>
             {loadError}
           </div>
@@ -84,38 +86,36 @@ export default function EditProfile() {
         {/* Header */}
         <header className="settings-page-header edit-profile-header reveal reveal-1">
           <span className="kicker">// YOUR PROFILE</span>
-          <h1 className="settings-page-title">Edit Profile</h1>
-          <p className="settings-page-subtitle">
-            This information is visible to other players and developers.
-          </p>
+          <h1 className="settings-page-title">{t('account.editProfileTitle')}</h1>
+          <p className="settings-page-subtitle">{t('account.editProfileSubtitle')}</p>
         </header>
 
-        <form onSubmit={handleSubmit} className="edit-profile-form reveal reveal-2">
+        <form onSubmit={handleSubmit} className="edit-profile-form reveal reveal-2" aria-label={t('account.editProfileFormLabel')}>
           {/* Avatar */}
           <div className="avatar-upload-section">
             <div className="settings-avatar-wrap" style={{ width: 80, height: 80 }}>
               <img
                 src={formData.avatar}
-                alt="Your avatar preview"
+                alt={t('account.avatarPreview')}
                 className="settings-avatar"
                 style={{ width: 80, height: 80 }}
                 loading="lazy"
               />
-              <div className="settings-avatar-overlay" aria-hidden="true">Change</div>
-              <label className="settings-avatar-input-label" aria-label="Upload new avatar">
+              <div className="settings-avatar-overlay" aria-hidden="true">{t('account.change')}</div>
+              <label className="settings-avatar-input-label" aria-label={t('account.uploadNewAvatar')}>
                 <input type="file" accept="image/*" onChange={handleAvatarChange} hidden />
               </label>
             </div>
             <div className="avatar-upload-controls">
-              <span className="settings-field-label">AVATAR</span>
+              <span className="settings-field-label">{t('account.avatarLabel')}</span>
               <label className="avatar-upload-btn">
                 <input type="file" accept="image/*" onChange={handleAvatarChange} hidden />
-                Upload New Avatar
+                {t('account.uploadNewAvatar')}
               </label>
               {avatarFile && (
                 <span className="file-name">{avatarFile.name}</span>
               )}
-              <span className="settings-avatar-hint">JPG or PNG · 200×200 px recommended</span>
+              <span className="settings-avatar-hint">{t('account.avatarHintShort')}</span>
             </div>
           </div>
 
@@ -123,29 +123,29 @@ export default function EditProfile() {
           <div className="settings-section" style={{ padding: '1.5rem' }}>
             <div className="settings-grid-2">
               <Input
-                label="Username"
+                label={t('auth.usernameLabel')}
                 name="username"
                 value={formData.username}
                 onChange={handleChange}
-                placeholder="Enter your username"
+                placeholder={t('account.usernamePlaceholder')}
               />
               <Input
-                label="Location"
+                label={t('account.locationLabel')}
                 name="location"
                 value={formData.location}
                 onChange={handleChange}
-                placeholder="City, Country"
+                placeholder={t('account.locationPlaceholder')}
               />
             </div>
 
             <div className="input-wrapper">
-              <label htmlFor="bio-edit" className="input-label">Bio</label>
+              <label htmlFor="bio-edit" className="input-label">{t('account.bioLabel')}</label>
               <textarea
                 id="bio-edit"
                 name="bio"
                 value={formData.bio}
                 onChange={handleChange}
-                placeholder="Tell us about yourself and your games…"
+                placeholder={t('account.bioPlaceholder')}
                 className="input-field textarea-field"
                 rows={4}
               />
@@ -158,14 +158,14 @@ export default function EditProfile() {
               variant="secondary"
               onClick={() => navigate(-1)}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
               variant="primary"
               loading={isSaving}
             >
-              Save Changes
+              {t('account.saveChanges')}
             </Button>
           </div>
         </form>

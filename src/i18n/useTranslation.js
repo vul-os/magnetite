@@ -17,6 +17,7 @@
 
 import { useContext } from 'react';
 import { I18nContext } from './I18nProvider';
+import en from './en.json';
 
 /**
  * Resolve a dot-separated key like "auth.errors.invalidCredentials"
@@ -49,9 +50,21 @@ export function useTranslation() {
   const ctx = useContext(I18nContext);
 
   if (!ctx) {
-    // Fallback when used outside an I18nProvider (e.g. in tests without wrapper).
+    // Fallback when used outside an I18nProvider (e.g. in tests without wrapper):
+    // resolve against the bundled English dictionary so the UI still shows real
+    // copy (not raw keys), then fall back to the key only if truly missing.
     return {
-      t: (key) => key,
+      t: (key, vars) => {
+        const value = resolvePath(en, key);
+        if (typeof value === 'string') {
+          return vars
+            ? value.replace(/\{\{(\w+)\}\}/g, (_, name) =>
+                name in vars ? String(vars[name]) : `{{${name}}}`,
+              )
+            : value;
+        }
+        return key;
+      },
       locale: 'en',
       setLocale: () => {},
     };

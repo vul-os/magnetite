@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSearch } from '../hooks/useSearch';
+import { useTranslation } from '../i18n/useTranslation';
 import Spinner from './common/Spinner';
 import './SearchModal.css';
 
@@ -8,6 +9,7 @@ const CATEGORY_FILTERS = ['All', 'Games', 'Users'];
 
 export function SearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { query, setQuery, search, recentSearches, addRecentSearch, clearRecentSearches, loading, results, filters, setFilters, genres } = useSearch();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -15,6 +17,7 @@ export function SearchModal({ isOpen, onClose }) {
   const inputRef = useRef(null);
   const modalRef = useRef(null);
   const cleanupRef = useRef(false);
+  const titleId = 'search-modal-title';
 
   const flatResults = useMemo(() => {
     if (!results) return [];
@@ -174,23 +177,24 @@ export function SearchModal({ isOpen, onClose }) {
 
     return (
       <div className="search-results-group">
-        <div className="search-results-group-header">
+        <div className="search-results-group-header" aria-hidden="true">
           {icon}
           {title}
         </div>
-        <ul className="search-results-list">
+        <ul className="search-results-list" role="group" aria-label={title}>
           {items.map((item, index) => {
             const flatIndex = type === 'games' ? index : groupedResults.games.length + index;
             return (
               <li
                 key={`${type}-${item.id}`}
+                id={`search-result-${flatIndex}`}
                 className={`search-result-item ${flatIndex === activeIndex ? 'active' : ''}`}
                 onClick={() => handleSelect(item)}
                 onMouseEnter={() => setActiveIndex(flatIndex)}
                 role="option"
                 aria-selected={flatIndex === activeIndex}
               >
-                <span className="result-icon">
+                <span className="result-icon" aria-hidden="true">
                   {type === 'games' ? (
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="2" y="6" width="20" height="12" rx="2" />
@@ -207,8 +211,8 @@ export function SearchModal({ isOpen, onClose }) {
                   <span className="result-title">{item.title}</span>
                   <span className="result-subtitle">{item.subtitle}</span>
                 </span>
-                <span className={`result-badge ${type === 'games' ? 'game' : 'user'}`}>
-                  {type === 'games' ? 'Game' : 'User'}
+                <span className={`result-badge ${type === 'games' ? 'game' : 'user'}`} aria-hidden="true">
+                  {type === 'games' ? t('search.categoryGames') : t('search.categoryUsers')}
                 </span>
               </li>
             );
@@ -221,50 +225,77 @@ export function SearchModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="search-modal-overlay" role="dialog" aria-modal="true" aria-label="Search">
+    <div
+      className="search-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       <div className="search-modal" ref={modalRef}>
         <div className="search-modal-header">
-          <svg className="search-modal-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="search-modal-icon"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
+          <label id={titleId} htmlFor="search-modal-input" className="sr-only">
+            {t('search.label')}
+          </label>
           <input
             id="search-modal-input"
             ref={inputRef}
-            type="text"
+            type="search"
+            role="combobox"
+            aria-expanded={!!(query.trim() && results && flatResults.length > 0)}
+            aria-autocomplete="list"
+            aria-controls="search-results-listbox"
+            aria-activedescendant={activeIndex >= 0 ? `search-result-${activeIndex}` : undefined}
             value={query}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Search games, users..."
+            placeholder={t('search.placeholder')}
             className="search-modal-input"
             autoComplete="off"
           />
-          {loading && <Spinner size="sm" />}
-          <kbd className="search-modal-kbd">ESC</kbd>
+          {loading && <Spinner size="sm" aria-label={t('common.loading')} />}
+          <kbd className="search-modal-kbd" aria-label={t('search.pressEscToClose')}>ESC</kbd>
         </div>
 
-        <div className="search-modal-filters">
+        <div
+          className="search-modal-filters"
+          role="toolbar"
+          aria-label={t('search.filterLabel')}
+        >
           {CATEGORY_FILTERS.map(cat => (
             <button
               key={cat}
               type="button"
               className={`search-filter-btn ${selectedCategory === cat ? 'active' : ''}`}
               onClick={() => handleCategoryChange(cat)}
+              aria-pressed={selectedCategory === cat}
             >
               {cat === 'All' && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 6v6l4 2" />
                 </svg>
               )}
               {cat === 'Games' && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <rect x="2" y="6" width="20" height="12" rx="2" />
                   <path d="M6 12h4M8 10v4M15 11h.01M18 13h.01" />
                 </svg>
               )}
               {cat === 'Users' && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
@@ -277,13 +308,14 @@ export function SearchModal({ isOpen, onClose }) {
               type="button"
               className={`search-filter-btn ${showFilters || Object.keys(filters).length > 0 ? 'active' : ''}`}
               onClick={() => setShowFilters(v => !v)}
-              aria-label="Toggle genre/tag filters"
-              title="Filters"
+              aria-label={t('search.toggleFilters')}
+              aria-expanded={showFilters}
+              title={t('search.filters')}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
-              Filters{Object.keys(filters).length > 0 ? ` (${Object.keys(filters).length})` : ''}
+              {t('search.filters')}{Object.keys(filters).length > 0 ? ` (${Object.keys(filters).length})` : ''}
             </button>
           )}
         </div>
@@ -294,9 +326,9 @@ export function SearchModal({ isOpen, onClose }) {
               value={filters.genre ?? ''}
               onChange={e => handleFilterChange('genre', e.target.value || null)}
               style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text-primary)', cursor: 'pointer' }}
-              aria-label="Filter by genre"
+              aria-label={t('search.filterByGenre')}
             >
-              <option value="">All Genres</option>
+              <option value="">{t('search.allGenres')}</option>
               {(genres ?? []).map(g => (
                 <option key={g} value={g.toLowerCase()}>{g}</option>
               ))}
@@ -306,9 +338,8 @@ export function SearchModal({ isOpen, onClose }) {
                 type="checkbox"
                 checked={filters.is_free === 'true'}
                 onChange={e => handleFilterChange('is_free', e.target.checked ? 'true' : null)}
-                aria-label="Free to play only"
               />
-              Free to play
+              {t('search.freeToPlay')}
             </label>
             {Object.keys(filters).length > 0 && (
               <button
@@ -319,22 +350,27 @@ export function SearchModal({ isOpen, onClose }) {
                   if (query.trim()) search(query, selectedCategory, {});
                 }}
               >
-                Clear filters
+                {t('search.clearFilters')}
               </button>
             )}
           </div>
         )}
 
-        <div className="search-modal-content">
+        <div
+          id="search-results-listbox"
+          className="search-modal-content"
+          role="listbox"
+          aria-label={t('search.resultsLabel')}
+        >
           {!query.trim() && recentSearches.length > 0 && (
             <div className="search-recent">
               <div className="search-recent-header">
-                <span>Recent Searches</span>
+                <span>{t('search.recentSearches')}</span>
                 <button type="button" onClick={clearRecentSearches} className="search-clear-recent">
-                  Clear all
+                  {t('search.clearAll')}
                 </button>
               </div>
-              <ul className="search-recent-list">
+              <ul className="search-recent-list" aria-label={t('search.recentSearches')}>
                 {recentSearches.map((recent, i) => (
                   <li key={i}>
                     <button
@@ -342,7 +378,7 @@ export function SearchModal({ isOpen, onClose }) {
                       className="search-recent-item"
                       onClick={() => handleRecentSelect(recent)}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
                       </svg>
@@ -358,9 +394,9 @@ export function SearchModal({ isOpen, onClose }) {
             <>
               {(selectedCategory === 'All' || selectedCategory === 'Games') &&
                 renderResultsGroup(
-                  'Games',
+                  t('search.categoryGames'),
                   groupedResults.games,
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <rect x="2" y="6" width="20" height="12" rx="2" />
                     <path d="M6 12h4M8 10v4M15 11h.01M18 13h.01" />
                   </svg>,
@@ -368,9 +404,9 @@ export function SearchModal({ isOpen, onClose }) {
                 )}
               {(selectedCategory === 'All' || selectedCategory === 'Users') &&
                 renderResultsGroup(
-                  'Users',
+                  t('search.categoryUsers'),
                   groupedResults.users,
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
                   </svg>,
@@ -380,31 +416,31 @@ export function SearchModal({ isOpen, onClose }) {
           )}
 
           {query.trim() && !loading && results && flatResults.length === 0 && (
-            <div className="search-empty">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <div className="search-empty" role="status">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" />
                 <path d="M21 21l-4.35-4.35" />
               </svg>
-              <p>No results found for "{query}"</p>
-              <span>Try searching for something else</span>
+              <p>{t('search.noResults', { query })}</p>
+              <span>{t('search.tryAnother')}</span>
             </div>
           )}
 
           {query.trim() && loading && (
-            <div className="search-loading">
+            <div className="search-loading" aria-live="polite">
               <Spinner size="md" />
             </div>
           )}
         </div>
 
-        <div className="search-modal-footer">
+        <div className="search-modal-footer" aria-hidden="true">
           <div className="search-shortcuts">
-            <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-            <span><kbd>↵</kbd> Select</span>
-            <span><kbd>esc</kbd> Close</span>
+            <span><kbd>↑</kbd><kbd>↓</kbd> {t('search.shortcutNavigate')}</span>
+            <span><kbd>↵</kbd> {t('search.shortcutSelect')}</span>
+            <span><kbd>esc</kbd> {t('search.shortcutClose')}</span>
           </div>
           <div className="search-modal-brand">
-            <span className="logo-icon">M</span>
+            <span className="logo-icon" aria-hidden="true">M</span>
             <span>Magnetite</span>
           </div>
         </div>

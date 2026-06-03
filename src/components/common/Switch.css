@@ -66,3 +66,16 @@
 .switch.checked:not(.disabled):hover .switch-track {
   border-color: var(--color-accent-hover);
 }
+
+/* Label wrapper for switch + visible label */
+.switch-label-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  cursor: pointer;
+}
+.switch-label-text {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  line-height: 1.4;
+}

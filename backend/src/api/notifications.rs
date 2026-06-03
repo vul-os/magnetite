@@ -625,11 +625,185 @@ pub async fn create_notification(
     Ok(Json(notification))
 }
 
+// ── Notification Preferences ────────────────────────────────────────────────
+
+/// Per-channel (email / in_app / push), per-category (payouts / social /
+/// achievements / marketing) preference row.  Mirrors the DB schema.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct NotificationPreferences {
+    pub id: Uuid,
+    pub user_id: Uuid,
+
+    pub payouts_email: bool,
+    pub payouts_in_app: bool,
+    pub payouts_push: bool,
+
+    pub social_email: bool,
+    pub social_in_app: bool,
+    pub social_push: bool,
+
+    pub achievements_email: bool,
+    pub achievements_in_app: bool,
+    pub achievements_push: bool,
+
+    pub marketing_email: bool,
+    pub marketing_in_app: bool,
+    pub marketing_push: bool,
+
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Body accepted by PUT /preferences — all fields optional; omitted fields
+/// retain their current DB values.
+#[derive(Debug, Deserialize, Default)]
+pub struct UpdateNotificationPreferencesRequest {
+    pub payouts_email: Option<bool>,
+    pub payouts_in_app: Option<bool>,
+    pub payouts_push: Option<bool>,
+
+    pub social_email: Option<bool>,
+    pub social_in_app: Option<bool>,
+    pub social_push: Option<bool>,
+
+    pub achievements_email: Option<bool>,
+    pub achievements_in_app: Option<bool>,
+    pub achievements_push: Option<bool>,
+
+    pub marketing_email: Option<bool>,
+    pub marketing_in_app: Option<bool>,
+    pub marketing_push: Option<bool>,
+}
+
+/// GET /api/v1/notifications/preferences
+/// Returns the authenticated user's notification preferences, creating a
+/// default row on first access (upsert-on-read pattern).
+pub async fn get_preferences(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+) -> Result<Json<NotificationPreferences>> {
+    // Upsert defaults so callers always get a full row.
+    let prefs = sqlx::query_as::<_, NotificationPreferences>(
+        "INSERT INTO notification_preferences (user_id)
+         VALUES ($1)
+         ON CONFLICT (user_id) DO UPDATE
+           SET updated_at = notification_preferences.updated_at
+         RETURNING *",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    Ok(Json(prefs))
+}
+
+/// PUT /api/v1/notifications/preferences
+/// Partial update — only supplied fields are written.  Returns the updated row.
+pub async fn update_preferences(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<UpdateNotificationPreferencesRequest>,
+) -> Result<Json<NotificationPreferences>> {
+    // Ensure a row exists first.
+    sqlx::query(
+        "INSERT INTO notification_preferences (user_id)
+         VALUES ($1)
+         ON CONFLICT (user_id) DO NOTHING",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    // Apply each supplied field via individual updates to avoid a massive
+    // dynamic-SQL builder while still keeping atomic semantics.
+    macro_rules! apply_pref {
+        ($col:literal, $val:expr) => {
+            if let Some(v) = $val {
+                sqlx::query(concat!(
+                    "UPDATE notification_preferences SET ",
+                    $col,
+                    " = $1, updated_at = NOW() WHERE user_id = $2"
+                ))
+                .bind(v)
+                .bind(user_id)
+                .execute(&pool)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            }
+        };
+    }
+
+    apply_pref!("payouts_email", payload.payouts_email);
+    apply_pref!("payouts_in_app", payload.payouts_in_app);
+    apply_pref!("payouts_push", payload.payouts_push);
+    apply_pref!("social_email", payload.social_email);
+    apply_pref!("social_in_app", payload.social_in_app);
+    apply_pref!("social_push", payload.social_push);
+    apply_pref!("achievements_email", payload.achievements_email);
+    apply_pref!("achievements_in_app", payload.achievements_in_app);
+    apply_pref!("achievements_push", payload.achievements_push);
+    apply_pref!("marketing_email", payload.marketing_email);
+    apply_pref!("marketing_in_app", payload.marketing_in_app);
+    apply_pref!("marketing_push", payload.marketing_push);
+
+    // Return the final state.
+    let prefs = sqlx::query_as::<_, NotificationPreferences>(
+        "SELECT * FROM notification_preferences WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?;
+
+    Ok(Json(prefs))
+}
+
+/// Returns whether the user has enabled a given channel for a given category.
+/// Called by other modules (e.g. notification delivery) to skip disabled channels.
+pub async fn channel_enabled(pool: &PgPool, user_id: Uuid, category: &str, channel: &str) -> bool {
+    let col = format!("{}_{}", category, channel);
+    // Allowlist to prevent SQL injection from caller-controlled strings.
+    let allowed_cols = [
+        "payouts_email",
+        "payouts_in_app",
+        "payouts_push",
+        "social_email",
+        "social_in_app",
+        "social_push",
+        "achievements_email",
+        "achievements_in_app",
+        "achievements_push",
+        "marketing_email",
+        "marketing_in_app",
+        "marketing_push",
+    ];
+    if !allowed_cols.contains(&col.as_str()) {
+        return true; // Unknown category/channel — default allow.
+    }
+
+    // Build the SELECT dynamically (col is validated above).
+    let query = format!(
+        "SELECT {} FROM notification_preferences WHERE user_id = $1",
+        col
+    );
+    sqlx::query_scalar::<_, bool>(&query)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or(true) // Default to enabled if no preference row exists yet.
+}
+
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route("/", get(list_notifications))
         .route("/count", get(get_unread_count))
         .route("/read-all", put(mark_all_as_read))
+        .route("/preferences", get(get_preferences))
+        .route("/preferences", put(update_preferences))
         .route("/:id/read", put(mark_as_read))
         .route("/:id", delete(delete_notification))
         .route("/", post(create_notification))

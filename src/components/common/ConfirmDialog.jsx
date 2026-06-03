@@ -1,5 +1,6 @@
 import Modal from './Modal';
 import Button from './Button';
+import { useTranslation } from '../../i18n/useTranslation';
 import './ConfirmDialog.css';
 
 const variantClasses = {
@@ -36,22 +37,26 @@ export default function ConfirmDialog({
   onCancel,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   variant = 'info',
 }) {
+  const { t } = useTranslation();
+  const resolvedConfirmText = confirmText ?? t('common.confirm');
+  const resolvedCancelText = cancelText ?? t('common.cancel');
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" closeOnBackdrop={false}>
       <div className={`confirm-dialog-body ${variantClasses[variant]}`}>
-        <div className="confirm-dialog-icon">{icons[variant]}</div>
+        <div className="confirm-dialog-icon" aria-hidden="true">{icons[variant]}</div>
         <p className="confirm-dialog-message">{message}</p>
       </div>
       <div className="confirm-dialog-actions">
         <Button variant="secondary" onClick={onCancel}>
-          {cancelText}
+          {resolvedCancelText}
         </Button>
         <Button variant={variant === 'danger' ? 'danger' : 'primary'} onClick={onConfirm}>
-          {confirmText}
+          {resolvedConfirmText}
         </Button>
       </div>
     </Modal>

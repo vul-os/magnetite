@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -48,6 +49,7 @@ function normaliseApiKey(k) {
 }
 
 export default function Security() {
+  const { t } = useTranslation();
   const [passwords, setPasswords]           = useState({ current: '', new: '', confirm: '' });
   const [passwordError, setPasswordError]   = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState(false);
@@ -127,15 +129,15 @@ export default function Security() {
     setPasswordSuccess(false);
 
     if (passwords.new !== passwords.confirm) {
-      setPasswordError('New passwords do not match');
+      setPasswordError(t('auth.passwordsDoNotMatch'));
       return;
     }
     if (passwords.new.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+      setPasswordError(t('auth.passwordTooShort'));
       return;
     }
     if (!passwords.current) {
-      setPasswordError('Current password is required');
+      setPasswordError(t('account.currentPasswordRequired'));
       return;
     }
 
@@ -146,7 +148,7 @@ export default function Security() {
       setPasswords({ current: '', new: '', confirm: '' });
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
-      setPasswordError(err.message || 'Failed to update password');
+      setPasswordError(err.message || t('account.failedToUpdatePassword'));
     } finally {
       setChangingPw(false);
     }
@@ -267,89 +269,83 @@ export default function Security() {
         {/* Header */}
         <header className="settings-page-header reveal reveal-1">
           <span className="kicker">// SECURITY</span>
-          <h1 className="settings-page-title">Security</h1>
-          <p className="settings-page-subtitle">
-            Manage your password, two-factor authentication, sessions, and API keys.
-          </p>
+          <h1 className="settings-page-title">{t('account.securityTitle')}</h1>
+          <p className="settings-page-subtitle">{t('account.securitySubtitle')}</p>
         </header>
 
         {/* Password */}
-        <section className="settings-section reveal reveal-2">
-          <h2 className="settings-section-title">Change Password</h2>
-          <p className="settings-section-desc">
-            Use a strong password you don&apos;t use on other sites.
-          </p>
+        <section className="settings-section reveal reveal-2" aria-labelledby="sec-pw-heading">
+          <h2 id="sec-pw-heading" className="settings-section-title">{t('account.changePassword')}</h2>
+          <p className="settings-section-desc">{t('account.changePasswordDesc')}</p>
 
-          <form onSubmit={handlePasswordChange}>
+          <form onSubmit={handlePasswordChange} aria-label={t('account.changePasswordFormLabel')} noValidate>
             <div className="settings-field">
-              <label className="settings-field-label" htmlFor="sec-cur-pw">Current Password</label>
+              <label className="settings-field-label" htmlFor="sec-cur-pw">{t('account.currentPassword')}</label>
               <input
                 id="sec-cur-pw"
                 type="password"
                 value={passwords.current}
                 onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
                 className="settings-input"
-                placeholder="Enter current password"
+                placeholder={t('account.enterCurrentPassword')}
                 autoComplete="current-password"
               />
             </div>
             <div className="settings-grid-2">
               <div className="settings-field">
-                <label className="settings-field-label" htmlFor="sec-new-pw">New Password</label>
+                <label className="settings-field-label" htmlFor="sec-new-pw">{t('auth.newPasswordLabel')}</label>
                 <input
                   id="sec-new-pw"
                   type="password"
                   value={passwords.new}
                   onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
                   className="settings-input"
-                  placeholder="New password"
+                  placeholder={t('auth.newPasswordPlaceholder')}
                   autoComplete="new-password"
                 />
               </div>
               <div className="settings-field">
-                <label className="settings-field-label" htmlFor="sec-conf-pw">Confirm Password</label>
+                <label className="settings-field-label" htmlFor="sec-conf-pw">{t('auth.confirmPasswordLabel')}</label>
                 <input
                   id="sec-conf-pw"
                   type="password"
                   value={passwords.confirm}
                   onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
                   className="settings-input"
-                  placeholder="Confirm new password"
+                  placeholder={t('auth.confirmPasswordPlaceholder')}
                   autoComplete="new-password"
                 />
               </div>
             </div>
 
             {passwordError && (
-              <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+              <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
                 <span className="auth-error-icon" aria-hidden="true">!</span>
                 {passwordError}
               </div>
             )}
             {passwordSuccess && (
-              <div className="auth-success" role="status" style={{ marginBottom: '1rem' }}>
+              <div className="auth-success" role="status" aria-live="polite" style={{ marginBottom: '1rem' }}>
                 <span className="auth-success-icon" aria-hidden="true">✓</span>
-                Password updated successfully!
+                {t('account.passwordUpdatedSuccess')}
               </div>
             )}
 
-            <button type="submit" className="settings-save-btn" disabled={changingPw}>
+            <button type="submit" className="settings-save-btn" disabled={changingPw} aria-busy={changingPw}>
               {changingPw ? (
-                <><span className="spinner spinner-sm" aria-hidden="true" /> Updating&hellip;</>
-              ) : 'Update Password'}
+                <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('account.updatingPassword')}</span></>
+              ) : t('account.updatePassword')}
             </button>
           </form>
         </section>
 
         {/* 2FA */}
-        <section className="settings-section reveal reveal-3">
-          <h2 className="settings-section-title">Two-Factor Authentication</h2>
-          <p className="settings-section-desc">
-            Add a second layer of security with an authenticator app (Google Authenticator, Authy, etc.).
-          </p>
+        <section className="settings-section reveal reveal-3" aria-labelledby="sec-2fa-heading">
+          <h2 id="sec-2fa-heading" className="settings-section-title">{t('account.twoFactorAuth')}</h2>
+          <p className="settings-section-desc">{t('account.twoFactorAuthDesc')}</p>
 
           {twoFaError && (
-            <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+            <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
               <span className="auth-error-icon" aria-hidden="true">!</span>
               {twoFaError}
             </div>
@@ -359,13 +355,13 @@ export default function Security() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="twofa-status-enabled">
                 <span aria-hidden="true">✓</span>
-                2FA is enabled — your account is protected
+                {t('account.twoFAEnabled')}
               </div>
               {showDisableForm ? (
-                <form onSubmit={handleDisable2FA} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 320 }}>
+                <form onSubmit={handleDisable2FA} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 320 }} aria-label={t('account.disable2FAFormLabel')}>
                   <div className="settings-field">
                     <label className="settings-field-label" htmlFor="disable-2fa-code">
-                      Enter your current 6-digit code to disable 2FA
+                      {t('account.disable2FACodeLabel')}
                     </label>
                     <input
                       id="disable-2fa-code"
@@ -381,12 +377,12 @@ export default function Security() {
                       style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.2em' }}
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button type="submit" className="settings-action-btn danger" disabled={twoFaLoading}>
-                      {twoFaLoading ? <><span className="spinner spinner-sm" aria-hidden="true" /> Disabling&hellip;</> : 'Confirm Disable'}
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button type="submit" className="settings-action-btn danger" disabled={twoFaLoading} aria-busy={twoFaLoading}>
+                      {twoFaLoading ? <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('account.disabling2FA')}</span></> : t('account.confirmDisable')}
                     </button>
                     <button type="button" className="settings-action-btn" onClick={() => { setShowDisableForm(false); setDisableCode(''); setTwoFaError(''); }}>
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </form>
@@ -396,17 +392,17 @@ export default function Security() {
                   onClick={() => setShowDisableForm(true)}
                   style={{ alignSelf: 'flex-start' }}
                 >
-                  Disable 2FA
+                  {t('account.disable2FA')}
                 </button>
               )}
             </div>
           ) : showSetup2FA ? (
-            <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} aria-label={t('account.setup2FAFormLabel')}>
               <div className="twofa-qr-placeholder">
                 {qrDataUrl ? (
                   <img
                     src={qrDataUrl}
-                    alt="Scan this QR code with your authenticator app"
+                    alt={t('account.scanQRCode')}
                     style={{ width: 160, height: 160, imageRendering: 'pixelated' }}
                   />
                 ) : otpauthUri ? (
@@ -415,23 +411,23 @@ export default function Security() {
                       {otpauthUri}
                     </p>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: '0.5rem 0 0' }}>
-                      Copy this URI into your authenticator app if QR scanning is not available.
+                      {t('account.copyOtpauthUri')}
                     </p>
                   </div>
                 ) : (
-                  <div className="twofa-qr-code" aria-label="QR code placeholder" style={{ fontSize: '3rem' }}>⬡</div>
+                  <div className="twofa-qr-code" aria-label={t('account.qrCodePlaceholder')} style={{ fontSize: '3rem' }}>⬡</div>
                 )}
                 <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: 0, textAlign: 'center' }}>
-                  Scan the QR code with your authenticator app, then enter the code below.
+                  {t('account.scanQRInstructions')}
                 </p>
               </div>
               <div className="settings-field">
-                <label className="settings-field-label" htmlFor="twofa-code">Verification Code</label>
+                <label className="settings-field-label" htmlFor="twofa-code">{t('account.verificationCode')}</label>
                 <input
                   id="twofa-code"
                   type="text"
                   className="settings-input"
-                  placeholder="Enter 6-digit code"
+                  placeholder={t('account.enter6DigitCode')}
                   maxLength={6}
                   pattern="[0-9]{6}"
                   inputMode="numeric"
@@ -441,23 +437,24 @@ export default function Security() {
                   style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.2em', maxWidth: 200 }}
                 />
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <button
                   type="submit"
                   className="settings-save-btn"
                   style={{ margin: 0 }}
                   disabled={twoFaLoading}
+                  aria-busy={twoFaLoading}
                 >
                   {twoFaLoading ? (
-                    <><span className="spinner spinner-sm" aria-hidden="true" /> Verifying&hellip;</>
-                  ) : 'Verify & Enable'}
+                    <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('account.verifying')}</span></>
+                  ) : t('account.verifyAndEnable')}
                 </button>
                 <button
                   type="button"
                   className="settings-action-btn"
                   onClick={() => { setShowSetup2FA(false); setTwoFaCode(''); setTwoFaError(''); setOtpauthUri(''); setQrDataUrl(''); }}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </form>
@@ -467,32 +464,33 @@ export default function Security() {
               onClick={handleBeginSetup2FA}
               disabled={twoFaLoading}
               style={{ margin: 0 }}
+              aria-busy={twoFaLoading}
             >
               {twoFaLoading ? (
-                <><span className="spinner spinner-sm" aria-hidden="true" /> Loading&hellip;</>
-              ) : 'Set Up 2FA'}
+                <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('common.loading')}</span></>
+              ) : t('account.setUp2FA')}
             </button>
           )}
         </section>
 
         {/* Sessions */}
-        <section className="settings-section reveal reveal-4">
+        <section className="settings-section reveal reveal-4" aria-labelledby="sec-sessions-heading">
           <div className="settings-section-head">
             <div>
-              <h2 className="settings-section-title">Active Sessions</h2>
+              <h2 id="sec-sessions-heading" className="settings-section-title">{t('account.activeSessions')}</h2>
               <p className="settings-section-desc" style={{ margin: 0 }}>
-                Your account is signed in on these devices.
+                {t('account.activeSessionsDesc')}
               </p>
             </div>
             {sessions.length > 1 && (
-              <button className="settings-revoke-btn" onClick={handleSignOutAll}>
-                Sign Out All
+              <button className="settings-revoke-btn" onClick={handleSignOutAll} type="button">
+                {t('account.signOutAll')}
               </button>
             )}
           </div>
 
           {sessionError && (
-            <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+            <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
               <span className="auth-error-icon" aria-hidden="true">!</span>
               {sessionError}
             </div>
@@ -501,11 +499,11 @@ export default function Security() {
           <div className="settings-sessions">
             {sessionsLoading ? (
               <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }} aria-busy="true">
-                <span className="spinner spinner-sm" aria-hidden="true" /> Loading sessions&hellip;
+                <span className="spinner spinner-sm" aria-hidden="true" /> {t('account.loadingSessions')}
               </div>
             ) : sessions.length === 0 ? (
               <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)' }}>
-                No active sessions
+                {t('account.noActiveSessions')}
               </p>
             ) : (
               sessions.map(session => (
@@ -517,7 +515,7 @@ export default function Security() {
                     <span className="settings-session-device">
                       {session.device}
                       {session.current && (
-                        <span className="settings-session-badge">Current</span>
+                        <span className="settings-session-badge">{t('account.currentSession')}</span>
                       )}
                     </span>
                     <span className="settings-session-meta">
@@ -526,10 +524,12 @@ export default function Security() {
                   </div>
                   {!session.current && (
                     <button
+                      type="button"
                       className="settings-revoke-btn"
                       onClick={() => handleRevokeSession(session.id)}
+                      aria-label={t('account.revokeSessionLabel', { device: session.device })}
                     >
-                      Revoke
+                      {t('account.revoke')}
                     </button>
                   )}
                 </div>
@@ -539,21 +539,22 @@ export default function Security() {
         </section>
 
         {/* API Keys */}
-        <section className="settings-section reveal reveal-5">
+        <section className="settings-section reveal reveal-5" aria-labelledby="sec-apikeys-heading">
           <div className="settings-section-head">
             <div>
-              <h2 className="settings-section-title">API Keys</h2>
+              <h2 id="sec-apikeys-heading" className="settings-section-title">{t('account.apiKeys')}</h2>
               <p className="settings-section-desc" style={{ margin: 0 }}>
-                Programmatic access to Magnetite APIs.
+                {t('account.apiKeysDesc')}
               </p>
             </div>
             {!showNewKeyForm && (
               <button
+                type="button"
                 className="settings-save-btn"
                 style={{ margin: 0 }}
                 onClick={() => { setShowNewKeyForm(true); setCreatedKey(null); setApiKeysError(null); }}
               >
-                + New Key
+                {t('account.newKey')}
               </button>
             )}
           </div>
@@ -572,7 +573,7 @@ export default function Security() {
               }}
             >
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--color-accent)', margin: '0 0 0.5rem' }}>
-                ✓ API key &ldquo;{createdKey.name}&rdquo; created — copy it now, it will not be shown again:
+                {t('account.apiKeyCreated', { name: createdKey.name })}
               </p>
               <code
                 style={{
@@ -590,24 +591,26 @@ export default function Security() {
                 {createdKey.key}
               </code>
               <button
+                type="button"
                 className="settings-action-btn"
                 style={{ marginTop: '0.75rem' }}
                 onClick={() => navigator.clipboard.writeText(createdKey.key).catch(() => null)}
               >
-                Copy to Clipboard
+                {t('account.copyToClipboard')}
               </button>
               <button
+                type="button"
                 className="settings-action-btn"
                 style={{ marginTop: '0.75rem', marginLeft: '0.5rem' }}
                 onClick={() => setCreatedKey(null)}
               >
-                Dismiss
+                {t('account.dismiss')}
               </button>
             </div>
           )}
 
           {apiKeysError && (
-            <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+            <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
               <span className="auth-error-icon" aria-hidden="true">!</span>
               {apiKeysError}
             </div>
@@ -618,30 +621,31 @@ export default function Security() {
               className="apikey-new-display"
               onSubmit={handleCreateApiKey}
               style={{ marginBottom: '1rem' }}
+              aria-label={t('account.newKeyFormLabel')}
             >
               <div className="settings-field" style={{ marginBottom: 0 }}>
-                <label className="settings-field-label" htmlFor="key-name">Key name</label>
+                <label className="settings-field-label" htmlFor="key-name">{t('account.keyNameLabel')}</label>
                 <input
                   id="key-name"
                   type="text"
                   className="settings-input"
-                  placeholder="e.g., Production API Key"
+                  placeholder={t('account.keyNamePlaceholder')}
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   required
                   autoFocus
                 />
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem' }}>
-                <button type="submit" className="settings-save-btn" style={{ margin: 0 }} disabled={creatingKey}>
-                  {creatingKey ? <><span className="spinner spinner-sm" aria-hidden="true" /> Creating&hellip;</> : 'Create Key'}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                <button type="submit" className="settings-save-btn" style={{ margin: 0 }} disabled={creatingKey} aria-busy={creatingKey}>
+                  {creatingKey ? <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('account.creatingKey')}</span></> : t('account.createKey')}
                 </button>
                 <button
                   type="button"
                   className="settings-action-btn"
                   onClick={() => { setShowNewKeyForm(false); setNewKeyName(''); setApiKeysError(null); }}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </form>
@@ -649,11 +653,11 @@ export default function Security() {
 
           {apiKeysLoading ? (
             <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }} aria-busy="true">
-              <span className="spinner spinner-sm" aria-hidden="true" /> Loading API keys&hellip;
+              <span className="spinner spinner-sm" aria-hidden="true" /> {t('account.loadingApiKeys')}
             </div>
           ) : apiKeys.length === 0 ? (
             <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)', padding: '0.5rem 0' }}>
-              No API keys yet. Create one to access the Magnetite API programmatically.
+              {t('account.noApiKeys')}
             </p>
           ) : (
             <div className="settings-sessions">
@@ -663,16 +667,17 @@ export default function Security() {
                   <div className="settings-session-info">
                     <span className="settings-session-device">{key.name}</span>
                     <span className="settings-session-meta" style={{ fontFamily: 'var(--font-mono)' }}>
-                      {key.prefix} · Created {key.createdAt} · Last used: {key.lastUsed}
+                      {key.prefix} · {t('account.apiKeyCreatedOn', { date: key.createdAt })} · {t('account.apiKeyLastUsed', { date: key.lastUsed })}
                     </span>
                   </div>
                   <button
+                    type="button"
                     className="settings-revoke-btn"
                     onClick={() => handleRevokeApiKey(key.id)}
                     disabled={revokingId === key.id}
-                    aria-label={`Revoke API key ${key.name}`}
+                    aria-label={t('account.revokeApiKeyLabel', { name: key.name })}
                   >
-                    {revokingId === key.id ? 'Revoking…' : 'Revoke'}
+                    {revokingId === key.id ? t('account.revoking') : t('account.revoke')}
                   </button>
                 </div>
               ))}

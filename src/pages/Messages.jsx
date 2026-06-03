@@ -4,6 +4,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useCommsSocket } from '../hooks/useCommsSocket';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './Messages.css';
 
 // ── Icons (inline SVG to avoid import churn) ─────────────────────────────
@@ -17,6 +18,7 @@ function ChatBubbleIcon(props) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
       {...props}
     >
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -34,6 +36,7 @@ function SendIcon(props) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
       {...props}
     >
       <line x1="22" y1="2" x2="11" y2="13" />
@@ -52,6 +55,7 @@ function PlusIcon(props) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      aria-hidden="true"
       {...props}
     >
       <line x1="12" y1="5" x2="12" y2="19" />
@@ -130,13 +134,15 @@ function PresenceDot({ status, className = '' }) {
     <span
       className={`presence-dot ${status ?? 'offline'} ${className}`}
       aria-label={getPresenceLabel(status)}
+      role="img"
     />
   );
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────
 function DmMessage({ message, isMine }) {
-  const displayName = message.author?.display_name ?? message.author?.username ?? 'Unknown';
+  const { t } = useTranslation();
+  const displayName = message.author?.display_name ?? message.author?.username ?? t('messages.unknown');
   const initial = getInitials(displayName);
 
   return (
@@ -150,14 +156,14 @@ function DmMessage({ message, isMine }) {
       </div>
       <div className="dm-msg-body">
         <div className="dm-msg-header">
-          <span className="dm-msg-author">{isMine ? 'You' : displayName}</span>
+          <span className="dm-msg-author">{isMine ? t('messages.you') : displayName}</span>
           <time className="dm-msg-time" dateTime={message.created_at}>
             {formatTime(message.created_at)}
           </time>
         </div>
         <div className="dm-msg-bubble">{message.content}</div>
         {message.failed && (
-          <div className="dm-msg-failed-hint" role="alert">Failed — tap to retry</div>
+          <div className="dm-msg-failed-hint" role="alert">{t('messages.failedRetry')}</div>
         )}
       </div>
     </div>
@@ -166,8 +172,10 @@ function DmMessage({ message, isMine }) {
 
 // ── Composer ──────────────────────────────────────────────────────────────
 function DmComposer({ onSend, disabled, recipientName }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState('');
   const textareaRef = useRef(null);
+  const inputId = 'dm-composer-input';
 
   const handleKeyDown = useCallback(
     (e) => {
@@ -193,22 +201,26 @@ function DmComposer({ onSend, disabled, recipientName }) {
   return (
     <div className="dm-composer">
       <div className="dm-composer-inner">
+        <label htmlFor={inputId} className="sr-only">
+          {t('messages.messageLabel', { name: recipientName ?? '' })}
+        </label>
         <textarea
+          id={inputId}
           ref={textareaRef}
           className="dm-composer-input"
-          placeholder={`Message ${recipientName ?? ''}…`}
+          placeholder={t('messages.messagePlaceholder', { name: recipientName ?? '' })}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
           disabled={disabled}
-          aria-label={`Message ${recipientName ?? ''}`}
+          aria-label={t('messages.messageLabel', { name: recipientName ?? '' })}
         />
         <button
           className="dm-send-btn"
           onClick={handleSend}
           disabled={!value.trim() || disabled}
-          aria-label="Send message"
+          aria-label={t('messages.sendMessage')}
         >
           <SendIcon />
         </button>
@@ -219,6 +231,7 @@ function DmComposer({ onSend, disabled, recipientName }) {
 
 // ── Conversation view ─────────────────────────────────────────────────────
 function DmConversation({ thread, isConnected, currentUserId }) {
+  const { t } = useTranslation();
   const { user } = thread;
   const { presenceMap } = usePresence([user.id]);
   const presence = presenceMap[user.id] ?? { status: 'offline' };
@@ -290,7 +303,7 @@ function DmConversation({ thread, isConnected, currentUserId }) {
       <div className="dm-conv-header">
         <div className="dm-conv-avatar">
           {user.avatar ? (
-            <img src={user.avatar} alt={`${user.username} avatar`} className="dm-conv-avatar-img" />
+            <img src={user.avatar} alt={t('messages.avatarAlt', { name: user.username })} className="dm-conv-avatar-img" />
           ) : (
             <div className="dm-conv-avatar-img" aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--color-bg-primary)', background: 'var(--gradient-primary)' }}>
               {getInitials(user.display_name ?? user.username)}
@@ -309,29 +322,29 @@ function DmConversation({ thread, isConnected, currentUserId }) {
       {/* Connection banner */}
       {!isConnected && (
         <div className="dm-conn-banner" role="status" aria-live="polite">
-          Reconnecting to real-time…
+          {t('messages.reconnecting')}
         </div>
       )}
 
       {/* Messages */}
-      <div className="dm-messages-area" role="log" aria-label="Direct messages" aria-live="polite">
+      <div className="dm-messages-area" role="log" aria-label={t('messages.logLabel')} aria-live="polite">
         {hasMore && (
           <div className="dm-load-more">
-            <button onClick={loadMore} disabled={loading}>
-              {loading ? 'Loading…' : 'Load older messages'}
+            <button onClick={loadMore} disabled={loading} aria-label={t('messages.loadOlder')}>
+              {loading ? t('common.loading') : t('messages.loadOlder')}
             </button>
           </div>
         )}
         {loading && messages.length === 0 && (
-          <div className="dm-messages-loading" aria-label="Loading messages">
+          <div className="dm-messages-loading" aria-label={t('messages.loadingMessages')}>
             <div className="dm-spinner" aria-hidden="true" />
-            Loading messages…
+            {t('messages.loadingMessages')}
           </div>
         )}
         {groupedMessages.map((item) =>
           item.type === 'divider' ? (
-            <div key={item.key} className="dm-date-divider" role="separator">
-              <span>{item.label}</span>
+            <div key={item.key} className="dm-date-divider" role="separator" aria-label={item.label}>
+              <span aria-hidden="true">{item.label}</span>
             </div>
           ) : (
             <DmMessage
@@ -355,7 +368,7 @@ function DmConversation({ thread, isConnected, currentUserId }) {
             <span className="dm-typing-dots" aria-hidden="true">
               <span /><span /><span />
             </span>
-            {typingList.join(', ')} {typingList.length === 1 ? 'is' : 'are'} typing…
+            {typingList.join(', ')} {typingList.length === 1 ? t('messages.typingIs') : t('messages.typingAre')}
           </>
         )}
       </div>
@@ -372,13 +385,14 @@ function DmConversation({ thread, isConnected, currentUserId }) {
 
 // ── Thread item ───────────────────────────────────────────────────────────
 function DmThreadItem({ thread, active, presence, onClick }) {
+  const { t } = useTranslation();
   const { user, preview, unread, updated_at } = thread;
   return (
     <button
       className={`dm-thread-item${active ? ' active' : ''}`}
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
-      aria-label={`Conversation with ${user.display_name ?? user.username}${unread > 0 ? `, ${unread} unread` : ''}`}
+      aria-label={t('messages.threadLabel', { name: user.display_name ?? user.username, unread: unread > 0 ? `, ${unread} ${t('messages.unread')}` : '' })}
     >
       <div className="dm-thread-avatar">
         {user.avatar ? (
@@ -396,7 +410,7 @@ function DmThreadItem({ thread, active, presence, onClick }) {
       </div>
       <div className="dm-thread-time">{formatThreadTime(updated_at)}</div>
       {unread > 0 && (
-        <span className="dm-unread-badge" aria-label={`${unread} unread`}>{unread}</span>
+        <span className="dm-unread-badge" aria-label={t('messages.unreadCount', { count: unread })}>{unread}</span>
       )}
     </button>
   );
@@ -404,6 +418,7 @@ function DmThreadItem({ thread, active, presence, onClick }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function Messages() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const currentUserId = user?.id ? String(user.id) : 'me';
 
@@ -427,10 +442,10 @@ export default function Messages() {
       (msg) => {
         // Update thread preview when a DM arrives
         setThreads((prev) =>
-          prev.map((t) =>
-            t.user.id === msg.sender_id
-              ? { ...t, preview: msg.content, updated_at: new Date().toISOString(), unread: (t.unread ?? 0) + 1 }
-              : t
+          prev.map((th) =>
+            th.user.id === msg.sender_id
+              ? { ...th, preview: msg.content, updated_at: new Date().toISOString(), unread: (th.unread ?? 0) + 1 }
+              : th
           )
         );
       },
@@ -451,48 +466,50 @@ export default function Messages() {
     return () => { cancelled = true; };
   }, []);
 
-  const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
+  const activeThread = threads.find((th) => th.id === activeThreadId) ?? null;
 
   // Clear unread count on open
   const handleSelectThread = useCallback((threadId) => {
     setActiveThreadId(threadId);
     setThreads((prev) =>
-      prev.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t))
+      prev.map((th) => (th.id === threadId ? { ...th, unread: 0 } : th))
     );
   }, []);
 
   const filteredThreads = searchQuery.trim()
-    ? threads.filter((t) =>
-        (t.user.display_name ?? t.user.username)
+    ? threads.filter((th) =>
+        (th.user.display_name ?? th.user.username)
           .toLowerCase()
           .includes(searchQuery.toLowerCase())
       )
     : threads;
 
   return (
-    <main className="messages-page" id="main-content" aria-label="Direct messages">
+    <main className="messages-page" id="main-content" aria-label={t('messages.pageLabel')}>
       {/* ── Thread sidebar ── */}
-      <aside className="dm-sidebar" aria-label="Conversations">
+      <aside className="dm-sidebar" aria-label={t('messages.sidebarLabel')}>
         <div className="dm-sidebar-header">
-          <h2>Direct Messages</h2>
-          <button className="dm-new-btn" aria-label="New message">
+          <h2>{t('messages.directMessages')}</h2>
+          <button className="dm-new-btn" aria-label={t('messages.newMessage')}>
             <PlusIcon />
           </button>
         </div>
         <div className="dm-search">
+          <label htmlFor="dm-search-input" className="sr-only">{t('messages.searchConversations')}</label>
           <input
+            id="dm-search-input"
             type="search"
-            placeholder="Search…"
+            placeholder={t('messages.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search conversations"
+            aria-label={t('messages.searchConversations')}
           />
         </div>
         <div className="dm-thread-list" role="list">
           {filteredThreads.length === 0 ? (
             <div className="dm-empty-threads">
               <ChatBubbleIcon />
-              <p>No conversations yet</p>
+              <p>{t('messages.noConversations')}</p>
             </div>
           ) : (
             filteredThreads.map((thread) => (
@@ -510,7 +527,7 @@ export default function Messages() {
       </aside>
 
       {/* ── Conversation area ── */}
-      <section className="dm-conversation" aria-label="Conversation">
+      <section className="dm-conversation" aria-label={t('messages.conversationLabel')}>
         {activeThread ? (
           <DmConversation
             key={activeThread.id}
@@ -523,8 +540,8 @@ export default function Messages() {
             <div className="dm-no-conversation-icon" aria-hidden="true">
               <ChatBubbleIcon />
             </div>
-            <h3>Direct Messages</h3>
-            <p>Select a conversation to start chatting</p>
+            <h3>{t('messages.directMessages')}</h3>
+            <p>{t('messages.selectConversation')}</p>
           </div>
         )}
       </section>

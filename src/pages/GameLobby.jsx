@@ -11,9 +11,11 @@ import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
 import { useGameLobby } from '../hooks/useGameLobby';
 import { usePlayManifest } from '../hooks/usePlayManifest';
+import { useTranslation } from '../i18n/useTranslation';
 import './GameLobby.css';
 
 export default function GameLobby() {
+  const { t } = useTranslation();
   const { id: _gameId } = useParams();
   const navigate        = useNavigate();
 
@@ -90,44 +92,44 @@ export default function GameLobby() {
           {/* ── Header ── */}
           <header className="lobby-header">
             <div className="lobby-info-group">
-              <span className="lobby-kicker">// Game Lobby</span>
-              <h1 className="lobby-title">Rust Match</h1>
-              <p className="lobby-game-name">Chess — Server-Authoritative</p>
+              <span className="lobby-kicker">{t('game.lobbyKicker')}</span>
+              <h1 className="lobby-title">{t('game.lobbyTitle')}</h1>
+              <p className="lobby-game-name">{t('game.lobbyGame')}</p>
             </div>
             <div className="lobby-header-right">
               {/* Points HUD */}
-              <div className="lobby-points-hud" aria-label={`Points: ${balance.points ?? 0}`}>
+              <div className="lobby-points-hud" aria-label={t('game.lobbyPoints', { count: balance.points ?? 0 })}>
                 <span className="lobby-points-icon" aria-hidden="true">⬡</span>
                 <span className="lobby-points-value">{(balance.points ?? 0).toLocaleString()}</span>
-                <span className="lobby-points-label">pts</span>
+                <span className="lobby-points-label">{t('game.pointsUnit')}</span>
               </div>
               {/* In-game store toggle */}
               <button
                 className="lobby-store-btn"
                 onClick={() => setShowStore((v) => !v)}
                 aria-expanded={showStore}
-                aria-label="Toggle in-game store"
+                aria-label={t('game.toggleStore')}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
                   <line x1="3" x2="21" y1="6" y2="6" />
                   <path d="M16 10a4 4 0 0 1-8 0" />
                 </svg>
-                Store
+                {t('game.storeLabel')}
               </button>
               <div className="lobby-code-block">
-                <span className="lobby-code-label">// Lobby Code</span>
-                <span className="lobby-code-value" aria-label={`Lobby code ${_gameId ?? 'unknown'}`}>
+                <span className="lobby-code-label">{t('game.lobbyCode')}</span>
+                <span className="lobby-code-value" aria-label={t('game.lobbyCodeLabel', { code: _gameId ?? 'unknown' })}>
                   {_gameId ?? '—'}
                 </span>
               </div>
               <div
                 className={`lobby-conn-status ${isConnected ? 'connected' : 'disconnected'}`}
                 aria-live="polite"
-                aria-label={isConnected ? 'Connected to lobby' : 'Connecting to lobby…'}
+                aria-label={isConnected ? t('game.connectedLabel') : t('game.connectingLabel')}
               >
                 <span className="status-dot" aria-hidden="true" />
-                {isConnected ? 'Connected' : 'Connecting…'}
+                {isConnected ? t('game.connected') : t('game.connecting')}
               </div>
 
               {/* Game server status — resolved from the play manifest */}
@@ -139,15 +141,15 @@ export default function GameLobby() {
                 }`}
                 aria-live="polite"
                 aria-label={
-                  manifestLoading ? 'Resolving game server…' :
-                  manifestError   ? `Game server unavailable: ${manifestError}` :
-                  playManifest?.server_url ? 'Game server ready' : 'Game server pending'
+                  manifestLoading ? t('game.serverResolving') :
+                  manifestError   ? t('game.serverUnavailable', { error: manifestError }) :
+                  playManifest?.server_url ? t('game.serverReady') : t('game.serverPending')
                 }
               >
                 <span className="status-dot" aria-hidden="true" />
-                {manifestLoading           ? 'Server…'  :
-                 manifestError             ? 'No server' :
-                 playManifest?.server_url  ? 'Server ready' : 'Server pending'}
+                {manifestLoading           ? t('game.serverStatus')    :
+                 manifestError             ? t('game.serverNoServer') :
+                 playManifest?.server_url  ? t('game.serverReady') : t('game.serverPending')}
               </div>
             </div>
           </header>
@@ -162,14 +164,14 @@ export default function GameLobby() {
           {/* Countdown overlay */}
           {countdown !== null && (
             <div className="lobby-countdown" role="status" aria-live="assertive">
-              <span className="countdown-label">// Starting in</span>
+              <span className="countdown-label">{t('game.startingIn')}</span>
               <span className="countdown-value">{countdown}</span>
             </div>
           )}
 
           {/* In-game store panel */}
           {showStore && (
-            <div className="lobby-store-panel" role="region" aria-label="In-game store">
+            <div className="lobby-store-panel" role="region" aria-label={t('game.storeRegion')}>
               <InGameStore
                 storeId={_gameId ? `game-${_gameId}` : undefined}
                 gameTitle="Lobby Store"
@@ -194,7 +196,7 @@ export default function GameLobby() {
             {/* Center controls */}
             <div className="lobby-center">
               <div className="lobby-section-card">
-                <h3>// Ready Status</h3>
+                <h3>{t('game.readyStatus')}</h3>
                 <ReadyButton
                   isReady={currentPlayer?.isReady || false}
                   isHost={isHost}
@@ -204,7 +206,7 @@ export default function GameLobby() {
 
               {isHost && (
                 <div className="lobby-section-card">
-                  <h3>// Host Controls</h3>
+                  <h3>{t('game.hostControls')}</h3>
                   <StartGameButton
                     allReady={allReady}
                     playerCount={players.length}
@@ -217,7 +219,7 @@ export default function GameLobby() {
               {!isHost && !allReady && (
                 <div className="waiting-state" aria-live="polite">
                   <div className="waiting-dot" aria-hidden="true" />
-                  Waiting for all players to ready up…
+                  {t('game.waitingForPlayers')}
                 </div>
               )}
             </div>

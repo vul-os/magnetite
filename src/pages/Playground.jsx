@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useComms } from '../context/CommsContext';
 import { usePoints } from '../hooks/usePoints';
 import { usePlayManifest } from '../hooks/usePlayManifest';
+import { useTranslation } from '../i18n/useTranslation';
 import './Playground.css';
 
 // When the play manifest returns a server_url that looks like a real ws[s]:// URL
@@ -30,6 +31,7 @@ function formatTime(seconds) {
 }
 
 export default function Playground() {
+  const { t } = useTranslation();
   const { id: gameId } = useParams();
   const navigate        = useNavigate();
   const canvasRef       = useRef(null);
@@ -256,8 +258,8 @@ export default function Playground() {
     return (
       <div className="playground-container playground-loading" role="main" aria-label="Loading game">
         <div className="playground-status-card" aria-live="polite">
-          <span className="playground-status-kicker">// Connecting</span>
-          <p className="playground-status-msg">Fetching game server&hellip;</p>
+          <span className="playground-status-kicker">{t('game.playgroundConnecting')}</span>
+          <p className="playground-status-msg">{t('game.playgroundLoading')}</p>
         </div>
       </div>
     );
@@ -267,10 +269,10 @@ export default function Playground() {
     return (
       <div className="playground-container playground-error" role="main" aria-label="Game unavailable">
         <div className="playground-status-card" role="alert">
-          <span className="playground-status-kicker">// Error</span>
+          <span className="playground-status-kicker">{t('game.playgroundError')}</span>
           <p className="playground-status-msg">{manifestError}</p>
-          <button className="btn btn-primary" onClick={reloadManifest}>Retry</button>
-          <button className="btn btn-secondary" onClick={() => navigate('/matchmaking')}>Back</button>
+          <button className="btn btn-primary" onClick={reloadManifest}>{t('common.retry')}</button>
+          <button className="btn btn-secondary" onClick={() => navigate('/matchmaking')}>{t('common.back')}</button>
         </div>
       </div>
     );
@@ -293,16 +295,16 @@ export default function Playground() {
             >
               <span className="status-dot" aria-hidden="true" />
               <span className="status-text">
-                {connectionStatus === 'connected'    ? 'Server Connected' :
-                 connectionStatus === 'disconnected' ? 'Disconnected'     : 'Error'}
+                {connectionStatus === 'connected'    ? t('game.serverConnected') :
+                 connectionStatus === 'disconnected' ? t('game.disconnected')    : t('game.connectionError')}
               </span>
               {connectionStatus === 'connected' && (
-                <span className="latency" aria-label={`Latency: ${latency}ms`}>{latency}ms</span>
+                <span className="latency" aria-label={t('game.latency', { ms: latency })}>{latency}ms</span>
               )}
             </div>
 
             {user && (
-              <div className="player-hud" aria-label={`Signed in as ${user.username ?? user.email}`}>
+              <div className="player-hud" aria-label={t('game.signedInAs', { name: user.username ?? user.email })}>
                 <span className="player-hud-avatar" aria-hidden="true">
                   {(user.username ?? user.email ?? 'P').charAt(0).toUpperCase()}
                 </span>
@@ -310,7 +312,7 @@ export default function Playground() {
               </div>
             )}
 
-            <button className="exit-btn" onClick={handleExit} aria-label="Exit game">
+            <button className="exit-btn" onClick={handleExit} aria-label={t('game.exitGame')}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M10 11l3-3-3-3M6 8h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -359,15 +361,15 @@ export default function Playground() {
         >
           <span className="status-dot" aria-hidden="true" />
           <span className="status-text">
-            {connectionStatus === 'connected'    ? 'Connected'    :
-             connectionStatus === 'disconnected' ? 'Disconnected' : 'Error'}
+            {connectionStatus === 'connected'    ? t('game.connected')    :
+             connectionStatus === 'disconnected' ? t('game.disconnected') : t('game.connectionError')}
           </span>
           {connectionStatus === 'connected' && (
-            <span className="latency" aria-label={`Latency: ${latency} milliseconds`}>{latency}ms</span>
+            <span className="latency" aria-label={t('game.latency', { ms: latency })}>{latency}ms</span>
           )}
         </div>
 
-        <div className="game-timer" role="timer" aria-label={`Time remaining: ${formatTime(gameState.timeRemaining)}`}>
+        <div className="game-timer" role="timer" aria-label={t('game.timeRemaining', { time: formatTime(gameState.timeRemaining) })}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="2" />
             <path d="M8 4v4l2 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -375,21 +377,21 @@ export default function Playground() {
           <span>{formatTime(gameState.timeRemaining)}</span>
         </div>
 
-        <div className="score-display" aria-label={`Score: ${gameState.score}`}>
+        <div className="score-display" aria-label={t('game.scoreLabel', { score: gameState.score })}>
           <span className="score-label">Score</span>
           <span className="score-value">{gameState.score}</span>
         </div>
 
         {/* Points HUD */}
-        <div className="points-hud" aria-label={`Points balance: ${balance.points}`}>
+        <div className="points-hud" aria-label={t('game.pointsBalance', { count: balance.points ?? 0 })}>
           <span className="points-hud-icon" aria-hidden="true">⬡</span>
           <span className="points-hud-value">{(balance.points ?? 0).toLocaleString()}</span>
-          <span className="points-hud-label">pts</span>
+          <span className="points-hud-label">{t('game.pointsUnit')}</span>
         </div>
 
         {/* Player badge */}
         {user && (
-          <div className="player-hud" aria-label={`Signed in as ${user.username ?? user.email}`}>
+          <div className="player-hud" aria-label={t('game.signedInAs', { name: user.username ?? user.email })}>
             <span className="player-hud-avatar" aria-hidden="true">
               {(user.username ?? user.email ?? 'P').charAt(0).toUpperCase()}
             </span>
@@ -402,18 +404,18 @@ export default function Playground() {
           className="store-hud-btn"
           onClick={() => setShowStore((v) => !v)}
           aria-expanded={showStore}
-          aria-label="Toggle in-game store"
-          title="Store"
+          aria-label={t('game.toggleStore')}
+          title={t('game.storeLabel')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
             <line x1="3" x2="21" y1="6" y2="6" />
             <path d="M16 10a4 4 0 0 1-8 0" />
           </svg>
-          Store
+          {t('game.storeLabel')}
         </button>
 
-        <button className="exit-btn" onClick={handleExit} aria-label="Exit game">
+        <button className="exit-btn" onClick={handleExit} aria-label={t('game.exitGame')}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M10 11l3-3-3-3M6 8h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -423,7 +425,7 @@ export default function Playground() {
 
       {/* In-game store panel */}
       {showStore && (
-        <div className="ingame-store-overlay" role="region" aria-label="In-game store">
+        <div className="ingame-store-overlay" role="region" aria-label={t('game.storeRegion')}>
           <InGameStore
             storeId={gameId ? `game-${gameId}` : undefined}
             gameTitle="Match Store"
@@ -434,11 +436,11 @@ export default function Playground() {
       )}
 
       {/* Pause modal */}
-      <Modal isOpen={showPauseMenu} onClose={handleResume} title="// Game Paused" size="sm">
+      <Modal isOpen={showPauseMenu} onClose={handleResume} title={t('game.gamePaused')} size="sm">
         <div className="pause-menu-content">
-          <p>The game is paused. Resume or exit to the lobby.</p>
-          <button className="btn btn-primary" onClick={handleResume}>Resume</button>
-          <button className="btn btn-secondary" onClick={handleExit}>Exit Game</button>
+          <p>{t('game.pauseBody')}</p>
+          <button className="btn btn-primary" onClick={handleResume}>{t('game.resume')}</button>
+          <button className="btn btn-secondary" onClick={handleExit}>{t('game.exitGameLabel')}</button>
         </div>
       </Modal>
 
@@ -446,7 +448,7 @@ export default function Playground() {
       <Modal
         isOpen={gameState.isGameOver}
         onClose={() => {}}
-        title="// Game Over"
+        title={t('game.gameOver')}
         size="sm"
         closeOnBackdrop={false}
         closeOnEscape={false}
@@ -454,13 +456,13 @@ export default function Playground() {
       >
         <div className="game-over-content">
           <div className="winner-announcement">
-            {gameState.winner ? `${gameState.winner} wins!` : 'Match Complete'}
+            {gameState.winner ? t('game.wins', { name: gameState.winner }) : t('game.matchComplete')}
           </div>
           <div className="final-score">
-            Final Score: {gameState.score}
+            {t('game.finalScore', { score: gameState.score })}
           </div>
           <button className="btn btn-primary" onClick={handleExit}>
-            Back to Matchmaking
+            {t('game.backToMatchmaking')}
           </button>
         </div>
       </Modal>

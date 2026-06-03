@@ -1171,6 +1171,36 @@
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SCREEN READER ONLY UTILITY
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MINIMUM TAP TARGET SIZES (WCAG 2.5.5 — ≥40px)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.oauth-btn,
+.auth-submit-btn {
+  min-height: 44px;
+}
+
+.auth-switch-link,
+.auth-link-forgot {
+  display: inline-block;
+  min-height: 40px;
+  line-height: 40px;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    RESPONSIVE
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 @media (max-width: 900px) {
@@ -1185,6 +1215,10 @@
   .auth-form-panel {
     padding: 2rem 1.25rem;
     min-height: 100vh;
+  }
+
+  .auth-form-inner {
+    max-width: 100%;
   }
 }
 
@@ -1206,6 +1240,25 @@
   .social-proof-value {
     font-size: var(--text-lg);
   }
+
+  /* Ensure inputs never overflow on 360px screens */
+  .email-input-wrapper,
+  .password-input-wrapper,
+  .input-wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .email-input,
+  .password-input,
+  .input-field {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .auth-divider span {
+    font-size: 10px;
+  }
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1219,6 +1272,18 @@
   .auth-hero-glow,
   .auth-hero-glow-amber {
     animation: none;
+  }
+
+  .auth-error {
+    animation: none;
+  }
+
+  .spinner {
+    animation: none;
+    border-top-color: transparent;
+    border-right-color: currentColor;
+    border-bottom-color: currentColor;
+    border-left-color: currentColor;
   }
 
   /* .reveal classes handled globally in index.css */

@@ -425,4 +425,21 @@
   .analytics-header-row h1 { font-size: var(--text-2xl); }
   .kpi-value { font-size: var(--text-xl); }
   .range-selector { flex-wrap: wrap; }
+  /* Adequate touch targets for range buttons */
+  .range-btn { min-height: 40px; }
+  /* Horizontal scroll for breakdown table */
+  .breakdown-table-wrapper { overflow-x: auto; }
+}
+
+/* ─── Screen-reader only utility ─────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

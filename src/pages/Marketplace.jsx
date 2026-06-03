@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import OnboardingTour from '../components/OnboardingTour';
 import { useTour } from '../hooks/useTour';
 import { useGames } from '../hooks/useGames';
+import { useTranslation } from '../i18n/useTranslation';
 import './Marketplace.css';
 
 const TOUR_KEY = 'magnetite_marketplace_tour_done';
@@ -43,14 +44,6 @@ const MARKETPLACE_TOUR_STEPS = [
 
 const CATEGORIES = ['All', 'Action', 'Puzzle', 'Racing', 'RPG', 'Strategy', 'Arcade'];
 
-const SORT_OPTIONS = [
-  { value: 'popular',    label: 'Most Popular' },
-  { value: 'new',        label: 'Newest' },
-  { value: 'price-low',  label: 'Price: Low to High' },
-  { value: 'price-high', label: 'Price: High to Low' },
-  { value: 'rating',     label: 'Highest Rated' },
-];
-
 function LoadingSkeleton() {
   return (
     <div className="game-grid">
@@ -62,6 +55,7 @@ function LoadingSkeleton() {
 }
 
 function EmptyState({ hasFilters, onClearFilters }) {
+  const { t } = useTranslation();
   return (
     <div className="empty-state">
       <div className="empty-icon" aria-hidden="true">
@@ -71,15 +65,15 @@ function EmptyState({ hasFilters, onClearFilters }) {
           <path d="M22 28h12M28 22v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.25"/>
         </svg>
       </div>
-      <h3 className="empty-title">No games found</h3>
+      <h3 className="empty-title">{t('store.noGamesFound')}</h3>
       <p className="empty-desc">
         {hasFilters
-          ? "Try adjusting your filters to find what you're looking for"
-          : 'Check back soon for new Rust games'}
+          ? t('store.noGamesFiltered')
+          : t('store.noGamesEmpty')}
       </p>
       {hasFilters && (
         <button className="clear-filters-btn" onClick={onClearFilters}>
-          Clear All Filters
+          {t('store.clearAllFilters')}
         </button>
       )}
     </div>
@@ -87,6 +81,7 @@ function EmptyState({ hasFilters, onClearFilters }) {
 }
 
 function ErrorState({ message, onRetry }) {
+  const { t } = useTranslation();
   return (
     <div className="empty-state" role="alert">
       <div className="empty-icon" aria-hidden="true">
@@ -95,11 +90,11 @@ function ErrorState({ message, onRetry }) {
           <path d="M32 20v16M32 42v2" stroke="var(--color-error)" strokeWidth="2" strokeLinecap="round" opacity="0.7"/>
         </svg>
       </div>
-      <h3 className="empty-title">Failed to load games</h3>
-      <p className="empty-desc">{message || 'Could not connect to the server. Please try again.'}</p>
+      <h3 className="empty-title">{t('store.failedToLoad')}</h3>
+      <p className="empty-desc">{message || t('store.couldNotConnect')}</p>
       {onRetry && (
         <button className="clear-filters-btn" onClick={onRetry}>
-          Retry
+          {t('store.retry')}
         </button>
       )}
     </div>
@@ -107,6 +102,7 @@ function ErrorState({ message, onRetry }) {
 }
 
 export default function Marketplace() {
+  const { t } = useTranslation();
   const [search, setSearch]         = useState('');
   const [category, setCategory]     = useState('All');
   const [priceRange, setPriceRange] = useState([0, 5]);
@@ -182,9 +178,9 @@ export default function Marketplace() {
           <div className="mkt-header-glow-secondary" aria-hidden="true" />
 
           <div className="header-content reveal">
-            <span className="kicker reveal-1">// RUST GAME CATALOG</span>
+            <span className="kicker reveal-1">{t('store.marketplaceKicker')}</span>
             <h1 id="marketplace-heading" className="mkt-heading reveal-2">
-              Discover Rust Games
+              {t('store.marketplaceHeading')}
             </h1>
             <p className="header-subtitle reveal-3">
               Browser-native via WASM. Server-authoritative Rust netcode.<br />
@@ -193,23 +189,24 @@ export default function Marketplace() {
 
             {/* Search */}
             <div className="search-container reveal-4" role="search">
+              <label htmlFor="marketplace-search" className="visually-hidden">{t('store.searchLabel')}</label>
               <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
               <input
                 type="text"
                 id="marketplace-search"
-                placeholder="Search games or developers..."
+                placeholder={t('store.searchPlaceholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="search-input"
-                aria-label="Search games"
+                aria-label={t('store.searchLabel')}
               />
               {search && (
                 <button
                   className="search-clear"
                   onClick={() => setSearch('')}
-                  aria-label="Clear search"
+                  aria-label={t('store.clearSearch')}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -219,7 +216,7 @@ export default function Marketplace() {
             </div>
 
             {/* Category pills */}
-            <nav className="category-pills reveal-5" aria-label="Game categories">
+            <nav className="category-pills reveal-5" aria-label={t('store.categoriesLabel')}>
               {CATEGORIES.map(cat => (
                 <button
                   key={cat}
@@ -235,11 +232,11 @@ export default function Marketplace() {
         </header>
 
         {/* ── Sticky filter bar ──────────────────────────────────────────── */}
-        <div className="filters-section" role="region" aria-label="Filter and sort options">
+        <div className="filters-section" role="region" aria-label={t('store.filterLabel')}>
           <div className="filters-bar">
             <div className="filter-group">
               <label className="filter-label" htmlFor="mp-price-range">
-                Max Price
+                {t('store.maxPrice')}
               </label>
               <div className="price-range-container">
                 <span className="price-value" aria-live="polite">
@@ -255,41 +252,43 @@ export default function Marketplace() {
                   value={priceRange[1]}
                   onChange={(e) => setPriceRange([priceRange[0], parseFloat(e.target.value)])}
                   className="price-slider"
-                  aria-label="Maximum price per session"
+                  aria-label={t('store.priceAriaLabel')}
                 />
               </div>
             </div>
 
             <div className="filter-group">
-              <label className="filter-label" htmlFor="mp-sort-by">Sort By</label>
+              <label className="filter-label" htmlFor="mp-sort-by">{t('store.sortBy')}</label>
               <select
                 id="mp-sort-by"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="filter-select"
               >
-                {SORT_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
+                <option value="popular">{t('store.sortPopular')}</option>
+                <option value="new">{t('store.sortNew')}</option>
+                <option value="price-low">{t('store.sortPriceLow')}</option>
+                <option value="price-high">{t('store.sortPriceHigh')}</option>
+                <option value="rating">{t('store.sortRating')}</option>
               </select>
             </div>
 
             <div className="filter-results-info" role="status" aria-live="polite">
               <span className="results-count">
                 <span className="results-num">{filteredGames.length}</span>
-                {' '}game{filteredGames.length !== 1 ? 's' : ''}
+                {' '}{filteredGames.length !== 1 ? t('store.resultsPlural', { count: '' }).replace('{{count}} ', '') : t('store.results', { count: '' }).replace('{{count}} ', '')}
               </span>
             </div>
           </div>
 
           {hasActiveFilters && (
-            <div className="active-filters" role="region" aria-label="Active filters">
-              <span className="active-filters-label">Active:</span>
+            <div className="active-filters" role="region" aria-label={t('store.activeFilters')}>
+              <span className="active-filters-label">{t('store.activeLabel')}</span>
               {search && (
                 <button
                   className="filter-tag"
                   onClick={() => removeFilter('search')}
-                  aria-label={`Remove search filter: ${search}`}
+                  aria-label={t('store.removeFilter', { type: 'search', value: search })}
                 >
                   &ldquo;{search}&rdquo;
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
@@ -301,7 +300,7 @@ export default function Marketplace() {
                 <button
                   className="filter-tag"
                   onClick={() => removeFilter('category')}
-                  aria-label={`Remove category filter: ${category}`}
+                  aria-label={t('store.removeFilter', { type: 'category', value: category })}
                 >
                   {category}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
@@ -313,7 +312,7 @@ export default function Marketplace() {
                 <button
                   className="filter-tag"
                   onClick={() => removeFilter('price')}
-                  aria-label="Remove price filter"
+                  aria-label={t('store.removePriceFilter')}
                 >
                   ${priceRange[0].toFixed(2)}–${priceRange[1].toFixed(2)}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
@@ -322,7 +321,7 @@ export default function Marketplace() {
                 </button>
               )}
               <button className="clear-all-btn" onClick={clearAllFilters}>
-                Clear all
+                {t('store.clearAll')}
               </button>
             </div>
           )}

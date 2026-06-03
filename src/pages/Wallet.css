@@ -829,4 +829,24 @@
   .address-card { flex-direction: column; }
 
   .wallet-page-header h1 { font-size: var(--text-2xl); }
+
+  /* Ensure preset buttons have adequate tap targets */
+  .preset-btn { min-height: 44px; }
+  .btn-manage-sub,
+  .btn-add-funds,
+  .btn-withdraw,
+  .btn-deposit-submit { min-height: 44px; }
+}
+
+/* ─── Screen-reader only utility ─────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

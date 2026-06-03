@@ -7,10 +7,12 @@ import EmailInput from '../components/auth/EmailInput';
 import PasswordInput from '../components/auth/PasswordInput';
 import TermsCheckbox from '../components/auth/TermsCheckbox';
 import SocialProof from '../components/auth/SocialProof';
+import { useTranslation } from '../i18n/useTranslation';
 import './auth.css';
 
 export default function Register() {
   const { register } = useAuth();
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +25,7 @@ export default function Register() {
     e.preventDefault();
     setError('');
     if (!termsAccepted) {
-      setError('You must accept the terms and conditions');
+      setError(t('auth.mustAcceptTerms'));
       return;
     }
     setLoading(true);
@@ -44,13 +46,13 @@ export default function Register() {
   return (
     <div className="auth-split">
       {/* ── Hero Panel ──────────────────────────────────────── */}
-      <div className="auth-hero">
+      <div className="auth-hero" aria-hidden="true">
         <div className="auth-hero-glow" aria-hidden="true" />
         <div className="auth-hero-glow-amber" aria-hidden="true" />
         <div className="auth-hero-grain" aria-hidden="true" />
 
         <div className="auth-hero-content">
-          <Link to="/" className="auth-hero-logo">
+          <Link to="/" className="auth-hero-logo" tabIndex="-1">
             <div className="auth-hero-logo-mark">M</div>
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
@@ -101,8 +103,8 @@ export default function Register() {
         <div className="auth-form-inner">
           <div className="auth-panel-header reveal reveal-1">
             <span className="auth-kicker">// CREATE ACCOUNT</span>
-            <h1 className="auth-title">Join Magnetite</h1>
-            <p className="auth-subtitle">Build and ship Rust games to thousands of players</p>
+            <h1 className="auth-title">{t('auth.registerTitle')}</h1>
+            <p className="auth-subtitle">{t('auth.registerSubtitle')}</p>
           </div>
 
           <div className="reveal reveal-2">
@@ -114,43 +116,49 @@ export default function Register() {
           </div>
 
           <div className="auth-divider reveal reveal-3">
-            <span>or sign up with email</span>
+            <span>{t('auth.orSignUpWithEmail')}</span>
           </div>
 
-          <form onSubmit={handleSubmit} className="auth-form reveal reveal-4">
+          <form
+            onSubmit={handleSubmit}
+            className="auth-form reveal reveal-4"
+            aria-label={t('auth.registerFormLabel')}
+            noValidate
+          >
             {error && (
-              <div className="auth-error" role="alert">
+              <div className="auth-error" role="alert" aria-live="assertive">
                 <span className="auth-error-icon" aria-hidden="true">!</span>
                 {error}
               </div>
             )}
 
             <div className="input-wrapper">
-              <label className="input-label" htmlFor="reg-username">Username</label>
+              <label className="input-label" htmlFor="reg-username">{t('auth.usernameLabel')}</label>
               <input
                 id="reg-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="input-field"
-                placeholder="Choose a username"
+                placeholder={t('auth.usernamePlaceholder')}
                 required
                 minLength={3}
                 maxLength={20}
                 autoComplete="username"
+                aria-required="true"
               />
             </div>
 
             <EmailInput
               value={email}
               onChange={setEmail}
-              placeholder="Email address"
+              placeholder={t('auth.emailPlaceholder')}
             />
 
             <PasswordInput
               value={password}
               onChange={setPassword}
-              placeholder="Create a password"
+              placeholder={t('auth.createPasswordPlaceholder')}
               showStrength
               showRequirements
             />
@@ -165,16 +173,17 @@ export default function Register() {
               type="submit"
               className="auth-submit-btn"
               disabled={!termsAccepted || loading}
+              aria-busy={loading}
             >
               {loading
-                ? <span className="spinner spinner-sm" aria-hidden="true" />
-                : 'Create Account'}
+                ? <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('auth.creatingAccount')}</span></>
+                : t('auth.createAccountBtn')}
             </button>
           </form>
 
           <div className="auth-switch reveal reveal-5">
-            <span>Already have an account?</span>
-            <Link to="/login" className="auth-switch-link">Sign in</Link>
+            <span>{t('auth.haveAccountPrompt')}</span>
+            <Link to="/login" className="auth-switch-link">{t('auth.signInLink')}</Link>
           </div>
 
           <div className="reveal reveal-6">

@@ -1800,3 +1800,92 @@ i18n page coverage (using the existing src/i18n scaffold) — partitioned by DIS
 collide; plus one real feature: notification preferences (backend prefs + settings UI). Pure-quality agents
 verify via eslint on their slice; the feature agent owns client.js + runs the build; orchestrator runs the
 authoritative full build/lint/test after. Verify-on-disk + re-check-frontend-lint discipline continues.
+
+---
+
+## §7 — QUALITY-1 Agent 5: Notification Preferences feature (2026-06-03)
+
+**Deliverables shipped (Agent 5):**
+
+**Backend:**
+- `backend/migrations/20260603_notification_preferences.sql` (NEW) — `notification_preferences` table
+  with per-channel (email/in_app/push) × per-category (payouts/social/achievements/marketing) BOOLEAN toggles;
+  UNIQUE(user_id), FK CASCADE on users(id), defaults: marketing off, achievements_push off.
+- `backend/src/api/notifications.rs` (MODIFIED) — added:
+  - `NotificationPreferences` struct (sqlx::FromRow)
+  - `UpdateNotificationPreferencesRequest` (all fields `Option<bool>`)
+  - `GET /api/v1/notifications/preferences` → `get_preferences()` (upsert-on-read pattern)
+  - `PUT /api/v1/notifications/preferences` → `update_preferences()` (partial update via macro)
+  - `channel_enabled(pool, user_id, category, channel) -> bool` helper (allowlisted against SQLi)
+  - Wired both routes into the existing notifications router
+
+**Frontend:**
+- `src/components/NotificationPreferences.jsx` (NEW) — self-contained component; no page wiring
+  (intentional: out of scope per ownership rules; note left for follow-up)
+- `src/components/NotificationPreferences.css` (NEW) — responsive (360/768/1280), tap targets ≥40px,
+  prefers-reduced-motion, token-only values, grid layout for channel columns
+- `src/api/client.js` (MODIFIED) — added `notifications.getPreferences()` and `notifications.updatePreferences(data)`
+- `src/i18n/en.json` (MODIFIED) — appended `notifPrefs` section (23 keys, namespaced, no existing keys removed)
+
+**Crossroads / decisions:**
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| NP-1 | Route wiring | NotificationPreferences NOT mounted into a page/route | Settings.jsx owned by Agent 1; App.jsx route list collision risk. Self-contained component ready to drop-in. |
+| NP-2 | Partial update strategy | Per-column UPDATE via macro rather than single large UPDATE | Avoids dynamic SQL builder; type-safe; sqlx compile-time check per column; functionally equivalent for client. |
+| NP-3 | upsert-on-read in GET | INSERT ... ON CONFLICT DO UPDATE (no-op) on every GET | Guarantees callers always receive a full row without a separate "init" call; idempotent. |
+| NP-4 | channel_enabled helper | Allowlist validation on col string | Prevents SQL injection from caller-controlled strings while keeping a clean API for delivery code. |
+| NP-5 | Test failures (Login/Register) | Not fixed — pre-existing | Caused by other agents applying i18n to Login.jsx/Register.jsx; tests look for hardcoded strings that are now t() keys. Out of scope for Agent 5. |
+
+**Verified (backend):** `cargo check` 0 warnings; `cargo fmt --check` passes; `cargo test --no-run` 9 executables compiled.
+**Verified (frontend):** `npm run build` EXIT 0; `eslint NotificationPreferences.jsx client.js` 0 errors 0 warnings; 23 i18n keys confirmed; 7 aria-label occurrences; 26 t() calls; 6 role= attributes.
+
+---
+
+## §8 — QUALITY-1 Agent 4: Shared Component Library + Chrome a11y/mobile/i18n (2026-06-03)
+
+**Deliverables shipped (Agent 4 — components/common/* + Modal + Toast + SearchModal + Footer):**
+
+**Accessibility (a11y):**
+- **Button**: `aria-busy` on loading, `aria-disabled`, `aria-label` prop properly forwarded, `aria-hidden` on icon/spinner spans. `prefers-reduced-motion` stops spinner animation and transform.
+- **Input**: `aria-invalid`, `aria-required`, `aria-describedby` linking error/helper text IDs, `role="alert"` on error span, `aria-controls` on password-toggle, `isRequired` prop adds visible asterisk + hidden aria-required.
+- **Select**: Full keyboard navigation (Arrow Up/Down, Enter, Space, Escape, Tab), `role="listbox"`, `aria-haspopup="listbox"`, `aria-expanded`, `aria-activedescendant`, `aria-selected` on options, `aria-label` on search input/clear button. Focused option highlight via CSS.
+- **Switch**: Added `label` prop wrapping switch+text in `<label>`. Existing `role="switch"` + `aria-checked` kept.
+- **Tooltip**: Added `useId()` for stable `id`; trigger gets `aria-describedby` pointing to tooltip `id`.
+- **Table**: `scope="col"` on headers, `aria-sort` (none/ascending/descending), keyboard-activatable sortable headers (Enter/Space), `aria-label` on select-all and row checkboxes, `aria-selected` on rows.
+- **Progress**: `role="progressbar"`, `aria-valuenow/min/max`, `aria-label` prop.
+- **Avatar**: Online indicator gets `role="img"` + `aria-label="Online"`.
+- **Pagination**: `<nav>` with `aria-label`, `aria-live` on info span, `aria-label` on all nav buttons, `aria-current="page"` on active page.
+- **Modal (common + top-level)**: `useId()` for unique title IDs (prevents ID collisions with multiple open modals), close button uses `t('common.close')`, close SVG gets `aria-hidden`.
+- **Toast**: Individual toasts use `role="alert"` for errors or `role="status"` for others + `aria-live` accordingly. ToastContainer: `role="region"`, `aria-live`, `aria-label`.
+- **SearchModal**: `role="dialog"` with `aria-labelledby`, input gets `role="combobox"` + `aria-expanded` + `aria-autocomplete` + `aria-activedescendant`, results container `role="listbox"`, filter toolbar `role="toolbar"` + `aria-label`, hidden sr-only class for screen-reader labels.
+- **ConfirmDialog**: Dialog icons get `aria-hidden`, default confirmText/cancelText fall back to i18n keys.
+
+**Mobile / Responsive:**
+- **Modal.css**: Bottom-sheet on ≤480px (slides up from bottom with rounded top corners).
+- **SearchModal.css**: Already had 680px breakpoint; added `min-height: 40px` on filter buttons for tap targets. Focus-visible rings on filter/result/recent-item buttons.
+- **Button.css**: `prefers-reduced-motion` disables transform hover lift.
+- **Switch.css**: `.switch-label-wrapper` for inline label layout.
+
+**i18n:**
+- **Pagination**: All text (Showing X–Y of Z, First/Previous/Next/Last, Items per page, Page N) via `t()`.
+- **Modal**: Close button label via `t('common.close')`.
+- **ConfirmDialog**: Confirm/Cancel button text defaults via `t('common.confirm')` / `t('common.cancel')`.
+- **SearchModal**: All user-facing strings (placeholder, category labels, filters, recent searches, no-results, shortcuts) via `t()`.
+
+**en.json additions (namespaced, append-only):**
+- `common.pagination.*` (8 keys): label, showing, first, previous, next, last, page, itemsPerPage
+- `search.*` (20 keys): label, placeholder, pressEscToClose, filterLabel, toggleFilters, filters, filterByGenre, allGenres, freeToPlay, clearFilters, recentSearches, clearAll, categoryGames, categoryUsers, noResults, tryAnother, resultsLabel, shortcutNavigate, shortcutSelect, shortcutClose
+
+**Decisions:**
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| A4-1 | Modal unique title IDs | `useId()` per Modal instance | Fixed-string `modal-title` id breaks when ≥2 modals render simultaneously (invalid HTML, aria-labelledby hits first match) |
+| A4-2 | password toggle tabIndex | Changed from -1 to keyboard-reachable | tabIndex=-1 excluded password-toggle from keyboard flow; users need keyboard access to toggle visibility |
+| A4-3 | Select keyboard nav | Full ARIA combobox pattern on trigger | Native `<select>` alternative rejected to keep custom styling; opted for listbox pattern with Arrow/Enter/Escape |
+| A4-4 | Modal mobile layout | Bottom-sheet slide-up on ≤480px | More natural mobile gesture; full-width from edge to edge |
+| A4-5 | prefers-reduced-motion | Variables already zeroed in tokens.css | Button/SearchModal added explicit animation:none guards for declarations not using the variables |
+| A4-6 | Tabs.jsx / Tooltip.jsx pre-existing warnings | Not fixed | Out of scope; warnings existed before this wave; fixing would require logic refactor |
+
+**Verified:** `npx eslint <all 19 owned files>` EXIT 0; 3 pre-existing warnings in Tabs.jsx and Tooltip.jsx (unchanged by this agent); 0 new errors. `aria-label` grep: 60+ occurrences across owned files; `t(` grep: 60+ calls. en.json valid JSON, 28 new keys appended under `common.pagination` and `search` namespaces.

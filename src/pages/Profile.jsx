@@ -3,11 +3,13 @@ import { Link, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import ProfileCard from '../components/ProfileCard';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export default function Profile() {
+  const { t } = useTranslation();
   const { username } = useParams();
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading]         = useState(true);
@@ -71,7 +73,7 @@ export default function Profile() {
       <Layout>
         <div className="loading-state" aria-live="polite" aria-busy="true" style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
           <span className="spinner" aria-hidden="true" />
-          <span>Loading profile…</span>
+          <span>{t('account.loadingProfile')}</span>
         </div>
       </Layout>
     );
@@ -81,7 +83,7 @@ export default function Profile() {
     return (
       <Layout>
         <div className="error-state" role="alert" style={{ padding: '2rem', textAlign: 'center' }}>
-          <p style={{ color: 'var(--color-error)' }}>Could not load profile: {error}</p>
+          <p style={{ color: 'var(--color-error)' }}>{t('account.couldNotLoadProfile', { error })}</p>
         </div>
       </Layout>
     );
@@ -92,7 +94,7 @@ export default function Profile() {
       <div className="profile-page reveal">
         {error && (
           <div className="profile-error-banner" role="status" aria-live="polite" style={{ padding: '0.5rem 1rem', background: 'var(--color-amber-soft)', color: 'var(--color-amber)', fontSize: '0.85rem', borderRadius: 'var(--radius-sm)', marginBottom: '1rem' }}>
-            Could not reach server — showing cached data.
+            {t('account.showingCachedData')}
           </div>
         )}
         <div className="reveal-1">
@@ -107,10 +109,10 @@ export default function Profile() {
         </div>
 
         <div className="profile-sections">
-          <section className="profile-section reveal-2">
+          <section className="profile-section reveal-2" aria-labelledby="recent-games-heading">
             <div className="section-header">
-              <h3>// Recent Games</h3>
-              <Link to="/leaderboard" className="view-all">View All →</Link>
+              <h3 id="recent-games-heading">{t('account.recentGames')}</h3>
+              <Link to="/leaderboard" className="view-all">{t('account.viewAll')}</Link>
             </div>
             <div className="recent-games-grid">
               {recentGames.map(game => (
@@ -118,8 +120,8 @@ export default function Profile() {
                   <img src={game.thumbnail} alt={game.title} loading="lazy" />
                   <div className="recent-game-info">
                     <h4>{game.title}</h4>
-                    <p>Score: {game.score.toLocaleString()}</p>
-                    <p>Rank: #{game.rank}</p>
+                    <p>{t('account.score', { score: game.score.toLocaleString() })}</p>
+                    <p>{t('account.rank', { rank: game.rank })}</p>
                     <span className="played-date">
                       {new Date(game.playedAt).toLocaleDateString()}
                     </span>
@@ -129,10 +131,10 @@ export default function Profile() {
             </div>
           </section>
 
-          <section className="profile-section reveal-3">
+          <section className="profile-section reveal-3" aria-labelledby="achievements-heading">
             <div className="section-header">
-              <h3>// Achievements</h3>
-              <Link to="/achievements" className="view-all">View All →</Link>
+              <h3 id="achievements-heading">{t('account.achievements')}</h3>
+              <Link to="/achievements" className="view-all">{t('account.viewAll')}</Link>
             </div>
             <div className="achievements-preview">
               {achievements.map(achievement => (
@@ -144,10 +146,10 @@ export default function Profile() {
             </div>
           </section>
 
-          <section className="profile-section reveal-4">
+          <section className="profile-section reveal-4" aria-labelledby="friends-heading">
             <div className="section-header">
-              <h3>// Friends</h3>
-              <Link to="/friends" className="view-all">View All →</Link>
+              <h3 id="friends-heading">{t('account.friends')}</h3>
+              <Link to="/friends" className="view-all">{t('account.viewAll')}</Link>
             </div>
             <div className="friends-preview">
               {friends.map(friend => (
@@ -155,13 +157,13 @@ export default function Profile() {
                   key={friend.id}
                   to={`/profile/${friend.username}`}
                   className="friend-preview-item"
-                  aria-label={`${friend.username}'s profile`}
+                  aria-label={t('account.friendProfileLabel', { username: friend.username })}
                 >
-                  <img src={friend.avatar} alt={`${friend.username} avatar`} loading="lazy" />
+                  <img src={friend.avatar} alt={t('account.friendAvatarAlt', { username: friend.username })} loading="lazy" />
                   <span className="friend-name">{friend.username}</span>
                   <span
                     className={`friend-status ${friend.status}`}
-                    aria-label={friend.status === 'online' ? 'Online' : 'Offline'}
+                    aria-label={friend.status === 'online' ? t('social.online') : t('social.offline')}
                   />
                 </Link>
               ))}

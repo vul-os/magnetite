@@ -5,6 +5,18 @@
 
 .table-wrapper   { display: flex; flex-direction: column; width: 100%; }
 
+.table-caption {
+  caption-side: top;
+  padding: 0.75rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
 .table-container {
   width: 100%;
   overflow-x: auto;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Layout from '../components/Layout';
 import { useWallet } from '../hooks/useWallet';
+import { useTranslation } from '../i18n/useTranslation';
 import './Wallet.css';
 
 const TIER_DISPLAY = {
@@ -11,6 +12,7 @@ const TIER_DISPLAY = {
 };
 
 export default function Wallet() {
+  const { t } = useTranslation();
   const { balance, transactions, loading, error: walletError, deposit: hookDeposit } = useWallet();
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [customAmount, setCustomAmount] = useState('');
@@ -22,6 +24,8 @@ export default function Wallet() {
     hoursUsed: 32,
     hoursTotal: 50,
   });
+
+  const customAmountId = 'wallet-custom-amount';
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
@@ -56,7 +60,7 @@ export default function Wallet() {
     try {
       await hookDeposit(parseFloat(amount), 'paystack');
     } catch (err) {
-      setDepositError(err.message || 'Deposit failed. Please try again.');
+      setDepositError(err.message || t('walletPage.depositError'));
     } finally {
       setDepositLoading(false);
     }
@@ -92,9 +96,9 @@ export default function Wallet() {
     <Layout>
       <div className="wallet">
         <header className="wallet-page-header">
-          <span className="kicker">// USD WALLET</span>
-          <h1>Wallet</h1>
-          <p className="wallet-subtitle">Manage your USD balance, add funds via Paystack, and manage your subscription</p>
+          <span className="kicker">// {t('walletPage.kicker')}</span>
+          <h1>{t('walletPage.title')}</h1>
+          <p className="wallet-subtitle">{t('walletPage.subtitle')}</p>
         </header>
 
         {walletError && (
@@ -106,24 +110,24 @@ export default function Wallet() {
         <div className="wallet-grid">
           <div className="wallet-left">
             {/* Subscription status */}
-            <div className="sub-status-card">
+            <section className="sub-status-card" aria-label={t('walletPage.subscriptionLabel')}>
               <div className="sub-status-top">
                 <div className="sub-tier-badge">
-                  <span className="sub-tier-dot" />
-                  <span className="sub-tier-name">{tierInfo.name} Plan</span>
+                  <span className="sub-tier-dot" aria-hidden="true" />
+                  <span className="sub-tier-name">{tierInfo.name} {t('walletPage.plan')}</span>
                 </div>
-                <span className="sub-active-label">ACTIVE</span>
+                <span className="sub-active-label" aria-label={t('walletPage.activeLabel')}>{t('walletPage.active')}</span>
               </div>
               <div className="sub-renewal">
-                <span className="sub-detail-label">Renews</span>
+                <span className="sub-detail-label">{t('walletPage.renews')}</span>
                 <span className="sub-detail-value">{formatDate(subscription.renewalDate)}</span>
               </div>
               <div className="sub-hours">
                 <div className="sub-hours-header">
-                  <span className="sub-detail-label">Hours This Month</span>
-                  <span className="sub-detail-value">{subscription.hoursUsed} / {subscription.hoursTotal} hrs</span>
+                  <span className="sub-detail-label">{t('walletPage.hoursThisMonth')}</span>
+                  <span className="sub-detail-value">{subscription.hoursUsed} / {subscription.hoursTotal} {t('walletPage.hrs')}</span>
                 </div>
-                <div className="sub-bar-track">
+                <div className="sub-bar-track" aria-hidden="true">
                   <div
                     className="sub-bar-fill"
                     style={{ width: `${hoursPercent}%` }}
@@ -131,54 +135,61 @@ export default function Wallet() {
                     aria-valuenow={subscription.hoursUsed}
                     aria-valuemin={0}
                     aria-valuemax={subscription.hoursTotal}
+                    aria-label={t('walletPage.hoursUsedLabel', { used: subscription.hoursUsed, total: subscription.hoursTotal })}
                   />
                 </div>
-                <span className="sub-hours-remaining">{hoursRemaining} hours remaining</span>
+                <span className="sub-hours-remaining">{t('walletPage.hoursRemaining', { count: hoursRemaining })}</span>
               </div>
-              <button className="btn btn-primary btn-manage-sub" onClick={handleManageSubscription}>
-                Manage Subscription
+              <button
+                className="btn btn-primary btn-manage-sub"
+                onClick={handleManageSubscription}
+                aria-label={t('walletPage.manageSubLabel')}
+              >
+                {t('walletPage.manageSub')}
               </button>
-            </div>
+            </section>
 
             {/* Balance card */}
-            <div className="balance-card">
+            <section className="balance-card" aria-label={t('walletPage.balanceLabel')}>
               <div className="balance-card-top">
                 <div className="usdc-badge">
-                  <span className="usdc-icon">$</span>
+                  <span className="usdc-icon" aria-hidden="true">$</span>
                   <span>USD</span>
                 </div>
-                <span className="balance-label-text">Total Balance</span>
+                <span className="balance-label-text">{t('walletPage.totalBalance')}</span>
               </div>
               <div className="balance-amount-row">
-                <span className="balance-currency">$</span>
+                <span className="balance-currency" aria-hidden="true">$</span>
                 {loading
-                  ? <span className="balance-loading">—</span>
-                  : <span className="balance-value">{balance != null ? Number(balance).toFixed(2) : '—'}</span>
+                  ? <span className="balance-loading" aria-label={t('common.loading')}>—</span>
+                  : <span className="balance-value" aria-label={t('walletPage.balanceValue', { amount: balance != null ? Number(balance).toFixed(2) : '0.00' })}>{balance != null ? Number(balance).toFixed(2) : '—'}</span>
                 }
               </div>
               <div className="balance-actions">
-                <button className="btn btn-primary btn-add-funds">
-                  <span aria-hidden="true">+</span> Add Funds
+                <button className="btn btn-primary btn-add-funds" aria-label={t('walletPage.addFundsLabel')}>
+                  <span aria-hidden="true">+</span> {t('walletPage.addFunds')}
                 </button>
-                <a href="/earnings" className="btn btn-withdraw">
-                  <span aria-hidden="true">↓</span> Request Payout
+                <a href="/earnings" className="btn btn-withdraw" aria-label={t('walletPage.payoutLabel')}>
+                  <span aria-hidden="true">↓</span> {t('walletPage.requestPayout')}
                 </a>
               </div>
-            </div>
+            </section>
 
             {/* Add funds via Paystack */}
-            <div className="quick-deposit-card">
-              <span className="kicker">// ADD FUNDS</span>
-              <h3>Add Funds via Paystack</h3>
+            <section className="quick-deposit-card" aria-label={t('walletPage.addFundsSection')}>
+              <span className="kicker">// {t('walletPage.addFundsKicker')}</span>
+              <h3>{t('walletPage.addFundsViaPaystack')}</h3>
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: '1rem', fontFamily: 'var(--font-sans)' }}>
-                Deposit using your card or bank account. Funds are added to your USD balance instantly.
+                {t('walletPage.paystackDesc')}
               </p>
-              <div className="preset-amounts">
+              <div className="preset-amounts" role="group" aria-label={t('walletPage.presetAmounts')}>
                 {[5, 10, 25, 50].map((amt) => (
                   <button
                     key={amt}
                     className={`preset-btn${selectedPreset === amt ? ' active' : ''}`}
                     onClick={() => handlePresetClick(amt)}
+                    aria-pressed={selectedPreset === amt}
+                    aria-label={t('walletPage.presetLabel', { amount: amt })}
                   >
                     ${amt}
                   </button>
@@ -187,14 +198,16 @@ export default function Wallet() {
               <div className="custom-amount-row">
                 <div className="custom-amount-input">
                   <span className="input-prefix" aria-hidden="true">$</span>
+                  <label htmlFor={customAmountId} className="sr-only">{t('walletPage.customAmountLabel')}</label>
                   <input
+                    id={customAmountId}
                     type="number"
-                    placeholder="Custom amount"
+                    placeholder={t('walletPage.customAmountPlaceholder')}
                     value={customAmount}
                     onChange={handleCustomChange}
                     min="1"
                     step="1"
-                    aria-label="Custom deposit amount"
+                    aria-label={t('walletPage.customAmountLabel')}
                   />
                 </div>
               </div>
@@ -207,31 +220,32 @@ export default function Wallet() {
                 className="btn btn-primary btn-deposit-submit"
                 onClick={handleDeposit}
                 disabled={!getAmount() || depositLoading}
+                aria-label={depositLoading ? t('walletPage.processing') : t('walletPage.depositLabel', { amount: getAmount() || '' })}
               >
                 {depositLoading
-                  ? 'Processing…'
-                  : `Add Funds ${getAmount() ? `$${getAmount()}` : ''} via Paystack`}
+                  ? t('walletPage.processing')
+                  : `${t('walletPage.addFunds')} ${getAmount() ? `$${getAmount()}` : ''} ${t('walletPage.viaPaystack')}`}
               </button>
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: '0.75rem', fontFamily: 'var(--font-sans)' }}>
-                Powered by Paystack. Supports card and bank transfer payments.
+                {t('walletPage.paystackPowered')}
               </p>
-            </div>
+            </section>
           </div>
 
           <div className="wallet-right">
-            <div className="transactions-card">
+            <section className="transactions-card" aria-label={t('walletPage.transactionsLabel')}>
               <div className="transactions-header">
-                <h3>Recent Transactions</h3>
-                <a href="/earnings" className="btn-text-link">View All</a>
+                <h3>{t('walletPage.recentTransactions')}</h3>
+                <a href="/earnings" className="btn-text-link">{t('walletPage.viewAll')}</a>
               </div>
               {loading ? (
                 <div className="loading-state">
-                  <span className="spinner" />
-                  <span>Loading transactions…</span>
+                  <span className="spinner" aria-hidden="true" />
+                  <span>{t('walletPage.loadingTransactions')}</span>
                 </div>
               ) : transactions.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
-                  No transactions yet. Add funds to get started.
+                  {t('walletPage.noTransactions')}
                 </div>
               ) : (
                 <div className="transactions-list">
@@ -247,7 +261,7 @@ export default function Wallet() {
                         </span>
                       </div>
                       <div className="tx-right">
-                        <span className={`tx-amount ${tx.amount > 0 ? 'positive' : 'negative'}`}>
+                        <span className={`tx-amount ${tx.amount > 0 ? 'positive' : 'negative'}`} aria-label={`${tx.amount > 0 ? '+' : ''}${Number(tx.amount).toFixed(2)} USD`}>
                           {tx.amount > 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
                         </span>
                         <span className={`tx-status ${getStatusClass(tx.status)}`}>
@@ -258,7 +272,7 @@ export default function Wallet() {
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           </div>
         </div>
       </div>

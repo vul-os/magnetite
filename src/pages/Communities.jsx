@@ -9,6 +9,7 @@ import VoicePanel from '../components/comms/VoicePanel';
 import { useComms } from '../context/CommsContext';
 import { useCommunityMembers } from '../hooks/useCommunities';
 import { useAuth } from '../hooks/useAuth';
+import { useTranslation } from '../i18n/useTranslation';
 import './Communities.css';
 
 // ─── Normalise API data shapes to what the visual components expect ───────────
@@ -48,13 +49,14 @@ function normaliseMember(m) {
 // ─── Typing indicator banner ──────────────────────────────────────────────────
 
 function TypingBanner({ typingUsers }) {
+  const { t } = useTranslation();
   const names = Object.values(typingUsers ?? {});
   if (names.length === 0) return null;
 
   let text;
-  if (names.length === 1) text = `${names[0]} is typing…`;
-  else if (names.length === 2) text = `${names[0]} and ${names[1]} are typing…`;
-  else text = 'Several people are typing…';
+  if (names.length === 1) text = t('communities.typingOne', { name: names[0] });
+  else if (names.length === 2) text = t('communities.typingTwo', { name1: names[0], name2: names[1] });
+  else text = t('communities.typingMany');
 
   return (
     <div className="typing-banner" aria-live="polite" aria-atomic="true">
@@ -71,14 +73,15 @@ function TypingBanner({ typingUsers }) {
 // ─── Connection status pill ───────────────────────────────────────────────────
 
 function ConnectionStatus({ isConnected }) {
+  const { t } = useTranslation();
   return (
     <span
       className={`conn-status ${isConnected ? 'conn-status--online' : 'conn-status--offline'}`}
-      aria-label={isConnected ? 'Connected to comms server' : 'Connecting to comms server…'}
-      title={isConnected ? 'Live' : 'Connecting…'}
+      aria-label={isConnected ? t('communities.connectedLabel') : t('communities.connectingLabel')}
+      title={isConnected ? t('communities.live') : t('communities.connecting')}
     >
       <span className="conn-status__dot" aria-hidden="true" />
-      {isConnected ? 'Live' : 'Connecting…'}
+      {isConnected ? t('communities.live') : t('communities.connecting')}
     </span>
   );
 }
@@ -86,8 +89,9 @@ function ConnectionStatus({ isConnected }) {
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 
 function CommunitiesSkeleton() {
+  const { t } = useTranslation();
   return (
-    <div className="communities-page" aria-busy="true" aria-label="Loading communities…">
+    <div className="communities-page" aria-busy="true" aria-label={t('communities.loadingLabel')}>
       <div className="communities-shell bg-atmosphere">
         <div className="communities-skeleton__rail" aria-hidden="true">
           {[...Array(5)].map((_, i) => (
@@ -112,8 +116,9 @@ function CommunitiesSkeleton() {
 // ─── Empty state when no communities ─────────────────────────────────────────
 
 function NoCommunities({ onCreate }) {
+  const { t } = useTranslation();
   return (
-    <div className="communities-empty" role="region" aria-label="No communities">
+    <div className="communities-empty" role="region" aria-label={t('communities.emptyLabel')}>
       <div className="communities-empty__inner">
         <div className="communities-empty__icon" aria-hidden="true">
           <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
@@ -123,14 +128,13 @@ function NoCommunities({ onCreate }) {
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
         </div>
-        <span className="kicker">// no communities yet</span>
-        <h2 className="communities-empty__title">Join a community</h2>
+        <span className="kicker">// {t('communities.noCommunitiesYet')}</span>
+        <h2 className="communities-empty__title">{t('communities.joinCommunity')}</h2>
         <p className="communities-empty__desc">
-          Connect with other Rust game developers. Create your own community or browse
-          public ones.
+          {t('communities.emptyDesc')}
         </p>
-        <button className="btn btn-primary" onClick={onCreate} aria-label="Create a new community">
-          Create Community
+        <button className="btn btn-primary" onClick={onCreate} aria-label={t('communities.createCommunityLabel')}>
+          {t('communities.createCommunity')}
         </button>
       </div>
     </div>
@@ -140,6 +144,7 @@ function NoCommunities({ onCreate }) {
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function Communities() {
+  const { t } = useTranslation();
   // Real user from auth; fall back to a stable guest ID if not logged in.
   const { user } = useAuth();
   const currentUserId = user?.id ? String(user.id) : 'guest';
@@ -307,7 +312,7 @@ export default function Communities() {
       <main
         id="main-content"
         className="communities-shell bg-atmosphere"
-        aria-label="Communities"
+        aria-label={t('communities.mainLabel')}
       >
         {/* 1. Server rail */}
         <ServerRail
@@ -328,7 +333,7 @@ export default function Communities() {
         {/* 3. Main area */}
         <div className="communities-main">
           {/* Channel header */}
-          <header className="channel-header" aria-label="Channel information">
+          <header className="channel-header" aria-label={t('communities.channelInfoLabel')}>
             <div className="channel-header__left">
               <span className="channel-header__hash" aria-hidden="true">
                 {isTextChannel ? (
@@ -344,13 +349,13 @@ export default function Communities() {
                 )}
               </span>
               <h1 className="channel-header__name">
-                {activeChannel?.name ?? selectedVoiceChannel?.name ?? 'Select a channel'}
+                {activeChannel?.name ?? selectedVoiceChannel?.name ?? t('communities.selectChannel')}
               </h1>
               {(activeChannel || selectedVoiceChannel) && (
                 <p className="channel-header__topic">
                   {isTextChannel
-                    ? (activeChannel?.topic ?? activeCommunity?.description ?? 'Welcome!')
-                    : `Voice channel · ${vParticipants.length} connected`}
+                    ? (activeChannel?.topic ?? activeCommunity?.description ?? t('communities.welcome'))
+                    : t('communities.voiceConnected', { count: vParticipants.length })}
                 </p>
               )}
             </div>
@@ -358,23 +363,23 @@ export default function Communities() {
             <div className="channel-header__right">
               <ConnectionStatus isConnected={isConnected} />
               {onlineCount > 0 && (
-                <span className="channel-header__online kicker" aria-label={`${onlineCount} members online`}>
-                  {onlineCount} online
+                <span className="channel-header__online kicker" aria-label={t('communities.onlineCount', { count: onlineCount })}>
+                  {onlineCount} {t('communities.online')}
                 </span>
               )}
-              <button className="channel-header-btn" aria-label="Search in channel">
+              <button className="channel-header-btn" aria-label={t('communities.searchChannel')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </button>
-              <button className="channel-header-btn" aria-label="Pinned messages">
+              <button className="channel-header-btn" aria-label={t('communities.pinnedMessages')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="12" y1="17" x2="12" y2="22" />
                   <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z" />
                 </svg>
               </button>
-              <button className="channel-header-btn" aria-label="Toggle member list">
+              <button className="channel-header-btn" aria-label={t('communities.toggleMemberList')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                   <circle cx="9" cy="7" r="4" />
@@ -408,9 +413,9 @@ export default function Communities() {
                     className="btn btn-ghost load-more-btn"
                     onClick={loadMore}
                     disabled={messagesLoading}
-                    aria-label="Load older messages"
+                    aria-label={t('communities.loadOlderMessages')}
                   >
-                    {messagesLoading ? 'Loading…' : 'Load older messages'}
+                    {messagesLoading ? t('common.loading') : t('communities.loadOlderMessages')}
                   </button>
                 </div>
               )}
@@ -433,22 +438,21 @@ export default function Communities() {
             </>
           ) : (
             /* Voice channel selected — not yet joined */
-            <div className="voice-channel-view" role="region" aria-label="Voice channel view">
+            <div className="voice-channel-view" role="region" aria-label={t('communities.voiceChannelView')}>
               <div className="voice-channel-view__inner">
-                <span className="kicker">// voice channel</span>
+                <span className="kicker">// {t('communities.voiceChannel')}</span>
                 <h2 className="voice-channel-view__title">
-                  {selectedVoiceChannel?.name ?? 'Voice Channel'}
+                  {selectedVoiceChannel?.name ?? t('communities.voiceChannelDefault')}
                 </h2>
                 <p className="voice-channel-view__desc">
-                  Join to connect with others via WebRTC voice. Peer-to-peer mesh for
-                  small rooms; SFU-ready for scale.
+                  {t('communities.voiceDesc')}
                 </p>
                 <button
                   className="btn btn-primary voice-channel-view__join"
                   onClick={handleJoinVoice}
-                  aria-label={`Join ${selectedVoiceChannel?.name ?? 'voice channel'}`}
+                  aria-label={t('communities.joinVoiceLabel', { name: selectedVoiceChannel?.name ?? t('communities.voiceChannelDefault') })}
                 >
-                  Join Voice
+                  {t('communities.joinVoice')}
                 </button>
               </div>
             </div>

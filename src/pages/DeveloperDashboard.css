@@ -525,4 +525,19 @@
   .stat-icon-wrapper { width: 40px; height: 40px; font-size: 1.25rem; }
   .stat-value { font-size: var(--text-xl); }
   .quick-action-btn .action-icon { width: 36px; height: 36px; }
+  /* Ensure action buttons have adequate touch targets */
+  .action-btn { min-width: 40px; min-height: 40px; }
+}
+
+/* ─── Screen-reader only utility ─────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

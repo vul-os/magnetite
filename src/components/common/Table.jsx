@@ -15,10 +15,18 @@ export default function Table({
   emptyTitle = 'No data found',
   emptyDescription = 'There are no items to display.',
   pagination,
+  caption,
   className = '',
 }) {
   const handleHeaderClick = (column) => {
     if (column.sortable && onSort) {
+      onSort(column.key);
+    }
+  };
+
+  const handleHeaderKeyDown = (e, column) => {
+    if (column.sortable && onSort && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
       onSort(column.key);
     }
   };
@@ -41,13 +49,19 @@ export default function Table({
   const isAllSelected = data.length > 0 && selectedRows.length === data.length;
   const isSomeSelected = selectedRows.length > 0 && selectedRows.length < data.length;
 
+  const getAriaSortValue = (column) => {
+    if (!column.sortable) return undefined;
+    if (sortKey !== column.key) return 'none';
+    return sortOrder === 'asc' ? 'ascending' : 'descending';
+  };
+
   const renderSortIcon = (column) => {
     if (!column.sortable) return null;
     if (sortKey !== column.key) {
-      return <span className="sort-icon sort-icon-neutral">↕</span>;
+      return <span className="sort-icon sort-icon-neutral" aria-hidden="true">↕</span>;
     }
     return (
-      <span className={`sort-icon sort-icon-${sortOrder === 'asc' ? 'active' : 'active-desc'}`}>
+      <span className={`sort-icon sort-icon-${sortOrder === 'asc' ? 'active' : 'active-desc'}`} aria-hidden="true">
         {sortOrder === 'asc' ? '↑' : '↓'}
       </span>
     );
@@ -55,12 +69,13 @@ export default function Table({
 
   return (
     <div className={`table-wrapper ${className}`}>
-      <div className="table-container">
+      <div className="table-container" role="region" aria-label={caption}>
         <table className="table">
+          {caption && <caption className="table-caption">{caption}</caption>}
           <thead className="table-head">
             <tr className="table-row table-row-head">
               {selectable && (
-                <th className="table-header table-cell-checkbox">
+                <th className="table-header table-cell-checkbox" scope="col">
                   <label className="checkbox-wrapper">
                     <input
                       type="checkbox"
@@ -68,17 +83,22 @@ export default function Table({
                       ref={(el) => { if (el) el.indeterminate = isSomeSelected; }}
                       onChange={handleSelectAll}
                       className="checkbox-input"
+                      aria-label={isAllSelected ? 'Deselect all rows' : 'Select all rows'}
                     />
-                    <span className="checkbox-custom" />
+                    <span className="checkbox-custom" aria-hidden="true" />
                   </label>
                 </th>
               )}
               {columns.map((column) => (
                 <th
                   key={column.key}
+                  scope="col"
                   className={`table-header ${column.sortable ? 'sortable' : ''} ${sortKey === column.key ? 'sorted' : ''}`}
                   style={{ width: column.width }}
+                  aria-sort={getAriaSortValue(column)}
                   onClick={() => handleHeaderClick(column)}
+                  onKeyDown={(e) => handleHeaderKeyDown(e, column)}
+                  tabIndex={column.sortable ? 0 : undefined}
                 >
                   <div className="header-content">
                     <span className="header-label">{column.label}</span>
@@ -106,6 +126,7 @@ export default function Table({
                   <tr
                     key={rowIndex}
                     className={`table-row ${isSelected ? 'selected' : ''}`}
+                    aria-selected={selectable ? isSelected : undefined}
                   >
                     {selectable && (
                       <td className="table-cell table-cell-checkbox">
@@ -115,8 +136,9 @@ export default function Table({
                             checked={isSelected}
                             onChange={() => handleRowSelect(rowIndex)}
                             className="checkbox-input"
+                            aria-label={`Select row ${rowIndex + 1}`}
                           />
-                          <span className="checkbox-custom" />
+                          <span className="checkbox-custom" aria-hidden="true" />
                         </label>
                       </td>
                     )}

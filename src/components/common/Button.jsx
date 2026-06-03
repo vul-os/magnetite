@@ -30,6 +30,7 @@ export default function Button({
   type = 'button',
   onClick,
   className = '',
+  'aria-label': ariaLabel,
   ...props
 }) {
   const classes = [
@@ -46,17 +47,23 @@ export default function Button({
       className={classes}
       disabled={isDisabled || isLoading}
       onClick={onClick}
+      aria-label={ariaLabel}
+      aria-busy={isLoading || undefined}
+      aria-disabled={isDisabled || isLoading || undefined}
       {...props}
     >
       {isLoading && (
-        <span className={`spinner ${spinnerSizeClasses[size]}`} />
+        <span
+          className={`spinner ${spinnerSizeClasses[size]}`}
+          aria-hidden="true"
+        />
       )}
       {leftIcon && !isLoading && (
-        <span className="icon iconLeft">{leftIcon}</span>
+        <span className="icon iconLeft" aria-hidden="true">{leftIcon}</span>
       )}
       {children}
       {rightIcon && !isLoading && (
-        <span className="icon iconRight">{rightIcon}</span>
+        <span className="icon iconRight" aria-hidden="true">{rightIcon}</span>
       )}
     </button>
   );

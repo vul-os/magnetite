@@ -3,11 +3,13 @@ import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
 import { api } from '../api/client';
 import { usePresence } from '../hooks/usePresence';
+import { useTranslation } from '../i18n/useTranslation';
 import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export default function Friends() {
+  const { t } = useTranslation();
   const [friends, setFriends]               = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [sentRequests, setSentRequests]       = useState([]);
@@ -54,7 +56,7 @@ export default function Friends() {
         const list = Array.isArray(data) ? data : (data?.friends ?? []);
         setFriends(list);
       } else {
-        setLoadError(friendsResult.reason?.message || 'Failed to load friends');
+        setLoadError(friendsResult.reason?.message || t('friends.loadError'));
       }
 
       if (pendingResult.status === 'fulfilled') {
@@ -72,13 +74,13 @@ export default function Friends() {
       setLoading(false);
     }).catch((err) => {
       if (!cancelled) {
-        setLoadError(err.message || 'Failed to load friends');
+        setLoadError(err.message || t('friends.loadError'));
         setLoading(false);
       }
     });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [t]);
 
   const handleSearch = useCallback(async (query) => {
     setSearchQuery(query);
@@ -100,13 +102,13 @@ export default function Friends() {
           setSearchResults([]);
         }
       }).catch((err) => {
-        setSearchError(err.message || 'Search failed');
+        setSearchError(err.message || t('friends.searchError'));
         setSearchResults([]);
       });
     } else {
       setSearchResults([]);
     }
-  }, []);
+  }, [t]);
 
   const handleAddFriend = useCallback(async (user) => {
     try {
@@ -182,7 +184,7 @@ export default function Friends() {
       <Layout>
         <div className="loading-state" aria-live="polite" aria-busy="true" style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
           <span className="spinner" aria-hidden="true" />
-          <span>Loading friends…</span>
+          <span>{t('friends.loading')}</span>
         </div>
       </Layout>
     );
@@ -192,8 +194,8 @@ export default function Friends() {
     <Layout>
       <div className="friends-page reveal">
         <header className="page-header reveal-1">
-          <span className="kicker">// Social Network</span>
-          <h1>Friends</h1>
+          <span className="kicker">// {t('friends.kicker')}</span>
+          <h1>{t('friends.title')}</h1>
         </header>
 
         {loadError && (
@@ -205,14 +207,17 @@ export default function Friends() {
 
         <div className="reveal-2">
           <div className="search-box">
+            <label htmlFor="friends-search" className="sr-only">{t('friends.searchLabel')}</label>
             <input
-              type="text"
-              placeholder="Search players by username..."
+              id="friends-search"
+              type="search"
+              placeholder={t('friends.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
-              aria-label="Search users"
+              aria-label={t('friends.searchLabel')}
               aria-autocomplete="list"
               aria-expanded={searchResults.length > 0}
+              aria-controls={searchResults.length > 0 ? 'friends-search-results' : undefined}
             />
             {searchError && (
               <p style={{ color: 'var(--color-error)', fontSize: 'var(--text-sm)', marginTop: '0.5rem', fontFamily: 'var(--font-mono)' }} role="alert">
@@ -220,7 +225,7 @@ export default function Friends() {
               </p>
             )}
             {searchResults.length > 0 && (
-              <div className="search-results" role="listbox" aria-label="Search results">
+              <div id="friends-search-results" className="search-results" role="listbox" aria-label={t('friends.searchResults')}>
                 {searchResults.map(user => (
                   <div key={user.id} className="search-result-item" role="option">
                     <img src={user.avatar} alt="" loading="lazy" />
@@ -228,9 +233,9 @@ export default function Friends() {
                     <button
                       onClick={() => handleAddFriend(user)}
                       className="btn btn-primary btn-sm"
-                      aria-label={`Add ${user.username} as friend`}
+                      aria-label={t('friends.addFriendLabel', { name: user.username })}
                     >
-                      Add
+                      {t('friends.add')}
                     </button>
                   </div>
                 ))}
@@ -239,46 +244,54 @@ export default function Friends() {
           </div>
         </div>
 
-        <div className="tabs reveal-3" role="tablist" aria-label="Friends sections">
+        <div className="tabs reveal-3" role="tablist" aria-label={t('friends.tabsLabel')}>
           <button
+            id="tab-friends"
             role="tab"
             aria-selected={activeTab === 'friends'}
+            aria-controls="panel-friends"
             className={`tab ${activeTab === 'friends' ? 'active' : ''}`}
             onClick={() => setActiveTab('friends')}
           >
-            Friends ({friends.length})
+            {t('friends.tab.friends')} ({friends.length})
           </button>
           <button
+            id="tab-requests"
             role="tab"
             aria-selected={activeTab === 'requests'}
+            aria-controls="panel-requests"
             className={`tab ${activeTab === 'requests' ? 'active' : ''}`}
             onClick={() => setActiveTab('requests')}
           >
-            Incoming {incomingCount > 0 && <span className="badge-count">{incomingCount}</span>}
+            {t('friends.tab.incoming')} {incomingCount > 0 && <span className="badge-count" aria-label={t('friends.incomingCount', { count: incomingCount })}>{incomingCount}</span>}
           </button>
           <button
+            id="tab-sent"
             role="tab"
             aria-selected={activeTab === 'sent'}
+            aria-controls="panel-sent"
             className={`tab ${activeTab === 'sent' ? 'active' : ''}`}
             onClick={() => setActiveTab('sent')}
           >
-            Sent ({sentCount})
+            {t('friends.tab.sent')} ({sentCount})
           </button>
           <button
+            id="tab-blocked"
             role="tab"
             aria-selected={activeTab === 'blocked'}
+            aria-controls="panel-blocked"
             className={`tab ${activeTab === 'blocked' ? 'active' : ''}`}
             onClick={() => setActiveTab('blocked')}
           >
-            Blocked ({blockedUsers.length})
+            {t('friends.tab.blocked')} ({blockedUsers.length})
           </button>
         </div>
 
         <div className="tab-content reveal-4">
           {activeTab === 'friends' && (
-            <div className="friends-list" role="tabpanel" aria-label="Friends list">
+            <div id="panel-friends" className="friends-list" role="tabpanel" aria-labelledby="tab-friends">
               {friends.length === 0
-                ? <p className="empty-state-inline">No friends yet — search for players above</p>
+                ? <p className="empty-state-inline">{t('friends.noFriends')}</p>
                 : friends.map(friend => {
                     const presence = presenceMap[friend.id];
                     const friendWithPresence = presence
@@ -298,37 +311,37 @@ export default function Friends() {
           )}
 
           {activeTab === 'requests' && (
-            <div className="requests-list" role="tabpanel" aria-label="Incoming friend requests">
+            <div id="panel-requests" className="requests-list" role="tabpanel" aria-labelledby="tab-requests">
               {pendingRequests.length === 0 ? (
-                <p className="empty-state-inline">No pending incoming requests</p>
+                <p className="empty-state-inline">{t('friends.noIncoming')}</p>
               ) : (
                 pendingRequests.map(request => (
                   <div key={request.id} className="request-card">
                     <img
                       src={request.avatar ?? request.from_avatar ?? `https://api.dicebear.com/7.x/identicon/svg?seed=${request.id}`}
-                      alt={`${request.username ?? request.from_username ?? 'User'} avatar`}
+                      alt={t('friends.avatarAlt', { name: request.username ?? request.from_username ?? 'User' })}
                       loading="lazy"
                     />
                     <div className="request-info">
-                      <h4>{request.username ?? request.from_username ?? 'Unknown User'}</h4>
+                      <h4>{request.username ?? request.from_username ?? t('friends.unknownUser')}</h4>
                       <span>
-                        Sent {new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString()}
+                        {t('friends.sentDate', { date: new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString() })}
                       </span>
                     </div>
                     <div className="request-actions">
                       <button
                         onClick={() => handleAcceptRequest(request)}
                         className="btn btn-primary btn-sm"
-                        aria-label={`Accept request from ${request.username ?? request.from_username ?? 'user'}`}
+                        aria-label={t('friends.acceptLabel', { name: request.username ?? request.from_username ?? t('friends.user') })}
                       >
-                        Accept
+                        {t('friends.accept')}
                       </button>
                       <button
                         onClick={() => handleDeclineRequest(request)}
                         className="btn btn-secondary btn-sm"
-                        aria-label={`Decline request from ${request.username ?? request.from_username ?? 'user'}`}
+                        aria-label={t('friends.declineLabel', { name: request.username ?? request.from_username ?? t('friends.user') })}
                       >
-                        Decline
+                        {t('friends.decline')}
                       </button>
                     </div>
                   </div>
@@ -338,30 +351,30 @@ export default function Friends() {
           )}
 
           {activeTab === 'sent' && (
-            <div className="requests-list" role="tabpanel" aria-label="Sent friend requests">
+            <div id="panel-sent" className="requests-list" role="tabpanel" aria-labelledby="tab-sent">
               {sentRequests.length === 0 ? (
-                <p className="empty-state-inline">No pending sent requests</p>
+                <p className="empty-state-inline">{t('friends.noSent')}</p>
               ) : (
                 sentRequests.map(request => (
                   <div key={request.id} className="request-card">
                     <img
                       src={request.avatar ?? request.to_avatar ?? `https://api.dicebear.com/7.x/identicon/svg?seed=${request.id}`}
-                      alt={`${request.username ?? request.to_username ?? 'User'} avatar`}
+                      alt={t('friends.avatarAlt', { name: request.username ?? request.to_username ?? 'User' })}
                       loading="lazy"
                     />
                     <div className="request-info">
-                      <h4>{request.username ?? request.to_username ?? 'Unknown User'}</h4>
+                      <h4>{request.username ?? request.to_username ?? t('friends.unknownUser')}</h4>
                       <span>
-                        Sent {new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString()}
+                        {t('friends.sentDate', { date: new Date(request.created_at ?? request.sentAt ?? Date.now()).toLocaleDateString() })}
                       </span>
                     </div>
                     <div className="request-actions">
                       <button
                         onClick={() => handleCancelSentRequest(request)}
                         className="btn btn-secondary btn-sm"
-                        aria-label={`Cancel request to ${request.username ?? request.to_username ?? 'user'}`}
+                        aria-label={t('friends.cancelLabel', { name: request.username ?? request.to_username ?? t('friends.user') })}
                       >
-                        Cancel
+                        {t('friends.cancel')}
                       </button>
                     </div>
                   </div>
@@ -371,23 +384,23 @@ export default function Friends() {
           )}
 
           {activeTab === 'blocked' && (
-            <div className="blocked-list" role="tabpanel" aria-label="Blocked users">
+            <div id="panel-blocked" className="blocked-list" role="tabpanel" aria-labelledby="tab-blocked">
               {blockedUsers.length === 0 ? (
-                <p className="empty-state-inline">No blocked users</p>
+                <p className="empty-state-inline">{t('friends.noBlocked')}</p>
               ) : (
                 blockedUsers.map(user => (
                   <div key={user.id} className="blocked-card">
-                    <img src={user.avatar} alt={`${user.username} avatar`} loading="lazy" />
+                    <img src={user.avatar} alt={t('friends.avatarAlt', { name: user.username })} loading="lazy" />
                     <div className="blocked-info">
                       <h4>{user.username}</h4>
-                      <span>Blocked {new Date(user.blockedAt).toLocaleDateString()}</span>
+                      <span>{t('friends.blockedDate', { date: new Date(user.blockedAt).toLocaleDateString() })}</span>
                     </div>
                     <button
                       onClick={() => handleUnblock(user)}
                       className="btn btn-secondary btn-sm"
-                      aria-label={`Unblock ${user.username}`}
+                      aria-label={t('friends.unblockLabel', { name: user.username })}
                     >
-                      Unblock
+                      {t('friends.unblock')}
                     </button>
                   </div>
                 ))

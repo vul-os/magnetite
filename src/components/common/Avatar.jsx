@@ -43,10 +43,16 @@ export default memo(function Avatar({
       {hasImage ? (
         <img src={src} alt={alt || name || 'Avatar'} className="avatar-img" loading="lazy" />
       ) : (
-        <span className="avatar-initials-text">{initials}</span>
+        <span className="avatar-initials-text" aria-hidden="true">{initials}</span>
       )}
-      {showOnline && <span className="avatar-online-indicator" />}
-      {status && <span className="avatar-status-ring" />}
+      {showOnline && (
+        <span
+          className="avatar-online-indicator"
+          aria-label="Online"
+          role="img"
+        />
+      )}
+      {status && <span className="avatar-status-ring" aria-hidden="true" />}
     </div>
   );
 });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './auth.css';
 
 const PASSWORD_LEVELS = [
@@ -43,6 +44,7 @@ function PasswordStrengthBar({ password }) {
 }
 
 export default function ResetPassword() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
@@ -63,17 +65,14 @@ export default function ResetPassword() {
         </div>
         <div className="auth-container-center">
           <div className="auth-card">
-            <div className="auth-state-card">
+            <div className="auth-state-card" role="alert">
               <div className="auth-state-icon auth-state-icon--error" aria-hidden="true">✕</div>
               <div>
-                <h1 className="auth-state-title">Invalid link</h1>
-                <p className="auth-state-body">
-                  This password reset link is invalid or has expired.
-                  Request a new one to continue.
-                </p>
+                <h1 className="auth-state-title">{t('auth.invalidLink')}</h1>
+                <p className="auth-state-body">{t('auth.invalidResetLinkBody')}</p>
               </div>
               <Link to="/forgot-password" className="auth-submit-btn" style={{ textDecoration: 'none' }}>
-                Request New Link
+                {t('auth.requestNewLink')}
               </Link>
             </div>
           </div>
@@ -92,16 +91,14 @@ export default function ResetPassword() {
         </div>
         <div className="auth-container-center">
           <div className="auth-card">
-            <div className="auth-state-card">
+            <div className="auth-state-card" role="status" aria-live="polite">
               <div className="auth-state-icon auth-state-icon--success" aria-hidden="true">✓</div>
               <div>
-                <h1 className="auth-state-title">Password reset!</h1>
-                <p className="auth-state-body">
-                  Your password has been updated. Redirecting you to sign in&hellip;
-                </p>
+                <h1 className="auth-state-title">{t('auth.passwordReset')}</h1>
+                <p className="auth-state-body">{t('auth.passwordResetBody')}</p>
               </div>
               <Link to="/login" className="auth-submit-btn" style={{ textDecoration: 'none' }}>
-                Sign In Now
+                {t('auth.signInNow')}
               </Link>
             </div>
           </div>
@@ -115,11 +112,11 @@ export default function ResetPassword() {
     setError('');
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError(t('auth.passwordTooShort'));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.passwordsDoNotMatch'));
       return;
     }
 
@@ -129,7 +126,7 @@ export default function ResetPassword() {
       setSuccess(true);
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
-      setError(err.message || 'Failed to reset password. The link may have expired.');
+      setError(err.message || t('auth.failedToResetPassword'));
     } finally {
       setLoading(false);
     }
@@ -138,12 +135,12 @@ export default function ResetPassword() {
   return (
     <div className="auth-split">
       {/* Hero */}
-      <div className="auth-hero">
+      <div className="auth-hero" aria-hidden="true">
         <div className="auth-hero-glow" aria-hidden="true" />
         <div className="auth-hero-glow-amber" aria-hidden="true" />
         <div className="auth-hero-grain" aria-hidden="true" />
         <div className="auth-hero-content">
-          <Link to="/" className="auth-hero-logo">
+          <Link to="/" className="auth-hero-logo" tabIndex="-1">
             <div className="auth-hero-logo-mark">M</div>
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
@@ -166,57 +163,69 @@ export default function ResetPassword() {
         <div className="auth-form-inner">
           <div className="auth-panel-header reveal reveal-1">
             <span className="auth-kicker">// RESET PASSWORD</span>
-            <h1 className="auth-title">New password</h1>
-            <p className="auth-subtitle">Enter and confirm your new password below</p>
+            <h1 className="auth-title">{t('auth.newPasswordTitle')}</h1>
+            <p className="auth-subtitle">{t('auth.newPasswordSubtitle')}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="auth-form reveal reveal-2">
+          <form
+            onSubmit={handleSubmit}
+            className="auth-form reveal reveal-2"
+            aria-label={t('auth.resetPasswordFormLabel')}
+            noValidate
+          >
             {error && (
-              <div className="auth-error" role="alert">
+              <div className="auth-error" role="alert" aria-live="assertive">
                 <span className="auth-error-icon" aria-hidden="true">!</span>
                 {error}
               </div>
             )}
 
             <div className="input-wrapper">
-              <label className="input-label" htmlFor="new-pw">New Password</label>
+              <label className="input-label" htmlFor="new-pw">{t('auth.newPasswordLabel')}</label>
               <input
                 id="new-pw"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field"
-                placeholder="New password"
+                placeholder={t('auth.newPasswordPlaceholder')}
                 required
                 autoComplete="new-password"
+                aria-required="true"
               />
               <PasswordStrengthBar password={password} />
             </div>
 
             <div className="input-wrapper">
-              <label className="input-label" htmlFor="confirm-pw">Confirm Password</label>
+              <label className="input-label" htmlFor="confirm-pw">{t('auth.confirmPasswordLabel')}</label>
               <input
                 id="confirm-pw"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="input-field"
-                placeholder="Confirm new password"
+                placeholder={t('auth.confirmPasswordPlaceholder')}
                 required
                 autoComplete="new-password"
+                aria-required="true"
               />
             </div>
 
-            <button type="submit" className="auth-submit-btn" disabled={loading}>
+            <button
+              type="submit"
+              className="auth-submit-btn"
+              disabled={loading}
+              aria-busy={loading}
+            >
               {loading
-                ? <span className="spinner spinner-sm" aria-hidden="true" />
-                : 'Reset Password'}
+                ? <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('auth.resettingPassword')}</span></>
+                : t('auth.resetPasswordBtn')}
             </button>
           </form>
 
           <div className="auth-switch reveal reveal-3">
-            <span>Remember your password?</span>
-            <Link to="/login" className="auth-switch-link">Sign in</Link>
+            <span>{t('auth.rememberPasswordPrompt')}</span>
+            <Link to="/login" className="auth-switch-link">{t('auth.signInLink')}</Link>
           </div>
         </div>
       </div>

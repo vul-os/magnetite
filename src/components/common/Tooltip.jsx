@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
@@ -21,6 +21,7 @@ export default function Tooltip({
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
   const timeoutRef = useRef(null);
+  const tooltipId = useId();
 
   const calculatePosition = (rect, tooltipRect) => {
     const viewportHeight = window.innerHeight;
@@ -112,9 +113,11 @@ export default function Tooltip({
   const tooltip = isVisible ? (
     <div
       ref={tooltipRef}
+      id={tooltipId}
       className={`tooltip ${positionClasses[position]}`}
       style={{ top: coords.top, left: coords.left }}
       role="tooltip"
+      aria-hidden={!isVisible}
     >
       <div className="tooltip-content">{content}</div>
       <div className="tooltip-arrow" />
@@ -130,6 +133,7 @@ export default function Tooltip({
         onMouseLeave={hideTooltip}
         onFocus={showTooltip}
         onBlur={hideTooltip}
+        aria-describedby={isVisible ? tooltipId : undefined}
       >
         {children}
       </span>

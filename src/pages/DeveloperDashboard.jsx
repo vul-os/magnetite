@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import {
   AreaChart,
   Area,
@@ -71,6 +72,7 @@ const getActivityIcon = (type) => {
 };
 
 export default function DeveloperDashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [stats, setStats]         = useState(USE_MOCKS ? MOCK_STATS : null);
   const [games, setGames]         = useState(USE_MOCKS ? MOCK_GAMES : []);
@@ -126,7 +128,7 @@ export default function DeveloperDashboard() {
           })));
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err.message || 'Failed to load dashboard');
+        if (!cancelled) setLoadError(err.message || t('dashboard.loadError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -134,10 +136,10 @@ export default function DeveloperDashboard() {
 
     loadData();
     return () => { cancelled = true; };
-  }, []);
+  }, [t]);
 
-  const handleDeleteGame = (gameId) => {
-    if (window.confirm('Are you sure you want to delete this game?')) {
+  const handleDeleteGame = (gameId, gameTitle) => {
+    if (window.confirm(t('dashboard.deleteConfirm', { title: gameTitle }))) {
       setGames(prev => prev.filter(g => g.id !== gameId));
     }
   };
@@ -147,16 +149,16 @@ export default function DeveloperDashboard() {
       <div className="developer-dashboard">
         <header className="dashboard-header">
           <div className="header-content">
-            <span className="kicker">// RUST GAME DEVELOPER</span>
-            <h1>Developer Dashboard</h1>
-            <p>Track performance, manage Rust games, and withdraw earnings.</p>
+            <span className="kicker">// {t('dashboard.kicker')}</span>
+            <h1>{t('dashboard.title')}</h1>
+            <p>{t('dashboard.subtitle')}</p>
           </div>
           <div className="header-actions">
             <Link to="/docs" className="btn btn-secondary">
-              <span aria-hidden="true">📚</span> Documentation
+              <span aria-hidden="true">📚</span> {t('dashboard.documentation')}
             </Link>
             <Link to="/game-studio" className="btn btn-primary">
-              <span aria-hidden="true">+</span> New Game
+              <span aria-hidden="true">+</span> {t('dashboard.newGame')}
             </Link>
           </div>
         </header>
@@ -167,15 +169,15 @@ export default function DeveloperDashboard() {
           </div>
         )}
 
-        <section className="stats-section">
+        <section className="stats-section" aria-label={t('dashboard.statsLabel')}>
           <div className="stats-grid">
             <div className="stat-card">
               <div className="stat-icon-wrapper games-icon" aria-hidden="true">
                 <span>🎮</span>
               </div>
               <div className="stat-content">
-                <span className="stat-label">Total Games</span>
-                <span className="stat-value">{loading ? '—' : (stats?.totalGames ?? 0)}</span>
+                <span className="stat-label">{t('dashboard.totalGames')}</span>
+                <span className="stat-value" aria-live="polite">{loading ? '—' : (stats?.totalGames ?? 0)}</span>
               </div>
             </div>
             <div className="stat-card">
@@ -183,8 +185,8 @@ export default function DeveloperDashboard() {
                 <span>👥</span>
               </div>
               <div className="stat-content">
-                <span className="stat-label">Total Players</span>
-                <span className="stat-value">{loading ? '—' : (stats?.totalPlayers ?? 0).toLocaleString()}</span>
+                <span className="stat-label">{t('dashboard.totalPlayers')}</span>
+                <span className="stat-value" aria-live="polite">{loading ? '—' : (stats?.totalPlayers ?? 0).toLocaleString()}</span>
               </div>
             </div>
             <div className="stat-card">
@@ -192,8 +194,8 @@ export default function DeveloperDashboard() {
                 <span>💰</span>
               </div>
               <div className="stat-content">
-                <span className="stat-label">Total Earnings (USD)</span>
-                <span className="stat-value amber-value">{loading ? '—' : `$${(stats?.totalEarnings ?? 0).toLocaleString()}`}</span>
+                <span className="stat-label">{t('dashboard.totalEarnings')}</span>
+                <span className="stat-value amber-value" aria-live="polite">{loading ? '—' : `$${(stats?.totalEarnings ?? 0).toLocaleString()}`}</span>
               </div>
             </div>
             <div className="stat-card highlight">
@@ -201,8 +203,8 @@ export default function DeveloperDashboard() {
                 <span>📈</span>
               </div>
               <div className="stat-content">
-                <span className="stat-label">This Month Revenue</span>
-                <span className="stat-value amber-value">{loading ? '—' : `$${(stats?.thisMonthRevenue ?? 0).toLocaleString()}`}</span>
+                <span className="stat-label">{t('dashboard.thisMonthRevenue')}</span>
+                <span className="stat-value amber-value" aria-live="polite">{loading ? '—' : `$${(stats?.thisMonthRevenue ?? 0).toLocaleString()}`}</span>
               </div>
             </div>
           </div>
@@ -213,11 +215,11 @@ export default function DeveloperDashboard() {
             <div className="card revenue-chart-card">
               <div className="card-header">
                 <div>
-                  <span className="kicker" style={{ marginBottom: '0.25rem' }}>// 30-DAY VIEW</span>
-                  <h2>Revenue Overview</h2>
+                  <span className="kicker" style={{ marginBottom: '0.25rem' }}>// {t('dashboard.chartKicker')}</span>
+                  <h2>{t('dashboard.revenueOverview')}</h2>
                 </div>
               </div>
-              <div className="chart-container">
+              <div className="chart-container" role="img" aria-label={t('dashboard.revenueChartLabel')}>
                 <ResponsiveContainer width="100%" height={280}>
                   <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
@@ -260,25 +262,25 @@ export default function DeveloperDashboard() {
 
             <div className="card games-table-card">
               <div className="card-header">
-                <h2>My Rust Games</h2>
-                <Link to="/game-studio" className="view-all-link">View All</Link>
+                <h2>{t('dashboard.myGames')}</h2>
+                <Link to="/game-studio" className="view-all-link">{t('dashboard.viewAll')}</Link>
               </div>
               {loading ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading games…</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('dashboard.loadingGames')}</div>
               ) : games.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                  <p>No games yet.</p>
-                  <Link to="/game-studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>Create Your First Game</Link>
+                  <p>{t('dashboard.noGames')}</p>
+                  <Link to="/game-studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>{t('dashboard.createFirstGame')}</Link>
                 </div>
               ) : (
-              <table className="games-table">
+              <table className="games-table" aria-label={t('dashboard.gamesTableLabel')}>
                 <thead>
                   <tr>
-                    <th>Game</th>
-                    <th>Status</th>
-                    <th>Players</th>
-                    <th>Earnings</th>
-                    <th>Actions</th>
+                    <th scope="col">{t('dashboard.colGame')}</th>
+                    <th scope="col">{t('dashboard.colStatus')}</th>
+                    <th scope="col">{t('dashboard.colPlayers')}</th>
+                    <th scope="col">{t('dashboard.colEarnings')}</th>
+                    <th scope="col">{t('dashboard.colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,22 +301,22 @@ export default function DeveloperDashboard() {
                       <td className="earnings-cell">${game.earnings.toLocaleString()}</td>
                       <td>
                         <div className="actions-cell">
-                          <button className="action-btn edit" title="Edit" aria-label={`Edit ${game.title}`}>
+                          <button className="action-btn edit" title={t('dashboard.editGame')} aria-label={t('dashboard.editGameLabel', { title: game.title })}>
                             ✏️
                           </button>
                           <button
                             className="action-btn analytics"
-                            title="View Analytics"
-                            aria-label={`Analytics for ${game.title}`}
+                            title={t('dashboard.viewAnalytics')}
+                            aria-label={t('dashboard.analyticsLabel', { title: game.title })}
                             onClick={() => navigate(`/developers/analytics/${game.id}`)}
                           >
                             📊
                           </button>
                           <button
                             className="action-btn delete"
-                            title="Delete"
-                            aria-label={`Delete ${game.title}`}
-                            onClick={() => handleDeleteGame(game.id)}
+                            title={t('dashboard.deleteGame')}
+                            aria-label={t('dashboard.deleteGameLabel', { title: game.title })}
+                            onClick={() => handleDeleteGame(game.id, game.title)}
                           >
                             🗑️
                           </button>
@@ -330,20 +332,20 @@ export default function DeveloperDashboard() {
 
           <div className="right-column">
             <div className="card quick-actions-card">
-              <h2>Quick Actions</h2>
+              <h2>{t('dashboard.quickActions')}</h2>
               <div className="quick-actions">
                 <Link to="/game-studio" className="quick-action-btn primary">
                   <span className="action-icon" aria-hidden="true">🎮</span>
                   <span className="action-text">
-                    <strong>Create New Game</strong>
-                    <small>Build and deploy in Rust</small>
+                    <strong>{t('dashboard.createNewGame')}</strong>
+                    <small>{t('dashboard.createNewGameDesc')}</small>
                   </span>
                 </Link>
                 <Link to="/docs" className="quick-action-btn">
                   <span className="action-icon" aria-hidden="true">📚</span>
                   <span className="action-text">
-                    <strong>View Documentation</strong>
-                    <small>SDK, API refs &amp; tutorials</small>
+                    <strong>{t('dashboard.viewDocumentation')}</strong>
+                    <small>{t('dashboard.viewDocumentationDesc')}</small>
                   </span>
                 </Link>
                 <Link
@@ -352,23 +354,23 @@ export default function DeveloperDashboard() {
                 >
                   <span className="action-icon" aria-hidden="true">📈</span>
                   <span className="action-text">
-                    <strong>View Analytics</strong>
-                    <small>Deep dive into your stats</small>
+                    <strong>{t('dashboard.viewAnalyticsAction')}</strong>
+                    <small>{t('dashboard.viewAnalyticsDesc')}</small>
                   </span>
                 </Link>
                 <Link to="/wallet" className="quick-action-btn">
                   <span className="action-icon" aria-hidden="true">💳</span>
                   <span className="action-text">
-                    <strong>Manage Wallet</strong>
-                    <small>Add funds or request payout</small>
+                    <strong>{t('dashboard.manageWallet')}</strong>
+                    <small>{t('dashboard.manageWalletDesc')}</small>
                   </span>
                 </Link>
               </div>
             </div>
 
             <div className="card activity-card">
-              <h2>Recent Activity</h2>
-              <div className="activity-feed">
+              <h2>{t('dashboard.recentActivity')}</h2>
+              <div className="activity-feed" aria-label={t('dashboard.activityFeedLabel')}>
                 {activities.map(activity => (
                   <div key={activity.id} className="activity-item">
                     <div className="activity-icon" aria-hidden="true">

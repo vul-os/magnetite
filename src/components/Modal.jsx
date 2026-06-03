@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useId } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from '../i18n/useTranslation';
 import './Modal.css';
 
 const sizeClasses = {
@@ -19,6 +20,9 @@ export default function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
 }) {
+  const { t } = useTranslation();
+  const uid = useId();
+  const titleId = `${uid}-title`;
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef(null);
@@ -111,12 +115,12 @@ export default function Modal({
         className={`modal ${sizeClasses[size]} ${isAnimating ? 'modal-visible' : ''}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        aria-labelledby={title ? titleId : undefined}
       >
         {(title || showCloseButton) && (
           <div className="modal-header">
             {title && (
-              <h2 id="modal-title" className="modal-title">
+              <h2 id={titleId} className="modal-title">
                 {title}
               </h2>
             )}
@@ -124,9 +128,9 @@ export default function Modal({
               <button
                 className="modal-close"
                 onClick={onClose}
-                aria-label="Close modal"
+                aria-label={t('common.close')}
               >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path
                     d="M5 5l10 10M15 5l-10 10"
                     stroke="currentColor"

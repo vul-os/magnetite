@@ -4,6 +4,7 @@ import LeaderboardRow from '../components/LeaderboardRow';
 import LeaderboardSkeleton from '../components/skeletons/LeaderboardSkeleton';
 import EmptyState from '../components/empty/EmptyState';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './social.css';
 
 const TrophyIcon = (
@@ -58,6 +59,8 @@ async function buildMockFallbackData(gameId, timeFilter) {
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export default function Leaderboard() {
+  const { t } = useTranslation();
+
   const MOCK_GAMES = [
     { id: 1, title: 'Cosmic Raiders'   },
     { id: 2, title: 'Puzzle Dimension' },
@@ -117,14 +120,14 @@ export default function Leaderboard() {
       }
     }).catch((err) => {
       if (!cancelled) {
-        setFetchError(err.message ?? 'Failed to load leaderboard');
+        setFetchError(err.message ?? t('leaderboard.loadError'));
         setApiEntries(null);
         setLoadedGame(selectedGame);
       }
     });
 
     return () => { cancelled = true; };
-  }, [selectedGame, timeFilter]);
+  }, [selectedGame, timeFilter, t]);
 
   const currentUser = { username: 'PlayerOne' };
 
@@ -144,8 +147,8 @@ export default function Leaderboard() {
     <Layout>
       <div className="leaderboard-page reveal">
         <header className="page-header reveal-1">
-          <span className="kicker">// Compete Worldwide</span>
-          <h1>Leaderboard</h1>
+          <span className="kicker">// {t('leaderboard.kicker')}</span>
+          <h1>{t('leaderboard.title')}</h1>
         </header>
 
         {fetchError && (
@@ -157,11 +160,12 @@ export default function Leaderboard() {
 
         <div className="leaderboard-controls reveal-2">
           <div className="game-select">
-            <label htmlFor="game-selector">Game</label>
+            <label htmlFor="game-selector">{t('leaderboard.gameLabel')}</label>
             <select
               id="game-selector"
               value={selectedGame}
               onChange={(e) => handleGameChange(e.target.value)}
+              aria-label={t('leaderboard.selectGame')}
             >
               {games.map(game => (
                 <option key={game.id} value={game.id}>{game.title}</option>
@@ -169,7 +173,7 @@ export default function Leaderboard() {
             </select>
           </div>
 
-          <div className="time-filters" role="group" aria-label="Time period">
+          <div className="time-filters" role="group" aria-label={t('leaderboard.timePeriod')}>
             {TIME_FILTERS.map(filter => (
               <button
                 key={filter.key}
@@ -185,21 +189,21 @@ export default function Leaderboard() {
 
         {!loading && userRank > 0 && userRank > 3 && (
           <div className="your-rank-banner reveal-3" role="status" aria-live="polite">
-            Your rank: #{userRank}
+            {t('leaderboard.yourRank', { rank: userRank })}
           </div>
         )}
 
         <div
           className="leaderboard-container reveal-4"
           role="table"
-          aria-label="Leaderboard"
+          aria-label={t('leaderboard.tableLabel')}
           aria-busy={loading}
         >
           <div className="leaderboard-header" role="row">
-            <span className="col-rank" role="columnheader">Rank</span>
-            <span className="col-player" role="columnheader">Player</span>
-            <span className="col-score" role="columnheader">Score</span>
-            <span className="col-change" role="columnheader">Change</span>
+            <span className="col-rank" role="columnheader">{t('leaderboard.colRank')}</span>
+            <span className="col-player" role="columnheader">{t('leaderboard.colPlayer')}</span>
+            <span className="col-score" role="columnheader">{t('leaderboard.colScore')}</span>
+            <span className="col-change" role="columnheader">{t('leaderboard.colChange')}</span>
           </div>
 
           <div className="leaderboard-body">
@@ -211,8 +215,8 @@ export default function Leaderboard() {
               <div role="row">
                 <EmptyState
                   icon={TrophyIcon}
-                  title="No scores yet"
-                  description="Be the first to make the leaderboard for this game."
+                  title={t('leaderboard.emptyTitle')}
+                  description={t('leaderboard.emptyDesc')}
                 />
               </div>
             ) : (
@@ -229,25 +233,25 @@ export default function Leaderboard() {
         </div>
 
         {!loading && totalPages > 1 && (
-          <nav className="pagination reveal-5" aria-label="Leaderboard pages">
+          <nav className="pagination reveal-5" aria-label={t('leaderboard.pagination')}>
             <button
               className="btn btn-secondary btn-sm"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(p => p - 1)}
-              aria-label="Previous page"
+              aria-label={t('leaderboard.prevPage')}
             >
-              Previous
+              {t('leaderboard.previous')}
             </button>
-            <span className="page-info" aria-current="page">
+            <span className="page-info" aria-current="page" aria-label={t('leaderboard.pageOf', { current: currentPage, total: totalPages })}>
               {currentPage} / {totalPages}
             </span>
             <button
               className="btn btn-secondary btn-sm"
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage(p => p + 1)}
-              aria-label="Next page"
+              aria-label={t('leaderboard.nextPage')}
             >
-              Next
+              {t('leaderboard.next')}
             </button>
           </nav>
         )}

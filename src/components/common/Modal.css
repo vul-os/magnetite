@@ -87,3 +87,26 @@
 }
 
 .modal-fullscreen .modal-content { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal {
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Mobile: full-screen on small viewports */
+@media (max-width: 480px) {
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal:not(.modal-fullscreen) {
+    max-width: 100%;
+    width: 100%;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 92vh;
+  }
+}

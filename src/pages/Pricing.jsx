@@ -1,4 +1,5 @@
 import PricingCard from '../components/PricingCard';
+import { useTranslation } from '../i18n/useTranslation';
 import './Pricing.css';
 
 const SUBSCRIPTION_TIERS = [
@@ -104,6 +105,7 @@ const faqs = [
 ];
 
 export default function Pricing() {
+  const { t } = useTranslation();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const currentPlan = user?.subscription?.tier || null;
 
@@ -113,20 +115,19 @@ export default function Pricing() {
       <section className="pricing-hero bg-atmosphere" aria-labelledby="pricing-heading">
         <div className="container">
           <div className="reveal">
-            <span className="kicker reveal-1">// TRANSPARENT PRICING</span>
+            <span className="kicker reveal-1">{t('store.pricingKicker')}</span>
             <h1 id="pricing-heading" className="pricing-hero-title reveal-2">
-              Simple, honest pricing
+              {t('store.pricingTitle')}
             </h1>
             <p className="pricing-hero-subtitle reveal-3">
-              Choose the plan that fits your gaming style. Pay by card or bank — no hidden fees, no
-              long-term contracts.
+              {t('store.pricingSubtitle')}
             </p>
           </div>
         </div>
       </section>
 
       {/* ── Cards ─────────────────────────────────────────────────────────── */}
-      <section className="pricing-cards">
+      <section className="pricing-cards" aria-label="Subscription plans">
         <div className="container">
           <div className="pricing-grid">
             {SUBSCRIPTION_TIERS.map((tier) => (
@@ -139,10 +140,10 @@ export default function Pricing() {
                 cta={{
                   label:
                     currentPlan === tier.id
-                      ? 'Current Plan'
+                      ? t('store.currentPlan')
                       : tier.price === 0
-                      ? 'Get Started'
-                      : 'Subscribe',
+                      ? t('store.getStarted')
+                      : t('store.subscribe'),
                   href:
                     currentPlan === tier.id ? '#' : `/subscribe/${tier.id}`,
                 }}
@@ -156,12 +157,13 @@ export default function Pricing() {
       </section>
 
       {/* ── Comparison ────────────────────────────────────────────────────── */}
-      <section className="pricing-comparison">
+      <section className="pricing-comparison" aria-labelledby="comparison-heading">
         <div className="container">
-          <span className="kicker">// PLAN COMPARISON</span>
-          <h2 className="pricing-section-title">Compare plans</h2>
-          <div className="comparison-table-wrapper">
+          <span className="kicker">{t('store.planComparisonKicker')}</span>
+          <h2 id="comparison-heading" className="pricing-section-title">{t('store.planComparison')}</h2>
+          <div className="comparison-table-wrapper" role="region" aria-label={t('store.planComparison')}>
             <table className="comparison-table">
+              <caption className="visually-hidden">{t('store.planComparison')}</caption>
               <thead>
                 <tr>
                   <th scope="col">Feature</th>
@@ -188,10 +190,10 @@ export default function Pricing() {
       </section>
 
       {/* ── FAQ ───────────────────────────────────────────────────────────── */}
-      <section className="pricing-faq">
+      <section className="pricing-faq" aria-labelledby="faq-heading">
         <div className="container">
-          <span className="kicker">// FAQ</span>
-          <h2 className="pricing-section-title">Frequently asked questions</h2>
+          <span className="kicker">{t('store.faqKicker')}</span>
+          <h2 id="faq-heading" className="pricing-section-title">{t('store.faqTitle')}</h2>
           <div className="faq-grid">
             {faqs.map((faq, i) => (
               <div key={i} className="faq-item">
@@ -204,14 +206,14 @@ export default function Pricing() {
       </section>
 
       {/* ── CTA ───────────────────────────────────────────────────────────── */}
-      <section className="pricing-cta">
+      <section className="pricing-cta" aria-labelledby="pricing-cta-heading">
         <div className="container">
-          <span className="kicker">// GET STARTED</span>
-          <h2>Ready to start playing Rust games?</h2>
-          <p>Create your free account and access the catalog today.</p>
+          <span className="kicker">{t('store.ctaKicker')}</span>
+          <h2 id="pricing-cta-heading">{t('store.ctaTitle')}</h2>
+          <p>{t('store.ctaBody')}</p>
           <div className="cta-buttons">
-            <a href="/register" className="btn btn-primary btn-lg">Create Account</a>
-            <a href="/marketplace" className="btn btn-secondary btn-lg">Browse Games</a>
+            <a href="/register" className="btn btn-primary btn-lg">{t('store.ctaCreateAccount')}</a>
+            <a href="/marketplace" className="btn btn-secondary btn-lg">{t('store.ctaBrowse')}</a>
           </div>
         </div>
       </section>

@@ -17,6 +17,7 @@ import { useParams, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 import AnalyticsChart from '../components/charts/AnalyticsChart';
+import { useTranslation } from '../i18n/useTranslation';
 import './GameAnalytics.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -96,6 +97,7 @@ function Skeleton({ h = 260 }) {
 
 /* ── Main component ──────────────────────────────────────────────────────── */
 export default function GameAnalytics() {
+  const { t } = useTranslation();
   const { gameId } = useParams();
 
   const [analytics, setAnalytics] = useState(USE_MOCKS ? MOCK_ANALYTICS : null);
@@ -153,11 +155,11 @@ export default function GameAnalytics() {
         })));
       }
     } catch (err) {
-      setLoadError(err.message || 'Failed to load analytics. Please try again.');
+      setLoadError(err.message || t('analytics.loadError'));
     } finally {
       setLoading(false);
     }
-  }, [gameId]);
+  }, [gameId, t]);
 
   useEffect(() => {
     loadData();
@@ -171,33 +173,34 @@ export default function GameAnalytics() {
   const windowRevenue = revSeries.length ? sum(revSeries) : (analytics?.summary?.total_revenue ?? 0);
   const windowMinutes = playSeries.length ? sum(playSeries) : 0;
   const fmtUsd = (v) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  const fmtMin = (v) => `${Math.round(v).toLocaleString()} min`;
+  const fmtMin = (v) => `${Math.round(v).toLocaleString()} ${t('analytics.min')}`;
 
   return (
     <Layout>
       <div className="game-analytics">
         {/* ── Header ──────────────────────────────────────────────────── */}
         <header className="analytics-header">
-          <div className="analytics-breadcrumb">
-            <Link to="/developers" className="breadcrumb-link">Dashboard</Link>
+          <nav className="analytics-breadcrumb" aria-label={t('analytics.breadcrumbLabel')}>
+            <Link to="/developers" className="breadcrumb-link">{t('analytics.dashboard')}</Link>
             <span className="breadcrumb-sep" aria-hidden="true">/</span>
-            <span className="breadcrumb-current">
-              {analytics?.game_title ?? (loading ? 'Loading…' : 'Analytics')}
+            <span className="breadcrumb-current" aria-current="page">
+              {analytics?.game_title ?? (loading ? t('common.loading') : t('analytics.title'))}
             </span>
-          </div>
+          </nav>
           <div className="analytics-header-row">
             <div>
-              <span className="kicker">// GAME ANALYTICS</span>
-              <h1>{analytics?.game_title ?? (loading ? '—' : 'Game Analytics')}</h1>
-              <p>Revenue and playtime analytics over time.</p>
+              <span className="kicker">// {t('analytics.kicker')}</span>
+              <h1>{analytics?.game_title ?? (loading ? '—' : t('analytics.title'))}</h1>
+              <p>{t('analytics.subtitle')}</p>
             </div>
-            <div className="range-selector" role="group" aria-label="Date range">
+            <div className="range-selector" role="group" aria-label={t('analytics.dateRange')}>
               {RANGES.map((r, i) => (
                 <button
                   key={r.label}
                   className={`range-btn${range === i ? ' active' : ''}`}
                   onClick={() => setRange(i)}
                   aria-pressed={range === i}
+                  aria-label={t('analytics.rangeLabel', { range: r.label })}
                 >
                   {r.label}
                 </button>
@@ -210,43 +213,45 @@ export default function GameAnalytics() {
         {loadError && (
           <div role="alert" className="analytics-error">
             <span>{loadError}</span>
-            <button className="analytics-retry" onClick={loadData}>Retry</button>
+            <button className="analytics-retry" onClick={loadData} aria-label={t('common.retry')}>
+              {t('common.retry')}
+            </button>
           </div>
         )}
 
         {/* ── KPI cards ───────────────────────────────────────────────── */}
-        <section className="analytics-kpi-grid" aria-label="Key metrics">
+        <section className="analytics-kpi-grid" aria-label={t('analytics.kpiLabel')}>
           <KpiCard
-            label={`Revenue (${RANGES[range].label})`}
+            label={t('analytics.revenueKpi', { range: RANGES[range].label })}
             value={loading ? '—' : fmtUsd(windowRevenue)}
-            sub="USD gross"
+            sub={t('analytics.usdGross')}
             accent
           />
           <KpiCard
-            label="Active Players"
+            label={t('analytics.activePlayers')}
             value={loading ? '—' : (analytics?.summary?.active_players ?? 0).toLocaleString()}
-            sub="unique players"
+            sub={t('analytics.uniquePlayers')}
           />
           <KpiCard
-            label="Total Sessions"
+            label={t('analytics.totalSessions')}
             value={loading ? '—' : (analytics?.summary?.total_sessions ?? 0).toLocaleString()}
-            sub="all time"
+            sub={t('analytics.allTime')}
           />
           <KpiCard
-            label={`Playtime (${RANGES[range].label})`}
+            label={t('analytics.playtimeKpi', { range: RANGES[range].label })}
             value={loading ? '—' : fmtMin(windowMinutes)}
-            sub="minutes played"
+            sub={t('analytics.minutesPlayed')}
           />
         </section>
 
         {/* ── Charts row ──────────────────────────────────────────────── */}
-        <section className="analytics-charts-grid">
+        <section className="analytics-charts-grid" aria-label={t('analytics.chartsLabel')}>
           {/* Revenue chart */}
           <div className="analytics-card">
             <div className="analytics-card-header">
               <div>
-                <span className="kicker">// REVENUE</span>
-                <h2>Revenue Over Time</h2>
+                <span className="kicker">// {t('analytics.revenueKicker')}</span>
+                <h2>{t('analytics.revenueChart')}</h2>
               </div>
               <span className="chart-badge amber">USD</span>
             </div>
@@ -259,7 +264,7 @@ export default function GameAnalytics() {
                 gradientId="revGrad"
                 yFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
                 tooltipFormatter={fmtUsd}
-                emptyMessage="No revenue data for this period."
+                emptyMessage={t('analytics.noRevenueData')}
               />
             )}
           </div>
@@ -268,10 +273,10 @@ export default function GameAnalytics() {
           <div className="analytics-card">
             <div className="analytics-card-header">
               <div>
-                <span className="kicker">// ENGAGEMENT</span>
-                <h2>Playtime Over Time</h2>
+                <span className="kicker">// {t('analytics.engagementKicker')}</span>
+                <h2>{t('analytics.playtimeChart')}</h2>
               </div>
-              <span className="chart-badge cyan">min</span>
+              <span className="chart-badge cyan">{t('analytics.min')}</span>
             </div>
             {loading ? (
               <Skeleton />
@@ -282,42 +287,42 @@ export default function GameAnalytics() {
                 gradientId="playGrad"
                 yFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v))}
                 tooltipFormatter={fmtMin}
-                emptyMessage="No playtime data for this period."
+                emptyMessage={t('analytics.noPlaytimeData')}
               />
             )}
           </div>
         </section>
 
         {/* ── Per-game breakdown table ─────────────────────────────────── */}
-        <section className="analytics-breakdown">
+        <section className="analytics-breakdown" aria-label={t('analytics.breakdownLabel')}>
           <div className="analytics-card">
             <div className="analytics-card-header">
               <div>
-                <span className="kicker">// ALL GAMES</span>
-                <h2>Per-Game Breakdown</h2>
+                <span className="kicker">// {t('analytics.allGamesKicker')}</span>
+                <h2>{t('analytics.breakdownTitle')}</h2>
               </div>
-              <Link to="/developers" className="view-all-link">Back to Dashboard</Link>
+              <Link to="/developers" className="view-all-link">{t('analytics.backToDashboard')}</Link>
             </div>
 
             {loading ? (
               <Skeleton h={120} />
             ) : gamesBreakdown.length === 0 ? (
               <div className="analytics-empty">
-                <p>No games data available.</p>
+                <p>{t('analytics.noGamesData')}</p>
                 <Link to="/game-studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
-                  Create Your First Game
+                  {t('analytics.createFirstGame')}
                 </Link>
               </div>
             ) : (
               <div className="breakdown-table-wrapper">
-                <table className="breakdown-table">
+                <table className="breakdown-table" aria-label={t('analytics.breakdownTableLabel')}>
                   <thead>
                     <tr>
-                      <th>Game</th>
-                      <th>Revenue</th>
-                      <th>Active Players</th>
-                      <th>Sessions</th>
-                      <th>View</th>
+                      <th scope="col">{t('analytics.colGame')}</th>
+                      <th scope="col">{t('analytics.colRevenue')}</th>
+                      <th scope="col">{t('analytics.colActivePlayers')}</th>
+                      <th scope="col">{t('analytics.colSessions')}</th>
+                      <th scope="col">{t('analytics.colView')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -325,10 +330,11 @@ export default function GameAnalytics() {
                       <tr
                         key={g.id}
                         className={String(g.id) === String(gameId) ? 'row-active' : ''}
+                        aria-current={String(g.id) === String(gameId) ? 'true' : undefined}
                       >
                         <td className="game-name-cell">
                           {String(g.id) === String(gameId) && (
-                            <span className="current-badge" aria-label="Current game">&#9654;</span>
+                            <span className="current-badge" aria-label={t('analytics.currentGame')}>&#9654;</span>
                           )}
                           {g.title}
                         </td>
@@ -339,9 +345,9 @@ export default function GameAnalytics() {
                           <Link
                             to={`/developers/analytics/${g.id}`}
                             className={`breakdown-link${String(g.id) === String(gameId) ? ' active' : ''}`}
-                            aria-label={`View analytics for ${g.title}`}
+                            aria-label={t('analytics.viewGameAnalytics', { title: g.title })}
                           >
-                            View
+                            {t('analytics.view')}
                           </Link>
                         </td>
                       </tr>

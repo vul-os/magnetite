@@ -65,20 +65,22 @@ function Toast({ toast, onRemove, position = 'top-right' }) {
   return (
     <div
       className={`toast toast-${toast.type} toast-${position} ${isExiting ? 'toast-exit' : ''} ${isEntering ? 'toast-enter' : ''}`}
-      role="alert"
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
     >
-      <div className="toast-icon">{icons[toast.type]}</div>
+      <div className="toast-icon" aria-hidden="true">{icons[toast.type]}</div>
       <div className="toast-content">
         {toast.title && <div className="toast-title">{toast.title}</div>}
         <div className="toast-message">{toast.message}</div>
       </div>
-      <button className="toast-close" onClick={handleClose} aria-label="Close">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <button className="toast-close" onClick={handleClose} aria-label="Close notification">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       </button>
       {toast.duration !== 0 && (
-        <div className="toast-progress">
+        <div className="toast-progress" aria-hidden="true">
           <div className="toast-progress-bar" style={{ width: `${progress}%` }} />
         </div>
       )}
@@ -88,7 +90,13 @@ function Toast({ toast, onRemove, position = 'top-right' }) {
 
 export function ToastContainer({ toasts, removeToast, position = 'top-right' }) {
   return (
-    <div className={`toast-container toast-container-${position}`}>
+    <div
+      className={`toast-container toast-container-${position}`}
+      aria-live="polite"
+      aria-atomic="false"
+      aria-label="Notifications"
+      role="region"
+    >
       {toasts.map(toast => (
         <Toast
           key={toast.id}

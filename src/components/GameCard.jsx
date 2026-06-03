@@ -1,5 +1,6 @@
 import { useState, memo } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from '../i18n/useTranslation';
 import './GameCard.css';
 
 const StarRating = memo(function StarRating({ rating }) {
@@ -69,6 +70,7 @@ const ErrorState = memo(function ErrorState() {
 });
 
 export default memo(function GameCard({ game, loading = false, showPlayButton = true }) {
+  const { t } = useTranslation();
   const [imageError, setImageError] = useState(false);
 
   if (loading || !game) {
@@ -79,18 +81,18 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
   const isPopular = playersOnline > 100;
   const isNew = game.is_new || false;
 
-  const thumbnailSrc = imageError 
-    ? null 
+  const thumbnailSrc = imageError
+    ? null
     : (game.thumbnail || `https://picsum.photos/seed/${game.id}/400/225`);
 
   return (
-    <div className="game-card">
-      <Link to={`/game/${game.id}`} className="card-image-link">
+    <article className="game-card" aria-label={game.title}>
+      <Link to={`/game/${game.id}`} className="card-image-link" tabIndex={-1} aria-hidden="true">
         <div className="card-image">
           {thumbnailSrc ? (
             <img
               src={thumbnailSrc}
-              alt={game.title}
+              alt=""
               loading="lazy"
               onError={() => setImageError(true)}
             />
@@ -100,8 +102,8 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
           {isPopular && !imageError && <Badge type="Popular" />}
           {isNew && !imageError && <Badge type="New" />}
           {showPlayButton && !imageError && (
-            <div className="play-overlay">
-              <span className="play-button">Play Now</span>
+            <div className="play-overlay" aria-hidden="true">
+              <span className="play-button">{t('games.play')}</span>
             </div>
           )}
         </div>
@@ -116,23 +118,23 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
         <div className="card-meta">
           <StarRating rating={game.rating ?? 0} />
           {playersOnline > 0 && (
-            <span className="players-online">
-              <svg className="online-icon" viewBox="0 0 24 24" fill="currentColor">
+            <span className="players-online" aria-label={`${playersOnline.toLocaleString()} ${t('games.players')} online`}>
+              <svg className="online-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />
               </svg>
-              {playersOnline.toLocaleString()} online
+              <span aria-hidden="true">{playersOnline.toLocaleString()} online</span>
             </span>
           )}
         </div>
 
         <div className="card-footer">
-          <span className="price">
-            <span className="price-value">{game.fee_per_session}</span>
-            <span className="price-currency">USDC</span>
-            <span className="price-period">/session</span>
+          <span className="price" aria-label={`${game.fee_per_session} USDC per session`}>
+            <span className="price-value" aria-hidden="true">{game.fee_per_session}</span>
+            <span className="price-currency" aria-hidden="true">USDC</span>
+            <span className="price-period" aria-hidden="true">/{t('games.sessions')}</span>
           </span>
         </div>
       </div>
-    </div>
+    </article>
   );
 });

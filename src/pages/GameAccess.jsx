@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import SubscriptionBadge from '../components/SubscriptionBadge';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 import './GameAccess.css';
 
 // Fallback shown when the API is unavailable (VITE_USE_MOCKS=true or backend down)
@@ -44,6 +45,7 @@ function PlayersIcon() {
 }
 
 export default function GameAccess() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [games, setGames]           = useState(null);   // null = loading
@@ -121,16 +123,16 @@ export default function GameAccess() {
     <Layout>
       <div className="game-access-page">
         {/* ── Header ── */}
-        <header className="game-access-header">
+        <header className="game-access-header" aria-labelledby="game-access-heading">
           <div className="header-content">
-            <span className="header-kicker">// Your Library</span>
-            <h1>Game Access</h1>
-            <p>All Rust-powered games available on your current subscription tier.</p>
+            <span className="header-kicker">{t('game.accessKicker')}</span>
+            <h1 id="game-access-heading">{t('game.accessTitle')}</h1>
+            <p>{t('game.accessSubtitle')}</p>
           </div>
           <div className="header-badge">
-            <span className="your-tier-label">// Current Tier</span>
+            <span className="your-tier-label">{t('game.currentTierKicker')}</span>
             {loading
-              ? <span className="tier-loading" aria-busy="true">Loading…</span>
+              ? <span className="tier-loading" aria-busy="true">{t('game.tierLoading')}</span>
               : <SubscriptionBadge tier={currentTier} size="lg" showIcon />
             }
           </div>
@@ -139,12 +141,12 @@ export default function GameAccess() {
         {/* ── Error banner ── */}
         {loadError && (
           <div className="game-access-error" role="alert">
-            Could not load your subscription data — showing free-tier access.
+            {t('game.subscriptionError')}
           </div>
         )}
 
         {/* ── Tier legend ── */}
-        <div className="tier-legend" role="list" aria-label="Subscription tiers">
+        <div className="tier-legend" role="list" aria-label={t('game.tiersLabel')}>
           {TIER_ORDER.map((tier) => (
             <div
               key={tier}
@@ -159,11 +161,11 @@ export default function GameAccess() {
         </div>
 
         {/* ── Games grid ── */}
-        <section className="games-section" aria-label="Available games">
+        <section className="games-section" aria-label={t('game.gamesLabel')}>
           {loading ? (
             <div className="loading-state" aria-live="polite" aria-busy="true">
               <span className="spinner" aria-hidden="true" />
-              <span>Loading games…</span>
+              <span>{t('game.loadingGames')}</span>
             </div>
           ) : (
             <div className="games-grid">
@@ -175,17 +177,17 @@ export default function GameAccess() {
                   <article
                     key={game.id}
                     className={`game-access-card ${isLocked ? 'locked' : ''}`}
-                    aria-label={`${game.title}${isLocked ? ' — locked' : ''}`}
+                    aria-label={isLocked ? t('game.gameLockedLabel', { title: game.title }) : game.title}
                   >
                     <div className="game-image-wrapper">
                       {imgSrc && (
-                        <img src={imgSrc} alt="" className="game-image" loading="lazy" aria-hidden="true" />
+                        <img src={imgSrc} alt={game.title} className="game-image" loading="lazy" />
                       )}
                       {isLocked && (
                         <div className="locked-overlay" aria-hidden="true">
                           <LockIcon className="lock-icon-svg" />
                           <span className="lock-tier">
-                            Requires <SubscriptionBadge tier={game.tier ?? 'pro'} size="sm" />
+                            {t('game.requiresTier')} <SubscriptionBadge tier={game.tier ?? 'pro'} size="sm" />
                           </span>
                         </div>
                       )}
@@ -201,7 +203,7 @@ export default function GameAccess() {
                         <div className="game-meta">
                           <span className="player-count-badge">
                             <PlayersIcon />
-                            {Number(game.players).toLocaleString()} players
+                            {t('game.playersCount', { count: Number(game.players).toLocaleString() })}
                           </span>
                         </div>
                       )}
@@ -210,15 +212,17 @@ export default function GameAccess() {
                         <button
                           className="btn-access-upgrade"
                           onClick={() => navigate('/subscription')}
+                          aria-label={t('game.upgradeTo', { tier: nextTier.charAt(0).toUpperCase() + nextTier.slice(1) })}
                         >
-                          Upgrade to {nextTier.charAt(0).toUpperCase() + nextTier.slice(1)} to Unlock
+                          {t('game.upgradeTo', { tier: nextTier.charAt(0).toUpperCase() + nextTier.slice(1) })}
                         </button>
                       ) : !isLocked ? (
                         <button
                           className="btn-access-play"
                           onClick={() => navigate(`/matchmaking?game=${game.id}`)}
+                          aria-label={`${t('game.playNow')} ${game.title}`}
                         >
-                          ▶  Play Now
+                          {t('game.playNow')}
                         </button>
                       ) : null}
                     </div>
@@ -231,16 +235,16 @@ export default function GameAccess() {
 
         {/* ── Upgrade CTA ── */}
         {!loading && nextTier && (
-          <section className="upgrade-prompt" aria-label="Upgrade your subscription">
-            <span className="upgrade-kicker">// Unlock More</span>
+          <section className="upgrade-prompt" aria-labelledby="upgrade-heading">
+            <span className="upgrade-kicker">{t('game.moreGamesKicker')}</span>
             <div className="upgrade-content">
-              <h2>More Games Await</h2>
+              <h2 id="upgrade-heading">{t('game.moreGamesTitle')}</h2>
               <p>
                 Upgrade to <SubscriptionBadge tier={nextTier} size="md" showIcon /> and unlock additional
                 Rust-powered games.
               </p>
               <button className="btn-upgrade-cta" onClick={() => navigate('/subscription')}>
-                Upgrade Now →
+                {t('game.upgradeNow')}
               </button>
             </div>
           </section>

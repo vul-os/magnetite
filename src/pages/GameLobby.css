@@ -228,6 +228,12 @@
   .lobby-code-block { align-items: flex-start; }
 }
 
+@media (max-width: 400px) {
+  .lobby-header-right { gap: 0.5rem; }
+  .lobby-store-btn, .lobby-conn-status, .lobby-server-status { font-size: 0.65rem; padding: 0.3rem 0.5rem; }
+  .lobby-points-value { font-size: var(--text-sm); }
+}
+
 /* ─── Header right-side group ──────────────────────────────────────────────── */
 .lobby-header-right {
   display: flex;

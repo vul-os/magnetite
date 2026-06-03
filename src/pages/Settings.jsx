@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import ThemeToggle from '../components/ThemeToggle';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n/useTranslation';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -60,25 +61,21 @@ function ToggleSetting({ label, description, checked, onChange }) {
 
 /* ── SaveButton ─────────────────────────────────────────────────────────────── */
 function SaveButton({ saving, success }) {
+  const { t } = useTranslation();
   return (
-    <button type="submit" className="settings-save-btn" disabled={saving}>
+    <button type="submit" className="settings-save-btn" disabled={saving} aria-busy={saving}>
       {saving
-        ? <><span className="spinner spinner-sm" aria-hidden="true" /> Saving&hellip;</>
+        ? <><span className="spinner spinner-sm" aria-hidden="true" />{t('account.saving')}</>
         : success
-          ? <><span style={{ color: 'var(--color-success)' }}>✓</span> Saved!</>
-          : 'Save Changes'}
+          ? <><span style={{ color: 'var(--color-success)' }} aria-hidden="true">✓</span>{t('account.saved')}</>
+          : t('account.saveChanges')}
     </button>
   );
 }
 
 /* ── Tab definitions ─────────────────────────────────────────────────────────── */
-const TABS = [
-  { id: 'profile',       label: 'Profile',       icon: '◉' },
-  { id: 'account',       label: 'Account',        icon: '⬡' },
-  { id: 'appearance',    label: 'Appearance',     icon: '◈' },
-  { id: 'notifications', label: 'Notifications',  icon: '◎' },
-  { id: 'privacy',       label: 'Privacy',        icon: '⊕' },
-];
+const TAB_IDS = ['profile', 'account', 'appearance', 'notifications', 'privacy'];
+const TAB_ICONS = { profile: '◉', account: '⬡', appearance: '◈', notifications: '◎', privacy: '⊕' };
 
 const DEFAULT_PROFILE = MOCK_USER ?? {
   name: '', email: '', avatar: '', bio: '', location: '',
@@ -97,6 +94,8 @@ function normaliseSession(s) {
 }
 
 export default function Settings() {
+  const { t } = useTranslation();
+  const TABS = TAB_IDS.map(id => ({ id, label: t(`account.settingsTab_${id}`), icon: TAB_ICONS[id] }));
   const [activeTab, setActiveTab] = useState('profile');
   const [profile, setProfile]     = useState(DEFAULT_PROFILE);
   const [account, setAccount]     = useState({ email: DEFAULT_PROFILE.email, twoFactorEnabled: false });
@@ -212,44 +211,44 @@ export default function Settings() {
   /* ── Tab panels ─────────────────────────────────────────────────────────── */
 
   const renderProfile = () => (
-    <form className="settings-tab-panel" onSubmit={handleSave}>
+    <form className="settings-tab-panel" onSubmit={handleSave} aria-label={t('account.profileFormLabel')}>
       {saveError && (
-        <div className="auth-error" role="alert" style={{ marginBottom: '1rem' }}>
+        <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
           <span className="auth-error-icon" aria-hidden="true">!</span>
           {saveError}
         </div>
       )}
 
       <div className="settings-section">
-        <h3 className="settings-section-title">Profile Information</h3>
-        <p className="settings-section-desc">Visible to other players and developers on Magnetite.</p>
+        <h3 className="settings-section-title">{t('account.profileInformation')}</h3>
+        <p className="settings-section-desc">{t('account.profileInfoDesc')}</p>
 
         {/* Avatar */}
         <div className="settings-avatar-row">
           <div className="settings-avatar-wrap">
             {profile.avatar ? (
-              <img src={profile.avatar} alt="Your avatar" className="settings-avatar" loading="lazy" />
+              <img src={profile.avatar} alt={t('account.yourAvatar')} className="settings-avatar" loading="lazy" />
             ) : (
-              <div className="settings-avatar" style={{ background: 'var(--color-bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
+              <div className="settings-avatar" style={{ background: 'var(--color-bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }} aria-label={t('account.avatarInitial')}>
                 {profile.name ? profile.name.charAt(0).toUpperCase() : '?'}
               </div>
             )}
             <div className="settings-avatar-overlay" aria-hidden="true">
-              <span>Change</span>
+              <span>{t('account.change')}</span>
             </div>
-            <label className="settings-avatar-input-label" aria-label="Upload new avatar">
+            <label className="settings-avatar-input-label" aria-label={t('account.uploadNewAvatar')}>
               <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
             </label>
           </div>
           <div className="settings-avatar-meta">
-            <span className="settings-field-label">AVATAR</span>
-            <p className="settings-avatar-hint">Recommended 200×200 px · JPG or PNG · Max 2 MB</p>
+            <span className="settings-field-label">{t('account.avatarLabel')}</span>
+            <p className="settings-avatar-hint">{t('account.avatarHint')}</p>
           </div>
         </div>
 
         <div className="settings-grid-2">
           <div className="settings-field">
-            <label className="settings-field-label" htmlFor="set-username">Username</label>
+            <label className="settings-field-label" htmlFor="set-username">{t('auth.usernameLabel')}</label>
             <input
               id="set-username"
               type="text"
@@ -259,27 +258,27 @@ export default function Settings() {
             />
           </div>
           <div className="settings-field">
-            <label className="settings-field-label" htmlFor="set-location">Location</label>
+            <label className="settings-field-label" htmlFor="set-location">{t('account.locationLabel')}</label>
             <input
               id="set-location"
               type="text"
               value={profile.location}
               onChange={(e) => setProfile({ ...profile, location: e.target.value })}
               className="settings-input"
-              placeholder="City, Country"
+              placeholder={t('account.locationPlaceholder')}
             />
           </div>
         </div>
 
         <div className="settings-field">
-          <label className="settings-field-label" htmlFor="set-bio">Bio</label>
+          <label className="settings-field-label" htmlFor="set-bio">{t('account.bioLabel')}</label>
           <textarea
             id="set-bio"
             value={profile.bio}
             onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
             className="settings-input settings-textarea"
             rows={3}
-            placeholder="Tell the community about yourself and your games…"
+            placeholder={t('account.bioPlaceholder')}
           />
         </div>
       </div>
@@ -288,46 +287,46 @@ export default function Settings() {
   );
 
   const renderAccount = () => (
-    <form className="settings-tab-panel" onSubmit={handleSave}>
+    <form className="settings-tab-panel" onSubmit={handleSave} aria-label={t('account.accountFormLabel')}>
       <div className="settings-section">
-        <h3 className="settings-section-title">Email Address</h3>
+        <h3 className="settings-section-title">{t('account.emailAddress')}</h3>
         <div className="settings-input-action">
           <input
             type="email"
             value={account.email}
             onChange={(e) => setAccount({ ...account, email: e.target.value })}
             className="settings-input"
-            aria-label="Email address"
+            aria-label={t('auth.emailLabel')}
           />
-          <button type="button" className="settings-action-btn">Change Email</button>
+          <button type="button" className="settings-action-btn">{t('account.changeEmail')}</button>
         </div>
       </div>
 
       <div className="settings-section">
-        <h3 className="settings-section-title">Password</h3>
+        <h3 className="settings-section-title">{t('account.passwordSection')}</h3>
         <div className="settings-grid-2">
           <div className="settings-field">
-            <label className="settings-field-label" htmlFor="cur-pw-set">Current Password</label>
-            <input id="cur-pw-set" type="password" className="settings-input" placeholder="Enter current password" />
+            <label className="settings-field-label" htmlFor="cur-pw-set">{t('account.currentPassword')}</label>
+            <input id="cur-pw-set" type="password" className="settings-input" placeholder={t('account.enterCurrentPassword')} autoComplete="current-password" />
           </div>
           <div />
           <div className="settings-field">
-            <label className="settings-field-label" htmlFor="new-pw-set">New Password</label>
-            <input id="new-pw-set" type="password" className="settings-input" placeholder="New password" />
+            <label className="settings-field-label" htmlFor="new-pw-set">{t('auth.newPasswordLabel')}</label>
+            <input id="new-pw-set" type="password" className="settings-input" placeholder={t('auth.newPasswordPlaceholder')} autoComplete="new-password" />
           </div>
           <div className="settings-field">
-            <label className="settings-field-label" htmlFor="conf-pw-set">Confirm New Password</label>
-            <input id="conf-pw-set" type="password" className="settings-input" placeholder="Confirm new password" />
+            <label className="settings-field-label" htmlFor="conf-pw-set">{t('account.confirmNewPassword')}</label>
+            <input id="conf-pw-set" type="password" className="settings-input" placeholder={t('auth.confirmPasswordPlaceholder')} autoComplete="new-password" />
           </div>
         </div>
-        <button type="button" className="settings-action-btn">Update Password</button>
+        <button type="button" className="settings-action-btn">{t('account.updatePassword')}</button>
       </div>
 
       <div className="settings-section">
-        <h3 className="settings-section-title">Two-Factor Authentication</h3>
+        <h3 className="settings-section-title">{t('account.twoFactorAuth')}</h3>
         <ToggleSetting
-          label="Enable 2FA"
-          description="Add a second layer of security with an authenticator app."
+          label={t('account.enable2FA')}
+          description={t('account.enable2FADesc')}
           checked={account.twoFactorEnabled}
           onChange={(v) => setAccount({ ...account, twoFactorEnabled: v })}
         />
@@ -336,18 +335,18 @@ export default function Settings() {
       <div className="settings-section">
         <div className="settings-section-head">
           <div>
-            <h3 className="settings-section-title">Active Sessions</h3>
-            <p className="settings-section-desc">Your account is signed in on these devices.</p>
+            <h3 className="settings-section-title">{t('account.activeSessions')}</h3>
+            <p className="settings-section-desc">{t('account.activeSessionsDesc')}</p>
           </div>
         </div>
         <div className="settings-sessions">
           {sessionsLoading ? (
             <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }} aria-busy="true">
-              <span className="spinner spinner-sm" aria-hidden="true" /> Loading sessions&hellip;
+              <span className="spinner spinner-sm" aria-hidden="true" /> {t('account.loadingSessions')}
             </div>
           ) : sessions.length === 0 ? (
             <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)' }}>
-              No active sessions
+              {t('account.noActiveSessions')}
             </p>
           ) : (
             sessions.map(session => (
@@ -359,7 +358,7 @@ export default function Settings() {
                   <span className="settings-session-device">
                     {session.device}
                     {session.current && (
-                      <span className="settings-session-badge">Current</span>
+                      <span className="settings-session-badge">{t('account.currentSession')}</span>
                     )}
                   </span>
                   <span className="settings-session-meta">
@@ -371,8 +370,9 @@ export default function Settings() {
                     type="button"
                     className="settings-revoke-btn"
                     onClick={() => handleRevokeSession(session.id)}
+                    aria-label={t('account.revokeSessionLabel', { device: session.device })}
                   >
-                    Revoke
+                    {t('account.revoke')}
                   </button>
                 )}
               </div>
@@ -388,8 +388,8 @@ export default function Settings() {
   const renderAppearance = () => (
     <div className="settings-tab-panel">
       <div className="settings-section">
-        <h3 className="settings-section-title">Theme</h3>
-        <p className="settings-section-desc">Choose your preferred colour scheme.</p>
+        <h3 className="settings-section-title">{t('account.theme')}</h3>
+        <p className="settings-section-desc">{t('account.themeDesc')}</p>
         <div className="settings-theme-row">
           <ThemeToggle />
         </div>
@@ -398,66 +398,66 @@ export default function Settings() {
   );
 
   const renderNotifications = () => (
-    <form className="settings-tab-panel" onSubmit={handleSave}>
+    <form className="settings-tab-panel" onSubmit={handleSave} aria-label={t('account.notificationsFormLabel')}>
       <div className="settings-section">
-        <h3 className="settings-section-title">Email Notifications</h3>
+        <h3 className="settings-section-title">{t('account.emailNotifications')}</h3>
         <ToggleSetting
-          label="Promotional Emails"
-          description="Updates about new games and special offers."
+          label={t('account.promotionalEmails')}
+          description={t('account.promotionalEmailsDesc')}
           checked={notifications.email.promotions}
           onChange={(v) => setNotifications({ ...notifications, email: { ...notifications.email, promotions: v } })}
         />
         <ToggleSetting
-          label="Account Updates"
-          description="Important account and security notifications."
+          label={t('account.accountUpdates')}
+          description={t('account.accountUpdatesDesc')}
           checked={notifications.email.updates}
           onChange={(v) => setNotifications({ ...notifications, email: { ...notifications.email, updates: v } })}
         />
         <ToggleSetting
-          label="Newsletter"
-          description="Weekly community digest and platform news."
+          label={t('account.newsletter')}
+          description={t('account.newsletterDesc')}
           checked={notifications.email.newsletter}
           onChange={(v) => setNotifications({ ...notifications, email: { ...notifications.email, newsletter: v } })}
         />
       </div>
 
       <div className="settings-section">
-        <h3 className="settings-section-title">Push Notifications</h3>
+        <h3 className="settings-section-title">{t('account.pushNotifications')}</h3>
         <ToggleSetting
-          label="Match Found"
-          description="When matchmaking finds a game for you."
+          label={t('account.matchFound')}
+          description={t('account.matchFoundDesc')}
           checked={notifications.push.matches}
           onChange={(v) => setNotifications({ ...notifications, push: { ...notifications.push, matches: v } })}
         />
         <ToggleSetting
-          label="Friend Activity"
-          description="When friends join, leave, or come online."
+          label={t('account.friendActivity')}
+          description={t('account.friendActivityDesc')}
           checked={notifications.push.friends}
           onChange={(v) => setNotifications({ ...notifications, push: { ...notifications.push, friends: v } })}
         />
         <ToggleSetting
-          label="System Announcements"
-          description="Platform maintenance and system messages."
+          label={t('account.systemAnnouncements')}
+          description={t('account.systemAnnouncementsDesc')}
           checked={notifications.push.system}
           onChange={(v) => setNotifications({ ...notifications, push: { ...notifications.push, system: v } })}
         />
       </div>
 
       <div className="settings-section">
-        <h3 className="settings-section-title">Email Frequency</h3>
+        <h3 className="settings-section-title">{t('account.emailFrequency')}</h3>
         <div className="settings-field" style={{ maxWidth: 260 }}>
-          <label className="settings-field-label" htmlFor="notif-freq">Digest frequency</label>
+          <label className="settings-field-label" htmlFor="notif-freq">{t('account.digestFrequency')}</label>
           <select
             id="notif-freq"
             value={notifications.frequency}
             onChange={(e) => setNotifications({ ...notifications, frequency: e.target.value })}
             className="settings-input"
           >
-            <option value="instant">Instant</option>
-            <option value="hourly">Hourly Digest</option>
-            <option value="daily">Daily Digest</option>
-            <option value="weekly">Weekly Digest</option>
-            <option value="never">Never</option>
+            <option value="instant">{t('account.freqInstant')}</option>
+            <option value="hourly">{t('account.freqHourly')}</option>
+            <option value="daily">{t('account.freqDaily')}</option>
+            <option value="weekly">{t('account.freqWeekly')}</option>
+            <option value="never">{t('account.freqNever')}</option>
           </select>
         </div>
       </div>
@@ -467,29 +467,29 @@ export default function Settings() {
   );
 
   const renderPrivacy = () => (
-    <form className="settings-tab-panel" onSubmit={handleSave}>
+    <form className="settings-tab-panel" onSubmit={handleSave} aria-label={t('account.privacyFormLabel')}>
       <div className="settings-section">
-        <h3 className="settings-section-title">Profile Visibility</h3>
+        <h3 className="settings-section-title">{t('account.profileVisibility')}</h3>
         <div className="settings-field" style={{ maxWidth: 320 }}>
-          <label className="settings-field-label" htmlFor="prof-vis">Who can view your profile</label>
+          <label className="settings-field-label" htmlFor="prof-vis">{t('account.whoCanView')}</label>
           <select
             id="prof-vis"
             value={privacy.profileVisibility}
             onChange={(e) => setPrivacy({ ...privacy, profileVisibility: e.target.value })}
             className="settings-input"
           >
-            <option value="public">Public — anyone can view</option>
-            <option value="friends">Friends Only</option>
-            <option value="private">Private — only you</option>
+            <option value="public">{t('account.visibilityPublic')}</option>
+            <option value="friends">{t('account.visibilityFriends')}</option>
+            <option value="private">{t('account.visibilityPrivate')}</option>
           </select>
         </div>
       </div>
 
       <div className="settings-section">
-        <h3 className="settings-section-title">Visibility Options</h3>
+        <h3 className="settings-section-title">{t('account.visibilityOptions')}</h3>
         <ToggleSetting
-          label="Show on Leaderboards"
-          description="Appear in public rankings with your scores."
+          label={t('account.showOnLeaderboards')}
+          description={t('account.showOnLeaderboardsDesc')}
           checked={privacy.showOnLeaderboards}
           onChange={(v) => setPrivacy({ ...privacy, showOnLeaderboards: v })}
         />
@@ -497,18 +497,18 @@ export default function Settings() {
 
       {privacy.blockedUsers.length > 0 && (
         <div className="settings-section">
-          <h3 className="settings-section-title">Blocked Users</h3>
-          <p className="settings-section-desc">Blocked users cannot view your profile or message you.</p>
+          <h3 className="settings-section-title">{t('account.blockedUsers')}</h3>
+          <p className="settings-section-desc">{t('account.blockedUsersDesc')}</p>
           <div className="settings-blocked-list">
             {privacy.blockedUsers.map(userId => (
               <div key={userId} className="settings-blocked-item">
-                <span>Blocked User #{userId}</span>
+                <span>{t('account.blockedUserLabel', { id: userId })}</span>
                 <button
                   type="button"
                   className="settings-action-btn"
                   onClick={() => setPrivacy(prev => ({ ...prev, blockedUsers: prev.blockedUsers.filter(id => id !== userId) }))}
                 >
-                  Unblock
+                  {t('account.unblock')}
                 </button>
               </div>
             ))}
@@ -526,13 +526,13 @@ export default function Settings() {
         {/* Header */}
         <header className="settings-page-header reveal reveal-1">
           <span className="kicker">// SETTINGS</span>
-          <h1 className="settings-page-title">Account Settings</h1>
-          <p className="settings-page-subtitle">Manage your profile, security, and preferences.</p>
+          <h1 className="settings-page-title">{t('account.settingsTitle')}</h1>
+          <p className="settings-page-subtitle">{t('account.settingsSubtitle')}</p>
         </header>
 
         <div className="settings-layout reveal reveal-2">
           {/* Sidebar nav */}
-          <nav className="settings-sidebar" aria-label="Settings sections">
+          <nav className="settings-sidebar" aria-label={t('account.settingsNavLabel')}>
             {TABS.map(tab => (
               <button
                 key={tab.id}
@@ -547,10 +547,10 @@ export default function Settings() {
           </nav>
 
           {/* Content area */}
-          <div className="settings-content-area">
+          <div className="settings-content-area" role="region" aria-label={t('account.settingsContent')}>
             {loading ? (
               <div className="settings-loading">
-                <span className="spinner spinner-lg" style={{ color: 'var(--color-accent)' }} aria-label="Loading settings" />
+                <span className="spinner spinner-lg" style={{ color: 'var(--color-accent)' }} aria-label={t('account.loadingSettings')} />
               </div>
             ) : (
               <>

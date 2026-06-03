@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from '../../i18n/useTranslation';
 import './Pagination.css';
 
 export default function Pagination({
@@ -9,6 +10,8 @@ export default function Pagination({
   onItemsPerPageChange,
   totalItems = 0,
 }) {
+  const { t } = useTranslation();
+
   const startIndex = useMemo(() => {
     if (totalItems === 0) return 0;
     return (currentPage - 1) * itemsPerPage + 1;
@@ -68,10 +71,10 @@ export default function Pagination({
   }
 
   return (
-    <div className="pagination-container">
-      <div className="pagination-info">
+    <nav className="pagination-container" aria-label={t('common.pagination.label')}>
+      <div className="pagination-info" aria-live="polite" aria-atomic="true">
         <span className="showing-text">
-          Showing {startIndex}-{endIndex} of {totalItems}
+          {t('common.pagination.showing', { start: startIndex, end: endIndex, total: totalItems })}
         </span>
       </div>
 
@@ -81,8 +84,9 @@ export default function Pagination({
             className="pagination-btn first-last"
             disabled={currentPage === 1}
             onClick={() => handlePageClick(1)}
+            aria-label={t('common.pagination.first')}
           >
-            First
+            {t('common.pagination.first')}
           </button>
         )}
 
@@ -90,19 +94,23 @@ export default function Pagination({
           className="pagination-btn prev-next"
           disabled={currentPage === 1}
           onClick={() => handlePageClick(currentPage - 1)}
+          aria-label={t('common.pagination.previous')}
         >
-          Previous
+          {t('common.pagination.previous')}
         </button>
 
-        <div className="page-numbers">
+        <div className="page-numbers" role="list">
           {pageNumbers.map((page, index) => (
             page === '...' ? (
-              <span key={`ellipsis-${index}`} className="ellipsis">...</span>
+              <span key={`ellipsis-${index}`} className="ellipsis" aria-hidden="true">...</span>
             ) : (
               <button
                 key={page}
+                role="listitem"
                 className={`page-number ${currentPage === page ? 'active' : ''}`}
                 onClick={() => handlePageClick(page)}
+                aria-label={t('common.pagination.page', { page })}
+                aria-current={currentPage === page ? 'page' : undefined}
               >
                 {page}
               </button>
@@ -114,8 +122,9 @@ export default function Pagination({
           className="pagination-btn prev-next"
           disabled={currentPage === totalPages}
           onClick={() => handlePageClick(currentPage + 1)}
+          aria-label={t('common.pagination.next')}
         >
-          Next
+          {t('common.pagination.next')}
         </button>
 
         {totalPages > 1 && (
@@ -123,15 +132,16 @@ export default function Pagination({
             className="pagination-btn first-last"
             disabled={currentPage === totalPages}
             onClick={() => handlePageClick(totalPages)}
+            aria-label={t('common.pagination.last')}
           >
-            Last
+            {t('common.pagination.last')}
           </button>
         )}
       </div>
 
       {onItemsPerPageChange && (
         <div className="per-page-selector">
-          <label htmlFor="per-page-select">Items per page:</label>
+          <label htmlFor="per-page-select">{t('common.pagination.itemsPerPage')}</label>
           <select
             id="per-page-select"
             value={itemsPerPage}
@@ -144,6 +154,6 @@ export default function Pagination({
           </select>
         </div>
       )}
-    </div>
+    </nav>
   );
 }

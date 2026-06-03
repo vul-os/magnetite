@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Layout from '../components/Layout';
+import { useTranslation } from '../i18n/useTranslation';
 
 const MOCK_BLOCKED_USERS = [
   { id: 'user_001', username: 'cheater123', blockedDate: '2026-04-10' },
@@ -28,6 +29,7 @@ function ToggleSetting({ label, description, checked, onChange }) {
 }
 
 export default function PrivacySettings() {
+  const { t } = useTranslation();
   const [privacy, setPrivacy] = useState({
     profileVisibility:  'public',
     showOnLeaderboards: true,
@@ -74,63 +76,59 @@ export default function PrivacySettings() {
         {/* Header */}
         <header className="settings-page-header reveal reveal-1">
           <span className="kicker">// PRIVACY</span>
-          <h1 className="settings-page-title">Privacy</h1>
-          <p className="settings-page-subtitle">
-            Control who can see your data and how your information is used.
-          </p>
+          <h1 className="settings-page-title">{t('account.privacyTitle')}</h1>
+          <p className="settings-page-subtitle">{t('account.privacySubtitle')}</p>
         </header>
 
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} aria-label={t('account.privacyFormLabel')}>
           {/* Profile Visibility */}
-          <section className="settings-section reveal reveal-2">
-            <h2 className="settings-section-title">Profile Visibility</h2>
+          <section className="settings-section reveal reveal-2" aria-labelledby="priv-vis-heading">
+            <h2 id="priv-vis-heading" className="settings-section-title">{t('account.profileVisibility')}</h2>
             <div className="settings-field" style={{ maxWidth: 340, marginBottom: 0 }}>
-              <label className="settings-field-label" htmlFor="priv-vis">Who can view your profile</label>
+              <label className="settings-field-label" htmlFor="priv-vis">{t('account.whoCanView')}</label>
               <select
                 id="priv-vis"
                 value={privacy.profileVisibility}
                 onChange={(e) => setPrivacy({ ...privacy, profileVisibility: e.target.value })}
                 className="settings-input"
               >
-                <option value="public">Public — anyone can view</option>
-                <option value="friends">Friends Only</option>
-                <option value="private">Private — only you</option>
+                <option value="public">{t('account.visibilityPublic')}</option>
+                <option value="friends">{t('account.visibilityFriends')}</option>
+                <option value="private">{t('account.visibilityPrivate')}</option>
               </select>
             </div>
           </section>
 
           {/* Visibility options */}
-          <section className="settings-section reveal reveal-3">
-            <h2 className="settings-section-title">Visibility Options</h2>
+          <section className="settings-section reveal reveal-3" aria-labelledby="priv-options-heading">
+            <h2 id="priv-options-heading" className="settings-section-title">{t('account.visibilityOptions')}</h2>
             <ToggleSetting
-              label="Show on Leaderboards"
-              description="Appear in public rankings with your scores and stats."
+              label={t('account.showOnLeaderboards')}
+              description={t('account.showOnLeaderboardsDesc')}
               checked={privacy.showOnLeaderboards}
               onChange={(v) => setPrivacy({ ...privacy, showOnLeaderboards: v })}
             />
             <ToggleSetting
-              label="Show Online Status"
-              description="Let other players see when you&apos;re active."
+              label={t('account.showOnlineStatus')}
+              description={t('account.showOnlineStatusDesc')}
               checked={privacy.showOnlineStatus}
               onChange={(v) => setPrivacy({ ...privacy, showOnlineStatus: v })}
             />
             <ToggleSetting
-              label="Allow Friend Requests"
-              description="Other players can send you friend requests."
+              label={t('account.allowFriendRequests')}
+              description={t('account.allowFriendRequestsDesc')}
               checked={privacy.allowFriendRequests}
               onChange={(v) => setPrivacy({ ...privacy, allowFriendRequests: v })}
             />
           </section>
 
           {/* Blocked users */}
-          <section className="settings-section reveal reveal-4">
-            <h2 className="settings-section-title">Blocked Users</h2>
-            <p className="settings-section-desc">
-              Blocked players cannot view your profile or send you messages.
-            </p>
+          <section className="settings-section reveal reveal-4" aria-labelledby="priv-blocked-heading">
+            <h2 id="priv-blocked-heading" className="settings-section-title">{t('account.blockedUsers')}</h2>
+            <p className="settings-section-desc">{t('account.blockedUsersDesc')}</p>
             {blockedUsers.length === 0 ? (
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
-                You haven&apos;t blocked any users.
+                {t('account.noBlockedUsers')}
               </p>
             ) : (
               <div className="settings-blocked-list">
@@ -141,15 +139,16 @@ export default function PrivacySettings() {
                         @{user.username}
                       </span>
                       <span style={{ marginLeft: '0.75rem', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        Blocked {user.blockedDate}
+                        {t('account.blockedOn', { date: user.blockedDate })}
                       </span>
                     </div>
                     <button
                       type="button"
                       className="settings-action-btn"
                       onClick={() => handleUnblockUser(user.id)}
+                      aria-label={t('account.unblockUserLabel', { username: user.username })}
                     >
-                      Unblock
+                      {t('account.unblock')}
                     </button>
                   </div>
                 ))}
@@ -157,47 +156,50 @@ export default function PrivacySettings() {
             )}
           </section>
 
-          <button type="submit" className="settings-save-btn reveal reveal-5" disabled={saving} style={{ marginBottom: '2rem' }}>
+          <button
+            type="submit"
+            className="settings-save-btn reveal reveal-5"
+            disabled={saving}
+            aria-busy={saving}
+            style={{ marginBottom: '2rem' }}
+          >
             {saving
-              ? <><span className="spinner spinner-sm" aria-hidden="true" /> Saving&hellip;</>
+              ? <><span className="spinner spinner-sm" aria-hidden="true" />{t('account.saving')}</>
               : saveSuccess
-                ? <><span style={{ color: 'var(--color-success)' }}>✓</span> Saved!</>
-                : 'Save Changes'}
+                ? <><span style={{ color: 'var(--color-success)' }} aria-hidden="true">✓</span>{t('account.saved')}</>
+                : t('account.saveChanges')}
           </button>
         </form>
 
         {/* Data Management */}
-        <section className="settings-section reveal reveal-6">
-          <h2 className="settings-section-title">Data Management</h2>
+        <section className="settings-section reveal reveal-6" aria-labelledby="priv-data-heading">
+          <h2 id="priv-data-heading" className="settings-section-title">{t('account.dataManagement')}</h2>
           <div className="settings-danger-row">
             <div>
-              <span className="settings-danger-action-title">Export Your Data</span>
-              <p className="settings-danger-desc">
-                Download a copy of all your profile, game, and transaction data.
-              </p>
+              <span className="settings-danger-action-title">{t('account.exportYourData')}</span>
+              <p className="settings-danger-desc">{t('account.exportYourDataDesc')}</p>
             </div>
             <button
               type="button"
               className="settings-action-btn"
               onClick={handleExportData}
               disabled={exporting}
+              aria-busy={exporting}
             >
               {exporting
-                ? <><span className="spinner spinner-sm" aria-hidden="true" /> Exporting&hellip;</>
-                : 'Request Export'}
+                ? <><span className="spinner spinner-sm" aria-hidden="true" /><span className="sr-only">{t('account.exportingData')}</span></>
+                : t('account.requestExport')}
             </button>
           </div>
         </section>
 
         {/* Danger zone */}
-        <section className="settings-section settings-danger-zone reveal reveal-7">
-          <h2 className="settings-section-title">Danger Zone</h2>
+        <section className="settings-section settings-danger-zone reveal reveal-7" aria-labelledby="priv-danger-heading">
+          <h2 id="priv-danger-heading" className="settings-section-title">{t('account.dangerZone')}</h2>
           <div className="settings-danger-row">
             <div>
-              <span className="settings-danger-action-title">Delete Account</span>
-              <p className="settings-danger-desc">
-                Permanently delete your account and all associated data. This cannot be undone.
-              </p>
+              <span className="settings-danger-action-title">{t('account.deleteAccount')}</span>
+              <p className="settings-danger-desc">{t('account.deleteAccountDesc')}</p>
             </div>
             {showDeleteConfirm ? (
               <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
@@ -207,14 +209,14 @@ export default function PrivacySettings() {
                   style={{ padding: '0.5rem 1rem', border: '1px solid var(--color-error)', background: 'rgba(255,84,104,0.1)', color: 'var(--color-error)' }}
                   onClick={handleDeleteAccount}
                 >
-                  Yes, delete
+                  {t('account.confirmDelete')}
                 </button>
                 <button
                   type="button"
                   className="settings-action-btn"
                   onClick={() => setShowDeleteConfirm(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -224,7 +226,7 @@ export default function PrivacySettings() {
                 style={{ padding: '0.5rem 1rem', border: '1px solid rgba(255,84,104,0.4)', color: 'var(--color-error)' }}
                 onClick={() => setShowDeleteConfirm(true)}
               >
-                Delete Account
+                {t('account.deleteAccount')}
               </button>
             )}
           </div>
