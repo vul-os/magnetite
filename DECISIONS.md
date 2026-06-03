@@ -2101,7 +2101,25 @@ the read-only pages lacked (`backend/src/superadmin/ops.rs`, audited + CSRF):
   key creation). The page is explicit that the 15%/30% fees are code constants the billing report verifies —
   I did NOT rewire the live session-fee from settings (the seeded `platform_fee_percentage='30'` conflicts with
   the code's 15%, so wiring it would silently change money splits). Shared pages.rs helpers made `pub(super)`.
-Verified: 0 warnings/fmt + 16 superadmin tests (added ops-routes-require-session).
+- **Moderation** (`/superadmin/moderation`): comms-moderation queue over `chat_flags` (pending/resolved/dismissed/
+  all); resolve/dismiss a pending flag (super-admin isn't a users row so `resolved_by` is NULL, actor in note +
+  audit). Author links to user page for a ban.
+Verified: 0 warnings/fmt + 16 superadmin tests (ops-routes-require-session covers payouts/settings/moderation).
+
+### Adversarial security review of the super-admin module (+ 2 fixes)
+Ran a focused subagent review of all 7 superadmin files. Verified CLEAN: SQL injection (billing.rs format! SQL
+only interpolates module consts; `user_role` column is whitelisted; everything else parameterised), XSS (every
+dynamic value goes through `esc()`), CSRF (every mutating POST checks `csrf_ok`/login double-submit), open
+redirect/CRLF (Location is always a fixed internal path), auth bypass (all mutating routes under
+`route_layer(require_session)`; allowlist+headers wrap the merged router), session/cookie/credential handling,
+payout/moderation/settings logic, info leak (recorder never stores tokens/auth headers). Two real findings fixed:
+- **MEDIUM (conditional):** `client_ip` took the *leftmost* X-Forwarded-For value — spoofable — so under
+  `TRUST_PROXY=true` a forged XFF could bypass the IP allowlist AND the per-IP lockout. Fixed: select the client
+  IP `TRUSTED_PROXY_COUNT` hops from the **right** (rightmost entries are appended by our own infra); fall back
+  to the peer socket if the chain is shorter than expected. New env `TRUSTED_PROXY_COUNT` (default 1) + a unit
+  test asserting the leftmost spoof is never returned.
+- **LOW:** `setting_update` accepted any free-form value; fixed with numeric-suffix validation so a malformed
+  numeric setting can't break a downstream consumer.
 
 ### Developer tools — already integrated (GDS wave, earlier)
 Confirmed present + routed: in-browser **Game Studio** (`/developers/studio`, Monaco), **Deploy** flow

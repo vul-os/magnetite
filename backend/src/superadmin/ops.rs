@@ -478,6 +478,24 @@ pub async fn setting_update(
     if !csrf_ok(&sess, &f.csrf) {
         return redirect("/superadmin/settings?err=CSRF+check+failed");
     }
+    // Light type validation: numeric-typed keys must hold a parseable number, so a
+    // malformed value can't break a downstream consumer that parses without a fallback.
+    let numeric_suffixes = [
+        "_percentage",
+        "_rate",
+        "_count",
+        "_days",
+        "_secs",
+        "_seconds",
+        "_limit",
+        "_amount",
+        "_max",
+        "_min",
+    ];
+    let looks_numeric = numeric_suffixes.iter().any(|suf| f.key.ends_with(suf));
+    if looks_numeric && f.value.trim().parse::<f64>().is_err() {
+        return redirect("/superadmin/settings?err=Value+must+be+numeric+for+this+key");
+    }
     // Update an existing key only (UPSERT would let the form invent arbitrary keys).
     let res = sqlx::query("UPDATE platform_settings SET value=$2, updated_at=NOW() WHERE key=$1")
         .bind(&f.key)

@@ -28,6 +28,8 @@ pub struct AnalyticsState {
     pub pool: PgPool,
     pub geo: Arc<GeoResolver>,
     pub trust_proxy: bool,
+    /// Number of trusted proxies appending XFF (for correct client-IP selection).
+    pub trusted_proxy_count: usize,
     pub enabled: bool,
     /// Fraction of successful (<400) requests to persist; errors are always kept.
     pub sample_rate: f64,
@@ -51,10 +53,16 @@ impl AnalyticsState {
             .filter(|h| !h.trim().is_empty())
             .unwrap_or_else(|| "cf-ipcountry".to_string())
             .to_lowercase();
+        let trusted_proxy_count = std::env::var("TRUSTED_PROXY_COUNT")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|c| *c >= 1)
+            .unwrap_or(1);
         Self {
             pool,
             geo,
             trust_proxy,
+            trusted_proxy_count,
             enabled,
             sample_rate,
             country_header,
@@ -103,7 +111,12 @@ pub async fn record_analytics(
         return next.run(request).await;
     }
 
-    let ip = super::auth::client_ip(&headers, Some(peer.ip()), state.trust_proxy);
+    let ip = super::auth::client_ip(
+        &headers,
+        Some(peer.ip()),
+        state.trust_proxy,
+        state.trusted_proxy_count,
+    );
     let user_id = best_effort_user(&headers);
     let user_agent = header_str(&headers, "user-agent");
     let referer = header_str(&headers, "referer");

@@ -170,7 +170,12 @@ async fn security_and_allowlist(
     request: Request<Body>,
     next: Next,
 ) -> Response<Body> {
-    let ip = client_ip(request.headers(), Some(peer.ip()), state.config.trust_proxy);
+    let ip = client_ip(
+        request.headers(),
+        Some(peer.ip()),
+        state.config.trust_proxy,
+        state.config.trusted_proxy_count,
+    );
     if !state.config.ip_allowed(&ip) {
         let mut resp = (StatusCode::FORBIDDEN, "Forbidden").into_response();
         apply_security_headers(&mut resp);
@@ -243,7 +248,12 @@ async fn login_submit(
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response<Body> {
-    let ip = client_ip(&headers, Some(peer.ip()), state.config.trust_proxy);
+    let ip = client_ip(
+        &headers,
+        Some(peer.ip()),
+        state.config.trust_proxy,
+        state.config.trusted_proxy_count,
+    );
 
     // Brute-force lockout.
     if let Err(secs) = state.guard.check(&ip).await {

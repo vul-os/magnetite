@@ -48,6 +48,7 @@ pub struct SuperAdminConfig {
     credential: Credential,
     pub secure_cookie: bool,
     pub trust_proxy: bool,
+    pub trusted_proxy_count: usize,
     allowlist: Vec<IpRule>,
     pub session_ttl: Duration,
 }
@@ -87,6 +88,11 @@ impl SuperAdminConfig {
         let trust_proxy = std::env::var("TRUST_PROXY")
             .map(|v| v == "true")
             .unwrap_or(false);
+        let trusted_proxy_count = std::env::var("TRUSTED_PROXY_COUNT")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|c| *c >= 1)
+            .unwrap_or(1);
         let allowlist =
             parse_allowlist(&std::env::var("SUPERADMIN_IP_ALLOWLIST").unwrap_or_default());
         let ttl_secs = std::env::var("SUPERADMIN_SESSION_TTL_SECS")
@@ -99,6 +105,7 @@ impl SuperAdminConfig {
             credential,
             secure_cookie,
             trust_proxy,
+            trusted_proxy_count,
             allowlist,
             session_ttl: Duration::from_secs(ttl_secs),
         })
@@ -472,16 +479,39 @@ pub fn token_from_cookies(headers: &HeaderMap) -> Option<String> {
 
 /// Best-effort client IP. Honours `X-Forwarded-For`/`X-Real-IP` only when the
 /// deployment is configured to trust an upstream proxy.
-pub fn client_ip(headers: &HeaderMap, peer: Option<IpAddr>, trust_proxy: bool) -> String {
+///
+/// Security: the *leftmost* XFF entry is fully attacker-controlled (any client can
+/// prepend a value), so trusting it for the allowlist/lockout would let a spoofed
+/// header bypass both. Instead we take the entry `trusted_proxy_count` positions
+/// from the **right** — those rightmost hops are appended by our own infrastructure.
+/// `trusted_proxy_count` must equal the number of trusted proxies that append XFF
+/// (default 1). If the chain is shorter than expected, we fall back to the peer
+/// socket address rather than trust a forged value.
+pub fn client_ip(
+    headers: &HeaderMap,
+    peer: Option<IpAddr>,
+    trust_proxy: bool,
+    trusted_proxy_count: usize,
+) -> String {
     if trust_proxy {
+        let count = trusted_proxy_count.max(1);
         if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-            if let Some(first) = xff.split(',').next() {
-                let t = first.trim();
-                if !t.is_empty() {
-                    return t.to_string();
+            let parts: Vec<&str> = xff
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            // Pick the first untrusted hop from the right: index len - count.
+            if parts.len() >= count {
+                let candidate = parts[parts.len() - count];
+                if !candidate.is_empty() {
+                    return candidate.to_string();
                 }
             }
+            // Chain shorter than the configured proxy count → don't trust XFF.
         }
+        // X-Real-IP is set by the proxy (overwriting any client value), so it is
+        // a reasonable single-hop fallback.
         if let Some(xr) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
             if !xr.trim().is_empty() {
                 return xr.trim().to_string();
@@ -533,10 +563,31 @@ mod tests {
             credential: Credential::Plain("x".into()),
             secure_cookie: false,
             trust_proxy: false,
+            trusted_proxy_count: 1,
             allowlist: vec![],
             session_ttl: Duration::from_secs(60),
         };
         assert!(cfg.ip_allowed("8.8.8.8"));
+    }
+
+    #[test]
+    fn client_ip_uses_trusted_hop_not_spoofable_leftmost() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            "x-forwarded-for",
+            "1.1.1.1, 2.2.2.2, 3.3.3.3".parse().unwrap(),
+        );
+        // 1 trusted proxy → the rightmost entry is the one our proxy appended.
+        assert_eq!(client_ip(&h, None, true, 1), "3.3.3.3");
+        // 2 trusted proxies → second from the right.
+        assert_eq!(client_ip(&h, None, true, 2), "2.2.2.2");
+        // The attacker-controllable leftmost value is never returned.
+        assert_ne!(client_ip(&h, None, true, 1), "1.1.1.1");
+        // When not trusting a proxy, the peer socket address wins regardless of XFF.
+        let peer = Some(IpAddr::from_str("9.9.9.9").unwrap());
+        assert_eq!(client_ip(&h, peer, false, 1), "9.9.9.9");
+        // Chain shorter than the configured proxy count → fall back to peer.
+        assert_eq!(client_ip(&h, peer, true, 9), "9.9.9.9");
     }
 
     #[tokio::test]
