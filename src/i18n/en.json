@@ -30,9 +30,9 @@
       "last": "Last",
       "page": "Page {{page}}",
       "itemsPerPage": "Items per page:"
-    }
+    },
+    "greeting": "Hello, {{name}}!"
   },
-
   "search": {
     "label": "Search Magnetite",
     "placeholder": "Search games, users…",
@@ -55,7 +55,6 @@
     "shortcutSelect": "Select",
     "shortcutClose": "Close"
   },
-
   "nav": {
     "home": "Home",
     "marketplace": "Marketplace",
@@ -72,7 +71,6 @@
     "about": "About",
     "profile": "Profile"
   },
-
   "auth": {
     "emailLabel": "Email address",
     "passwordLabel": "Password",
@@ -159,7 +157,6 @@
       "sessionExpired": "Your session has expired, please sign in again"
     }
   },
-
   "account": {
     "settingsTitle": "Account Settings",
     "settingsSubtitle": "Manage your profile, security, and preferences.",
@@ -322,7 +319,6 @@
     "editProfileSubtitle": "This information is visible to other players and developers.",
     "editProfileFormLabel": "Edit profile form"
   },
-
   "games": {
     "play": "Play",
     "download": "Download",
@@ -344,7 +340,6 @@
     "players": "players",
     "sessions": "sessions"
   },
-
   "wallet": {
     "title": "Wallet",
     "balance": "Balance",
@@ -365,7 +360,6 @@
       "payout": "Payout"
     }
   },
-
   "social": {
     "friends": "Friends",
     "addFriend": "Add friend",
@@ -384,7 +378,6 @@
     "offline": "Offline",
     "playing": "Playing"
   },
-
   "notifications": {
     "title": "Notifications",
     "markAllRead": "Mark all as read",
@@ -398,7 +391,6 @@
       "system": "System notification"
     }
   },
-
   "developer": {
     "dashboard": "Developer Dashboard",
     "myGames": "My Games",
@@ -417,7 +409,6 @@
     "sessions": "Sessions",
     "avgSession": "Avg. session duration"
   },
-
   "admin": {
     "title": "Admin",
     "users": "Users",
@@ -433,7 +424,6 @@
     "unbanUser": "Unban user",
     "reason": "Reason"
   },
-
   "subscription": {
     "title": "Subscription",
     "currentPlan": "Current plan",
@@ -449,7 +439,6 @@
       "enterprise": "Enterprise"
     }
   },
-
   "errors": {
     "notFound": "Page not found",
     "notFoundMessage": "The page you're looking for doesn't exist.",
@@ -462,7 +451,6 @@
     "goHome": "Go to homepage",
     "goBack": "Go back"
   },
-
   "navbar": {
     "logoLabel": "Magnetite home",
     "siteNav": "Site sections",
@@ -487,7 +475,6 @@
     "getStarted": "Get started",
     "notificationsDialog": "Notifications"
   },
-
   "footer": {
     "logoLabel": "Magnetite home",
     "tagline": "The open-source platform for building, distributing, and monetizing Rust games — at any scale.",
@@ -526,7 +513,6 @@
       "english": "English"
     }
   },
-
   "store": {
     "marketplaceHeading": "Discover Rust Games",
     "marketplaceKicker": "// RUST GAME CATALOG",
@@ -574,7 +560,6 @@
     "getStarted": "Get Started",
     "subscribe": "Subscribe"
   },
-
   "game": {
     "studioTitle": "Game Studio",
     "studioKicker": "// RUST GAME STUDIO",
@@ -707,7 +692,6 @@
     "controlsShoot": "LMB / Space — Shoot",
     "controlsOverlay": "Tab — Toggle overlay"
   },
-
   "about": {
     "kicker": "// ABOUT MAGNETITE",
     "heroTitle": "Built for Rust developers,",
@@ -748,7 +732,6 @@
     "footerNav": "Footer navigation",
     "footerCopyright": "© 2026 Magnetite. Open source under MIT License."
   },
-
   "notifPrefs": {
     "kicker": "// NOTIFICATIONS",
     "title": "Notification Preferences",
@@ -774,7 +757,6 @@
     "saveSuccess": "Preferences saved successfully.",
     "saveError": "Failed to save preferences. Please try again."
   },
-
   "communities": {
     "typingOne": "{{name}} is typing…",
     "typingTwo": "{{name1}} and {{name2}} are typing…",
@@ -808,7 +790,6 @@
     "joinVoiceLabel": "Join {{name}}",
     "joinVoice": "Join Voice"
   },
-
   "friends": {
     "kicker": "Social Network",
     "title": "Friends",
@@ -846,7 +827,6 @@
     "unblockLabel": "Unblock {{name}}",
     "unblock": "Unblock"
   },
-
   "messages": {
     "pageLabel": "Direct messages",
     "sidebarLabel": "Conversations",
@@ -874,7 +854,6 @@
     "unread": "unread",
     "unreadCount": "{{count}} unread"
   },
-
   "leaderboard": {
     "kicker": "Compete Worldwide",
     "title": "Leaderboard",
@@ -897,7 +876,6 @@
     "next": "Next",
     "pageOf": "Page {{current}} of {{total}}"
   },
-
   "achievements": {
     "kicker": "Trophy Room",
     "title": "Achievements",
@@ -919,7 +897,6 @@
     "emptyDescCategory": "No {{category}} achievements found. Try a different category.",
     "showAll": "Show All"
   },
-
   "wishlist": {
     "kicker": "Saved Games",
     "title": "My Wishlist",
@@ -933,7 +910,6 @@
     "removeLabel": "Remove {{title}} from wishlist",
     "remove": "Remove from Wishlist"
   },
-
   "dashboard": {
     "kicker": "RUST GAME DEVELOPER",
     "title": "Developer Dashboard",
@@ -979,7 +955,6 @@
     "recentActivity": "Recent Activity",
     "activityFeedLabel": "Recent activity feed"
   },
-
   "walletPage": {
     "kicker": "USD WALLET",
     "title": "Wallet",
@@ -1021,7 +996,6 @@
     "loadingTransactions": "Loading transactions…",
     "noTransactions": "No transactions yet. Add funds to get started."
   },
-
   "earnings": {
     "kicker": "DEVELOPER EARNINGS",
     "title": "Earnings",
@@ -1084,7 +1058,6 @@
     "transactionsTableLabel": "Transaction history",
     "payoutsTableLabel": "Payout history"
   },
-
   "analytics": {
     "kicker": "GAME ANALYTICS",
     "title": "Game Analytics",

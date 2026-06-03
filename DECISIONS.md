@@ -1889,3 +1889,17 @@ authoritative full build/lint/test after. Verify-on-disk + re-check-frontend-lin
 | A4-6 | Tabs.jsx / Tooltip.jsx pre-existing warnings | Not fixed | Out of scope; warnings existed before this wave; fixing would require logic refactor |
 
 **Verified:** `npx eslint <all 19 owned files>` EXIT 0; 3 pre-existing warnings in Tabs.jsx and Tooltip.jsx (unchanged by this agent); 0 new errors. `aria-label` grep: 60+ occurrences across owned files; `t(` grep: 60+ calls. en.json valid JSON, 28 new keys appended under `common.pagination` and `search` namespaces.
+
+---
+
+## §6 — QUALITY-1 done; next = DEPTH-1 (2026-06-03)
+
+QUALITY-1 (`e1f86e4`): a11y + mobile + i18n coverage + notification preferences. Caught + fixed an i18n
+regression (useTranslation returned raw keys without a provider → 41 test failures; hook now resolves en.json
+without a provider). en.json reconciled: 853 t() keys used, only common.greeting missing (a JSDoc example) — added.
+**Next wave DEPTH-1 (chosen):** deeper differentiated features — (1) backend: enforce notification prefs +
+auto-flag heuristic on reviews/chat + moderation status; (2) frontend depth (SOLE frontend owner + build +
+package.json): Monaco in-browser code editor in Studio + Settings notif-prefs tab + moderation queue UI; (3) i18n
+second locale (Spanish es.json + locale switching); (4) docs/AUDIT/GAPS refresh; (5) backend tests for the new
+depth. Clean ownership: one backend feature agent, one frontend agent (owns client.js/build/package.json), one
+i18n agent (src/i18n only), one docs agent, one tests agent.
