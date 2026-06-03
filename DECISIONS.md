@@ -1978,3 +1978,19 @@ readiness (dir attribute scaffolding); (4) backend store-purchase hardening (his
 store-refund) + migration; (5) tests (backend store + frontend PWA/bottom-nav/store — test files only, no new dep).
 Clean ownership: one frontend agent (client.js+pkg+build), one deploy agent (new k8s/nomad dirs + docs), one i18n
 agent (src/i18n), one backend agent (marketplace.rs+migration), one tests agent. No shared-file contention.
+
+---
+
+## §6 — PRODUCTION-1 done; next = CONSOLIDATE+OBSERVE (2026-06-03)
+
+PRODUCTION-1 (`8d6bf56`): PWA + mobile nav + store UX, k8s/nomad deploy, French locale, store hardening. Caught
+4 issues (fmt, 2 lint errors, a stub-instead-of-real BottomNav test). The product is launch-shaped — codeable
+high-value work is thinning, so this wave adds the last real gaps + consolidates. **Next wave CONSOLIDATE+OBSERVE
+(chosen):** (1) backend OBSERVABILITY — a real Prometheus /metrics (request count + latency histogram + error
+rate via a tower layer, active-WS + game-session gauges, DB pool) + request-id structured logging (metrics.rs
+currently returns only pool stats — audit gap). (2) frontend (sole client.js+package.json+build): add a11y test
+dep (vitest-axe) + safely reduce the 82 lint warnings (trivial set-state-in-effect/unused) with NO behavior change.
+(3) a11y AXE test suite (test files; uses the dep #2 adds) on key pages. (4) end-to-end SMOKE — scripts/smoke.sh +
+docs exercising the full local stack (compose health → build a game → run-runtime → web-client connect → replay
+roundtrip). (5) final docs/AUDIT/GAPS/README consolidation reflecting the whole build. Clean ownership; one
+coordination point (#2 adds the axe dep for #3). After this, evaluate whether to STOP (only external-infra/creds left).
