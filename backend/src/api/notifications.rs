@@ -197,6 +197,21 @@ pub async fn broadcast_notification(notification: Notification) {
     }
 }
 
+// ── Notification category mapping ────────────────────────────────────────────
+
+/// Maps a notification type string to its preference category.
+/// Returns None for unknown types (treated as always-enabled).
+pub fn category_for_type(notification_type: &str) -> Option<&'static str> {
+    match notification_type {
+        "PAYOUT_COMPLETE" | "SUBSCRIPTION_RENEWAL" => Some("payouts"),
+        "FRIEND_REQUEST" | "GAME_INVITE" => Some("social"),
+        "ACHIEVEMENT_UNLOCKED" => Some("achievements"),
+        // SYSTEM notifications with no special category default to always enabled
+        // unless we detect a marketing flag in the data (handled at call site).
+        _ => None,
+    }
+}
+
 pub struct NotificationService {
     pool: PgPool,
 }
@@ -206,10 +221,66 @@ impl NotificationService {
         Self { pool }
     }
 
+    /// Creates an in-app notification, respecting the user's preference toggles.
+    ///
+    /// Preference enforcement logic:
+    ///   1. Resolve the category for the notification type.
+    ///   2. If the user has disabled `in_app` for that category, skip DB insert
+    ///      and return `None` — no notification is created.
+    ///   3. If the user has disabled `push` for that category, the notification
+    ///      is still persisted (in-app inbox) but the push channel is not called.
+    ///      (Email suppression is also noted here for future email delivery.)
+    ///
+    /// `marketing` category is opt-in (default false); if a caller passes
+    /// `notification_type = "SYSTEM"` AND sets `data.marketing = true`, we route
+    /// it through the marketing category check.
     pub async fn create_notification(
         &self,
         req: &CreateNotificationRequest,
     ) -> Result<Notification> {
+        // ── Preference gate ───────────────────────────────────────────────────
+        // Determine the category; fall back to "marketing" when the data payload
+        // explicitly marks this as a marketing notification.
+        let effective_category: Option<&str> = {
+            let base = category_for_type(&req.notification_type);
+            if base.is_some() {
+                base
+            } else if req
+                .data
+                .as_ref()
+                .and_then(|d| d.get("marketing"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                Some("marketing")
+            } else {
+                None // Unknown / unclassified — always allow.
+            }
+        };
+
+        if let Some(category) = effective_category {
+            // Check in_app preference — this is the primary delivery channel for
+            // the notification inbox.  If disabled, skip entirely.
+            let in_app_enabled =
+                channel_enabled_inner(&self.pool, req.user_id, category, "in_app").await;
+            if !in_app_enabled {
+                tracing::debug!(
+                    user_id = %req.user_id,
+                    category,
+                    notification_type = %req.notification_type,
+                    "Skipping notification: user disabled in_app for category"
+                );
+                // Return a sentinel error that callers can ignore via ok() if needed,
+                // or propagate. We use a specific variant so the HTTP handler can still
+                // surface a 204/skipped result rather than a 500.
+                return Err(AppError::BadRequest(format!(
+                    "Notification suppressed: user disabled in_app for category '{}'",
+                    category
+                )));
+            }
+        }
+
+        // ── Persist ───────────────────────────────────────────────────────────
         let notification = sqlx::query_as::<_, Notification>(
             "INSERT INTO notifications (id, user_id, type, title, body, data, read, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, false, NOW())
@@ -225,9 +296,32 @@ impl NotificationService {
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
 
+        // ── Push gate (future extension) ──────────────────────────────────────
+        // If we later integrate a push provider, check push_enabled here before
+        // calling it.  The notification itself is already in the inbox at this point.
+        // let push_enabled = channel_enabled_inner(&self.pool, req.user_id, category, "push").await;
+
+        // ── Email gate (future extension) ─────────────────────────────────────
+        // If email delivery is added, check email_enabled before sending.
+        // let email_enabled = channel_enabled_inner(&self.pool, req.user_id, category, "email").await;
+
         broadcast_notification(notification.clone()).await;
 
         Ok(notification)
+    }
+
+    /// Variant that silently drops the notification when preferences say to skip
+    /// rather than returning an error.  Use this from internal callers (achievements,
+    /// payout services) where a suppressed notification is not a call error.
+    pub async fn try_create_notification(
+        &self,
+        req: &CreateNotificationRequest,
+    ) -> Result<Option<Notification>> {
+        match self.create_notification(req).await {
+            Ok(n) => Ok(Some(n)),
+            Err(AppError::BadRequest(ref msg)) if msg.contains("suppressed") => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn create_achievement_notification(
@@ -235,10 +329,10 @@ impl NotificationService {
         user_id: Uuid,
         achievement_name: &str,
         achievement_icon: Option<&str>,
-    ) -> Result<Notification> {
+    ) -> Result<Option<Notification>> {
         let data = achievement_icon.map(|icon| serde_json::json!({ "achievement_icon": icon }));
 
-        self.create_notification(&CreateNotificationRequest {
+        self.try_create_notification(&CreateNotificationRequest {
             user_id,
             notification_type: NotificationType::AchievementUnlocked.as_str().to_string(),
             title: format!("Achievement Unlocked: {}", achievement_name),
@@ -252,8 +346,8 @@ impl NotificationService {
         &self,
         user_id: Uuid,
         from_username: &str,
-    ) -> Result<Notification> {
-        self.create_notification(&CreateNotificationRequest {
+    ) -> Result<Option<Notification>> {
+        self.try_create_notification(&CreateNotificationRequest {
             user_id,
             notification_type: NotificationType::FriendRequest.as_str().to_string(),
             title: "New Friend Request".to_string(),
@@ -269,8 +363,8 @@ impl NotificationService {
         from_username: &str,
         game_title: &str,
         game_id: Uuid,
-    ) -> Result<Notification> {
-        self.create_notification(&CreateNotificationRequest {
+    ) -> Result<Option<Notification>> {
+        self.try_create_notification(&CreateNotificationRequest {
             user_id,
             notification_type: NotificationType::GameInvite.as_str().to_string(),
             title: "Game Invite".to_string(),
@@ -287,8 +381,8 @@ impl NotificationService {
         &self,
         user_id: Uuid,
         amount: &str,
-    ) -> Result<Notification> {
-        self.create_notification(&CreateNotificationRequest {
+    ) -> Result<Option<Notification>> {
+        self.try_create_notification(&CreateNotificationRequest {
             user_id,
             notification_type: NotificationType::PayoutComplete.as_str().to_string(),
             title: "Payout Complete".to_string(),
@@ -302,8 +396,8 @@ impl NotificationService {
         &self,
         user_id: Uuid,
         tier_name: &str,
-    ) -> Result<Notification> {
-        self.create_notification(&CreateNotificationRequest {
+    ) -> Result<Option<Notification>> {
+        self.try_create_notification(&CreateNotificationRequest {
             user_id,
             notification_type: NotificationType::SubscriptionRenewal.as_str().to_string(),
             title: "Subscription Renewed".to_string(),
@@ -318,8 +412,10 @@ impl NotificationService {
         user_id: Uuid,
         title: &str,
         body: &str,
-    ) -> Result<Notification> {
-        self.create_notification(&CreateNotificationRequest {
+    ) -> Result<Option<Notification>> {
+        // System notifications are unclassified — always deliver to in-app inbox.
+        // (category_for_type returns None for SYSTEM, so no preference gate fires.)
+        self.try_create_notification(&CreateNotificationRequest {
             user_id,
             notification_type: NotificationType::System.as_str().to_string(),
             title: title.to_string(),
@@ -758,6 +854,17 @@ pub async fn update_preferences(
     .map_err(|e| AppError::Database(e.to_string()))?;
 
     Ok(Json(prefs))
+}
+
+/// Internal helper — same as `channel_enabled` but named distinctly so the
+/// borrow checker doesn't confuse it with the public API helper.
+async fn channel_enabled_inner(
+    pool: &PgPool,
+    user_id: Uuid,
+    category: &str,
+    channel: &str,
+) -> bool {
+    channel_enabled(pool, user_id, category, channel).await
 }
 
 /// Returns whether the user has enabled a given channel for a given category.

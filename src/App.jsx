@@ -68,6 +68,7 @@ const AdminGames = lazy(() => import('./pages/admin/Games'));
 const AdminFinance = lazy(() => import('./pages/admin/Finance'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 const AdminReviewModeration = lazy(() => import('./pages/admin/ReviewModeration'));
+const AdminModeration = lazy(() => import('./pages/admin/Moderation'));
 const Communities = lazy(() => import('./pages/Communities'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Streams = lazy(() => import('./pages/Streams'));
@@ -186,6 +187,7 @@ function App() {
                       <Route path="/admin/finance" element={<AdminRoute><AdminFinance /></AdminRoute>} />
                       <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
                       <Route path="/admin/review-moderation" element={<AdminRoute><AdminReviewModeration /></AdminRoute>} />
+                      <Route path="/admin/moderation" element={<AdminRoute><AdminModeration /></AdminRoute>} />
                       <Route path="/communities" element={<Communities />} />
                       <Route path="/messages" element={<Messages />} />
                       <Route path="/streams" element={<Streams />} />

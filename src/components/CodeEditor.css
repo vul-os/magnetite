@@ -1,0 +1,157 @@
+/* ── CodeEditor — Magnetite industrial styling ─────────────────────────────── */
+
+/* ── Root wrapper ─────────────────────────────────────────────────────────── */
+.ce-root {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: #07070b;
+  box-shadow: var(--shadow-md);
+  transition: border-color var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out);
+}
+
+.ce-root:focus-within {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 1px var(--color-accent-soft), var(--shadow-md);
+}
+
+/* ── Header bar ───────────────────────────────────────────────────────────── */
+.ce-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.875rem;
+  background: #0f0f16;
+  border-bottom: 1px solid var(--color-border);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* macOS-style traffic-light dots */
+.ce-dots {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ce-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+.ce-dot--red   { background: #ff5f57; }
+.ce-dot--amber { background: #febc2e; }
+.ce-dot--green { background: #28c840; }
+
+.ce-filename {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.01em;
+  flex: 1;
+  /* Truncate long paths */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ce-lang-badge {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border: 1px solid rgba(56, 225, 200, 0.2);
+  flex-shrink: 0;
+}
+
+/* ── Editor viewport ──────────────────────────────────────────────────────── */
+.ce-viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  /* Monaco renders into a div inside here */
+}
+
+/* Ensure Monaco's container fills the viewport */
+.ce-viewport > div {
+  display: block !important;
+}
+
+/* ── Loading skeleton ─────────────────────────────────────────────────────── */
+@keyframes ce-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.ce-skeleton {
+  background: #07070b;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.ce-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  height: 22px;
+  animation: ce-shimmer 1.6s linear infinite;
+}
+
+.ce-skeleton-ln {
+  width: 24px;
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(90deg,
+    #1b1b27 25%,
+    #23232e 50%,
+    #1b1b27 75%
+  );
+  background-size: 800px 100%;
+  animation: ce-shimmer 1.6s linear infinite;
+  flex-shrink: 0;
+}
+
+.ce-skeleton-code {
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(90deg,
+    #1b1b27 25%,
+    #23232e 50%,
+    #1b1b27 75%
+  );
+  background-size: 800px 100%;
+  animation: ce-shimmer 1.6s linear infinite;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .ce-skeleton-row,
+  .ce-skeleton-ln,
+  .ce-skeleton-code {
+    animation: none;
+  }
+}
+
+/* ── GameStudio integration classes ───────────────────────────────────────── */
+/* Applied by GameStudio when the editor is embedded in the configure/result step */
+.studio-code-editor {
+  margin-top: 1.5rem;
+}
+
+.studio-code-editor .ce-root {
+  border-radius: var(--radius);
+}

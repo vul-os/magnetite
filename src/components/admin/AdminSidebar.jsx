@@ -4,7 +4,8 @@ const NAV_ITEMS = [
   { id: 'dashboard',          label: 'Dashboard',       icon: '◉', path: '/admin'                   },
   { id: 'users',              label: 'Users',           icon: '👥', path: '/admin/users'             },
   { id: 'games',              label: 'Games',           icon: '⬡',  path: '/admin/games'             },
-  { id: 'review-moderation',  label: 'Moderation',      icon: '⚑',  path: '/admin/review-moderation' },
+  { id: 'moderation',         label: 'Mod Queue',       icon: '⚑',  path: '/admin/moderation'       },
+  { id: 'review-moderation',  label: 'Reviews',         icon: '◈',  path: '/admin/review-moderation' },
   { id: 'finance',            label: 'Finance',         icon: '$',  path: '/admin/finance'           },
   { id: 'settings',           label: 'Settings',        icon: '⚙',  path: '/admin/settings'         },
 ];

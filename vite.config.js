@@ -8,6 +8,13 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Monaco editor — large; lazy-loaded only when CodeEditor mounts.
+          // Keep ALL monaco internals in a single chunk for better caching.
+          if (id.includes('node_modules/monaco-editor') ||
+              id.includes('node_modules/@monaco-editor')) {
+            return 'vendor-monaco'
+          }
+
           // recharts + its deps (d3-*, victory-*, etc.) — heavy, dashboard-only
           if (id.includes('node_modules/recharts') ||
               id.includes('node_modules/d3-') ||

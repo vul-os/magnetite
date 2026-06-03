@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import Layout from '../components/Layout';
 import GamePreview from '../components/GamePreview';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 import './GameStudio.css';
+
+// Lazy-load CodeEditor — Monaco is large; keep it out of the main bundle.
+// The dynamic import means Vite/Rollup will split Monaco into its own chunk.
+const CodeEditor = lazy(() => import('../components/CodeEditor'));
 
 // ── SVG template preview art ──────────────────────────────────────────────────
 // Each function returns a unique geometric composition for the template card.
@@ -240,6 +244,9 @@ export default function GameStudio() {
   const [step, setStep]         = useState(STEP_TEMPLATE);
   const [gameName, setGameName] = useState('');
   const [gameDesc, setGameDesc] = useState('');
+  // In-browser code editor — tracks the starter source the dev can edit
+  const [editorSource, setEditorSource] = useState('');
+  const [showEditor, setShowEditor]     = useState(false);
 
   // ── Step 3: result ───────────────────────────────────────────────────────
   const [creating, setCreating]     = useState(false);
@@ -283,6 +290,8 @@ export default function GameStudio() {
     setGameName('');
     setGameDesc('');
     setCreateError(null);
+    setEditorSource('');
+    setShowEditor(false);
   };
 
   const handleBack = () => {
@@ -319,6 +328,8 @@ export default function GameStudio() {
     setCreateError(null);
     setShowPreview(false);
     setPreviewEndpoint('');
+    setEditorSource('');
+    setShowEditor(false);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -537,6 +548,56 @@ export default function GameStudio() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* ── In-browser code editor (lazy) ──────────────────────────── */}
+            <div className="studio-editor-section">
+              <div className="studio-editor-toggle-row">
+                <div>
+                  <span className="kicker">// STARTER SOURCE</span>
+                  <p className="studio-section-desc" style={{ marginTop: 0 }}>
+                    Preview and edit the starter game source before scaffolding.
+                    Changes here are not saved — use <code>magnetite new</code> to generate
+                    locally with your chosen template.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={`btn ${showEditor ? 'btn-secondary' : 'btn-accent'}`}
+                  onClick={() => setShowEditor(v => !v)}
+                  aria-expanded={showEditor}
+                  aria-controls="studio-code-editor-panel"
+                >
+                  {showEditor ? 'Hide Editor' : 'Open Code Editor'}
+                </button>
+              </div>
+
+              {showEditor && (
+                <div id="studio-code-editor-panel" className="studio-editor-panel">
+                  <Suspense
+                    fallback={
+                      <div className="studio-loading" aria-live="polite">
+                        <span className="spinner" aria-hidden="true" />
+                        Loading Monaco editor…
+                      </div>
+                    }
+                  >
+                    <CodeEditor
+                      value={editorSource || undefined}
+                      onChange={setEditorSource}
+                      language="rust"
+                      height="480px"
+                      filename={`${gameName ? gameName.replace(/\s+/g, '_').toLowerCase() : 'game'}/src/game.rs`}
+                      className="studio-code-editor"
+                    />
+                  </Suspense>
+                  <p className="studio-editor-note">
+                    This is an editable preview of <code>src/game.rs</code> from the{' '}
+                    <strong>{selectedTemplate.name}</strong> template.
+                    Scaffold locally with <code>magnetite new</code> to get the full project structure.
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         )}

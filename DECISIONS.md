@@ -1892,6 +1892,53 @@ authoritative full build/lint/test after. Verify-on-disk + re-check-frontend-lin
 
 ---
 
+## DEPTH-1 — Agent 2: Frontend Depth (2026-06-03)
+
+**Owner:** Frontend (sole owner of package.json, src/api/client.js, src/pages/GameStudio.jsx+css, src/pages/Settings.jsx, src/pages/admin/Moderation.jsx+css, src/App.jsx (moderation route only), src/components/CodeEditor.jsx+css, src/components/NotificationPreferences.jsx (wiring only), src/components/admin/AdminSidebar.jsx).
+
+**Deliverables shipped:**
+
+1. **Monaco in-browser code editor** (`src/components/CodeEditor.jsx` + `CodeEditor.css`, NEW):
+   - `@monaco-editor/react` added to `package.json`; `npm install` completed cleanly.
+   - Monaco lazy-loaded via `lazy(() => import('@monaco-editor/react'))` — resolves into `dist/assets/vendor-monaco-*.js` (21.68 kB gzip: 7.45 kB), separate from the main bundle.
+   - Custom `magnetite-dark` Monaco theme: teal keywords, amber types, green strings, dark gutters matching design tokens.
+   - Skeleton shimmer shown while Monaco loads (reduced-motion safe).
+   - Props: `value`, `onChange`, `language` (default `rust`), `height`, `readOnly`, `filename`.
+   - Embedded in `GameStudio` configure step with toggle button ("Open Code Editor" / "Hide Editor"). Starter Rust game source pre-loaded from `STARTER_RUST_SOURCE` constant.
+
+2. **NotificationPreferences wired into Settings** (`src/pages/Settings.jsx`):
+   - Replaced hand-rolled toggle form in the Notifications tab with `<NotificationPreferences />` component.
+   - `NotificationPreferences` self-manages `GET/PUT /api/v1/notifications/preferences` — no parent state delegation needed.
+   - Removed now-unused `notifications` / `setNotifications` local state.
+
+3. **Moderation queue page** (`src/pages/admin/Moderation.jsx` + `Moderation.css`, NEW):
+   - Lists `review_reports` via `api.admin.reviewReports({ limit, offset, status })`.
+   - Status filter tabs: Pending / Resolved / All.
+   - Each report card (expandable): reason badge + auto-flag banner (score / classifier result) + reported content + reporter info + star rating.
+   - Per-report actions (pending only): Dismiss / Warn User / Remove Review / Remove & Ban.
+   - `warnUser` and `getReport` methods added to `api.admin` in `client.js`.
+   - Lazy route `/admin/moderation` added to `App.jsx`; nav link added to `AdminSidebar.jsx`.
+
+4. **Vite chunk splitting** (`vite.config.js`): `vendor-monaco` chunk added to `manualChunks` so Monaco is always split from the app bundle.
+
+**Crossroads:**
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| D2-1 | Monaco chunk strategy | `manualChunks` rule + `lazy()` in component | `@monaco-editor/react` loads Monaco from CDN by default; with local install + `lazy()` Vite will code-split automatically. `manualChunks` groups all monaco-editor internals into a stable `vendor-monaco` cache entry. |
+| D2-2 | Starter source in CodeEditor | Exported constant `STARTER_RUST_SOURCE` | Lets GameStudio (and any future page) import just the string without loading Monaco. |
+| D2-3 | Settings notification tab | Replace entire renderNotifications body | The NotificationPreferences component is fully self-contained with its own save lifecycle. Keeping the old toggles alongside would produce conflicting state and duplicate PUT calls. |
+| D2-4 | Moderation vs ReviewModeration | NEW page at /admin/moderation | ReviewModeration already exists and is owned by another agent. New page adds `warn` action + auto-flag banner without touching the existing file. Both remain; AdminSidebar links to both. |
+| D2-5 | warn action endpoint | POST /api/v1/admin/users/:id/warn | Added to client.js; backend endpoint expected per wave spec. Dismissed report is also sent so the queue clears correctly. |
+
+**Verification (all run on-disk):**
+- `npm install` — exit 0; `@monaco-editor/react` installed under `node_modules/@monaco-editor/react`.
+- `npm run build` — exit 0; `dist/assets/vendor-monaco-*.js` present (21.68 kB gzip 7.45 kB) confirming Monaco is in a separate chunk.
+- `npm run lint` — exit 0; 0 errors (77 pre-existing warnings, 0 new errors).
+- `npm test -- --run` — exit 0; **24 test files, 378 tests passed**.
+
+---
+
 ## §6 — QUALITY-1 done; next = DEPTH-1 (2026-06-03)
 
 QUALITY-1 (`e1f86e4`): a11y + mobile + i18n coverage + notification preferences. Caught + fixed an i18n

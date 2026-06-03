@@ -12,6 +12,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "hls.js": "^1.6.16",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

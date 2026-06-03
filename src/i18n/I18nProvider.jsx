@@ -5,6 +5,9 @@
  * The English locale ("en") is the default and always loaded eagerly as
  * the fallback dictionary.
  *
+ * Locale persistence: the active locale is stored in localStorage under the
+ * key "magnetite_locale" and restored on the next page load.
+ *
  * This is a SCAFFOLD — it does NOT rewire existing pages.  New pages and
  * future migrations should wrap the component tree with <I18nProvider> and
  * use the useTranslation() hook.
@@ -27,16 +30,28 @@ import enMessages from './en.json';
 /** @type {React.Context<import('./useTranslation').I18nContextValue|null>} */
 export const I18nContext = createContext(null);
 
+/** localStorage key used to persist the user's locale choice. */
+const LOCALE_STORAGE_KEY = 'magnetite_locale';
+
+/** Supported locale codes (add new locales here when their JSON files are added). */
+const SUPPORTED_LOCALES = ['en', 'es'];
+
 /**
- * Detect the browser's preferred locale, clamped to supported locales.
+ * Read the persisted locale from localStorage, falling back to browser
+ * detection and finally to "en".
  *
- * @param {string[]} supported  List of supported locale codes.
- * @returns {string}  The best matching locale, defaulting to "en".
+ * @returns {string}
  */
-function detectLocale(supported) {
-  const preferred = navigator?.language ?? 'en';
-  const lang = preferred.split('-')[0].toLowerCase();
-  return supported.includes(lang) ? lang : 'en';
+function readPersistedLocale() {
+  try {
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored && SUPPORTED_LOCALES.includes(stored)) return stored;
+  } catch {
+    // localStorage may be unavailable (private browsing, etc.).
+  }
+  // Browser-language detection as secondary fallback.
+  const preferred = (navigator?.language ?? 'en').split('-')[0].toLowerCase();
+  return SUPPORTED_LOCALES.includes(preferred) ? preferred : 'en';
 }
 
 /**
@@ -52,6 +67,7 @@ async function loadLocale(locale) {
     // Dynamic imports for additional locales — add entries here as new
     // locale JSON files are created under src/i18n/<locale>.json.
     const modules = {
+      'es': () => import('./es.json'),
       // 'fr': () => import('./fr.json'),
       // 'de': () => import('./de.json'),
     };
@@ -78,7 +94,8 @@ async function loadLocale(locale) {
  */
 export function I18nProvider({ children, defaultLocale }) {
   const [locale, setLocaleState] = useState(() => {
-    return defaultLocale ?? detectLocale(['en']);
+    // Explicit prop takes precedence; otherwise restore from localStorage.
+    return defaultLocale ?? readPersistedLocale();
   });
 
   const [messages, setMessages] = useState(
@@ -96,6 +113,11 @@ export function I18nProvider({ children, defaultLocale }) {
   }, [locale]);
 
   const setLocale = useCallback((newLocale) => {
+    try {
+      localStorage.setItem(LOCALE_STORAGE_KEY, newLocale);
+    } catch {
+      // Ignore write failures (private browsing, quota exceeded, etc.).
+    }
     setLocaleState(newLocale);
   }, []);
 

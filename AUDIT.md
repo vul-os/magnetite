@@ -7,6 +7,10 @@
 > **STATUS 2026-06-03 (MX1b `def014a` + INFRA-E2E wave):** Selected medium/low findings RESOLVED — see
 > "🟡 Medium/Low — Resolved by MX1/MX1b" section below for the closed set with evidence. Genuine-open
 > medium/low items remain; they are listed at the end of each section as-is and represent honest backlog.
+>
+> **STATUS 2026-06-03 (DEPTH-1 wave — Agent 4 docs+audit update):** Additional medium/low findings
+> CLOSED — notification real-time delivery, moderation surface, and i18n infra. See updated
+> "🟡 Medium/Low — Resolved" section for evidence. `/ws/notifications` auth-layer finding also closed.
 
 > Generated into a fix program (Waves AX1 wiring+security, AX2 missing-features, GDS game-dev). Evidence is file:line.
 
@@ -310,6 +314,10 @@ above. Evidence is grep-on-disk confirmed per DECISIONS.md §6.
 | **MediaMTX not in compose — HLS 503 without separate deployment** (medium, Realtime/WS) | MX1b D-MX1b-2 | `mediamtx` service added to `docker-compose.yml`; `config/mediamtx.yml` created; `MEDIA_SERVER_BASE_URL=http://mediamtx:8888` wired in backend service; `docker-compose.override.yml` updated |
 | **StreamPlayer native-HLS only — no HLS.js** (low, smaller gaps) | Backlog B1 `b90248f` | Dynamic `hls.js` import for non-Safari; `src/components/streaming/StreamPlayer.jsx` |
 | **README "15% platform fee" wrong** (low, smaller gaps) | Backlog B1 `b90248f` | `README.md:22` corrected to 30% (70/30) |
+| **Real-time notification delivery not connected — frontend polls REST only** (high, Missing Features) | DEPTH-1 wave | `NotificationContext.jsx:58-128` now opens `WebSocket` to `/ws/notifications?token=<JWT>` after login; handles `NotificationBroadcast` frames and calls `setNotifications`; reconnects on close with 5s back-off. Backend auth fixed: `handle_notification_connection` (notifications.rs:366) now uses `?token=` query param + `validate_token()` — no `Extension(user_id)` extractor. Evidence: `src/context/NotificationContext.jsx:66,68-100`; `backend/src/api/notifications.rs:362-386` |
+| **/ws/notifications auth layer missing — Extension extractor will panic** (low, Realtime/WS) | DEPTH-1 wave | Same fix as above: `handle_notification_connection` switched from `Extension(user_id)` to `Query(WsNotifQuery { token })` + inline `validate_token()` call. Returns HTTP 401 on missing/invalid token. No `auth_middleware` layer required. Evidence: `backend/src/api/notifications.rs:361-386` |
+| **Reported reviews: no admin moderation surface** (high, Missing Features) | DEPTH-1 wave | `GET /api/v1/admin/review-reports` (`list_review_reports`, admin.rs:1389) and `POST /api/v1/admin/review-reports/:id/action` (`act_on_review_report`, admin.rs:1454) implemented. Actions: `dismiss`, `remove_review`, `warn_user`, `ban_user`. Both routes mounted in `admin::router()` at lines 1725–1738. Evidence: `backend/src/api/admin.rs:1389-1578,1722-1738` |
+| **i18n / localization infrastructure absent** (low, Missing Features) | DEPTH-1 wave | `src/i18n/` scaffold: `I18nProvider.jsx` (lazy locale loading, browser-language detection), `useTranslation.js` (dot-path resolution + `{{var}}` interpolation, graceful no-provider fallback), `en.json` (1,100+ strings across 28 namespaces). `NotificationPreferences.jsx` is first production consumer. 20-case Vitest suite (`useTranslation.test.js`) passing. Evidence: `src/i18n/I18nProvider.jsx`, `src/i18n/useTranslation.js`, `src/i18n/en.json`, `src/i18n/useTranslation.test.js`, `src/components/NotificationPreferences.jsx:24` |
 
 ### Still genuinely open (not resolved by MX1b)
 
@@ -325,10 +333,7 @@ silently faked. All are documented honestly above.
 | medium | Anti-abuse rate limits missing for chat messages / review submissions | Only /api/auth/, /api/wallet/, /api/games have custom limits |
 | medium | TOTP 2FA exists but never checked at login | Login handler does not read `totp_enabled` — security theatre |
 | medium | Game version rollback UX missing | Only `promote_version` exists; no demote/rollback endpoint |
-| medium | Real-time notification WS not connected to frontend | NotificationContext polls REST only; /ws/notifications exists but unreachable without auth layer fix |
-| medium | Reported reviews: no admin moderation surface | `review_reports` table written but never read from admin router |
 | medium | Wise IBAN (international) missing from payout KYC | Only US-ACH and email supported |
 | medium | Search is ILIKE only — no full-text ranking | No GIN index, no `tsvector`, no tag/genre filter |
-| low | i18n / localization infrastructure absent | All UI is hard-coded English |
-| low | /ws/notifications auth layer missing in `main.rs` mount | Extension extractor will panic without auth middleware applied |
 | low | Developer analytics: no geographic / device breakdown | No IP→country, no store conversion funnel |
+| low | `NotificationPreferences` component not yet mounted in Settings route | Component is ready (`src/components/NotificationPreferences.jsx`); needs a `/settings/notifications` route in `App.jsx` or settings tab wiring |

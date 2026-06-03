@@ -258,6 +258,19 @@ export const api = {
      */
     refundTransaction: (transactionId, data = {}) =>
       request(`/api/v1/admin/transactions/${transactionId}/refund`, { method: 'POST', body: JSON.stringify(data) }),
+
+    /**
+     * POST /api/v1/admin/users/:id/warn — issue a warning to a user.
+     * data: { reason: string }
+     */
+    warnUser: (userId, reason) =>
+      request(`/api/v1/admin/users/${userId}/warn`, { method: 'POST', body: JSON.stringify({ reason }) }),
+
+    /**
+     * GET /api/v1/admin/review-reports/:id — get a single report detail.
+     */
+    getReport: (reportId) =>
+      request(`/api/v1/admin/review-reports/${reportId}`),
   },
 
   developer: {

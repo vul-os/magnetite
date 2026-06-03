@@ -1164,17 +1164,19 @@ pub async fn seed_test_data(
 pub struct ReviewReportQuery {
     pub page: Option<i64>,
     pub limit: Option<i64>,
-    /// Filter by report status: "pending", "dismissed", "resolved" (optional)
+    /// Filter by report status: "pending", "dismissed", "resolved" (optional, default: "pending")
     pub status: Option<String>,
     /// Filter by reason string (case-insensitive substring, optional)
     pub reason: Option<String>,
+    /// Filter by source: "user" | "auto_flag" (optional, omit for all)
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct AdminReviewReport {
     pub id: Uuid,
     pub review_id: Uuid,
-    pub reporter_id: Uuid,
+    pub reporter_id: Option<Uuid>,
     pub reporter_username: Option<String>,
     /// The reported review's author id
     pub review_author_id: Option<Uuid>,
@@ -1186,6 +1188,8 @@ pub struct AdminReviewReport {
     pub review_content: Option<String>,
     pub reason: String,
     pub status: String,
+    /// 'user' for human-filed reports; 'auto_flag' for heuristic-triggered entries
+    pub source: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -1402,43 +1406,92 @@ pub async fn list_review_reports(
         .as_deref()
         .map(|r| format!("%{}%", r.to_lowercase()))
         .unwrap_or_else(|| "%".to_string());
+    // Optional source filter — None means "all sources".
+    let source_filter: Option<String> = query.source.clone();
 
-    let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM review_reports rr
-         WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2",
-    )
-    .bind(status_filter)
-    .bind(&reason_filter)
-    .fetch_one(&pool)
-    .await?;
+    let total = if let Some(ref src) = source_filter {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM review_reports rr
+             WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2
+               AND COALESCE(rr.source, 'user') = $3",
+        )
+        .bind(status_filter)
+        .bind(&reason_filter)
+        .bind(src)
+        .fetch_one(&pool)
+        .await?
+    } else {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM review_reports rr
+             WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2",
+        )
+        .bind(status_filter)
+        .bind(&reason_filter)
+        .fetch_one(&pool)
+        .await?
+    };
 
-    let reports = sqlx::query_as::<_, AdminReviewReport>(
-        "SELECT
-             rr.id,
-             rr.review_id,
-             rr.reporter_id,
-             reporter.username AS reporter_username,
-             r.user_id AS review_author_id,
-             author.username AS review_author_username,
-             r.rating AS review_rating,
-             r.content AS review_content,
-             rr.reason,
-             rr.status,
-             rr.created_at
-         FROM review_reports rr
-         LEFT JOIN users reporter ON reporter.id = rr.reporter_id
-         LEFT JOIN reviews r      ON r.id = rr.review_id
-         LEFT JOIN users author   ON author.id = r.user_id
-         WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2
-         ORDER BY rr.created_at DESC
-         LIMIT $3 OFFSET $4",
-    )
-    .bind(status_filter)
-    .bind(&reason_filter)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&pool)
-    .await?;
+    let reports = if let Some(ref src) = source_filter {
+        sqlx::query_as::<_, AdminReviewReport>(
+            "SELECT
+                 rr.id,
+                 rr.review_id,
+                 rr.reporter_id,
+                 reporter.username AS reporter_username,
+                 r.user_id AS review_author_id,
+                 author.username AS review_author_username,
+                 r.rating AS review_rating,
+                 r.content AS review_content,
+                 rr.reason,
+                 rr.status,
+                 COALESCE(rr.source, 'user') AS source,
+                 rr.created_at
+             FROM review_reports rr
+             LEFT JOIN users reporter ON reporter.id = rr.reporter_id
+             LEFT JOIN reviews r      ON r.id = rr.review_id
+             LEFT JOIN users author   ON author.id = r.user_id
+             WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2
+               AND COALESCE(rr.source, 'user') = $3
+             ORDER BY rr.created_at DESC
+             LIMIT $4 OFFSET $5",
+        )
+        .bind(status_filter)
+        .bind(&reason_filter)
+        .bind(src)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, AdminReviewReport>(
+            "SELECT
+                 rr.id,
+                 rr.review_id,
+                 rr.reporter_id,
+                 reporter.username AS reporter_username,
+                 r.user_id AS review_author_id,
+                 author.username AS review_author_username,
+                 r.rating AS review_rating,
+                 r.content AS review_content,
+                 rr.reason,
+                 rr.status,
+                 COALESCE(rr.source, 'user') AS source,
+                 rr.created_at
+             FROM review_reports rr
+             LEFT JOIN users reporter ON reporter.id = rr.reporter_id
+             LEFT JOIN reviews r      ON r.id = rr.review_id
+             LEFT JOIN users author   ON author.id = r.user_id
+             WHERE rr.status = $1 AND LOWER(rr.reason) LIKE $2
+             ORDER BY rr.created_at DESC
+             LIMIT $3 OFFSET $4",
+        )
+        .bind(status_filter)
+        .bind(&reason_filter)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&pool)
+        .await?
+    };
 
     let total_pages = (total as f64 / limit as f64).ceil() as i64;
 
@@ -1459,20 +1512,14 @@ pub async fn act_on_review_report(
 ) -> Result<axum::http::StatusCode> {
     require_admin(&pool, user_id).await?;
 
-    // Fetch the report to get its review_id and the review author.
-    let report_row = sqlx::query_as::<
-        _,
-        (
-            Uuid, // review_id
-            Uuid, // reporter_id (unused but available)
-        ),
-    >("SELECT review_id, reporter_id FROM review_reports WHERE id = $1")
-    .bind(report_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Review report not found".to_string()))?;
-
-    let review_id = report_row.0;
+    // Fetch the report to get its review_id.
+    // reporter_id is now nullable (NULL for auto-flag rows), so we only fetch review_id.
+    let review_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT review_id FROM review_reports WHERE id = $1")
+            .bind(report_id)
+            .fetch_optional(&pool)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Review report not found".to_string()))?;
 
     // Resolve the action.
     match payload.action.as_str() {
@@ -1569,6 +1616,184 @@ pub async fn act_on_review_report(
         other => {
             return Err(AppError::BadRequest(format!(
                 "Unknown action '{}'. Valid: dismiss | remove_review | warn_user | ban_user",
+                other
+            )));
+        }
+    }
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+// ── Chat flag moderation ──────────────────────────────────────────────────────
+//
+// GET  /admin/chat-flags              — list auto-flagged chat messages (paginated, filterable by status)
+// POST /admin/chat-flags/:id/action   — dismiss | warn_user | ban_user
+
+#[derive(Debug, Deserialize)]
+pub struct ChatFlagQuery {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    /// Filter by status: "pending" | "dismissed" | "resolved"
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct AdminChatFlag {
+    pub id: Uuid,
+    pub channel_id: Uuid,
+    pub author_id: Uuid,
+    pub author_username: Option<String>,
+    pub content: String,
+    pub flag_reasons: String,
+    pub status: String,
+    pub resolved_by: Option<Uuid>,
+    pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub resolution_note: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChatFlagActionRequest {
+    /// One of: "dismiss" | "warn_user" | "ban_user"
+    pub action: String,
+    pub note: Option<String>,
+}
+
+pub async fn list_chat_flags(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Query(query): Query<ChatFlagQuery>,
+) -> Result<Json<PaginatedResponse<AdminChatFlag>>> {
+    require_admin(&pool, user_id).await?;
+
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    let offset = (page - 1) * limit;
+    let status_filter = query.status.as_deref().unwrap_or("pending");
+
+    let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM chat_flags WHERE status = $1")
+        .bind(status_filter)
+        .fetch_one(&pool)
+        .await?;
+
+    let flags = sqlx::query_as::<_, AdminChatFlag>(
+        "SELECT
+             cf.id,
+             cf.channel_id,
+             cf.author_id,
+             u.username AS author_username,
+             cf.content,
+             cf.flag_reasons,
+             cf.status,
+             cf.resolved_by,
+             cf.resolved_at,
+             cf.resolution_note,
+             cf.created_at
+         FROM chat_flags cf
+         LEFT JOIN users u ON u.id = cf.author_id
+         WHERE cf.status = $1
+         ORDER BY cf.created_at DESC
+         LIMIT $2 OFFSET $3",
+    )
+    .bind(status_filter)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&pool)
+    .await?;
+
+    let total_pages = (total as f64 / limit as f64).ceil() as i64;
+
+    Ok(Json(PaginatedResponse {
+        data: flags,
+        page,
+        limit,
+        total,
+        total_pages,
+    }))
+}
+
+pub async fn act_on_chat_flag(
+    State(pool): State<PgPool>,
+    Extension(admin_id): Extension<Uuid>,
+    Path(flag_id): Path<Uuid>,
+    Json(payload): Json<ChatFlagActionRequest>,
+) -> Result<axum::http::StatusCode> {
+    require_admin(&pool, admin_id).await?;
+
+    // Fetch the flag to get the author_id.
+    let flag_row = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT author_id, status FROM chat_flags WHERE id = $1",
+    )
+    .bind(flag_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Chat flag not found".to_string()))?;
+
+    let (author_id, current_status) = flag_row;
+
+    if current_status != "pending" {
+        return Err(AppError::BadRequest(
+            "Chat flag has already been resolved".to_string(),
+        ));
+    }
+
+    match payload.action.as_str() {
+        "dismiss" => {
+            sqlx::query(
+                "UPDATE chat_flags SET status = 'dismissed', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE id = $3",
+            )
+            .bind(admin_id)
+            .bind(&payload.note)
+            .bind(flag_id)
+            .execute(&pool)
+            .await?;
+        }
+        "warn_user" => {
+            // Send a system notification as the warning.
+            let note = payload
+                .note
+                .as_deref()
+                .unwrap_or("Your chat message was flagged by moderators.");
+            sqlx::query(
+                "INSERT INTO notifications (id, user_id, type, title, body, read, created_at)
+                 VALUES ($1, $2, 'SYSTEM', 'Moderation Warning', $3, false, NOW())",
+            )
+            .bind(Uuid::new_v4())
+            .bind(author_id)
+            .bind(note)
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                "UPDATE chat_flags SET status = 'resolved', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE id = $3",
+            )
+            .bind(admin_id)
+            .bind(&payload.note)
+            .bind(flag_id)
+            .execute(&pool)
+            .await?;
+        }
+        "ban_user" => {
+            sqlx::query("UPDATE users SET banned_at = NOW(), updated_at = NOW() WHERE id = $1")
+                .bind(author_id)
+                .execute(&pool)
+                .await?;
+
+            sqlx::query(
+                "UPDATE chat_flags SET status = 'resolved', resolved_by = $1,
+                 resolved_at = NOW(), resolution_note = $2 WHERE id = $3",
+            )
+            .bind(admin_id)
+            .bind(&payload.note)
+            .bind(flag_id)
+            .execute(&pool)
+            .await?;
+        }
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "Unknown action '{}'. Valid: dismiss | warn_user | ban_user",
                 other
             )));
         }
@@ -1741,6 +1966,23 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/transactions/:id/refund",
             post(admin_refund_transaction).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        // ── Chat flag moderation ────────────────────────────────────────────────
+        // GET  /admin/chat-flags             — list auto-flagged messages (filter by status)
+        // POST /admin/chat-flags/:id/action  — dismiss | warn_user | ban_user
+        .route(
+            "/chat-flags",
+            get(list_chat_flags).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/chat-flags/:id/action",
+            post(act_on_chat_flag).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

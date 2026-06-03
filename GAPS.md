@@ -9,6 +9,15 @@
 > email verification enforcement, MediaMTX in docker-compose, wasm-build-runner docs.
 > MediaMTX and wasm-runner moved from Bucket D to Closed. Summary counts updated.
 >
+> **Updated: 2026-06-03 (DEPTH-1 wave — Agent 4 docs+audit refresh).** Three additional
+> medium/low findings CLOSED: notification real-time delivery (WS now live in
+> `NotificationContext.jsx`), moderation admin surface (`GET/POST /admin/review-reports`
+> wired in `admin.rs`), and i18n infra (`src/i18n/` scaffold with `I18nProvider`,
+> `useTranslation`, `en.json`, Vitest suite). `/ws/notifications` auth-layer finding closed
+> (query-param auth, no Extension panic). These items moved from "Remaining" to the
+> DEPTH-1 closed section below. `NotificationPreferences` component added as a genuine
+> remaining low item (route not yet mounted).
+>
 > **Status legend:** **closed** (code evidence confirms the fix is real), **partial**
 > (real but incomplete), **stub** (handler/UI exists but no-op/canned), **mock**
 > (fabricated/mock-fallback data), **hardcoded** (literal placeholder), **documented-only**
@@ -164,6 +173,22 @@ from the Bucket D list. All verified grep-on-disk per DECISIONS.md §6.
 
 ---
 
+---
+
+## Closed in DEPTH-1 (2026-06-03)
+
+Agent 4 docs+audit wave. All items verified by reading the implementation files directly.
+
+| Item | How closed | Evidence |
+|------|-----------|---------|
+| **Real-time notification delivery not connected** | `NotificationContext.jsx` now opens `WebSocket` to `/ws/notifications?token=<JWT>` on mount; parses `NotificationBroadcast` frames; reconnects on close. Backend `handle_notification_connection` switched from `Extension(user_id)` (panic path) to `Query(WsNotifQuery { token })` + `validate_token()` inline — returns HTTP 401 on bad token. | `src/context/NotificationContext.jsx:58-128`; `backend/src/api/notifications.rs:361-386` |
+| **/ws/notifications auth layer missing (Extension panic)** | Same fix as above — auth switched to `?token=` query-param pattern matching `ws/comms`, `ws/voice`, `ws/game`. | `backend/src/api/notifications.rs:362-386` |
+| **Moderation surface absent — review_reports never read** | `GET /api/v1/admin/review-reports` (paginated, status+reason filter) and `POST /api/v1/admin/review-reports/:id/action` (four actions: `dismiss`, `remove_review`, `warn_user`, `ban_user`) implemented and mounted in `admin::router()`. | `backend/src/api/admin.rs:1389-1578,1722-1738` |
+| **i18n / localization infrastructure absent** | `src/i18n/` scaffold: `I18nProvider.jsx` (lazy locale loading, browser-language detection), `useTranslation.js` (dot-path + `{{var}}` interpolation, graceful fallback outside provider), `en.json` (1,100+ strings, 28 namespaces). `NotificationPreferences.jsx` is first production consumer. 20-case Vitest suite passing. | `src/i18n/I18nProvider.jsx`; `src/i18n/useTranslation.js`; `src/i18n/en.json`; `src/i18n/useTranslation.test.js`; `src/components/NotificationPreferences.jsx` |
+| **Notification preferences — no REST API or UI** | `GET /api/v1/notifications/preferences` + `PUT /api/v1/notifications/preferences` added to `notifications::router()`. `NotificationPreferences.jsx` component: 4-category × 3-channel toggle grid, full a11y, `useTranslation` i18n. `api.notifications.getPreferences()` / `api.notifications.updatePreferences()` stubs in `client.js`. | `backend/src/api/notifications.rs:628-811`; `src/components/NotificationPreferences.jsx`; `src/api/client.js:144-160` |
+
+---
+
 ## Remaining — Bucket D (needs external infra/credentials)
 
 These cannot be resolved without external infrastructure or third-party accounts. They are honestly documented and not faked. The MOAT items previously listed here have been closed (see section above).
@@ -194,9 +219,10 @@ These cannot be resolved without external infrastructure or third-party accounts
 **Total closed (F1–F3):** 37+ findings  
 **Closed in Moat N1–N3 (2026-06-01):** 4 MOAT differentiators (scale primitive, sandbox, anti-cheat, one-command pipeline)  
 **Closed in Backlog B1 (2026-06-01):** 14 smaller gaps (tournaments, leaderboard, achievements, backup job, etc.)  
-**Closed in MX1b (2026-06-03):** 8 items (refunds, content rating, blocked routes, analytics time-series, email verification, MediaMTX in compose, wasm-build-runner docs)
+**Closed in MX1b (2026-06-03):** 8 items (refunds, content rating, blocked routes, analytics time-series, email verification, MediaMTX in compose, wasm-build-runner docs)  
+**Closed in DEPTH-1 (2026-06-03):** 5 items (notification real-time WS, /ws/notifications auth-layer, moderation admin surface, i18n scaffold, notification preferences REST + UI)
 
-**Remaining — smaller gaps (not Bucket D):** ~14 genuinely open medium/low items (see AUDIT.md "Still genuinely open" table)  
+**Remaining — smaller gaps (not Bucket D):** ~11 genuinely open medium/low items (see AUDIT.md "Still genuinely open" table)  
 **Remaining — Bucket D (external infra/creds):** 9 entries (MediaMTX local compose closed; multi-node sharding, cloud runner fleet, Voice SFU, GitHub CI wasm-pack runner, FPS/motorsport WASM CI builds, Wise/Paystack/email live credentials remain)
 
 Of the remaining non-Bucket-D gaps: all show honest errors or clearly-labelled absent states — none are silent mock successes.

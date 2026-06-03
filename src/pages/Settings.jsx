@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import ThemeToggle from '../components/ThemeToggle';
+import NotificationPreferences from '../components/NotificationPreferences';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -99,11 +100,7 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
   const [profile, setProfile]     = useState(DEFAULT_PROFILE);
   const [account, setAccount]     = useState({ email: DEFAULT_PROFILE.email, twoFactorEnabled: false });
-  const [notifications, setNotifications] = useState({
-    email: { promotions: true, updates: true, newsletter: false },
-    push:  { matches: true, friends: true, system: false },
-    frequency: 'instant',
-  });
+  // notifications state is managed by <NotificationPreferences /> — no local state needed.
   const [privacy, setPrivacy] = useState({
     profileVisibility: 'public',
     showOnLeaderboards: true,
@@ -398,72 +395,14 @@ export default function Settings() {
   );
 
   const renderNotifications = () => (
-    <form className="settings-tab-panel" onSubmit={handleSave} aria-label={t('account.notificationsFormLabel')}>
-      <div className="settings-section">
-        <h3 className="settings-section-title">{t('account.emailNotifications')}</h3>
-        <ToggleSetting
-          label={t('account.promotionalEmails')}
-          description={t('account.promotionalEmailsDesc')}
-          checked={notifications.email.promotions}
-          onChange={(v) => setNotifications({ ...notifications, email: { ...notifications.email, promotions: v } })}
-        />
-        <ToggleSetting
-          label={t('account.accountUpdates')}
-          description={t('account.accountUpdatesDesc')}
-          checked={notifications.email.updates}
-          onChange={(v) => setNotifications({ ...notifications, email: { ...notifications.email, updates: v } })}
-        />
-        <ToggleSetting
-          label={t('account.newsletter')}
-          description={t('account.newsletterDesc')}
-          checked={notifications.email.newsletter}
-          onChange={(v) => setNotifications({ ...notifications, email: { ...notifications.email, newsletter: v } })}
-        />
-      </div>
-
-      <div className="settings-section">
-        <h3 className="settings-section-title">{t('account.pushNotifications')}</h3>
-        <ToggleSetting
-          label={t('account.matchFound')}
-          description={t('account.matchFoundDesc')}
-          checked={notifications.push.matches}
-          onChange={(v) => setNotifications({ ...notifications, push: { ...notifications.push, matches: v } })}
-        />
-        <ToggleSetting
-          label={t('account.friendActivity')}
-          description={t('account.friendActivityDesc')}
-          checked={notifications.push.friends}
-          onChange={(v) => setNotifications({ ...notifications, push: { ...notifications.push, friends: v } })}
-        />
-        <ToggleSetting
-          label={t('account.systemAnnouncements')}
-          description={t('account.systemAnnouncementsDesc')}
-          checked={notifications.push.system}
-          onChange={(v) => setNotifications({ ...notifications, push: { ...notifications.push, system: v } })}
-        />
-      </div>
-
-      <div className="settings-section">
-        <h3 className="settings-section-title">{t('account.emailFrequency')}</h3>
-        <div className="settings-field" style={{ maxWidth: 260 }}>
-          <label className="settings-field-label" htmlFor="notif-freq">{t('account.digestFrequency')}</label>
-          <select
-            id="notif-freq"
-            value={notifications.frequency}
-            onChange={(e) => setNotifications({ ...notifications, frequency: e.target.value })}
-            className="settings-input"
-          >
-            <option value="instant">{t('account.freqInstant')}</option>
-            <option value="hourly">{t('account.freqHourly')}</option>
-            <option value="daily">{t('account.freqDaily')}</option>
-            <option value="weekly">{t('account.freqWeekly')}</option>
-            <option value="never">{t('account.freqNever')}</option>
-          </select>
-        </div>
-      </div>
-
-      <SaveButton saving={saving} success={saveSuccess} />
-    </form>
+    <div className="settings-tab-panel" aria-label={t('account.notificationsFormLabel')}>
+      {/*
+        NotificationPreferences handles its own GET/PUT lifecycle against
+        GET /api/v1/notifications/preferences and PUT /api/v1/notifications/preferences.
+        It is self-contained — no save propagation needed from this parent.
+      */}
+      <NotificationPreferences />
+    </div>
   );
 
   const renderPrivacy = () => (

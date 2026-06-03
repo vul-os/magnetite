@@ -12,6 +12,148 @@ use crate::api::middleware;
 use crate::api::response;
 use crate::error::{AppError, Result};
 
+// ── Content moderation heuristic ─────────────────────────────────────────────
+//
+// Lightweight, dependency-free content check.  Returns a Vec of triggered
+// flag reasons; empty means clean.  Callers may insert a review_report row
+// when the result is non-empty.
+
+/// Profanity/abuse wordlist — lower-case, checked via substring.
+const PROFANITY_WORDS: &[&str] = &[
+    "fuck", "shit", "asshole", "bitch", "cunt", "nigger", "faggot", "retard", "whore", "bastard",
+    "dick", "cock", "pussy",
+];
+
+/// Spam-signal words/phrases — marketing, scam, or off-topic solicitation.
+const SPAM_WORDS: &[&str] = &[
+    "buy now",
+    "click here",
+    "free money",
+    "earn $",
+    "make money fast",
+    "limited offer",
+    "casino",
+    "bitcoin investment",
+    "crypto giveaway",
+    "discount code",
+    "promo code",
+    "follow me",
+    "check my profile",
+];
+
+/// URL pattern — matches http/https or bare domain patterns.
+fn looks_like_url(s: &str) -> bool {
+    s.contains("http://")
+        || s.contains("https://")
+        || s.contains("www.")
+        // bare domain with common TLDs
+        || {
+            let s = s.to_lowercase();
+            [".com", ".net", ".org", ".io", ".gg", ".xyz"]
+                .iter()
+                .any(|tld| s.contains(tld))
+        }
+}
+
+/// Count distinct "words" (whitespace-separated tokens) in a string.
+fn word_count(s: &str) -> usize {
+    s.split_whitespace().count()
+}
+
+/// Repetition heuristic: flag if any single word appears more than 5 times.
+fn has_word_repetition(s: &str, threshold: usize) -> bool {
+    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for word in s.split_whitespace() {
+        let c = counts.entry(word).or_insert(0);
+        *c += 1;
+        if *c >= threshold {
+            return true;
+        }
+    }
+    false
+}
+
+/// Count URLs in content.
+fn url_count(s: &str) -> usize {
+    s.split_whitespace().filter(|w| looks_like_url(w)).count()
+}
+
+/// Run all heuristics and return triggered flag reasons.
+pub fn content_flag_reasons(content: &str) -> Vec<String> {
+    let lower = content.to_lowercase();
+    let mut reasons = Vec::new();
+
+    // 1. Profanity
+    if PROFANITY_WORDS.iter().any(|w| lower.contains(w)) {
+        reasons.push("profanity".to_string());
+    }
+
+    // 2. Spam keywords
+    if SPAM_WORDS.iter().any(|w| lower.contains(w)) {
+        reasons.push("spam".to_string());
+    }
+
+    // 3. URL flood — more than 2 URLs in the content
+    if url_count(&lower) > 2 {
+        reasons.push("url_flood".to_string());
+    }
+
+    // 4. Word repetition — any word used 6+ times
+    if word_count(content) > 5 && has_word_repetition(content, 6) {
+        reasons.push("repetition".to_string());
+    }
+
+    reasons
+}
+
+#[cfg(test)]
+mod heuristic_tests {
+    use super::*;
+
+    #[test]
+    fn clean_content_passes() {
+        assert!(content_flag_reasons("Great game, really enjoyed it.").is_empty());
+    }
+
+    #[test]
+    fn profanity_flagged() {
+        let r = content_flag_reasons("This game is such bullshit and fucking terrible");
+        assert!(
+            r.contains(&"profanity".to_string()),
+            "expected profanity: {:?}",
+            r
+        );
+    }
+
+    #[test]
+    fn spam_flagged() {
+        let r = content_flag_reasons("Buy now and earn $ fast with this amazing deal");
+        assert!(r.contains(&"spam".to_string()), "expected spam: {:?}", r);
+    }
+
+    #[test]
+    fn url_flood_flagged() {
+        let r = content_flag_reasons(
+            "Visit http://example.com http://spam.net https://click.io/here for deals",
+        );
+        assert!(
+            r.contains(&"url_flood".to_string()),
+            "expected url_flood: {:?}",
+            r
+        );
+    }
+
+    #[test]
+    fn repetition_flagged() {
+        let r = content_flag_reasons("bad bad bad bad bad bad game");
+        assert!(
+            r.contains(&"repetition".to_string()),
+            "expected repetition: {:?}",
+            r
+        );
+    }
+}
+
 // ── Review types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -198,6 +340,39 @@ pub async fn create_review(
     .fetch_one(&pool)
     .await?;
 
+    // ── Auto-flag heuristic ───────────────────────────────────────────────────
+    // Run content checks on the review text.  If any heuristic fires, insert a
+    // review_report row with source='auto_flag' so moderators see it in the queue.
+    // Failure to insert the flag is non-fatal (we log and continue).
+    if let Some(ref text) = review.content {
+        let reasons = content_flag_reasons(text);
+        if !reasons.is_empty() {
+            let reason_str = reasons.join(", ");
+            tracing::info!(
+                review_id = %review.id,
+                user_id = %user_id,
+                reasons = %reason_str,
+                "Auto-flagging review content"
+            );
+            if let Err(e) = sqlx::query(
+                "INSERT INTO review_reports (review_id, reporter_id, reason, status, source)
+                 VALUES ($1, NULL, $2, 'pending', 'auto_flag')
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(review.id)
+            .bind(&reason_str)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(
+                    review_id = %review.id,
+                    error = %e,
+                    "Failed to insert auto-flag review_report (non-fatal)"
+                );
+            }
+        }
+    }
+
     Ok(response::success_response(review))
 }
 
@@ -243,6 +418,31 @@ pub async fn update_review(
     .bind(review_id)
     .fetch_one(&pool)
     .await?;
+
+    // ── Auto-flag on update ───────────────────────────────────────────────────
+    // Only re-check if the caller actually changed the content.
+    if payload.content.is_some() {
+        if let Some(ref text) = updated_review.content {
+            let reasons = content_flag_reasons(text);
+            if !reasons.is_empty() {
+                let reason_str = reasons.join(", ");
+                tracing::info!(
+                    review_id = %updated_review.id,
+                    reasons = %reason_str,
+                    "Auto-flagging updated review content"
+                );
+                let _ = sqlx::query(
+                    "INSERT INTO review_reports (review_id, reporter_id, reason, status, source)
+                     VALUES ($1, NULL, $2, 'pending', 'auto_flag')
+                     ON CONFLICT DO NOTHING",
+                )
+                .bind(updated_review.id)
+                .bind(&reason_str)
+                .execute(&pool)
+                .await;
+            }
+        }
+    }
 
     Ok(response::success_response(updated_review))
 }

@@ -40,6 +40,7 @@ use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
 use crate::api::middleware::validate_token;
+use crate::api::reviews::content_flag_reasons;
 use crate::services::communities as svc;
 use crate::services::presence as presence_svc;
 
@@ -299,6 +300,42 @@ async fn handle_comms_socket(
                 content,
                 reply_to_id,
             } => {
+                // ── Auto-flag heuristic ───────────────────────────────────────
+                // Run before persisting so we can attach flag metadata alongside
+                // the message.  Failure to insert the flag is never fatal.
+                let flag_reasons = content_flag_reasons(&content);
+                if !flag_reasons.is_empty() {
+                    let reason_str = flag_reasons.join(", ");
+                    tracing::info!(
+                        channel_id = %channel_id,
+                        author_id  = %user_id,
+                        reasons    = %reason_str,
+                        "Auto-flagging chat message"
+                    );
+                    let pool_ref = state.pool.clone();
+                    let content_snapshot = content.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = sqlx::query(
+                            "INSERT INTO chat_flags
+                                 (channel_id, author_id, content, flag_reasons, status)
+                             VALUES ($1, $2, $3, $4, 'pending')",
+                        )
+                        .bind(channel_id)
+                        .bind(user_id)
+                        .bind(&content_snapshot)
+                        .bind(&reason_str)
+                        .execute(&pool_ref)
+                        .await
+                        {
+                            tracing::warn!(
+                                channel_id = %channel_id,
+                                error = %e,
+                                "Failed to insert chat_flag (non-fatal)"
+                            );
+                        }
+                    });
+                }
+
                 match svc::post_message(&state.pool, channel_id, user_id, &content, reply_to_id)
                     .await
                 {
