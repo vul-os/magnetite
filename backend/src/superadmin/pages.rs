@@ -25,13 +25,15 @@ type Resp = axum::response::Response;
 
 // ── shared helpers ──────────────────────────────────────────────────────────
 
-fn nav(active: &str) -> Vec<Nav<'static>> {
+pub(super) fn nav(active: &str) -> Vec<Nav<'static>> {
     let items = [
         ("/superadmin", "Overview", "overview"),
         ("/superadmin/users", "Users", "users"),
         ("/superadmin/games", "Games", "games"),
         ("/superadmin/transactions", "Money", "money"),
+        ("/superadmin/payouts", "Payouts", "payouts"),
         ("/superadmin/billing", "Billing compliance", "billing"),
+        ("/superadmin/settings", "Platform settings", "settings"),
         ("", "", "sep"),
         ("/superadmin/analytics", "Analytics", "analytics"),
         ("/superadmin/audit", "Audit log", "audit"),
@@ -48,15 +50,15 @@ fn nav(active: &str) -> Vec<Nav<'static>> {
         .collect()
 }
 
-fn money(d: Decimal) -> String {
+pub(super) fn money(d: Decimal) -> String {
     format!("${}", d.round_dp(2))
 }
 
-fn dt(d: DateTime<Utc>) -> String {
+pub(super) fn dt(d: DateTime<Utc>) -> String {
     d.format("%Y-%m-%d %H:%M").to_string()
 }
 
-fn flash(q: &FlashQuery) -> String {
+pub(super) fn flash(q: &FlashQuery) -> String {
     if let Some(m) = &q.msg {
         format!("<div class=\"flash ok\">{}</div>", esc(m))
     } else if let Some(e) = &q.err {
@@ -72,7 +74,7 @@ pub struct FlashQuery {
     pub err: Option<String>,
 }
 
-async fn audit(
+pub(super) async fn audit(
     pool: &PgPool,
     sess: &Session,
     action: &str,
@@ -96,11 +98,11 @@ async fn audit(
 
 /// Validate a submitted CSRF token against the session. On mismatch returns the
 /// redirect target the caller should short-circuit to.
-fn csrf_ok(sess: &Session, supplied: &str) -> bool {
+pub(super) fn csrf_ok(sess: &Session, supplied: &str) -> bool {
     ct_eq(sess.csrf.as_bytes(), supplied.as_bytes())
 }
 
-fn redirect(path: &str) -> Resp {
+pub(super) fn redirect(path: &str) -> Resp {
     Redirect::to(path).into_response()
 }
 
@@ -527,7 +529,7 @@ pub async fn user_detail(
     Html(html::page(&u.username, &nav("users"), &body)).into_response()
 }
 
-fn payout_pill(status: &str) -> &'static str {
+pub(super) fn payout_pill(status: &str) -> &'static str {
     match status {
         "completed" | "paid" => "ok",
         "failed" | "cancelled" => "bad",

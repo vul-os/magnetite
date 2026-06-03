@@ -2091,6 +2091,18 @@ Closed the four limitations I'd flagged:
    block/permit; CSRF mismatch rejected; correct creds → session cookie; wrong creds rejected. (7 route tests
    + the 8 unit tests.)
 
+### Ops management surfaces (same day, user: "keep going")
+Completed the "manage everything / access to everything" mandate by adding the two money-/policy-level surfaces
+the read-only pages lacked (`backend/src/superadmin/ops.rs`, audited + CSRF):
+- **Payouts** (`/superadmin/payouts`): list/filter developer disbursements; cancel a pending request; mark one
+  processed for manual reconciliation. Deliberately does NOT trigger an outbound Wise transfer (real sending is
+  the hourly batch job) so an admin can't accidentally disburse with a click.
+- **Platform settings** (`/superadmin/settings`): edit `platform_settings` key/values (UPDATE-only, no arbitrary
+  key creation). The page is explicit that the 15%/30% fees are code constants the billing report verifies —
+  I did NOT rewire the live session-fee from settings (the seeded `platform_fee_percentage='30'` conflicts with
+  the code's 15%, so wiring it would silently change money splits). Shared pages.rs helpers made `pub(super)`.
+Verified: 0 warnings/fmt + 16 superadmin tests (added ops-routes-require-session).
+
 ### Developer tools — already integrated (GDS wave, earlier)
 Confirmed present + routed: in-browser **Game Studio** (`/developers/studio`, Monaco), **Deploy** flow
 (`/developers/deploy` with BuildLogs/BuildTimeline/DeploymentStatus), **Developer Dashboard** (`/developers`),

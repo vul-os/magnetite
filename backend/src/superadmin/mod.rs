@@ -18,6 +18,7 @@ mod auth;
 mod billing;
 mod geo;
 mod html;
+mod ops;
 mod pages;
 
 use std::net::SocketAddr;
@@ -100,7 +101,12 @@ pub async fn router(pool: PgPool, geo: Arc<GeoResolver>) -> Option<Router> {
         .route("/games/:id/approve", post(pages::game_approve))
         .route("/games/:id/feature", post(pages::game_feature))
         .route("/transactions", get(pages::transactions))
+        .route("/payouts", get(ops::payouts_list))
+        .route("/payouts/:id/cancel", post(ops::payout_cancel))
+        .route("/payouts/:id/process", post(ops::payout_process))
         .route("/billing", get(pages::billing_page))
+        .route("/settings", get(ops::settings_list))
+        .route("/settings/update", post(ops::setting_update))
         .route("/analytics", get(pages::analytics_page))
         .route("/audit", get(pages::audit_page))
         .route("/logout", get(logout))
@@ -443,6 +449,20 @@ mod route_tests {
         let resp = app.oneshot(request("GET", "/")).await.unwrap();
         assert_eq!(resp.status(), StatusCode::SEE_OTHER);
         assert_eq!(header(&resp, "location"), "/superadmin/login");
+    }
+
+    #[tokio::test]
+    async fn ops_routes_require_a_session() {
+        let app = build(&[]).await;
+        for path in ["/payouts", "/settings"] {
+            let resp = app.clone().oneshot(request("GET", path)).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::SEE_OTHER,
+                "{path} should redirect when unauthenticated"
+            );
+            assert_eq!(header(&resp, "location"), "/superadmin/login");
+        }
     }
 
     #[tokio::test]
