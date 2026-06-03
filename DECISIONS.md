@@ -1950,3 +1950,17 @@ package.json): Monaco in-browser code editor in Studio + Settings notif-prefs ta
 second locale (Spanish es.json + locale switching); (4) docs/AUDIT/GAPS refresh; (5) backend tests for the new
 depth. Clean ownership: one backend feature agent, one frontend agent (owns client.js/build/package.json), one
 i18n agent (src/i18n only), one docs agent, one tests agent.
+
+---
+
+## §6 — DEPTH-1 done; next = REPLAY+TOURNAMENT (2026-06-03)
+
+DEPTH-1 (`cf3b081`): Monaco Studio editor, notif-pref enforcement, moderation+auto-flag, Spanish locale. Clean
+landing, zero breakage. **Next wave REPLAY+TOURNAMENT (chosen):** a differentiated spectator/replay viewer built
+on the moat's ReplayLog (authority.rs:917, recorded by magnetite-runtime tick.rs) + tournament UX. (1) backend:
+store ReplayLog from finished matches + GET endpoints to list/fetch replays; flesh out tournament bracket
+endpoints (create/join/advance/standings). (2) web-client: a ReplayPlayer (load a ReplayLog JSON, play back via
+the existing canvas renderer with play/pause/seek/speed — no live server). (3) frontend (sole client.js+build
+owner): a Replay Viewer page mounting the ReplayPlayer + Tournament bracket UX. (4) docs/AUDIT/GAPS. (5) tests.
+Clean ownership: 1 backend(+registration), 1 web-client, 1 frontend(+client.js+build), 1 docs, 1 tests. No new
+frontend dep (reuses magnetite-web-client) → no package.json contention.
