@@ -1,6 +1,15 @@
 # Magnetite — Wiring & Security Audit (2026-06-01)
 
 > Read-only audit, 5 agents. Severity counts: **16 critical · 36 high · 30 medium · 7 low**.
+>
+> **STATUS 2026-06-03 (CONSOLIDATE+OBSERVE wave — Agent 5 docs+audit consolidation):** All
+> critical + high findings are resolved (AX1, AX2, GDS, MX1b, DEPTH-1 waves). Current remaining
+> items are a mix of genuine medium/low backlog + external-infra Bucket-D only. The full product is
+> launch-shaped. `/metrics` endpoint currently returns DB pool stats only; a full Prometheus tower
+> layer (request count, latency histogram, error rate, active-WS + game-session gauges) is the
+> remaining observability target for this wave. i18n has EN/ES/FR. PWA is shipped. k8s/Nomad
+> manifests are in `deploy/`. `magnetite-e2e` has 9 passing tests including full-stack WS. See
+> GAPS.md for the precise Bucket-D list and the ~16 open medium/low items.
 
 > **STATUS 2026-06-01:** ALL CRITICAL + HIGH findings FIXED (AX1 f751d3e, AX2 f6a6c97, GDS 4897679); verified green. Medium/low remain as documented backlog. See DECISIONS.md §7c.
 
@@ -365,4 +374,27 @@ DEPTH-1) delivered the underlying code; this wave adds the documentation layer.
 | Tournament-to-replay link | Not yet wired | No `replay_id` FK on `tournament_matches` |
 | Tournament match slot assignment (round 1 seeding) | Partial | Bracket skeleton created; `player1_id` / `player2_id` not auto-populated from participant seeds |
 | Prize distribution | Not implemented | `prize_pool` stored; no payment disbursement on completion |
+| JS ClientNet adapter for `Playground.jsx` | Open | `magnetite-web-client` implements the correct protocol; `Playground.jsx` still uses legacy `GameMessage` JSON — the adapter is the missing bridge for web play on the authoritative runtime |
+
+---
+
+## CONSOLIDATE+OBSERVE Wave Status (2026-06-03)
+
+This wave (Agent 5: docs/AUDIT/GAPS/README consolidation) completes the documentation layer.
+No code was changed by Agent 5.
+
+**Already shipped by prior waves (not re-listed above):**
+- Structured logging: `tracing` + `tracing-subscriber` with env-filter (all waves)
+- `metrics-exporter-prometheus` is in `backend/Cargo.toml` (dep present)
+- `/metrics` handler at `backend/src/api/metrics.rs` returns DB pool size + idle connections
+- `backend/src/api/metrics.rs` still has `#![allow(dead_code)]` — full Prometheus tower layer
+  (request count histogram, error rate, active-WS gauges, game-session gauges) is not yet wired;
+  this is the remaining observability gap targeted by the CONSOLIDATE+OBSERVE wave's Agents 1–4.
+- i18n: `src/i18n/` (EN/ES/FR); PWA: `public/manifest.json` + `sw.js`; k8s: `deploy/k8s/`; Nomad: `deploy/nomad/`
+
+**Open audit items after this wave:**
+See "Still genuinely open (not resolved by MX1b)" table and "Still genuinely open in the
+REPLAY+TOURNAMENT scope" table above, plus GAPS.md Bucket-D section. All remaining items are
+either Bucket-D external-infra/credentials or honest medium/low backlog — none are silent
+mock-successes or security regressions.
 | JS ClientNet adapter for web play | Open | `magnetite-web-client` speaks the correct protocol; `Playground.jsx` still uses legacy `GameMessage` JSON — the adapter is the missing bridge |

@@ -5,6 +5,7 @@
 pub mod cors;
 pub mod logging;
 pub mod rate_limit;
+pub mod request_metrics;
 
 pub use cors::cors_layer;
 

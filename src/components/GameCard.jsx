@@ -128,7 +128,7 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
         </div>
 
         <div className="card-footer">
-          <span className="price" aria-label={`${game.fee_per_session} USDC per session`}>
+          <span className="price" aria-label={`${game.fee_per_session} USD per session`}>
             <span className="price-value" aria-hidden="true">{game.fee_per_session}</span>
             <span className="price-currency" aria-hidden="true">USDC</span>
             <span className="price-period" aria-hidden="true">/{t('games.sessions')}</span>

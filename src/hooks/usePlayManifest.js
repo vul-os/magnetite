@@ -83,7 +83,6 @@ export function usePlayManifest(gameId) {
 
     return () => { cancelled = true; };
     // `rev` is intentionally included so callers can force a refresh via reload().
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, rev]);
 
   return { manifest, loading, error, reload };

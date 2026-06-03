@@ -25,6 +25,15 @@
 > and remaining open items (replay REST API, tournament-to-replay link, prize distribution,
 > round-1 slot seeding, JS ClientNet adapter for Playground.jsx).
 >
+> **Updated: 2026-06-03 (CONSOLIDATE+OBSERVE wave — Agent 5 docs+audit consolidation).**
+> README.md rewritten to accurately reflect the full product: moat (scale primitive/sandbox/
+> anti-cheat/one-command), gaming suite (comms/voice/streaming/social/leaderboards/achievements/
+> subscriptions/notifications/moderation), Wise payouts + Paystack on-ramp, PWA/mobile, i18n
+> (EN/ES/FR), k8s/Nomad deploy, replay/spectator, tournaments, observability current state.
+> AUDIT.md updated with CONSOLIDATE+OBSERVE wave status block. GAPS.md Bucket-D updated:
+> observability gap (full Prometheus tower layer) explicitly named as the remaining codeable
+> target; all other Bucket-D items remain documented-only. Summary counts updated below.
+>
 > **Status legend:** **closed** (code evidence confirms the fix is real), **partial**
 > (real but incomplete), **stub** (handler/UI exists but no-op/canned), **mock**
 > (fabricated/mock-fallback data), **hardcoded** (literal placeholder), **documented-only**
@@ -255,12 +264,29 @@ These cannot be resolved without external infrastructure or third-party accounts
 **Closed in Moat N1–N3 (2026-06-01):** 4 MOAT differentiators (scale primitive, sandbox, anti-cheat, one-command pipeline)  
 **Closed in Backlog B1 (2026-06-01):** 14 smaller gaps (tournaments, leaderboard, achievements, backup job, etc.)  
 **Closed in MX1b (2026-06-03):** 8 items (refunds, content rating, blocked routes, analytics time-series, email verification, MediaMTX in compose, wasm-build-runner docs)  
-**Closed in DEPTH-1 (2026-06-03):** 5 items (notification real-time WS, /ws/notifications auth-layer, moderation admin surface, i18n scaffold, notification preferences REST + UI)
+**Closed in DEPTH-1 (2026-06-03):** 5 items (notification real-time WS, /ws/notifications auth-layer, moderation admin surface, i18n scaffold, notification preferences REST + UI)  
+**Closed in REPLAY+TOURNAMENT (2026-06-03):** 7 documentation items — `docs/moat/replay-spectator.md` created; covers ReplayLog struct + recording, verify_replay algorithm, ReplayVerifier enriched diagnostics, magnetite-web-client wire protocol + prediction buffer + canvas renderer + in-browser replay playback, tournament REST system (7 endpoints, bracket generation, lifecycle).  
+**Closed in CONSOLIDATE+OBSERVE (2026-06-03):** README.md, AUDIT.md, GAPS.md, docs/index.md fully updated to reflect the whole product.
 
-**Closed in REPLAY+TOURNAMENT (2026-06-03):** 7 documentation items — `docs/moat/replay-spectator.md` created; covers ReplayLog struct + recording, verify_replay algorithm, ReplayVerifier enriched diagnostics, magnetite-web-client wire protocol + prediction buffer + canvas renderer + in-browser replay playback, tournament REST system (7 endpoints, bracket generation, lifecycle).
+**Remaining — smaller gaps (not Bucket D):** ~17 genuinely open medium/low items:
+- Replay REST GET endpoint (`GET /api/v1/matches/:id/replay`) not wired
+- Tournament-to-replay FK (`replay_id` on `tournament_matches`) not wired
+- Tournament round-1 slot seeding (bracket skeleton, no auto-seed)
+- Prize distribution after tournament completion (no Wise/Paystack disbursement)
+- JS ClientNet adapter for `Playground.jsx` (web play on authoritative runtime blocked)
+- TOTP 2FA not checked at login (security theatre — `totp_enabled` read path missing)
+- Subscription upgrade/downgrade/proration not implemented
+- Wise IBAN (international) payout type not supported
+- Search is ILIKE only — no GIN/tsvector/full-text ranking
+- `NotificationPreferences` component not yet mounted in a Settings route
+- Full Prometheus tower layer for `/metrics` (request count, latency histogram, error rate, gauges) — `metrics-exporter-prometheus` dep is present; wiring is the target
+- KYC-for-payouts (`verification.rs` KYCVerified never set)
+- Anti-abuse rate limits missing for chat/review endpoints
+- Developer analytics: no geographic / device breakdown
+- `platform.rs` comment stale (was fixed in B1, stale comment swept — verify on disk)
+- `cancel_at_period_end` field exists but never set from handler
 
-**Remaining — smaller gaps (not Bucket D):** ~16 genuinely open medium/low items — see AUDIT.md "Still genuinely open" table and "Still genuinely open in the REPLAY+TOURNAMENT scope" table. Key open items: replay REST GET endpoint, tournament-to-replay FK, round-1 slot seeding, prize distribution, JS ClientNet adapter for Playground.jsx, TOTP at login, subscription upgrade, IBAN payout, search full-text.
-**Remaining — Bucket D (external infra/creds):** 9 entries (MediaMTX local compose closed; multi-node sharding, cloud runner fleet, Voice SFU, GitHub CI wasm-pack runner, FPS/motorsport WASM CI builds, Wise/Paystack/email live credentials remain)
+**Remaining — Bucket D (external infra/creds):** 9 entries (MediaMTX local compose: **closed MX1b**; multi-node sharding, cloud runner fleet, Voice SFU, GitHub CI wasm-pack runner, FPS/motorsport WASM CI builds, Wise/Paystack/email live credentials, production container orchestration for magnetite-runtime)
 
 Of the remaining non-Bucket-D gaps: all show honest errors or clearly-labelled absent states — none are silent mock successes.
 

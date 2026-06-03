@@ -166,7 +166,6 @@ export default function Replay() {
       if (!canvas || !renderFn || !replay) return;
       const ctx = canvas.getContext('2d');
       const state = buildArenaState(replay.frames, currentTickRef.current, replay.config);
-      // eslint-disable-next-line no-empty
       try { renderFn(ctx, state, 'player-1'); } catch { /* ignore render errors */ }
     });
   }, [replay]);
@@ -194,7 +193,7 @@ export default function Replay() {
     }, msPerTick);
 
     return () => { clearInterval(intervalRef.current); intervalRef.current = null; };
-  }, [playing, speed, replay]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playing, speed, replay]);
 
   // Re-render on tick change
   useEffect(() => { scheduleRender(); }, [currentTick, scheduleRender]);

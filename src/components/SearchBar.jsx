@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearch } from '../hooks/useSearch';
 import Spinner from './common/Spinner';
 
@@ -16,9 +16,12 @@ export default function SearchBar({
   const inputRef = useRef(null);
   const containerRef = useRef(null);
 
-  const allResults = results
-    ? [...(results.games || []).map(g => ({ ...g, category: 'game' })), ...(results.users || []).map(u => ({ ...u, category: 'user' }))]
-    : [];
+  const allResults = useMemo(
+    () => results
+      ? [...(results.games || []).map(g => ({ ...g, category: 'game' })), ...(results.users || []).map(u => ({ ...u, category: 'user' }))]
+      : [],
+    [results]
+  );
 
   useEffect(() => {
     if (autoFocus && inputRef.current) {

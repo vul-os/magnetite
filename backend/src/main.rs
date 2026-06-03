@@ -56,10 +56,12 @@ use crate::jobs::verification_cleanup;
 use crate::middleware::cors_layer;
 use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
+use crate::middleware::request_metrics::record_request_metrics;
 use crate::services::payment::SubscriptionService;
 use crate::services::payout::PayoutService;
 use crate::ws::comms;
 use crate::ws::game as ws_game;
+use crate::ws::gauges::WsGauges;
 use crate::ws::voice;
 
 #[tokio::main]
@@ -78,6 +80,22 @@ async fn main() {
     let rate_limit_config = RateLimitConfig::default();
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost".to_string());
     let rate_limiter = create_rate_limiter(&redis_url, rate_limit_config);
+
+    // ── Prometheus metrics recorder ─────────────────────────────────────────
+    // install_recorder() installs the recorder as the global `metrics` facade
+    // and returns a handle that can render Prometheus text on demand (used by
+    // GET /metrics).  No background HTTP listener is started — we expose the
+    // scrape endpoint through Axum instead.
+    let prom_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+        .install_recorder()
+        .expect("failed to install Prometheus recorder");
+
+    let ws_gauges = Arc::new(WsGauges::new());
+    let metrics_state = Arc::new(metrics::MetricsState {
+        handle: prom_handle,
+        pool: pool.clone(),
+        ws_gauges: Arc::clone(&ws_gauges),
+    });
 
     let versioning_state = Arc::new(());
 
@@ -163,11 +181,14 @@ async fn main() {
             versioning::versioning_middleware,
         ));
 
-    let health_metrics = Router::new()
+    let health_ready: Router = Router::new()
         .route("/health/ready", get(health::ready))
-        .route("/health/live", get(health::live))
-        .route("/metrics", get(metrics::metrics))
         .with_state(pool.clone());
+    let health_live: Router = Router::new().route("/health/live", get(health::live));
+    let metrics_router: Router = Router::new()
+        .route("/metrics", get(metrics::metrics))
+        .with_state(Arc::clone(&metrics_state));
+    let health_metrics = health_ready.merge(health_live).merge(metrics_router);
 
     notifications::init_notification_broadcaster().await;
     let notification_broadcaster = Arc::new(notifications::NotificationBroadcaster::new());
@@ -191,7 +212,8 @@ async fn main() {
             rate_limiter.clone(),
             rate_limit_middleware,
         ))
-        .layer(from_fn(log_request));
+        .layer(from_fn(log_request))
+        .layer(from_fn(record_request_metrics));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     tracing::info!("Server running on {}", listener.local_addr().unwrap());
