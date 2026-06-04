@@ -147,10 +147,12 @@ function App() {
               </a>
               <AnnouncementBanner />
               <ToastContainer />
-              <BottomNav />
               <ErrorBoundary>
                 <BrowserRouter>
                   <AppContent />
+                  {/* BottomNav uses router hooks (useLocation), so it must live
+                      inside BrowserRouter. */}
+                  <BottomNav />
                   <Suspense fallback={<PageLoader />}>
                     <Routes>
                       <Route path="/" element={<Marketplace />} />

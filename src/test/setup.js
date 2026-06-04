@@ -19,6 +19,23 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = MockObserver;
 }
 
+// jsdom doesn't implement matchMedia; provide a no-op MediaQueryList so
+// useMediaQuery (and anything else) can mount. Defaults to "does not match".
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent() {
+      return false;
+    },
+  });
+}
+
 afterEach(() => {
   cleanup();
 });
