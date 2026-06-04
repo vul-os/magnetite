@@ -4,6 +4,15 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    // Dedicated dev port for Magnetite (5173 is commonly taken by other Vite
+    // apps). strictPort makes Vite FAIL LOUDLY if this port is busy instead of
+    // silently bumping to the next free port — the auto-bump is what breaks HMR
+    // (server moves to :5174 but the HMR websocket still targets :5173), leaving
+    // the browser stuck on a stale bundle.
+    port: 5174,
+    strictPort: true,
+  },
   build: {
     rollupOptions: {
       output: {
