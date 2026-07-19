@@ -40,9 +40,9 @@ const features = [
   {
     Icon: WalletIcon,
     kicker: '// MONETIZATION',
-    title: 'Real Money, Fast Global Payouts',
+    title: 'Paid Directly, Non-Custodially',
     description:
-      'Playtime-based earnings paid via Wise — fast bank transfers to developers worldwide. 70% revenue share. Paystack card/bank on-ramp included. No payment plumbing required.',
+      'Buyers pay your wallet in the same atomic transaction that mints a signed receipt. Nobody holds your money, so there is no payout to request and no processing delay — and the protocol fee defaults to 0 bps.',
   },
 ];
 

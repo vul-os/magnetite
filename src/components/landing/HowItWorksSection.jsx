@@ -15,15 +15,15 @@ const steps = [
     kicker: '// CONFIGURE',
     title: 'Set Pricing & Deploy',
     description:
-      'Define your per-session price in USD, player limits, and server region. One push to GitHub triggers a full WASM + native build and deploys to the edge.',
+      'Define your per-session price in USDC, player limits, and server region. One push to GitHub triggers a full WASM + native build and deploys to the edge.',
     Icon: UploadIcon,
   },
   {
     number: '03',
     kicker: '// EARN',
-    title: 'Track Sessions & Collect',
+    title: 'Get Paid Wallet-to-Wallet',
     description:
-      'Monitor live sessions, player counts, and USD earnings in real-time from your developer dashboard. Weekly Wise payouts to your bank account, zero friction.',
+      'Buyers pay your wallet directly in USDC and each sale mints a signed receipt you can verify. Nothing is held in escrow, the protocol fee defaults to 0 bps, and there is no payout queue to wait on.',
     Icon: ChartIcon,
   },
 ];

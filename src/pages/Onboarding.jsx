@@ -4,11 +4,15 @@ import Button from '../components/common/Button';
 import OnboardingProgress from '../components/OnboardingProgress';
 import GameCard from '../components/GameCard';
 import { api } from '../api/client';
+import { shortKey } from '../utils/currency';
 import './Onboarding.css';
 
 const ONBOARDING_STORAGE_KEY = 'magnetite_onboarding_completed';
 
-const STEPS = ['Welcome', 'Set Up Wallet', 'Add Funds', 'Browse Games'];
+// NON-CUSTODIAL (seam §3.6 `PaymentRail`): there is no "add funds" step because
+// this node never holds funds. A wallet is an address you control; a purchase
+// pays the developer/operator wallet directly and mints a signed receipt.
+const STEPS = ['Welcome', 'Link Wallet', 'Browse Games'];
 
 // Placeholder featured games — replaced by real games if the API responds
 const FEATURED_GAMES_FALLBACK = [
@@ -17,7 +21,8 @@ const FEATURED_GAMES_FALLBACK = [
   { id: 3, title: 'Speed Legends',    developer: 'Velocity Labs',     fee_per_session: 0.75, category: 'Racing',  thumbnail: 'https://picsum.photos/seed/game3/400/225' },
 ];
 
-const FUND_AMOUNTS = [10, 25, 50, 100];
+/** A wallet address is a 32-byte hex Ed25519 public key. */
+const HEX_KEY_RE = /^[0-9a-fA-F]{64}$/;
 
 function WelcomeStep({ onNext }) {
   return (
@@ -39,11 +44,11 @@ function WelcomeStep({ onNext }) {
         </div>
         <div className="welcome-feature">
           <span className="feature-icon" aria-hidden="true">◈</span>
-          <span>Pay by card or bank — fast, secure via Paystack</span>
+          <span>Pay in USDC from a wallet you control — we never hold your funds</span>
         </div>
         <div className="welcome-feature">
           <span className="feature-icon" aria-hidden="true">◉</span>
-          <span>Earn 70% of playtime revenue as developer, paid via Wise</span>
+          <span>Developers are paid wallet-to-wallet, 0 bps protocol fee by default</span>
         </div>
       </div>
       <Button size="lg" onClick={onNext}>
@@ -54,192 +59,88 @@ function WelcomeStep({ onNext }) {
 }
 
 function WalletStep({ onNext, onSkip }) {
-  const [walletAddress, setWalletAddress] = useState('');
-  const [isGenerating, setIsGenerating]   = useState(false);
-  const [showAddress, setShowAddress]     = useState(false);
-  const [error, setError]                 = useState(null);
+  const [input, setInput]           = useState('');
+  const [linking, setLinking]       = useState(false);
+  const [linked, setLinked]         = useState(null);
+  const [error, setError]           = useState(null);
 
-  const generateWallet = async () => {
-    setIsGenerating(true);
+  const clean = input.trim().replace(/^0x/, '');
+  const valid = HEX_KEY_RE.test(clean);
+
+  const linkWallet = async () => {
+    if (!valid) {
+      setError('Enter a 32-byte hex Ed25519 public key (64 hex characters).');
+      return;
+    }
+    setLinking(true);
     setError(null);
     try {
-      // POST to wallet API — backend creates/returns the user's wallet info
-      const data = await api.wallet.balance();
-      const address = data?.address ?? data?.wallet_address ?? null;
-      if (address) {
-        setWalletAddress(address);
-        setShowAddress(true);
-      } else {
-        // Backend didn't return an address yet (wallet auto-created on registration)
-        // Fetch balance which also initialises the wallet server-side
-        setWalletAddress('Wallet activated — manage it in Settings');
-        setShowAddress(true);
-      }
-    } catch {
-      setError('Could not initialise wallet. You can set it up later in Settings.');
-      setShowAddress(true); // allow proceeding
-      setWalletAddress('');
+      const data = await api.wallet.link(clean);
+      const payload = data?.data ?? data;
+      setLinked(payload?.wallet_address ?? clean.toLowerCase());
+    } catch (err) {
+      setError(err.message || 'Could not link that wallet. You can link one later in Wallet settings.');
     } finally {
-      setIsGenerating(false);
+      setLinking(false);
     }
   };
 
   return (
     <div className="onboarding-step wallet-step">
-      <h2>Set Up Your Wallet</h2>
+      <h2>Link Your Wallet</h2>
       <p className="step-description">
-        Your Magnetite wallet holds your USD balance for game sessions and earnings.
-        It is managed securely by the platform — no crypto required.
+        Magnetite is non-custodial: your wallet is an address <em>you</em> control,
+        not a balance we hold. Buying an item pays the developer&apos;s wallet
+        directly and mints a signed receipt — that receipt is your entitlement.
+        You only need a wallet when you want to buy something, so you can skip this.
       </p>
 
       {error && (
         <div className="step-error" role="alert">{error}</div>
       )}
 
-      {!showAddress ? (
-        <div className="wallet-options">
-          <div
-            className="wallet-option primary"
-            onClick={isGenerating ? undefined : generateWallet}
-            role="button"
-            tabIndex={0}
-            aria-disabled={isGenerating}
-            onKeyDown={(e) => e.key === 'Enter' && !isGenerating && generateWallet()}
-          >
-            <div className="option-icon" aria-hidden="true">{isGenerating ? '⏳' : '✨'}</div>
-            <h3>{isGenerating ? 'Initialising…' : 'Activate Wallet'}</h3>
-            <p>Activate your USD wallet to start playing</p>
+      {!linked ? (
+        <div className="wallet-link-form">
+          <label className="address-label" htmlFor="onboarding-wallet-address">
+            Wallet Address
+          </label>
+          <div className="wallet-key-input">
+            <input
+              id="onboarding-wallet-address"
+              type="text"
+              spellCheck="false"
+              autoComplete="off"
+              placeholder="32-byte hex Ed25519 public key"
+              value={input}
+              onChange={(e) => { setInput(e.target.value); setError(null); }}
+              onKeyDown={(e) => e.key === 'Enter' && !linking && linkWallet()}
+              aria-describedby="onboarding-wallet-hint"
+            />
           </div>
+          <p id="onboarding-wallet-hint" className="wallet-key-hint">
+            64 hex characters. Nothing is custodied — settlement is USDC, wallet to wallet.
+          </p>
+          <Button onClick={linkWallet} loading={linking} disabled={!valid || linking}>
+            Link Wallet
+          </Button>
         </div>
       ) : (
-        walletAddress && (
-          <div className="wallet-address-display">
-            <div className="address-label">Wallet Status</div>
-            <div className="address-value">{walletAddress}</div>
-            {walletAddress.startsWith('0x') && (
-              <div className="address-actions">
-                <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(walletAddress)}>
-                  Copy Address
-                </Button>
-              </div>
-            )}
+        <div className="wallet-address-display">
+          <div className="address-label">Linked Wallet</div>
+          <div className="address-value">{linked}</div>
+          <div className="address-actions">
+            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(linked)}>
+              Copy {shortKey(linked)}
+            </Button>
           </div>
-        )
+        </div>
       )}
 
       <div className="step-actions">
-        <Button onClick={onNext} disabled={isGenerating && !showAddress}>
+        <Button onClick={onNext} disabled={linking}>
           Continue
         </Button>
         <Button variant="ghost" onClick={onSkip}>
-          Skip for now
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function FundsStep({ onNext, onSkip }) {
-  const [selectedAmount, setSelectedAmount] = useState(null);
-  const [customAmount, setCustomAmount]     = useState('');
-  const [isProcessing, setIsProcessing]     = useState(false);
-  const [depositError, setDepositError]     = useState(null);
-
-  const amount = selectedAmount || parseFloat(customAmount) || 0;
-
-  const handleDeposit = async (method) => {
-    if (!amount) return;
-    setIsProcessing(true);
-    setDepositError(null);
-    try {
-      await api.wallet.deposit({ amount, payment_method: method });
-      onNext();
-    } catch (err) {
-      setDepositError(err.message || 'Deposit failed. You can add funds later in Wallet settings.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <div className="onboarding-step funds-step">
-      <h2>Add Funds</h2>
-      <p className="step-description">
-        Add USD to your wallet to start playing. Pay by card or bank transfer. You can skip this step and add funds later.
-      </p>
-
-      {depositError && (
-        <div className="step-error" role="alert">{depositError}</div>
-      )}
-
-      <div className="amount-selector">
-        <div className="amount-label">Select Amount</div>
-        <div className="amount-options">
-          {FUND_AMOUNTS.map(amt => (
-            <button
-              key={amt}
-              className={`amount-option ${selectedAmount === amt ? 'selected' : ''}`}
-              onClick={() => {
-                setSelectedAmount(amt);
-                setCustomAmount('');
-              }}
-            >
-              ${amt}
-            </button>
-          ))}
-        </div>
-        <div className="custom-amount">
-          <span className="currency-symbol">$</span>
-          <input
-            type="number"
-            placeholder="Custom amount"
-            value={customAmount}
-            onChange={(e) => {
-              setCustomAmount(e.target.value);
-              setSelectedAmount(null);
-            }}
-            min="1"
-          />
-        </div>
-      </div>
-
-      {amount > 0 && (
-        <div className="deposit-options">
-          <div
-            className={`deposit-option ${isProcessing ? 'loading' : ''}`}
-            onClick={() => !isProcessing && handleDeposit('paystack')}
-            role="button"
-            tabIndex={0}
-            aria-disabled={isProcessing}
-            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleDeposit('paystack')}
-          >
-            <div className="option-icon" aria-hidden="true">💳</div>
-            <div className="option-info">
-              <h4>Pay with Card</h4>
-              <p>Visa, Mastercard via Paystack</p>
-            </div>
-            <div className="option-arrow" aria-hidden="true">→</div>
-          </div>
-          <div
-            className={`deposit-option ${isProcessing ? 'loading' : ''}`}
-            onClick={() => !isProcessing && handleDeposit('bank_transfer')}
-            role="button"
-            tabIndex={0}
-            aria-disabled={isProcessing}
-            onKeyDown={(e) => e.key === 'Enter' && !isProcessing && handleDeposit('bank_transfer')}
-          >
-            <div className="option-icon" aria-hidden="true">🏦</div>
-            <div className="option-info">
-              <h4>Bank Transfer</h4>
-              <p>Direct bank deposit via Paystack</p>
-            </div>
-            <div className="option-arrow" aria-hidden="true">→</div>
-          </div>
-        </div>
-      )}
-
-      <div className="step-actions">
-        <Button variant="secondary" onClick={onSkip}>
           Skip for now
         </Button>
       </div>
@@ -321,8 +222,6 @@ export default function Onboarding() {
       case 1:
         return <WalletStep onNext={handleNext} onSkip={handleSkip} />;
       case 2:
-        return <FundsStep onNext={handleNext} onSkip={handleSkip} />;
-      case 3:
         return <BrowseGamesStep onComplete={completeOnboarding} featuredGames={featuredGames} />;
       default:
         return null;

@@ -76,8 +76,8 @@ describe('Admin refunds API', () => {
       transaction_id: 'txn-uuid-456',
       user_id: 'user-uuid-789',
       amount: '49.99',
-      provider: 'paystack',
-      provider_ref: 'ps_refund_abc',
+      provider: 'mock',
+      provider_ref: 'rail_refund_abc',
       status: 'completed',
     };
     api.admin.refundTransaction.mockResolvedValue(mockResponse);
@@ -85,7 +85,7 @@ describe('Admin refunds API', () => {
     const result = await api.admin.refundTransaction('txn-uuid-456', { reason: 'Customer request' });
     expect(result.refund_id).toBe('refund-uuid-123');
     expect(result.status).toBe('completed');
-    expect(result.provider).toBe('paystack');
+    expect(result.provider).toBe('mock');
   });
 
   it('refundTransaction returns provider_unconfigured when no keys set', async () => {
@@ -94,7 +94,7 @@ describe('Admin refunds API', () => {
       transaction_id: 'txn-uuid-001',
       user_id: 'user-uuid-001',
       amount: '10.00',
-      provider: 'paystack',
+      provider: 'mock',
       provider_ref: null,
       status: 'provider_unconfigured',
     });

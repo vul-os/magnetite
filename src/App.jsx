@@ -34,6 +34,7 @@ if ('serviceWorker' in navigator) {
 
 const LandingPage = lazy(() => import('./components/landing/LandingPage'));
 const Marketplace = lazy(() => import('./pages/Marketplace'));
+const ServerBrowser = lazy(() => import('./pages/ServerBrowser'));
 const GameDetail = lazy(() => import('./pages/GameDetail'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -166,6 +167,8 @@ function App() {
                       <Route path="/settings/linked-accounts" element={<LinkAccount />} />
                       <Route path="/settings/connected-accounts" element={<ConnectedAccounts />} />
                       <Route path="/marketplace" element={<Marketplace />} />
+                      {/* Discovery (seam §3.4) — nodes self-advertise; this is the phonebook. */}
+                      <Route path="/servers" element={<ServerBrowser />} />
                       <Route path="/game/:id" element={<GameDetail />} />
                       <Route path="/play/:id" element={<Playground />} />
                       <Route path="/subscription" element={<Subscription />} />

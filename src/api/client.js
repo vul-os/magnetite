@@ -65,11 +65,64 @@ export const api = {
     /** Disable 2FA. POST /api/v1/auth/2fa/disable */
     disable2fa: (code) => request('/api/v1/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) }),
   },
+  /**
+   * Wallet — NON-CUSTODIAL (seam §3.6 `PaymentRail`).
+   *
+   * This node holds no funds. A "wallet" is nothing but the Ed25519 address the
+   * user has linked so a checkout can pay them (or charge them) directly,
+   * wallet→wallet. There is no balance, no deposit, no withdrawal, no payout:
+   * `/wallet/balance`, `/wallet/deposit`, `/wallet/transactions` and
+   * `/wallet/withdraw` were all removed from the backend.
+   */
   wallet: {
-    balance: () => request('/api/wallet/balance'),
-    deposit: (data) => request('/api/wallet/deposit', { method: 'POST', body: JSON.stringify(data) }),
-    withdraw: (data) => request('/api/wallet/withdraw', { method: 'POST', body: JSON.stringify(data) }),
-    transactions: () => request('/api/wallet/transactions'),
+    /** GET /api/v1/wallet → { user_id, wallet_address, custodial: false, rail } */
+    get: () => request('/api/v1/wallet'),
+    /** POST /api/v1/wallet/link — link/replace the hex Ed25519 address. */
+    link: (walletAddress) =>
+      request('/api/v1/wallet/link', {
+        method: 'POST',
+        body: JSON.stringify({ wallet_address: walletAddress }),
+      }),
+    /**
+     * GET /api/v1/wallet/receipts — the signed receipts this user paid for.
+     * Replaces the custodial transaction ledger. Each row:
+     * { id, kind, total, protocol_fee, rail_pubkey, voided, created_at }
+     */
+    receipts: () => request('/api/v1/wallet/receipts'),
+    /** POST /api/v1/wallet/hosting/pay — pay an operator's hosting fee (§3.6b). */
+    payHostingFee: ({ operatorPubkey, amount, serverId }) =>
+      request('/api/v1/wallet/hosting/pay', {
+        method: 'POST',
+        body: JSON.stringify({
+          operator_pubkey: operatorPubkey,
+          amount,
+          server_id: serverId,
+        }),
+      }),
+    /** GET /api/v1/wallet/hosting/:serverId → { server_id, allowed } */
+    hostingAccess: (serverId) => request(`/api/v1/wallet/hosting/${serverId}`),
+  },
+
+  /**
+   * Discovery — the phonebook (seam §3.4). Nodes self-advertise `SessionAd`s;
+   * this is a hint layer, never an authority. Replaces the old central
+   * `runtime_instances` poll.
+   */
+  discovery: {
+    /**
+     * GET /api/v1/discovery/sessions — discovered session ads. Each ad:
+     * { game, node, capacity: { cpu_cores, ram_mb, bandwidth_mbps, free_slots,
+     *   max_shards }, ping_hint, price, chat_room, voice_room }
+     */
+    sessions: (filter = {}) => {
+      const qs = new URLSearchParams(
+        Object.entries(filter).filter(([, v]) => v != null && v !== ''),
+      ).toString();
+      return request(`/api/v1/discovery/sessions${qs ? `?${qs}` : ''}`);
+    },
+    /** POST /api/v1/discovery/announce — a node advertises a session it hosts. */
+    announce: (ad) =>
+      request('/api/v1/discovery/announce', { method: 'POST', body: JSON.stringify(ad) }),
   },
   games: {
     list: () => request('/api/games'),
@@ -90,19 +143,26 @@ export const api = {
     /** GET /api/v1/subscriptions/me — current user's active subscription */
     current: () => request('/api/v1/subscriptions/me'),
     create: (data) => request('/api/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
-    /** DELETE /api/v1/subscriptions — cancel the active subscription */
+    /**
+     * DELETE /api/v1/subscriptions — drop back to the free tier.
+     * Note: nothing is "cancelled" in a billing sense — nobody holds a mandate
+     * against the user's wallet. A tier is a receipt-backed feature flag that
+     * lapses on its own; this just relinquishes it early.
+     */
     cancel: () => request('/api/v1/subscriptions', { method: 'DELETE' }),
     /**
-     * POST /api/v1/subscriptions/upgrade — upgrade/downgrade tier (AX2).
+     * POST /api/v1/subscriptions/upgrade — switch tier.
      * planId: target tier id.
-     * paystackRef: Paystack payment reference for the prorated charge (optional for downgrades).
+     * receiptId: id of the signed `payment_receipts` row that paid the operator
+     *   wallet for the new tier (omitted when moving to a cheaper/free tier).
+     * There is no proration charge: nothing is billed in arrears.
      */
-    upgrade: (planId, paystackRef) =>
+    upgrade: (planId, receiptId) =>
       request('/api/v1/subscriptions/upgrade', {
         method: 'POST',
         body: JSON.stringify({
           plan_id: planId,
-          ...(paystackRef ? { paystack_payment_id: paystackRef } : {}),
+          ...(receiptId ? { receipt_id: receiptId } : {}),
         }),
       }),
     /**
@@ -330,18 +390,10 @@ export const api = {
     rollback: (gameId, data) =>
       request(`/api/v1/developer/games/${gameId}/rollback`, { method: 'POST', body: JSON.stringify(data) }),
 
-    // ── Wise payout recipient (D-PAY-2) ──────────────────────────────────
-    /** GET /api/v1/developer/wise-recipient — current saved Wise recipient */
-    getWiseRecipient: () => request('/api/v1/developer/wise-recipient'),
-    /**
-     * POST /api/v1/developer/wise-recipient
-     * data: { account_holder_name, currency, type: 'email'|'iban'|'ach'|..., details: {...} }
-     */
-    saveWiseRecipient: (data) =>
-      request('/api/v1/developer/wise-recipient', { method: 'POST', body: JSON.stringify(data) }),
-    /** DELETE /api/v1/developer/wise-recipient — remove saved recipient */
-    deleteWiseRecipient: () =>
-      request('/api/v1/developer/wise-recipient', { method: 'DELETE' }),
+    // Payout recipients are GONE. Developers are paid wallet-to-wallet at
+    // checkout (seam §3.6), so there is no bank account to register, no
+    // recipient to maintain and no payout to schedule. The developer's
+    // destination is simply the wallet address linked via `api.wallet.link`.
 
     // ── Payout request (D-PAY-4) ─────────────────────────────────────────
     /**

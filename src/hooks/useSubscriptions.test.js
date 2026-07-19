@@ -145,18 +145,18 @@ describe('api.subscriptions client', () => {
     expect(result.data.status).toBe('cancel_pending');
   });
 
-  it('upgrade() sends tier_id and paystack_payment_id', async () => {
+  it('upgrade() sends tier_id and the signed receipt id', async () => {
     const mockResponse = {
       data: { id: 'sub-2', status: 'active', tier: { slug: 'pro' } },
     };
     api.subscriptions.upgrade.mockResolvedValue(mockResponse);
 
-    const result = await api.subscriptions.upgrade('tier-pro', 'pstk_ref_001');
+    const result = await api.subscriptions.upgrade('tier-pro', 'rcpt_01HQ8ZK3NP');
     expect(result.data.status).toBe('active');
-    expect(api.subscriptions.upgrade).toHaveBeenCalledWith('tier-pro', 'pstk_ref_001');
+    expect(api.subscriptions.upgrade).toHaveBeenCalledWith('tier-pro', 'rcpt_01HQ8ZK3NP');
   });
 
-  it('upgrade() for free downgrade does not require paystackRef', async () => {
+  it('upgrade() for a free downgrade does not require a receipt id', async () => {
     api.subscriptions.upgrade.mockResolvedValue({ data: { id: 'sub-3', status: 'active' } });
 
     const result = await api.subscriptions.upgrade('tier-free');
@@ -165,9 +165,9 @@ describe('api.subscriptions client', () => {
   });
 
   it('upgrade() propagates errors from backend', async () => {
-    api.subscriptions.upgrade.mockRejectedValue(new Error('payment_id required for paid tier'));
+    api.subscriptions.upgrade.mockRejectedValue(new Error('receipt_id required for paid tier'));
 
-    await expect(api.subscriptions.upgrade('tier-pro')).rejects.toThrow('payment_id required');
+    await expect(api.subscriptions.upgrade('tier-pro')).rejects.toThrow('receipt_id required');
   });
 
   it('cancel() calls DELETE on the right path', async () => {

@@ -1,22 +1,19 @@
-/* ── Wallet Page — Industrial Magnetite polish ─────────────────────────── */
+/* ── Wallet Page — non-custodial (address + signed receipts) ─────────────── */
+/*
+ * There is no balance card here on purpose: this node holds no funds. The page
+ * is two ideas — the address you control, and the receipts that prove what you
+ * paid for. Fiat affordances (deposit presets, payout buttons, Paystack method
+ * pickers) and their styles are gone.
+ */
 
 /* ── Keyframes (page-local) ──────────────────────────────────────────────── */
 @keyframes walletReveal {
   from { opacity: 0; transform: translateY(24px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes countPulse {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.04); }
-  100% { transform: scale(1); }
-}
-@keyframes shimmerSkeleton {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-@keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 24px rgba(245, 165, 36, 0.14); }
-  50%       { box-shadow: 0 0 40px rgba(245, 165, 36, 0.28); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── Root ────────────────────────────────────────────────────────────────── */
@@ -48,6 +45,31 @@
   font-family: var(--font-sans);
 }
 
+/* ── Shared bits ─────────────────────────────────────────────────────────── */
+.wallet-alert {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  background: rgba(255, 84, 104, 0.1);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
+
+.wallet-error {
+  color: var(--color-error);
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  margin: 0.5rem 0 0;
+}
+
+.wallet-muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
 /* ── Layout grid ─────────────────────────────────────────────────────────── */
 .wallet-grid {
   display: grid;
@@ -66,12 +88,9 @@
   min-width: 0;
 }
 
-/* Staggered reveal for left column cards */
 .wallet-left > *:nth-child(1) { animation: walletReveal var(--t-slow) var(--ease-out) 0.10s both; }
 .wallet-left > *:nth-child(2) { animation: walletReveal var(--t-slow) var(--ease-out) 0.18s both; }
-.wallet-left > *:nth-child(3) { animation: walletReveal var(--t-slow) var(--ease-out) 0.26s both; }
-.wallet-left > *:nth-child(4) { animation: walletReveal var(--t-slow) var(--ease-out) 0.34s both; }
-.wallet-right              { animation: walletReveal var(--t-slow) var(--ease-out) 0.14s both; }
+.wallet-right                 { animation: walletReveal var(--t-slow) var(--ease-out) 0.14s both; }
 
 @media (prefers-reduced-motion: reduce) {
   .wallet,
@@ -80,597 +99,398 @@
   .wallet-right { animation: none; }
 }
 
-/* ── Subscription status card ────────────────────────────────────────────── */
-.sub-status-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-  transition: border-color var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out);
-}
-
-.sub-status-card:hover {
-  border-color: var(--color-accent-soft);
-  box-shadow: 0 0 0 1px var(--color-accent-soft), var(--shadow-sm);
-}
-
-.sub-status-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sub-tier-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.sub-tier-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  box-shadow: 0 0 8px var(--color-accent);
-}
-
-.sub-tier-name {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.sub-active-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-success);
-  background: rgba(61, 220, 132, 0.10);
-  border: 1px solid rgba(61, 220, 132, 0.2);
-  padding: 2px 8px;
-  border-radius: var(--radius-xs);
-}
-
-.sub-renewal {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sub-detail-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.sub-detail-value {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-}
-
-.sub-hours-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.sub-bar-track {
-  height: 4px;
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-bottom: 0.375rem;
-}
-
-.sub-bar-fill {
-  height: 100%;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-full);
-  transition: width var(--t-slow) var(--ease-out);
-  box-shadow: 0 0 8px rgba(56, 225, 200, 0.4);
-}
-
-.sub-hours-remaining {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.btn-manage-sub {
-  width: 100%;
-  margin-top: 0.25rem;
-}
-
-/* ── Balance card ───────────────────────────────────────────────────────── */
-.balance-card {
-  background: var(--color-bg-card);
-  border: 1px solid rgba(245, 165, 36, 0.22);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  position: relative;
-  overflow: hidden;
-  animation: glowPulse 4s ease-in-out infinite;
-}
-
-.balance-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--gradient-energy);
-}
-
-.balance-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 50% 0%, rgba(245, 165, 36, 0.06) 0%, transparent 65%);
-  pointer-events: none;
-}
-
-.balance-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.25rem;
-  position: relative;
-  z-index: 1;
-}
-
-.usdc-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--color-amber-soft);
-  border: 1px solid rgba(245, 165, 36, 0.25);
-  border-radius: var(--radius-full);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-amber);
-  letter-spacing: 0.04em;
-}
-
-.usdc-icon { font-size: 14px; }
-
-.balance-label-text {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.balance-amount-row {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  margin-bottom: 1.25rem;
-  position: relative;
-  z-index: 1;
-}
-
-.balance-currency {
-  font-family: var(--font-mono);
-  font-size: var(--text-xl);
-  font-weight: 500;
-  color: rgba(245, 165, 36, 0.7);
-}
-
-.balance-value {
-  font-family: var(--font-mono);
-  font-size: var(--text-4xl);
-  font-weight: 700;
-  color: var(--color-amber);
-  letter-spacing: -0.02em;
-  text-shadow: 0 0 32px rgba(245, 165, 36, 0.3);
-}
-
-.balance-loading {
-  font-family: var(--font-mono);
-  font-size: var(--text-4xl);
-  color: var(--color-text-muted);
-  background: linear-gradient(90deg,
-    var(--color-bg-elevated) 0%,
-    var(--color-bg-card) 50%,
-    var(--color-bg-elevated) 100%);
-  background-size: 200% 100%;
-  animation: shimmerSkeleton 1.6s ease-in-out infinite;
-  border-radius: var(--radius-sm);
-  min-width: 120px;
-}
-
-.balance-actions {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-  position: relative;
-  z-index: 1;
-}
-
-.btn-add-funds { flex: 1; }
-
-.btn-withdraw {
-  padding: 0.625rem 1.25rem;
-  background: var(--color-amber-soft);
-  border: 1px solid rgba(245, 165, 36, 0.25);
-  border-radius: var(--radius-sm);
-  color: var(--color-amber);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-}
-
-.btn-withdraw:hover {
-  background: rgba(245, 165, 36, 0.2);
-  box-shadow: var(--shadow-glow-amber);
-  transform: translateY(-1px);
-}
-
-.btn-withdraw:active { transform: translateY(0); }
-
-.quick-actions-row {
-  display: flex;
-  gap: 0.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--color-border);
-  position: relative;
-  z-index: 1;
-}
-
-.quick-action-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 0.75rem 0.5rem;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: background var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-  min-height: 40px;
-}
-
-.quick-action-item:hover {
-  background: var(--color-amber-soft);
-  border-color: rgba(245, 165, 36, 0.35);
-  color: var(--color-amber);
-  transform: translateY(-1px);
-}
-
-.quick-action-item:active { transform: translateY(0); }
-
-.qa-icon { font-size: 18px; line-height: 1; }
-
-/* ── Quick deposit ────────────────────────────────────────────────────────── */
-.quick-deposit-card {
+/* ── Card shell ──────────────────────────────────────────────────────────── */
+.custody-card,
+.address-card,
+.receipts-card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
-  transition: border-color var(--t) var(--ease-out);
+  transition: border-color var(--t-fast) var(--ease-out);
 }
 
-.quick-deposit-card:hover {
+.custody-card:hover,
+.address-card:hover,
+.receipts-card:hover {
   border-color: var(--color-border-strong);
 }
 
-.quick-deposit-card h3 {
-  margin: 0.25rem 0 1.25rem;
+.custody-card h3,
+.address-card h3,
+.receipts-card h3 {
+  margin: 0.35rem 0 0.75rem;
   font-family: var(--font-display);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-.preset-amounts {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.625rem;
-  margin-bottom: 1rem;
-}
-
-.preset-btn {
-  padding: 0.75rem 0.5rem;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
   color: var(--color-text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
-  min-height: 40px;
 }
 
-.preset-btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  transform: translateY(-1px);
-}
-
-.preset-btn.active {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  animation: countPulse 0.3s var(--ease-out);
-}
-
-.custom-amount-row { margin-bottom: 1rem; }
-
-.custom-amount-input {
+/* ── Custody posture card ────────────────────────────────────────────────── */
+.custody-card {
   position: relative;
-  display: flex;
-  align-items: center;
+  overflow: hidden;
+  border-color: var(--color-accent-soft);
 }
 
-.custom-amount-input .input-prefix {
+.custody-card::before {
+  content: '';
   position: absolute;
-  left: 14px;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  pointer-events: none;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-accent), transparent);
 }
 
-.custom-amount-input input {
-  width: 100%;
-  padding: 0.75rem 1rem 0.75rem 2rem;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
-}
-
-.custom-amount-input input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: var(--shadow-glow-focus);
-}
-
-.custom-amount-input input::placeholder { color: var(--color-text-muted); }
-
-.deposit-methods {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  margin-bottom: 1.25rem;
-}
-
-.method-option {
+.custody-top {
   display: flex;
   align-items: center;
-  padding: 0.875rem 1rem;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
-}
-
-.method-option:hover { border-color: var(--color-border-strong); }
-
-.method-option.active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-  box-shadow: 0 0 0 1px var(--color-accent-soft);
-}
-
-.method-option input[type="radio"] { display: none; }
-
-.method-content {
-  display: flex;
-  align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
-  width: 100%;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
 }
 
-.method-icon {
-  font-size: 22px;
-  width: 36px;
-  height: 36px;
-  display: flex;
+.custody-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: var(--color-bg-card);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.method-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+.custody-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent-glow);
 }
 
-.method-name {
-  font-weight: 500;
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
+.custody-rail {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.custody-rail code {
+  color: var(--color-text-secondary);
+}
+
+.custody-explainer {
+  margin: 0 0 1rem;
   font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: 1.65;
+  color: var(--color-text-secondary);
 }
 
-.method-desc {
+.custody-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.custody-facts dt {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.custody-facts dd {
+  margin: 0;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
 }
 
-.btn-deposit-submit { width: 100%; }
-.btn-deposit-submit:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* ── Wallet address ───────────────────────────────────────────────────────── */
-.wallet-address-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  transition: border-color var(--t) var(--ease-out);
+.custody-facts code {
+  color: var(--color-accent);
 }
 
-.wallet-address-card:hover { border-color: var(--color-border-strong); }
-
-.wallet-address-card h3 {
-  margin: 0.25rem 0 1.25rem;
-  font-family: var(--font-display);
-  font-size: var(--text-base);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.address-card {
+/* ── Linked address card ─────────────────────────────────────────────────── */
+.address-row {
   display: flex;
-  gap: 1.25rem;
-  margin-bottom: 1rem;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 
-.qr-placeholder { flex-shrink: 0; }
-
-.qr-box {
-  width: 96px;
-  height: 96px;
-  background: #fff;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: #000;
-  font-size: var(--text-sm);
-  /* QR grid pattern */
-  background-image:
-    repeating-linear-gradient(#000 0 4px, transparent 0 8px),
-    repeating-linear-gradient(90deg, #000 0 4px, transparent 0 8px);
-  background-size: 8px 8px;
-  border: 3px solid #000;
-}
-
-.address-details {
+.address-value {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  word-break: break-all;
+  user-select: all;
 }
 
-.address-network-label {
+.btn-copy {
+  flex-shrink: 0;
+  align-self: stretch;
+  padding-inline: 0.9rem;
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.address-code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  word-break: break-all;
-  line-height: 1.5;
-  background: var(--color-bg-secondary);
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--color-border);
+.address-note {
+  margin: 0 0 1.1rem;
 }
 
-.btn-copy-addr {
-  align-self: flex-start;
-  padding: 6px 14px;
+/* ── Link form ───────────────────────────────────────────────────────────── */
+.link-form {
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.link-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.link-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.link-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
-  min-height: 32px;
+  font-size: var(--text-2xs);
+  transition: border-color var(--t-fast) var(--ease-out);
 }
 
-.btn-copy-addr:hover {
+.link-input:focus {
+  outline: none;
   border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: var(--color-accent-soft);
 }
 
-.address-notice {
-  font-size: var(--text-xs);
+.link-input::placeholder {
   color: var(--color-text-muted);
-  margin: 0;
-  line-height: 1.5;
 }
 
-/* ── Transactions panel ──────────────────────────────────────────────────── */
-.transactions-card {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  transition: border-color var(--t) var(--ease-out);
+.link-hint {
+  margin: 0.6rem 0 0;
 }
 
-.transactions-card:hover { border-color: var(--color-border-strong); }
-
-.transactions-header {
+/* ── Receipts ────────────────────────────────────────────────────────────── */
+.receipts-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.25rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 1rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.transactions-header h3 {
+.receipts-header h3 {
+  margin: 0 0 0.25rem;
+}
+
+.receipts-sub {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-base);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  max-width: 46ch;
 }
 
-.btn-text-link {
-  background: none;
-  border: none;
-  color: var(--color-accent);
+.receipts-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.receipts-total-label {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.receipts-total-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.receipts-empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.receipts-list {
+  list-style: none;
+  margin: 0;
   padding: 0;
-  letter-spacing: 0.04em;
-  transition: color var(--t-fast) var(--ease-out);
+  display: flex;
+  flex-direction: column;
 }
 
-.btn-text-link:hover {
-  color: var(--color-accent-hover);
-  text-decoration: underline;
+.receipt-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.1rem 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--t-fast) var(--ease-out);
 }
 
+.receipt-item:last-child { border-bottom: none; }
+
+.receipt-item:hover {
+  background: var(--color-bg-secondary);
+}
+
+.receipt-voided {
+  opacity: 0.55;
+}
+
+.receipt-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.receipt-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+.receipt-subject {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.receipt-kind {
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.receipt-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.receipt-meta code {
+  color: var(--color-text-secondary);
+}
+
+/* The cryptographic proof strip — this is what replaces "trust our ledger". */
+.receipt-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.receipt-proof-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+
+.receipt-proof-key {
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.receipt-proof-item code {
+  color: var(--color-accent);
+}
+
+.receipt-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.receipt-amount {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.receipt-status {
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-settled {
+  background: rgba(61, 220, 132, 0.12);
+  color: var(--color-success);
+}
+
+.status-voided {
+  background: rgba(255, 84, 104, 0.12);
+  color: var(--color-error);
+}
+
+/* ── Loading ─────────────────────────────────────────────────────────────── */
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -692,129 +512,6 @@
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.transactions-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.transaction-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.875rem 0.625rem;
-  border-bottom: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  transition: background var(--t-fast) var(--ease-out);
-}
-
-.transaction-item:last-child { border-bottom: none; }
-.transaction-item:first-child { padding-top: 0; }
-
-.transaction-item:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.tx-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.tx-icon-deposit {
-  background: rgba(61, 220, 132, 0.10);
-  color: var(--color-success);
-  border: 1px solid rgba(61, 220, 132, 0.2);
-}
-
-.tx-icon-withdraw {
-  background: rgba(255, 84, 104, 0.10);
-  color: var(--color-error);
-  border: 1px solid rgba(255, 84, 104, 0.2);
-}
-
-.tx-icon-subscription {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  border: 1px solid rgba(56, 225, 200, 0.2);
-}
-
-.tx-details {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.tx-description {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  font-family: var(--font-sans);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tx-meta {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  color: var(--color-text-muted);
-}
-
-.tx-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
-.tx-amount {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: var(--text-sm);
-}
-
-.tx-amount.positive { color: var(--color-success); }
-.tx-amount.negative { color: var(--color-text-primary); }
-
-.tx-status {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  padding: 2px 7px;
-  border-radius: var(--radius-xs);
-  text-transform: capitalize;
-  letter-spacing: 0.04em;
-}
-
-.status-success {
-  background: rgba(61, 220, 132, 0.10);
-  color: var(--color-success);
-  border: 1px solid rgba(61, 220, 132, 0.2);
-}
-
-.status-pending {
-  background: var(--color-amber-soft);
-  color: var(--color-amber);
-  border: 1px solid rgba(245, 165, 36, 0.2);
-}
-
-.status-failed {
-  background: rgba(255, 84, 104, 0.10);
-  color: var(--color-error);
-  border: 1px solid rgba(255, 84, 104, 0.2);
-}
-
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 960px) {
   .wallet-grid { grid-template-columns: 1fr; }
@@ -823,19 +520,13 @@
 }
 
 @media (max-width: 520px) {
-  .balance-value { font-size: var(--text-3xl); }
-  .balance-actions { flex-direction: column; }
-  .preset-amounts { grid-template-columns: repeat(2, 1fr); }
-  .address-card { flex-direction: column; }
-
   .wallet-page-header h1 { font-size: var(--text-2xl); }
-
-  /* Ensure preset buttons have adequate tap targets */
-  .preset-btn { min-height: 44px; }
-  .btn-manage-sub,
-  .btn-add-funds,
-  .btn-withdraw,
-  .btn-deposit-submit { min-height: 44px; }
+  .address-row { flex-direction: column; }
+  .link-row { flex-direction: column; }
+  .btn-copy,
+  .link-row .btn { min-height: 44px; }
+  .receipt-item { flex-direction: column; gap: 0.6rem; }
+  .receipt-right { flex-direction: row; align-items: center; }
 }
 
 /* ─── Screen-reader only utility ─────────────────────────────────────────── */
