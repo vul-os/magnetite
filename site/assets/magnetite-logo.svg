@@ -1,17 +1,27 @@
-<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Magnetite logo">
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Magnetite">
   <defs>
-    <linearGradient id="mgrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#7b61ff"/>
-      <stop offset="100%" stop-color="#ff4d9d"/>
+    <linearGradient id="mg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b6cff"/>
+      <stop offset="1" stop-color="#ff4d9d"/>
     </linearGradient>
   </defs>
-  <!-- field lines arcing between the poles -->
-  <path d="M62,66 Q100,34 138,66" fill="none" stroke="url(#mgrad)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
-  <path d="M46,72 Q100,14 154,72" fill="none" stroke="url(#mgrad)" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
-  <path d="M30,78 Q100,4 170,78" fill="none" stroke="url(#mgrad)" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
-  <!-- horseshoe magnet body -->
-  <path d="M56,72 L56,148 A44,44 0 0 0 144,148 L144,72" fill="none" stroke="url(#mgrad)" stroke-width="24" stroke-linecap="round"/>
-  <!-- pole caps -->
-  <circle cx="56" cy="70" r="13" fill="#7b61ff"/>
-  <circle cx="144" cy="70" r="13" fill="#ff4d9d"/>
+  <!-- magnetic field ring — back half (behind crystal) -->
+  <path d="M10,66 A54,13 0 0 1 118,66" fill="none" stroke="url(#mg)" stroke-width="3" stroke-linecap="round" opacity="0.28"/>
+  <!-- magnetite octahedron crystal, faceted for depth -->
+  <g stroke-linejoin="round">
+    <polygon points="64,14 64,64 20,64" fill="url(#mg)"/>
+    <polygon points="64,14 108,64 64,64" fill="url(#mg)"/>
+    <polygon points="64,14 108,64 64,64" fill="#ffffff" opacity="0.12"/>
+    <polygon points="64,114 20,64 64,64" fill="url(#mg)"/>
+    <polygon points="64,114 20,64 64,64" fill="#000000" opacity="0.14"/>
+    <polygon points="64,114 108,64 64,64" fill="url(#mg)"/>
+    <polygon points="64,114 108,64 64,64" fill="#000000" opacity="0.30"/>
+    <path d="M64,14 L108,64 L64,114 L20,64 Z M20,64 H108 M64,14 V114"
+          fill="none" stroke="#0b0a14" stroke-width="2" opacity="0.40"/>
+  </g>
+  <!-- magnetic field ring — front half (over crystal) -->
+  <path d="M10,66 A54,13 0 0 0 118,66" fill="none" stroke="url(#mg)" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- poles -->
+  <circle cx="10" cy="66" r="5" fill="#7b61ff"/>
+  <circle cx="118" cy="66" r="5" fill="#ff4d9d"/>
 </svg>

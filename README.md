@@ -20,7 +20,7 @@
 
 <br/>
 
-<img src="docs/screenshots/architecture-dark.png" alt="Magnetite architecture — node, discovery, payment, and comms seams" width="900">
+<img src="docs/screenshots/landing-dark.png" alt="Magnetite — the decentralized, self-hostable Rust game platform" width="900">
 
 </div>
 
@@ -145,8 +145,8 @@ other Vulos product.
 
 |  |  |
 | :---: | :---: |
-| **Landing** — hero, differentiators, seams, quick start | **Architecture** — node / discovery / payment / comms diagram |
-| <img src="docs/screenshots/landing-dark.png" alt="Magnetite landing page"> | <img src="docs/screenshots/architecture-dark.png" alt="Magnetite architecture docs"> |
+| **Architecture** — node / discovery / payment / comms diagram | **Comms** — pluggable Matrix / Jitsi / LiveKit integrations |
+| <img src="docs/screenshots/architecture-dark.png" alt="Magnetite architecture docs"> | <img src="docs/screenshots/comms-dark.png" alt="Magnetite comms docs"> |
 | **Hosting a server** — capacity-elastic node model | **Payments** — non-custodial crypto |
 | <img src="docs/screenshots/hosting-a-server-dark.png" alt="Magnetite hosting-a-server docs"> | <img src="docs/screenshots/payments-dark.png" alt="Magnetite payments docs"> |
 
