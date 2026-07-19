@@ -14,6 +14,14 @@ categories = ["game-development", "network-programming", "cryptography"]
 # and NO provider-specific / external-service SDK — only small, well-known
 # building blocks. All six seams ship a default that works fully offline.
 
+[features]
+default = []
+# Optional word-based naming provider (`keyname::KeyNameNaming`). Adds NO
+# dependencies — it only enables an extra module — and exists so the Naming seam
+# has a second real implementation. It is NOT a DMTAP integration: the
+# `dmtap-core` crate is not available, see `docs/dmtap.md`.
+dmtap = []
+
 [dependencies]
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 blake3 = "1"

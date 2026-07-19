@@ -19,6 +19,11 @@
 //! adapters live behind their own feature-gated modules and are never referenced
 //! by non-provider code.
 //!
+//! The one optional provider that exists today is [`keyname::KeyNameNaming`]
+//! (`--features dmtap`), a second `Naming` implementation using word-based
+//! key-names. **DMTAP itself is not integrated** — the `dmtap-core` crate is not
+//! available — see `docs/dmtap.md` for exactly what is and is not real.
+//!
 //! The [`defaults`] module wires one working provider set for `magnetite dev`.
 
 pub mod blobstore;
@@ -26,6 +31,8 @@ pub mod comms;
 pub mod discovery;
 mod error;
 pub mod identity;
+#[cfg(feature = "dmtap")]
+pub mod keyname;
 pub mod naming;
 pub mod payment;
 
@@ -39,6 +46,10 @@ pub use identity::{
 
 // Seam §3.2 — Naming
 pub use naming::{HashNaming, Naming};
+/// Optional second Naming provider (`--features dmtap`). Not a DMTAP
+/// integration — see [`keyname`] and `docs/dmtap.md`.
+#[cfg(feature = "dmtap")]
+pub use keyname::KeyNameNaming;
 
 // Seam §3.3 — BlobStore
 pub use blobstore::{BlobFetcher, BlobStore, Hash, HttpBlobStore, LocalBlobStore};

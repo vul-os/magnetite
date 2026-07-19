@@ -22,6 +22,7 @@ comms, economy, and payment rails — so developers only write game logic.
 | [Comms Suite](./comms/index.md) | Communities, channels, chat, presence, voice, streaming |
 | [Self-Hosting Guide](./self-hosting/index.md) | Docker Compose, Fly.io, k8s, Nomad deployments |
 | [Security & Sandboxing](./security/index.md) | Auth, anti-cheat, and deployment hardening |
+| [DMTAP Integration Surface](./dmtap.md) | Which seams DMTAP *would* plug into — and why it is optional and **not integrated today** |
 | [API Reference](./api-reference/index.md) | REST API endpoints |
 
 ---
