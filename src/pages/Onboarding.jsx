@@ -5,6 +5,7 @@ import OnboardingProgress from '../components/OnboardingProgress';
 import GameCard from '../components/GameCard';
 import { api } from '../api/client';
 import { shortKey } from '../utils/currency';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './Onboarding.css';
 
 const ONBOARDING_STORAGE_KEY = 'magnetite_onboarding_completed';
@@ -28,7 +29,7 @@ function WelcomeStep({ onNext }) {
   return (
     <div className="onboarding-step welcome-step">
       <div className="welcome-visual">
-        <div className="welcome-icon" aria-hidden="true">M</div>
+        <img src={magnetiteLogo} className="welcome-icon" aria-hidden="true" alt="" />
         <div className="welcome-glow" aria-hidden="true"></div>
       </div>
       <span className="step-kicker">// BUILT IN RUST</span>

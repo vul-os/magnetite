@@ -136,18 +136,11 @@
 .welcome-icon {
   width: 72px;
   height: 72px;
-  background: var(--color-accent);
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  color: #000;
+  display: block;
+  object-fit: contain;
   position: relative;
   z-index: 1;
-  box-shadow: var(--shadow-glow);
+  filter: drop-shadow(0 0 14px rgba(123, 97, 255, 0.4));
 }
 
 .welcome-glow {

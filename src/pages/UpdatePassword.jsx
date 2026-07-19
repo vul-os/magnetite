@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
 
 const PASSWORD_LEVELS = [
@@ -116,7 +117,7 @@ export default function UpdatePassword() {
         <div className="auth-hero-grain" aria-hidden="true" />
         <div className="auth-hero-content">
           <Link to="/" className="auth-hero-logo">
-            <div className="auth-hero-logo-mark">M</div>
+            <img src={magnetiteLogo} className="auth-hero-logo-mark" aria-hidden="true" alt="" />
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
           <div className="auth-hero-pitch reveal reveal-2">

@@ -1,5 +1,6 @@
 import './About.css';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 
 const team = [
   { name: 'Alex Chen',       role: 'Founder & CEO',   initials: 'AC' },
@@ -185,7 +186,7 @@ export default function About() {
           <div className="footer-content">
             <div className="footer-brand">
               <div className="logo">
-                <div className="logo-icon" aria-hidden="true">M</div>
+                <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
                 <span>Magnetite</span>
               </div>
               <p>{t('about.footerTagline')}</p>

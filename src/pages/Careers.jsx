@@ -1,4 +1,5 @@
 import './Careers.css';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 
 const openPositions = [
   {
@@ -188,7 +189,7 @@ export default function Careers() {
           <div className="footer-content">
             <div className="footer-brand">
               <div className="logo">
-                <div className="logo-icon" aria-hidden="true">M</div>
+                <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
                 <span>Magnetite</span>
               </div>
               <p>Open-source Rust gaming at any scale.</p>
