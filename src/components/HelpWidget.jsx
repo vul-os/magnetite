@@ -8,11 +8,11 @@ const faqs = [
   },
   {
     question: 'How do payments work?',
-    answer: 'Deposit funds via USDC (Circle) or fiat on-ramp (Paystack). Play sessions deduct a fee set by the developer. Your wallet balance is always yours.',
+    answer: 'Non-custodially. You link a wallet you control and pay the developer or operator directly in USDC; the rail returns a signed receipt that unlocks what you bought. We never hold a balance, so there is nothing to deposit and nothing to withdraw.',
   },
   {
     question: 'How can I become a game developer?',
-    answer: 'Head to the Developer Dashboard, set up your developer account, and publish Rust games using our SDK. We handle hosting, matchmaking, and payouts.',
+    answer: 'Head to the Developer Dashboard, set up your developer account, and publish Rust games using our SDK. We handle hosting and matchmaking; buyers pay your wallet directly, so there are no payouts to handle.',
   },
   {
     question: 'What games are available?',

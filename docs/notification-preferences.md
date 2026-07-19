@@ -16,7 +16,7 @@ one row; the row is created with safe defaults on first access (upsert-on-read).
 
 | Category | Description |
 |---|---|
-| `payouts` | Payout completions and subscription renewals |
+| `payouts` | Payment settlement (`PAYMENT_SETTLED`) and subscription events. The column prefix is a legacy name — there are no payouts; the platform never holds or disburses funds |
 | `social` | Friend requests and game invites |
 | `achievements` | Achievement unlocks and milestone rewards |
 | `marketing` | News, promotions, and platform announcements |

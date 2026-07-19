@@ -109,12 +109,24 @@ SMTP_PORT=587
 SMTP_USER=notifications@example.com
 SMTP_PASSWORD=smtp_password
 
-# Payments (for subscriptions)
-# Payment providers must be configured for subscription functionality to work.
-# Set at least one of:
-PAYSTACK_SECRET_KEY=your_paystack_secret_key
-CIRCLE_API_KEY=your_circle_api_key
-SUBSCRIPTION_WEBHOOK_SECRET=your_webhook_secret
+# Payments (non-custodial crypto — no provider account needed)
+# `mock` issues deterministic signed receipts fully offline. The node holds no
+# funds: no deposits, no withdrawals, no payouts.
+PAYMENT_RAIL=mock
+# Protocol fee in basis points, taken on top of the subtotal. The developer
+# receives the whole subtotal.
+PROTOCOL_FEE_BPS=0
+# Only if this node sells hosting or paid tiers:
+OPERATOR_WALLET_PUBKEY=
+
+# Comms — builtin needs no external service; matrix|jitsi|livekit|owncast fall
+# back to builtin when unconfigured.
+COMMS_PROVIDER=builtin
+
+# Media — optional and per-operator. Empty by default; the backend has no
+# dependency on a media server. In docker-compose MediaMTX is behind the `media`
+# profile: docker compose --profile media up
+MEDIA_SERVER_BASE_URL=
 ```
 
 ## Volume Management

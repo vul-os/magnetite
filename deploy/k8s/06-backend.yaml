@@ -92,21 +92,6 @@ spec:
                 secretKeyRef:
                   name: magnetite-secrets
                   key: JWT_SECRET
-            - name: PAYSTACK_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: magnetite-secrets
-                  key: PAYSTACK_SECRET_KEY
-            - name: WISE_API_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: magnetite-secrets
-                  key: WISE_API_TOKEN
-            - name: WISE_PROFILE_ID
-              valueFrom:
-                secretKeyRef:
-                  name: magnetite-secrets
-                  key: WISE_PROFILE_ID
             - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:

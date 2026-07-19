@@ -127,9 +127,9 @@ export default function Replay() {
       .catch(() => {
         // Fallback minimal renderer if the import fails (e.g. path issues in test env)
         renderFnRef.current = (ctx, state) => {
-          ctx.fillStyle = '#07070b';
+          ctx.fillStyle = '#08090c';
           ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-          ctx.fillStyle = '#38e1c8';
+          ctx.fillStyle = '#7b61ff';
           ctx.font = '14px monospace';
           ctx.fillText(`TICK ${state.tick ?? 0}`, 12, 24);
         };

@@ -94,45 +94,35 @@
 3. Ensure token endpoint URL is correct
 4. Check provider rate limits or usage quotas
 
-## Payment Processing Problems
+## Payment Problems
 
-### Webhook Delivery Failures
+Payments are **non-custodial**: the buyer pays the seller wallet-to-wallet
+through the `PaymentRail` seam and the node holds no funds. There is no payment
+provider account, no API keys, no sandbox/live toggle, no payment webhook, no
+card, and no deposit/withdrawal/payout to debug. What can actually go wrong is
+**receipt verification**.
 
-**Symptom:** Payment confirmed but order not updated.
+See [Self-hosting → Troubleshooting](./self-hosting/troubleshooting.md#payment-issues)
+for the full runbook. In short:
 
-**Solutions:**
-1. Verify webhook endpoint is publicly accessible
-2. Check webhook secret matches provider configuration
-3. Review webhook logs for delivery attempts and failures
-4. Use provider dashboard to replay missed webhooks
-5. Implement idempotency to handle duplicate deliveries
+### Purchase or paid tier rejected despite payment
 
-### Sandbox vs Production Confusion
+1. Check the rail: `PAYMENT_RAIL=mock` (default, offline, deterministic
+   signatures) and `PROTOCOL_FEE_BPS=0` (default). `CHAIN_RPC_URL`, `CHAIN_ID`,
+   and `STABLECOIN_ADDRESS` are **unused placeholders** — no real chain rail is
+   implemented, so setting them changes nothing.
+2. The signature is re-verified on every access; a `payment_receipts` row alone
+   is not sufficient. Grep the logs for receipt verification failures.
+3. Selling hosting or paid tiers requires `OPERATOR_WALLET_PUBKEY`; unset, paid
+   tiers fail closed.
 
-**Symptom:** Test payments work but live payments fail.
+### "Wallet not linked"
 
-**Solutions:**
-1. Verify you are using correct API keys for the environment
-2. Check that live mode is enabled in your payment provider dashboard
-3. Ensure webhook endpoints match the current environment
-4. Verify PCI compliance requirements are met for live mode
+Checkout needs a payee. Both buyer and developer need an address linked via
+`POST /api/v1/wallet/link`.
 
-### Currency/Amount Mismatches
+### Access denied on a paid room or paid session
 
-**Symptom:** Payment amount doesn't match order total.
-
-**Solutions:**
-1. Verify amount is passed in smallest currency unit (cents, pence)
-2. Check currency code matches between application and payment provider
-3. Ensure amount calculation includes all fees and discounts
-4. Use provider's amount validation tools before creating charges
-
-### Card Declines
-
-**Symptom:** Customer reports card was declined.
-
-**Solutions:**
-1. Check decline reason code from payment provider
-2. Common causes: insufficient funds, card expired, fraud detection
-3. Ask customer to contact their bank for more details
-4. Suggest alternative payment methods if available
+Paid access requires a **proven** (linked) key, not a derived one. Legacy
+accounts that never linked a wallet keep working on free and builtin paths but
+are refused on paid ones — by design, so a back-filled row cannot buy access.

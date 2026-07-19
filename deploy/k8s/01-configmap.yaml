@@ -1,5 +1,5 @@
 # ConfigMap for non-sensitive configuration that can be committed.
-# Sensitive values (JWT_SECRET, PAYSTACK_SECRET_KEY, WISE_API_TOKEN, etc.)
+# Sensitive values (JWT_SECRET, RESEND_API_KEY, etc.)
 # must be provided via the Secret template in 02-secret.yaml — never here.
 apiVersion: v1
 kind: ConfigMap
@@ -40,9 +40,16 @@ data:
   ANTICHEAT_MAX_VELOCITY: "50.0"
   ANTICHEAT_MAX_INPUT_RATE: "50.0"
 
-  # ── Payments sandbox (false = real providers required) ────────────────────
-  PAYMENTS_SANDBOX: "false"
-  WISE_SANDBOX: "false"
+  # ── Payments — non-custodial crypto (§3.6) ────────────────────────────────
+  # `mock` = deterministic signed receipts, no chain, no external service.
+  # Switch to a real rail only when one is configured; there is no fiat path.
+  PAYMENT_RAIL: "mock"
+  PROTOCOL_FEE_BPS: "0"
+
+  # ── Comms — pluggable (§3.5) ──────────────────────────────────────────────
+  # builtin | matrix | jitsi | livekit | owncast. `builtin` needs no external
+  # service; the others fall back to builtin when unconfigured.
+  COMMS_PROVIDER: "builtin"
 
   # ── Log level ─────────────────────────────────────────────────────────────
   RUST_LOG: "info"

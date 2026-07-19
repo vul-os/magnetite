@@ -1,4 +1,5 @@
 mod api;
+mod comms;
 mod config;
 mod db;
 mod error;
@@ -23,6 +24,7 @@ use crate::api::categories;
 use crate::api::channels;
 use crate::api::communities;
 use crate::api::developer;
+use crate::api::discovery;
 use crate::api::distribution;
 use crate::api::games;
 use crate::api::github;
@@ -59,8 +61,7 @@ use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
 use crate::middleware::request_metrics::record_request_metrics;
 use crate::services::payment::SubscriptionService;
-use crate::services::payout::PayoutService;
-use crate::ws::comms;
+use crate::ws::comms as ws_comms;
 use crate::ws::game as ws_game;
 use crate::ws::gauges::WsGauges;
 use crate::ws::voice;
@@ -112,6 +113,10 @@ async fn main() {
             "/contact",
             axum::routing::post(reviews::submit_contact).with_state(pool.clone()),
         )
+        // Discovery seam (§3.4) — a dumb, signature-checked tracker. A
+        // phonebook, not an authority: nodes self-advertise leased `SessionAd`s
+        // and clients query them. Demotes the central provisioning poll below.
+        .nest("/discovery", discovery::router(pool.clone()))
         .nest("/distribution", distribution::router(pool.clone()))
         .nest("/provisioning", provisioning::router(pool.clone()))
         .nest("/categories", categories::router(pool.clone()))
@@ -135,6 +140,10 @@ async fn main() {
         // Stores namespace — mirrors /marketplace/stores/* so frontend client.stores.* calls resolve
         .nest("/stores", marketplace::stores_router(pool.clone()))
         // Wave 6: comms core — communities, channels, messages, DMs
+        // Comms seam (§3.5) — provider probe + room create/join/close. The
+        // routes below (communities/channels/messages/streams/voice) are the
+        // DEMOTED `builtin` provider, kept working as one adapter among many.
+        .nest("/comms", crate::comms::api::router(pool.clone()))
         .nest("/communities", communities::router(pool.clone()))
         .nest(
             "/communities/:community_id/channels",
@@ -220,7 +229,7 @@ async fn main() {
         .merge(health_metrics)
         .merge(notification_ws_handler.router())
         // Wave 6: real-time comms and voice signaling WebSocket endpoints
-        .merge(comms::router(pool.clone(), Arc::clone(&ws_gauges)))
+        .merge(ws_comms::router(pool.clone(), Arc::clone(&ws_gauges)))
         .merge(voice::router(pool.clone(), Arc::clone(&ws_gauges)))
         // Game WebSocket: mount the game loop router (was unmounted — now wired)
         .merge(game_ws_handler.router());
@@ -253,20 +262,8 @@ async fn main() {
     // ── Background jobs (same tokio::spawn + interval pattern as notification_cleanup) ──
     tokio::spawn(notification_cleanup::run_cleanup_job(pool.clone()));
 
-    // Payout batch: process pending developer payouts every hour.
-    let payout_pool = pool.clone();
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
-        loop {
-            ticker.tick().await;
-            let svc = PayoutService::new(payout_pool.clone());
-            match svc.process_pending_payouts().await {
-                Ok(n) if n > 0 => tracing::info!("Processed {} pending payouts", n),
-                Ok(_) => {}
-                Err(e) => tracing::error!("Payout batch failed: {}", e),
-            }
-        }
-    });
+    // No payout batch: payments are non-custodial and settle wallet→wallet at
+    // point of sale, so nothing is ever accrued or disbursed by this node.
 
     // Subscription renewal: process expired subscriptions every hour.
     let renewal_pool = pool.clone();

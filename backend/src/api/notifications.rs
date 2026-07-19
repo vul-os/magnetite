@@ -26,7 +26,8 @@ pub enum NotificationType {
     AchievementUnlocked,
     GameInvite,
     FriendRequest,
-    PayoutComplete,
+    /// A wallet-to-wallet payment settled and a signed receipt was issued.
+    PaymentSettled,
     SubscriptionRenewal,
     System,
 }
@@ -37,7 +38,7 @@ impl NotificationType {
             NotificationType::AchievementUnlocked => "ACHIEVEMENT_UNLOCKED",
             NotificationType::GameInvite => "GAME_INVITE",
             NotificationType::FriendRequest => "FRIEND_REQUEST",
-            NotificationType::PayoutComplete => "PAYOUT_COMPLETE",
+            NotificationType::PaymentSettled => "PAYMENT_SETTLED",
             NotificationType::SubscriptionRenewal => "SUBSCRIPTION_RENEWAL",
             NotificationType::System => "SYSTEM",
         }
@@ -48,7 +49,9 @@ impl NotificationType {
             "ACHIEVEMENT_UNLOCKED" => Some(NotificationType::AchievementUnlocked),
             "GAME_INVITE" => Some(NotificationType::GameInvite),
             "FRIEND_REQUEST" => Some(NotificationType::FriendRequest),
-            "PAYOUT_COMPLETE" => Some(NotificationType::PayoutComplete),
+            "PAYMENT_SETTLED" => Some(NotificationType::PaymentSettled),
+            // Legacy custodial name, still parsed so historical rows resolve.
+            "PAYOUT_COMPLETE" => Some(NotificationType::PaymentSettled),
             "SUBSCRIPTION_RENEWAL" => Some(NotificationType::SubscriptionRenewal),
             "SYSTEM" => Some(NotificationType::System),
             _ => None,
@@ -203,7 +206,9 @@ pub async fn broadcast_notification(notification: Notification) {
 /// Returns None for unknown types (treated as always-enabled).
 pub fn category_for_type(notification_type: &str) -> Option<&'static str> {
     match notification_type {
-        "PAYOUT_COMPLETE" | "SUBSCRIPTION_RENEWAL" => Some("payouts"),
+        // The `payouts_*` preference columns predate non-custodial settlement;
+        // the category now means "money moved", not "we disbursed funds".
+        "PAYMENT_SETTLED" | "PAYOUT_COMPLETE" | "SUBSCRIPTION_RENEWAL" => Some("payouts"),
         "FRIEND_REQUEST" | "GAME_INVITE" => Some("social"),
         "ACHIEVEMENT_UNLOCKED" => Some("achievements"),
         // SYSTEM notifications with no special category default to always enabled
@@ -312,7 +317,7 @@ impl NotificationService {
 
     /// Variant that silently drops the notification when preferences say to skip
     /// rather than returning an error.  Use this from internal callers (achievements,
-    /// payout services) where a suppressed notification is not a call error.
+    /// settlement paths) where a suppressed notification is not a call error.
     pub async fn try_create_notification(
         &self,
         req: &CreateNotificationRequest,
@@ -377,16 +382,20 @@ impl NotificationService {
         .await
     }
 
-    pub async fn create_payout_notification(
+    /// Notify that a payment settled wallet-to-wallet.
+    ///
+    /// Non-custodial: nothing was disbursed by us — the rail moved value
+    /// directly between wallets and issued a signed receipt.
+    pub async fn create_settlement_notification(
         &self,
         user_id: Uuid,
         amount: &str,
     ) -> Result<Option<Notification>> {
         self.try_create_notification(&CreateNotificationRequest {
             user_id,
-            notification_type: NotificationType::PayoutComplete.as_str().to_string(),
-            title: "Payout Complete".to_string(),
-            body: Some(format!("Your payout of {} USD has been processed", amount)),
+            notification_type: NotificationType::PaymentSettled.as_str().to_string(),
+            title: "Payment Settled".to_string(),
+            body: Some(format!("A payment of {} settled to your wallet", amount)),
             data: None,
         })
         .await

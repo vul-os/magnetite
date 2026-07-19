@@ -8,6 +8,7 @@ import PasswordInput from '../components/auth/PasswordInput';
 import TermsCheckbox from '../components/auth/TermsCheckbox';
 import SocialProof from '../components/auth/SocialProof';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
 
 export default function Register() {
@@ -53,7 +54,7 @@ export default function Register() {
 
         <div className="auth-hero-content">
           <Link to="/" className="auth-hero-logo" tabIndex="-1">
-            <div className="auth-hero-logo-mark">M</div>
+            <img src={magnetiteLogo} className="auth-hero-logo-mark" aria-hidden="true" alt="" />
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
 

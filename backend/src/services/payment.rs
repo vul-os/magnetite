@@ -1,12 +1,11 @@
-// Payment/subscription service — Paystack (fiat on-ramp) integration.
+// Payment/subscription service — NON-CUSTODIAL crypto only (seam §3.6).
 //
-// Circle/USDC is removed. Payouts go through Wise (see services/payout.rs + services/wise.rs).
-// `PaymentService` is constructed per-request via `from_env()` in wallet and
-// subscription handlers.  `SubscriptionService` is spawned as a renewal background
-// job in `main.rs`.  The `#![allow(dead_code)]` below suppresses warnings for the
-// several internal helper methods and struct fields that are wired but not yet
-// called on every code path; individual dead items will be cleaned up as the
-// platform matures.
+// All fiat is gone: no Paystack on-ramp, no Wise payouts, no platform-held
+// balances. Money moves buyer-wallet → seller-wallet through the `PaymentRail`
+// seam and the signed `Receipt` is the entitlement. `SubscriptionService` keeps
+// tiers as feature flags activated by a receipt (pay-the-operator); renewal is
+// still spawned from `main.rs`. The payment rail itself lives at the bottom of
+// this file.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
@@ -62,15 +61,11 @@ pub struct SubscriptionWithTier {
 
 pub struct SubscriptionService {
     pool: PgPool,
-    paystack_secret_key: Option<String>,
 }
 
 impl SubscriptionService {
     pub fn new(pool: PgPool) -> Self {
-        Self {
-            pool,
-            paystack_secret_key: std::env::var("PAYSTACK_SECRET_KEY").ok(),
-        }
+        Self { pool }
     }
 
     pub async fn init_tables(&self) -> Result<()> {
@@ -181,14 +176,15 @@ impl SubscriptionService {
 
         if tier.price_usdc > Decimal::ZERO {
             match payment_method {
-                "paystack" | "platform" => {
-                    return self.create_paystack_subscription(user_id, &tier).await;
+                // Paid tiers are "pay the operator": one wallet→wallet checkout
+                // per period, activated by the signed receipt. No recurring
+                // card charge exists in a non-custodial model.
+                "receipt" | "crypto" | "platform" => {
+                    self.create_receipt_subscription(user_id, &tier).await
                 }
-                _ => {
-                    return Err(AppError::BadRequest(
-                        "Invalid payment provider. Use 'paystack'.".to_string(),
-                    ));
-                }
+                _ => Err(AppError::BadRequest(
+                    "Invalid payment method. Use 'receipt' (non-custodial crypto).".to_string(),
+                )),
             }
         } else {
             self.create_free_subscription(user_id, &tier).await
@@ -235,53 +231,32 @@ impl SubscriptionService {
         Ok(subscription)
     }
 
-    async fn create_paystack_subscription(
+    /// Paid tier via a single non-custodial checkout to the operator wallet.
+    /// The signed receipt is stored and IS the proof the tier is active.
+    async fn create_receipt_subscription(
         &self,
         user_id: Uuid,
         tier: &SubscriptionTier,
     ) -> Result<UserSubscription> {
-        let secret_key = self
-            .paystack_secret_key
-            .as_ref()
-            .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
+        let operator = operator_wallet().ok_or_else(|| {
+            AppError::Internal(
+                "OPERATOR_WALLET_PUBKEY is not configured — paid tiers are pay-the-operator"
+                    .to_string(),
+            )
+        })?;
+        let buyer = require_wallet(&self.pool, user_id, "subscriber").await?;
 
-        // Look up the user's real email from the DB — never use a fabricated placeholder.
-        let user_email = sqlx::query_as::<_, (String,)>("SELECT email FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_optional(&self.pool)
-            .await?
-            .map(|r| r.0)
-            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
-
-        let client = reqwest::Client::new();
-        let reference = format!("PS_SUB_{}", Uuid::new_v4());
-
-        let response = client
-            .post("https://api.paystack.co/transaction/initialize")
-            .header("Authorization", format!("Bearer {}", secret_key))
-            .json(&serde_json::json!({
-                "email": user_email,
-                "amount": (tier.price_zar * Decimal::new(100, 0)).to_string(),
-                "currency": "ZAR",
-                "reference": reference,
-                "metadata": {
-                    "user_id": user_id.to_string(),
-                    "tier_id": tier.id.to_string(),
-                    "subscription_type": "recurring"
-                },
-                "callback_url": format!("{}/subscription/callback", std::env::var("APP_URL").unwrap_or_default())
-            }))
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack request failed: {}", e)))?;
-
-        if !response.status().is_success() {
+        let amount = units_from_usd(tier.price_usdc);
+        let split = sale_split(operator, amount, None);
+        let receipt = rail().checkout(&buyer, split).await;
+        if !verify_receipt(&receipt) {
             return Err(AppError::Internal(
-                "Failed to create Paystack session".to_string(),
+                "subscription receipt failed verification".to_string(),
             ));
         }
+        let receipt_id =
+            store_receipt(&self.pool, &receipt, "subscription", user_id, None, None, None).await?;
 
-        let subscription_id = Uuid::new_v4();
         let now = Utc::now();
         let period_end = now + chrono::Duration::days(30);
 
@@ -291,27 +266,29 @@ impl SubscriptionService {
                 id, user_id, tier_id, status, payment_provider,
                 provider_subscription_id, current_period_start, current_period_end, cancel_at_period_end
             )
-            VALUES ($1, $2, $3, 'pending', 'paystack', $4, $5, $6, false)
+            VALUES ($1, $2, $3, 'active', 'receipt', $4, $5, $6, false)
             ON CONFLICT (user_id) DO UPDATE SET
                 tier_id = $3,
-                status = 'pending',
-                payment_provider = 'paystack',
+                status = 'active',
+                payment_provider = 'receipt',
                 provider_subscription_id = $4,
+                current_period_start = $5,
+                current_period_end = $6,
                 updated_at = NOW()
             RETURNING *
             "#,
         )
-        .bind(subscription_id)
+        .bind(Uuid::new_v4())
         .bind(user_id)
         .bind(tier.id)
-        .bind(reference)
+        .bind(receipt_id.to_string())
         .bind(now)
         .bind(period_end)
         .fetch_one(&self.pool)
         .await?;
 
         tracing::info!(
-            "Created Paystack subscription pending for user {} with tier {}",
+            "Activated receipt-backed subscription for user {} (tier {})",
             user_id,
             tier.slug
         );
@@ -327,15 +304,9 @@ impl SubscriptionService {
                 .await?
                 .ok_or_else(|| AppError::NotFound("Subscription not found".to_string()))?;
 
-        match subscription.payment_provider.as_str() {
-            "paystack" => {
-                if let Some(provider_sub_id) = &subscription.provider_subscription_id {
-                    self.cancel_paystack_subscription(provider_sub_id).await?;
-                }
-            }
-            "free" | "platform" => {}
-            _ => {}
-        }
+        // Nothing to cancel with a provider: there is no recurring mandate in a
+        // non-custodial model, only a receipt that stops being renewed.
+        let _ = &subscription;
 
         sqlx::query(
             r#"
@@ -349,31 +320,6 @@ impl SubscriptionService {
         .await?;
 
         tracing::info!("Subscription {} marked for cancellation", subscription_id);
-
-        Ok(())
-    }
-
-    async fn cancel_paystack_subscription(&self, reference: &str) -> Result<()> {
-        let secret_key = self
-            .paystack_secret_key
-            .as_ref()
-            .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
-
-        let client = reqwest::Client::new();
-
-        let response = client
-            .post(&format!(
-                "https://api.paystack.co/subscription/{}/manage/stop",
-                reference
-            ))
-            .header("Authorization", format!("Bearer {}", secret_key))
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack cancellation failed: {}", e)))?;
-
-        if !response.status().is_success() {
-            tracing::warn!("Paystack subscription cancellation may have failed");
-        }
 
         Ok(())
     }
@@ -506,11 +452,11 @@ impl SubscriptionService {
 
         for subscription in expired_subscriptions {
             match subscription.payment_provider.as_str() {
-                "paystack" => {
-                    if let Some(reference) = &subscription.provider_subscription_id {
-                        if self.renew_paystack_subscription(reference).await.is_ok() {
-                            renewed_count += 1;
-                        }
+                // Paid, receipt-backed tiers cannot auto-renew: renewal requires a
+                // new signed wallet→wallet checkout initiated by the subscriber.
+                "receipt" | "crypto" => {
+                    if self.expire_subscription(&subscription).await.is_ok() {
+                        renewed_count += 1;
                     }
                 }
                 "free" | "platform" => {
@@ -527,47 +473,14 @@ impl SubscriptionService {
         Ok(renewed_count)
     }
 
-    async fn renew_paystack_subscription(&self, reference: &str) -> Result<()> {
-        let secret_key = self
-            .paystack_secret_key
-            .as_ref()
-            .ok_or_else(|| AppError::Internal("Paystack not configured".to_string()))?;
-
-        let client = reqwest::Client::new();
-
-        let response = client
-            .post(&format!(
-                "https://api.paystack.co/transaction/charge/{}",
-                reference
-            ))
-            .header("Authorization", format!("Bearer {}", secret_key))
-            .json(&serde_json::json!({
-                "authorization_code": reference
-            }))
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack renewal failed: {}", e)))?;
-
-        if !response.status().is_success() {
-            return Err(AppError::Internal("Paystack renewal failed".to_string()));
-        }
-
-        let now = Utc::now();
-        let period_end = now + chrono::Duration::days(30);
-
+    /// Mark a receipt-backed subscription expired — the user must re-checkout.
+    async fn expire_subscription(&self, subscription: &UserSubscription) -> Result<()> {
         sqlx::query(
-            r#"
-            UPDATE user_subscriptions
-            SET current_period_start = $1, current_period_end = $2, updated_at = NOW()
-            WHERE provider_subscription_id = $3
-            "#,
+            "UPDATE user_subscriptions SET status = 'expired', updated_at = NOW() WHERE id = $1",
         )
-        .bind(now)
-        .bind(period_end)
-        .bind(reference)
+        .bind(subscription.id)
         .execute(&self.pool)
         .await?;
-
         Ok(())
     }
 
@@ -624,240 +537,372 @@ impl SubscriptionService {
         Ok(())
     }
 
-    pub async fn handle_paystack_success(&self, reference: &str, user_id: Uuid) -> Result<()> {
-        self.activate_subscription(user_id, "paystack", reference)
+    /// Activate a tier from a stored, verified receipt id.
+    pub async fn handle_receipt_success(&self, receipt_id: &str, user_id: Uuid) -> Result<()> {
+        self.activate_subscription(user_id, "receipt", receipt_id)
             .await
     }
 }
+// ─── Non-custodial payment rail (seam §3.6) ───────────────────────────────────
+//
+// There is no custody here: no balances, no deposits, no withdrawals, no payouts.
+// A purchase is an atomic wallet→wallet transfer produced by a `PaymentRail`
+// implementation; the resulting signed `Receipt` IS the entitlement.
+//
+// The default rail is `MockPaymentRail` — deterministic, offline, zero external
+// services — selected by `PAYMENT_RAIL=mock` (the default).
+//
+// TODO(chain): implement a real `PaymentRail` (USDC on an L2, or Solana where the
+// Ed25519 identity key doubles as the wallet key) using `CHAIN_RPC_URL`,
+// `CHAIN_ID` and `STABLECOIN_ADDRESS`, and select it here when
+// `PAYMENT_RAIL != "mock"`. Nothing outside this module may name a chain type.
 
-pub struct PaymentService {
-    /// Paystack secret key — None if PAYSTACK_SECRET_KEY is unset (triggers explicit error).
-    paystack_secret_key: Option<String>,
-    /// When true, return clearly-labeled sandbox results instead of calling providers.
-    sandbox: bool,
+use std::sync::OnceLock;
+
+pub use magnetite_seams::identity::{PubKey, Sig};
+pub use magnetite_seams::payment::{
+    Channel, MockPaymentRail, PayOut, PaymentRail, PaymentSplit, Receipt, Split,
+};
+
+/// Protocol fee in basis points. Default `0` (governance decides any real fee).
+pub fn protocol_fee_bps() -> u16 {
+    std::env::var("PROTOCOL_FEE_BPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PaystackSession {
-    pub session_id: String,
-    pub checkout_url: String,
-    pub reference: String,
+/// The process-wide payment rail. Default `mock` — fully offline.
+pub fn rail() -> &'static MockPaymentRail {
+    static RAIL: OnceLock<MockPaymentRail> = OnceLock::new();
+    RAIL.get_or_init(|| {
+        let kind = std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string());
+        if kind != "mock" {
+            tracing::warn!(
+                "PAYMENT_RAIL={} is not implemented yet; falling back to the offline mock rail. \
+                 See TODO(chain) in services/payment.rs",
+                kind
+            );
+        }
+        MockPaymentRail::with_fee_bps(protocol_fee_bps())
+    })
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PaystackVerification {
-    pub status: String,
-    pub reference: String,
-    pub amount: Decimal,
-    pub currency: String,
+/// Verify a receipt against the active rail (signature + internal arithmetic).
+pub fn verify_receipt(r: &Receipt) -> bool {
+    rail().verify_receipt(r)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PayoutInfo {
-    pub payout_id: Uuid,
-    pub user_id: Uuid,
-    pub amount: Decimal,
-    pub destination: String,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
+/// Convert a USD-denominated `Decimal` price to the rail's smallest unit (cents).
+pub fn units_from_usd(price: Decimal) -> u64 {
+    use rust_decimal::prelude::ToPrimitive;
+    (price * Decimal::new(100, 0))
+        .round()
+        .to_u64()
+        .unwrap_or(u64::MAX)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EarningsBreakdown {
-    pub total_revenue: Decimal,
-    pub developer_share: Decimal,
-    pub platform_share: Decimal,
-    pub developer_percentage: Decimal,
+/// The wallet (Ed25519 pubkey) a user has linked, if any. Non-custodial: we only
+/// ever record an address, never hold funds.
+pub async fn wallet_of(pool: &PgPool, user_id: Uuid) -> Result<Option<PubKey>> {
+    let row = sqlx::query_as::<_, (Option<String>,)>(
+        "SELECT wallet_address FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row
+        .and_then(|r| r.0)
+        .and_then(|h| PubKey::from_hex(h.trim_start_matches("0x")).ok()))
 }
 
-impl PaymentService {
-    /// Construct from environment variables. Call this inside handlers.
-    pub fn from_env() -> Self {
-        Self {
-            paystack_secret_key: std::env::var("PAYSTACK_SECRET_KEY").ok(),
-            sandbox: std::env::var("PAYMENTS_SANDBOX")
-                .map(|v| v == "true")
-                .unwrap_or(false),
-        }
+/// Require a linked wallet, with a role label for the error message.
+pub async fn require_wallet(pool: &PgPool, user_id: Uuid, role: &str) -> Result<PubKey> {
+    wallet_of(pool, user_id).await?.ok_or_else(|| {
+        AppError::Validation(format!(
+            "{role} has no linked wallet address — payments are non-custodial, \
+             link a wallet before transacting"
+        ))
+    })
+}
+
+/// The operator wallet that receives hosting / subscription fees, if configured.
+pub fn operator_wallet() -> Option<PubKey> {
+    std::env::var("OPERATOR_WALLET_PUBKEY")
+        .ok()
+        .and_then(|h| PubKey::from_hex(h.trim_start_matches("0x")).ok())
+}
+
+/// Persist a signed receipt. This row is the durable entitlement proof.
+#[allow(clippy::too_many_arguments)]
+pub async fn store_receipt(
+    pool: &PgPool,
+    receipt: &Receipt,
+    kind: &str,
+    buyer_id: Uuid,
+    purchase_id: Option<Uuid>,
+    item_id: Option<Uuid>,
+    game_id: Option<Uuid>,
+) -> Result<Uuid> {
+    if !verify_receipt(receipt) {
+        return Err(AppError::Internal(
+            "refusing to store an unverifiable receipt".to_string(),
+        ));
+    }
+    let id = Uuid::new_v4();
+    let payouts = serde_json::json!(receipt
+        .payouts
+        .iter()
+        .map(|p| serde_json::json!({ "wallet": p.wallet.to_hex(), "amount": p.amount }))
+        .collect::<Vec<_>>());
+
+    sqlx::query(
+        r#"
+        INSERT INTO payment_receipts
+            (id, kind, buyer_id, buyer_pubkey, purchase_id, item_id, game_id,
+             total, protocol_fee, payouts, nonce, rail_pubkey, sig, rail, voided, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,NOW())
+        "#,
+    )
+    .bind(id)
+    .bind(kind)
+    .bind(buyer_id)
+    .bind(receipt.buyer.to_hex())
+    .bind(purchase_id)
+    .bind(item_id)
+    .bind(game_id)
+    .bind(receipt.total as i64)
+    .bind(receipt.protocol_fee as i64)
+    .bind(payouts)
+    .bind(hex::encode(receipt.nonce))
+    .bind(receipt.rail_pubkey.to_hex())
+    .bind(hex::encode(receipt.sig.0))
+    .bind(std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string()))
+    .execute(pool)
+    .await?;
+
+    Ok(id)
+}
+
+/// Void a receipt (refund path — there is no money to claw back, only proof to revoke).
+pub async fn void_receipt_for_purchase(pool: &PgPool, purchase_id: Uuid) -> Result<()> {
+    sqlx::query(
+        "UPDATE payment_receipts SET voided = true, voided_at = NOW() WHERE purchase_id = $1",
+    )
+    .bind(purchase_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Open a hosting-fee payment channel to an operator (per-seat / per-hour).
+///
+/// TODO(chain): with a real rail this anchors an on-chain channel and the
+/// per-join debits are off-chain signed channel updates. The mock rail returns a
+/// deterministic channel id so the flow is testable offline.
+pub async fn open_hosting_channel(
+    pool: &PgPool,
+    payer_id: Uuid,
+    operator: &PubKey,
+    server_id: Option<Uuid>,
+) -> Result<Channel> {
+    let channel = rail().open_channel(operator).await;
+    sqlx::query(
+        r#"
+        INSERT INTO hosting_channels
+            (id, channel_id, payer_id, operator_pubkey, server_id, rail_pubkey, open, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,true,NOW())
+        ON CONFLICT (channel_id) DO NOTHING
+        "#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(hex::encode(channel.id))
+    .bind(payer_id)
+    .bind(operator.to_hex())
+    .bind(server_id)
+    .bind(channel.rail_pubkey.to_hex())
+    .execute(pool)
+    .await?;
+    Ok(channel)
+}
+
+/// Charge a hosting fee (per-seat / per-hour) to an operator and record the receipt.
+///
+/// Scaffold: with the mock rail this is a deterministic offline checkout, so the
+/// join-gate below is fully testable without a chain.
+/// TODO(chain): debit the open channel with a signed channel update instead of a
+/// full checkout, so a join costs no gas.
+pub async fn charge_hosting_fee(
+    pool: &PgPool,
+    payer_id: Uuid,
+    operator: &PubKey,
+    amount: u64,
+    server_id: Option<Uuid>,
+) -> Result<Receipt> {
+    let payer = require_wallet(pool, payer_id, "player").await?;
+    // Ensure a channel exists (idempotent, deterministic id).
+    open_hosting_channel(pool, payer_id, operator, server_id).await?;
+
+    let split = sale_split(*operator, amount, None);
+    let receipt = rail().checkout(&payer, split).await;
+    if !verify_receipt(&receipt) {
+        return Err(AppError::Internal(
+            "hosting fee receipt failed verification".to_string(),
+        ));
+    }
+    store_receipt(pool, &receipt, "hosting", payer_id, None, None, None).await?;
+    Ok(receipt)
+}
+
+/// Join-gate for a PAID server: the player must hold a non-voided hosting receipt.
+///
+/// A server with no hosting fee configured is free to join and returns `true`.
+pub async fn has_hosting_access(pool: &PgPool, user_id: Uuid, server_id: Uuid) -> Result<bool> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM payment_receipts r
+         JOIN hosting_channels c ON c.payer_id = r.buyer_id
+         WHERE r.kind = 'hosting' AND r.voided = false
+           AND r.buyer_id = $1 AND c.server_id = $2 AND c.open = true",
+    )
+    .bind(user_id)
+    .bind(server_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count > 0)
+}
+
+// ── Receipt-backed entitlement checks ───────────────────────────────────────
+//
+// An entitlement is a SIGNATURE, never a row. Every check below reconstructs the
+// stored receipt and re-verifies it against the active rail, so editing the
+// database directly grants nothing. All paths fail CLOSED.
+
+/// Reconstruct the newest non-voided receipt for `(buyer_id, item_id)`.
+///
+/// Returns `Ok(None)` when there is no such receipt OR when the stored row is
+/// malformed — a row that cannot be parsed back into the receipt it claims to be
+/// is not a receipt.
+pub async fn load_receipt(
+    pool: &PgPool,
+    buyer_id: Uuid,
+    item_id: Uuid,
+) -> Result<Option<Receipt>> {
+    let row: Option<(String, i64, i64, serde_json::Value, String, String, String)> =
+        sqlx::query_as(
+            r#"
+            SELECT buyer_pubkey, total, protocol_fee, payouts, nonce, rail_pubkey, sig
+              FROM payment_receipts
+             WHERE buyer_id = $1
+               AND item_id  = $2
+               AND voided   = false
+             ORDER BY created_at DESC
+             LIMIT 1
+            "#,
+        )
+        .bind(buyer_id)
+        .bind(item_id)
+        .fetch_optional(pool)
+        .await?;
+
+    let Some((buyer, total, fee, payouts, nonce, rail_pk, sig)) = row else {
+        return Ok(None);
+    };
+
+    let Ok(buyer) = PubKey::from_hex(&buyer) else {
+        return Ok(None);
+    };
+    let Ok(rail_pubkey) = PubKey::from_hex(&rail_pk) else {
+        return Ok(None);
+    };
+    let Some(nonce) = hex::decode(&nonce)
+        .ok()
+        .and_then(|b| <[u8; 32]>::try_from(b).ok())
+    else {
+        return Ok(None);
+    };
+    let Some(sig) = hex::decode(&sig)
+        .ok()
+        .and_then(|b| <[u8; 64]>::try_from(b).ok())
+    else {
+        return Ok(None);
+    };
+
+    let empty = Vec::new();
+    let mut parsed = Vec::new();
+    for p in payouts.as_array().unwrap_or(&empty) {
+        let (Some(w), Some(a)) = (
+            p.get("wallet").and_then(|v| v.as_str()),
+            p.get("amount").and_then(|v| v.as_u64()),
+        ) else {
+            return Ok(None);
+        };
+        let Ok(wallet) = PubKey::from_hex(w) else {
+            return Ok(None);
+        };
+        parsed.push(PayOut { wallet, amount: a });
     }
 
-    /// Legacy constructor kept for call-sites that pass an explicit key.
-    /// Prefer `from_env()`.
-    pub fn new(_api_key: String, _base_url: String) -> Self {
-        Self {
-            paystack_secret_key: std::env::var("PAYSTACK_SECRET_KEY").ok(),
-            sandbox: std::env::var("PAYMENTS_SANDBOX")
-                .map(|v| v == "true")
-                .unwrap_or(false),
+    Ok(Some(Receipt {
+        buyer,
+        payouts: parsed,
+        protocol_fee: fee.max(0) as u64,
+        total: total.max(0) as u64,
+        nonce,
+        rail_pubkey,
+        sig: Sig(sig),
+    }))
+}
+
+/// Whether `buyer_id` holds a verified, non-voided receipt for `item_id`
+/// covering at least `min_units`.
+///
+/// Fails CLOSED on any error. Also refuses receipts bound to the account's
+/// naming-only derived key (see `comms::AccountKey`) — such a receipt could only
+/// come from a forged or back-filled row, because checkout always binds a
+/// receipt to a LINKED wallet.
+pub async fn has_verified_receipt(
+    pool: &PgPool,
+    buyer_id: Uuid,
+    item_id: Uuid,
+    min_units: u64,
+) -> bool {
+    if min_units == 0 {
+        return true;
+    }
+    match load_receipt(pool, buyer_id, item_id).await {
+        Ok(Some(r)) => {
+            if r.buyer == crate::comms::derived_key(buyer_id) {
+                tracing::error!(
+                    "payments: receipt for item {item_id} is bound to a DERIVED account key — refusing"
+                );
+                return false;
+            }
+            // The receipt-only half of the gate lives in the seam
+            // (`receipt_admits`: buyer binding, amount cover, rail signature)
+            // so this backend and the offline node path cannot drift apart.
+            // The DB-only facts — item binding, not-voided, proven key — are
+            // checked here and in `load_receipt`, which is where they live.
+            let buyer = r.buyer;
+            magnetite_seams::payment::receipt_admits(rail(), &r, &buyer, min_units)
+        }
+        Ok(None) => false,
+        Err(e) => {
+            tracing::error!("payments: receipt lookup failed for item {item_id}: {e}");
+            false
         }
     }
+}
 
-    /// Kept for tests only. In production use `from_env()`.
-    pub fn mock() -> Self {
-        Self {
-            paystack_secret_key: None,
-            sandbox: true, // mock always runs in sandbox mode
-        }
-    }
-
-    fn require_paystack_key(&self) -> Result<&str> {
-        self.paystack_secret_key
-            .as_deref()
-            .ok_or_else(|| AppError::Internal(
-                "payments not configured: PAYSTACK_SECRET_KEY is unset (set PAYMENTS_SANDBOX=true for local dev)".to_string()
-            ))
-    }
-
-    /// Create a Paystack payment session (fiat on-ramp).
-    /// `user_email` must be the user's REAL email — never a fabricated placeholder.
-    pub async fn create_paystack_session(
-        &self,
-        user_id: Uuid,
-        amount: Decimal,
-        user_email: &str,
-    ) -> Result<PaystackSession> {
-        tracing::info!(
-            "Creating Paystack session for user: {}, amount: {} ZAR",
-            user_id,
-            amount
-        );
-
-        if self.sandbox {
-            let reference = format!("sandbox_PS_{}", Uuid::new_v4());
-            return Ok(PaystackSession {
-                session_id: format!("sandbox_session_{}", Uuid::new_v4()),
-                checkout_url: format!("https://sandbox.paystack.com/pay/{}", reference),
-                reference,
-            });
-        }
-
-        let secret_key = self.require_paystack_key()?;
-        // Amount in Paystack is in kobo (ZAR cents = 100ths).
-        let amount_kobo = (amount * Decimal::new(100, 0))
-            .to_string()
-            .split('.')
-            .next()
-            .unwrap_or("0")
-            .to_string();
-
-        let reference = format!("PS_{}", Uuid::new_v4());
-        let client = reqwest::Client::new();
-
-        let resp = client
-            .post("https://api.paystack.co/transaction/initialize")
-            .header("Authorization", format!("Bearer {}", secret_key))
-            .json(&serde_json::json!({
-                "email": user_email,
-                "amount": amount_kobo,
-                "currency": "ZAR",
-                "reference": reference,
-                "metadata": {
-                    "user_id": user_id.to_string()
-                },
-                "callback_url": format!("{}/payment/callback", std::env::var("APP_URL").unwrap_or_default())
-            }))
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack session creation failed: {}", e)))?;
-
-        if !resp.status().is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(AppError::Internal(format!(
-                "Paystack session failed: {}",
-                body
-            )));
-        }
-
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack response parse error: {}", e)))?;
-
-        let checkout_url = body["data"]["authorization_url"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        Ok(PaystackSession {
-            session_id: format!("session_{}", Uuid::new_v4()),
-            checkout_url,
-            reference,
-        })
-    }
-
-    /// Verify a Paystack payment by reference — calls the real Paystack API.
-    pub async fn verify_paystack_payment(&self, reference: &str) -> Result<PaystackVerification> {
-        tracing::info!("Verifying Paystack payment: {}", reference);
-
-        if self.sandbox {
-            return Ok(PaystackVerification {
-                status: "sandbox_success".to_string(),
-                reference: reference.to_string(),
-                amount: Decimal::new(100000, 2), // 1000.00 ZAR
-                currency: "ZAR".to_string(),
-            });
-        }
-
-        let secret_key = self.require_paystack_key()?;
-        let client = reqwest::Client::new();
-
-        let resp = client
-            .get(format!(
-                "https://api.paystack.co/transaction/verify/{}",
-                urlencoding::encode(reference)
-            ))
-            .header("Authorization", format!("Bearer {}", secret_key))
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack verify request failed: {}", e)))?;
-
-        if !resp.status().is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(AppError::Internal(format!(
-                "Paystack verification failed: {}",
-                body
-            )));
-        }
-
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack response parse error: {}", e)))?;
-
-        let status = body["data"]["status"]
-            .as_str()
-            .unwrap_or("failed")
-            .to_string();
-        // Paystack returns amount in kobo (ZAR cents); divide by 100 for ZAR.
-        let amount_kobo = body["data"]["amount"].as_i64().unwrap_or(0);
-        let amount = Decimal::new(amount_kobo, 2); // kobo → ZAR with 2 decimal places
-
-        let currency = body["data"]["currency"]
-            .as_str()
-            .unwrap_or("ZAR")
-            .to_string();
-
-        Ok(PaystackVerification {
-            status,
-            reference: reference.to_string(),
+/// Build the split for a single-seller sale: the developer takes the whole
+/// subtotal, an optional operator takes a hosting cut, protocol fee rides on top.
+pub fn sale_split(developer: PubKey, amount: u64, operator: Option<(PubKey, u64)>) -> PaymentSplit {
+    PaymentSplit {
+        developer: Split {
+            wallet: developer,
             amount,
-            currency,
-        })
-    }
-
-    pub fn calculate_earnings(&self, game_revenue: Decimal) -> EarningsBreakdown {
-        let platform_percentage = Decimal::new(30, 2); // 30%
-        let developer_percentage = Decimal::ONE - platform_percentage; // 70%
-
-        let platform_share = game_revenue * platform_percentage;
-        let developer_share = game_revenue * developer_percentage;
-
-        EarningsBreakdown {
-            total_revenue: game_revenue,
-            developer_share,
-            platform_share,
-            developer_percentage: developer_percentage * Decimal::new(100, 0),
-        }
+        },
+        operator: operator.map(|(wallet, amount)| Split { wallet, amount }),
+        protocol_fee_bps: protocol_fee_bps(),
     }
 }
 
@@ -865,15 +910,71 @@ impl PaymentService {
 mod tests {
     use super::*;
 
+    fn pk(b: u8) -> PubKey {
+        PubKey([b; 32])
+    }
+
     #[test]
-    fn test_calculate_earnings() {
-        let service = PaymentService::mock();
-        let revenue = Decimal::new(10000, 2);
+    fn usd_converts_to_cents() {
+        assert_eq!(units_from_usd(Decimal::new(1999, 2)), 1999);
+        assert_eq!(units_from_usd(Decimal::new(5, 0)), 500);
+        assert_eq!(units_from_usd(Decimal::ZERO), 0);
+    }
 
-        let earnings = service.calculate_earnings(revenue);
+    #[test]
+    fn default_protocol_fee_is_zero() {
+        // No PROTOCOL_FEE_BPS in the test env.
+        assert_eq!(
+            std::env::var("PROTOCOL_FEE_BPS").ok().is_none(),
+            true,
+            "test env must not set PROTOCOL_FEE_BPS"
+        );
+        assert_eq!(protocol_fee_bps(), 0);
+    }
 
-        assert_eq!(earnings.total_revenue, revenue);
-        assert!(earnings.developer_share > earnings.platform_share);
-        assert_eq!(earnings.developer_percentage, Decimal::new(70, 0));
+    #[tokio::test]
+    async fn checkout_produces_verifiable_receipt_offline() {
+        let buyer = pk(0xB0);
+        let split = sale_split(pk(0xD0), 1999, None);
+        let r = rail().checkout(&buyer, split).await;
+
+        assert_eq!(r.total, 1999);
+        assert_eq!(r.protocol_fee, 0);
+        assert_eq!(r.payouts.len(), 1);
+        assert_eq!(r.payouts[0].wallet, pk(0xD0));
+        assert!(verify_receipt(&r), "receipt must verify against the rail");
+    }
+
+    #[tokio::test]
+    async fn tampered_receipt_does_not_grant_entitlement() {
+        let buyer = pk(0xB1);
+        let mut r = rail().checkout(&buyer, sale_split(pk(0xD1), 500, None)).await;
+        assert!(verify_receipt(&r));
+        r.payouts[0].amount = 5_000_000;
+        assert!(
+            !verify_receipt(&r),
+            "a forged receipt must never gate an entitlement"
+        );
+    }
+
+    #[tokio::test]
+    async fn operator_cut_is_split_atomically() {
+        let buyer = pk(0xB2);
+        let r = rail()
+            .checkout(&buyer, sale_split(pk(0xD2), 900, Some((pk(0x0B), 100))))
+            .await;
+        assert_eq!(r.total, 1000);
+        assert_eq!(r.payouts.len(), 2);
+        assert_eq!(r.payouts[1].amount, 100);
+        assert!(verify_receipt(&r));
+    }
+
+    #[tokio::test]
+    async fn hosting_channel_id_is_deterministic() {
+        let op = pk(0x0C);
+        let a = rail().open_channel(&op).await;
+        let b = rail().open_channel(&op).await;
+        assert_eq!(a.id, b.id);
+        assert_eq!(a.peer, op);
     }
 }

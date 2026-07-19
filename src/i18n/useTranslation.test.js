@@ -50,10 +50,13 @@ describe('useTranslation — English resolution', () => {
     expect(result.current.t('games.contentRatings.mature')).toBe('Mature (17+)');
   });
 
-  it('resolves wallet transaction type labels', () => {
+  // The wallet is non-custodial: there are no deposit/withdrawal transaction
+  // types to label, only the kinds a signed receipt can have.
+  it('resolves wallet receipt kind labels', () => {
     const { result } = renderHook(() => useTranslation(), { wrapper: EnglishWrapper });
-    expect(result.current.t('wallet.transactionTypes.deposit')).toBe('Deposit');
-    expect(result.current.t('wallet.transactionTypes.refund')).toBe('Refund');
+    expect(result.current.t('wallet.receiptKinds.item_purchase')).toBe('Item purchase');
+    expect(result.current.t('wallet.receiptKinds.hosting_fee')).toBe('Hosting fee');
+    expect(result.current.t('wallet.receiptKinds.refund')).toBe('Refund');
   });
 
   it('resolves developer analytics labels', () => {
@@ -163,7 +166,7 @@ describe('useTranslation — locale state', () => {
 describe('useTranslation — nested path resolution', () => {
   it('resolves 2-level path', () => {
     const { result } = renderHook(() => useTranslation(), { wrapper: EnglishWrapper });
-    expect(result.current.t('wallet.balance')).toBe('Balance');
+    expect(result.current.t('wallet.receipts')).toBe('Receipts');
   });
 
   it('resolves 3-level path', () => {

@@ -118,6 +118,10 @@ pub mod input;
 pub mod networking;
 pub mod platform;
 pub mod protocol;
+/// Capacity-elastic scaling primitives (`Shardable`, `ShardScheduler`, emergent
+/// player caps). Feature-gated so default game builds stay dependency-lean.
+#[cfg(feature = "scaling")]
+pub mod scaling;
 pub mod state;
 
 // Convenience re-exports of the most commonly used types.

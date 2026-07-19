@@ -1,4 +1,5 @@
 import './Home.css';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 
 const features = [
   {
@@ -7,12 +8,12 @@ const features = [
     description: 'Write Bevy game logic once. Magnetite compiles to WASM for browsers and native for desktop — transparent code, fair by design.',
   },
   {
-    kicker: '// FIAT PAYMENTS',
-    title: 'Pay by Card or Bank',
-    description: 'Players top up with card or bank transfer via Paystack — no crypto required. Fast, secure, and available globally.',
+    kicker: '// NON-CUSTODIAL',
+    title: 'Pay From Your Own Wallet',
+    description: 'Players pay the developer directly in USDC. No balance to top up, no custody, no intermediary that can freeze or reverse it.',
   },
   {
-    kicker: '// 70% REVENUE',
+    kicker: '// 0 BPS PROTOCOL FEE',
     title: 'Earn as Developer',
     description: '70% revenue share, weekly payouts via Wise directly to your bank. Own your code, own your players, scale from a game-jam entry to a AAA title on the same platform.',
   },
@@ -28,8 +29,8 @@ const steps = [
   {
     num: '02',
     kicker: '// PAY',
-    title: 'Add funds via card or bank',
-    desc: 'Top up your wallet with Paystack — Visa, Mastercard, or bank transfer. Instant and secure.',
+    title: 'Link a wallet you control',
+    desc: 'Paste a public key and you are done. Purchases pay the developer directly and mint a signed receipt.',
   },
   {
     num: '03',
@@ -103,7 +104,7 @@ export default function Home() {
           <span className="kicker">// OPEN SOURCE · RUST-NATIVE · MONETIZED</span>
           <div className="hero-badge">
             <span className="hero-badge-dot" aria-hidden="true" />
-            Now live — Wise payouts &amp; real-time multiplayer
+            Now live — non-custodial payments &amp; real-time multiplayer
           </div>
           <h1 id="home-hero-heading" className="hero-title">
             <span className="line">Rust Games.</span>
@@ -112,7 +113,7 @@ export default function Home() {
           </h1>
           <p className="hero-subtitle">
             The open-source platform where developers publish Rust games,
-            players pay by card or bank, and 70% of every dollar goes straight to developers.
+            players pay from wallets they control, and the full subtotal goes straight to developers.
           </p>
           <div className="hero-ctas">
             <a href="/marketplace" className="btn btn-primary btn-lg">Start Playing</a>
@@ -223,8 +224,8 @@ export default function Home() {
                 Built by developers,<br />for developers
               </h2>
               <p className="section-subtitle">
-                Keep your code, own your players, and receive 70% of every dollar
-                — paid weekly to your bank via Wise.
+                Keep your code, own your players, and receive the full subtotal
+                — paid straight to your wallet, settled the moment a buyer checks out.
               </p>
               <div className="dev-features">
                 {devFeatures.map((f, i) => (
@@ -360,7 +361,7 @@ export default function Home() {
           <div className="footer-main">
             <div className="footer-brand">
               <div className="footer-logo">
-                <div className="footer-logo-icon" aria-hidden="true">M</div>
+                <img src={magnetiteLogo} className="footer-logo-icon" aria-hidden="true" alt="" />
                 <span>Magnetite</span>
               </div>
               <p>Open-source Rust gaming at any scale. MIT forever.</p>

@@ -101,9 +101,6 @@ pub async fn router(pool: PgPool, geo: Arc<GeoResolver>) -> Option<Router> {
         .route("/games/:id/approve", post(pages::game_approve))
         .route("/games/:id/feature", post(pages::game_feature))
         .route("/transactions", get(pages::transactions))
-        .route("/payouts", get(ops::payouts_list))
-        .route("/payouts/:id/cancel", post(ops::payout_cancel))
-        .route("/payouts/:id/process", post(ops::payout_process))
         .route("/billing", get(pages::billing_page))
         .route("/settings", get(ops::settings_list))
         .route("/settings/update", post(ops::setting_update))
@@ -467,7 +464,7 @@ mod route_tests {
     #[tokio::test]
     async fn ops_routes_require_a_session() {
         let app = build(&[]).await;
-        for path in ["/payouts", "/settings", "/moderation"] {
+        for path in ["/settings", "/moderation"] {
             let resp = app.clone().oneshot(request("GET", path)).await.unwrap();
             assert_eq!(
                 resp.status(),

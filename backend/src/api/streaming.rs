@@ -8,7 +8,11 @@
 // │    The backend fetches the .m3u8 from the configured media server and    │
 // │    returns it to the viewer.  This keeps the media-server address         │
 // │    internal and lets Magnetite add auth checks before proxying.           │
-// │    Set MEDIA_SERVER_BASE_URL env var (e.g. http://mediamtx:8888).        │
+// │    PER-NODE MEDIA (§3.5): the host comes from the stream record's own    │
+// │    `media_host` column. Every operator runs their own media server, so   │
+// │    there is NO single global media host. MEDIA_SERVER_BASE_URL survives  │
+// │    only as THIS node's default for streams that name no host of their    │
+// │    own — it is a fallback, not the platform's address.                   │
 // │    If not set, the endpoint returns the hls_url stored on the record     │
 // │    as a 302 redirect instead of proxying.                                │
 // │                                                                           │
@@ -56,6 +60,9 @@ pub struct CreateStreamRequest {
     pub rtmp_target: Option<String>,
     /// Stream key for the external RTMP target.
     pub stream_key: Option<String>,
+    /// This stream's own media host (e.g. `http://mediamtx.myserver:8888`).
+    /// Per-node: overrides this node's default for this stream only.
+    pub media_host: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,6 +122,14 @@ pub async fn create_stream(
         body.stream_key.as_deref(),
     )
     .await?;
+    // Per-node media: pin this stream to the operator-supplied host, if any.
+    if let Some(host) = body.media_host.as_deref().filter(|h| !h.trim().is_empty()) {
+        sqlx::query("UPDATE streams SET media_host = $1 WHERE id = $2")
+            .bind(host.trim())
+            .bind(stream.public.id)
+            .execute(&pool)
+            .await?;
+    }
     Ok(response::success_response(stream))
 }
 
@@ -234,7 +249,7 @@ pub async fn hls_manifest(State(pool): State<PgPool>, Path(id): Path<Uuid>) -> R
     let hls_url = match stream.hls_url.as_deref() {
         Some(url) => url.to_string(),
         None => {
-            let base = std::env::var("MEDIA_SERVER_BASE_URL").unwrap_or_default();
+            let base = media_host_for(&pool, id).await.unwrap_or_default();
             if base.is_empty() {
                 return (
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -295,7 +310,7 @@ async fn derive_hls_url(pool: &PgPool, stream_id: Uuid, provided: Option<&str>) 
     if let Some(url) = provided {
         return Some(url.to_string());
     }
-    let base = std::env::var("MEDIA_SERVER_BASE_URL").ok()?;
+    let base = media_host_for(pool, stream_id).await?;
     if base.is_empty() {
         return None;
     }
@@ -309,6 +324,33 @@ async fn derive_hls_url(pool: &PgPool, stream_id: Uuid, provided: Option<&str>) 
         .flatten();
 
     key.map(|k| format!("{base}/live/{k}/index.m3u8"))
+}
+
+/// The media host serving a given stream — PER NODE, not global (§3.5).
+///
+/// Resolution order:
+///   1. `streams.media_host` — the host this stream was published to. Every
+///      operator runs their own media server, so the record carries its own.
+///   2. `MEDIA_SERVER_BASE_URL` — *this* node's default, for streams created
+///      before per-stream hosts existed or by operators with a single server.
+///
+/// Returns `None` when neither is set: this node simply serves no media, which
+/// is a legitimate configuration, not an error.
+pub async fn media_host_for(pool: &PgPool, stream_id: Uuid) -> Option<String> {
+    let own: Option<Option<String>> =
+        sqlx::query_scalar("SELECT media_host FROM streams WHERE id = $1")
+            .bind(stream_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+    if let Some(host) = own.flatten().map(|h| h.trim().to_string()).filter(|h| !h.is_empty()) {
+        return Some(host.trim_end_matches('/').to_string());
+    }
+    std::env::var("MEDIA_SERVER_BASE_URL")
+        .ok()
+        .map(|h| h.trim().trim_end_matches('/').to_string())
+        .filter(|h| !h.is_empty())
 }
 
 /// GET /api/v1/streams/:id/watch — returns watch info including the HLS URL.

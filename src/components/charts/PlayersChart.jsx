@@ -8,7 +8,7 @@ const colors = {
   quaternary: '#a78bfa',   /* violet */
   grid:       '#23232e',   /* --color-border */
   text:       '#6b6b78',   /* --color-text-muted */
-  background: '#14141d',   /* --color-bg-card */
+  background: '#111319',   /* --color-bg-card */
   border:     '#23232e',   /* --color-border */
 };
 

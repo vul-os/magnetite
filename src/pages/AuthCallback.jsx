@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { sanitizeRedirect } from '../utils/sanitize';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
 
 // Single canonical key — must match useAuth.js and client.js.
@@ -22,7 +23,7 @@ function AuthShell({ children }) {
       <div className="auth-container-center">
         <div className="auth-card">
           <div className="auth-logo-container" style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
-            <div className="auth-logo-icon">M</div>
+            <img src={magnetiteLogo} className="auth-logo-icon" aria-hidden="true" alt="" />
             <span className="auth-logo-text">Magnetite</span>
           </div>
           {children}

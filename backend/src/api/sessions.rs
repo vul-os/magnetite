@@ -40,7 +40,6 @@ pub struct PlaySession {
     pub status: String,
     pub fee_amount: Decimal,
     pub final_score: Option<i64>,
-    pub payout_status: Option<String>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
 }
@@ -53,7 +52,6 @@ pub struct SessionResponse {
     pub status: String,
     pub fee_amount: Decimal,
     pub final_score: Option<i64>,
-    pub payout_status: Option<String>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
     pub game_title: Option<String>,
@@ -73,8 +71,6 @@ pub struct CreateSessionResponse {
     pub connection_details: serde_json::Value,
     pub ws_endpoint: String,
 }
-
-const PLATFORM_FEE_PERCENTAGE: &str = "0.15";
 
 pub async fn create_game_session(
     State(pool): State<PgPool>,
@@ -100,38 +96,20 @@ pub async fn create_game_session(
 
     let fee_amount = game.2;
 
+    // NON-CUSTODIAL (§3.6): we hold no balances, so there is nothing to debit.
+    // A paid game requires a verified, non-voided receipt for this game — the
+    // developer was already paid wallet-to-wallet at checkout. The check
+    // re-verifies the rail signature, so a database row alone is never proof,
+    // and it fails CLOSED.
     if fee_amount > Decimal::ZERO {
-        let balance = sqlx::query_as::<_, (Option<Decimal>)>(
-            "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
-        )
-        .bind(user_id)
-        .fetch_optional(&pool)
-        .await?
-        .0
-        .unwrap_or(Decimal::ZERO);
-
-        if balance < fee_amount {
-            return Err(AppError::InsufficientFunds("Insufficient balance to pay session fee".to_string()));
+        let required = crate::services::payment::units_from_usd(fee_amount);
+        if !crate::services::payment::has_verified_receipt(&pool, user_id, game_id, required).await
+        {
+            return Err(AppError::Validation(
+                "this game requires payment — complete checkout, then start a session"
+                    .to_string(),
+            ));
         }
-
-        sqlx::query(
-            "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USD'",
-        )
-        .bind(fee_amount)
-        .bind(user_id)
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-             VALUES ($1, $2, 'session_fee', $3, $4, 'completed', NOW())",
-        )
-        .bind(Uuid::new_v4())
-        .bind(user_id)
-        .bind(fee_amount)
-        .bind(game_id.to_string())
-        .execute(&pool)
-        .await?;
     }
 
     let session_id = Uuid::new_v4();
@@ -158,7 +136,6 @@ pub async fn create_game_session(
             status: "active".to_string(),
             fee_amount,
             final_score: None,
-            payout_status: None,
             started_at: Utc::now(),
             ended_at: None,
             game_title: Some(game.1),
@@ -187,7 +164,7 @@ pub async fn list_sessions(
 
     let sessions = sqlx::query_as::<_, PlaySession>(&format!(
         "SELECT ps.id, ps.game_id, ps.user_id, ps.status, ps.fee_amount,
-                ps.final_score, ps.payout_status, ps.started_at, ps.ended_at
+                ps.final_score, ps.started_at, ps.ended_at
          FROM play_sessions ps
          WHERE ps.user_id = $1 {}
          ORDER BY ps.started_at DESC
@@ -217,7 +194,6 @@ pub async fn list_sessions(
             status: s.status,
             fee_amount: s.fee_amount,
             final_score: s.final_score,
-            payout_status: s.payout_status,
             started_at: s.started_at,
             ended_at: s.ended_at,
             game_title: None,
@@ -241,7 +217,7 @@ pub async fn get_session(
 ) -> Result<Json<SessionResponse>> {
     let session = sqlx::query_as::<_, PlaySession>(
         "SELECT id, game_id, user_id, status, fee_amount, final_score,
-                payout_status, started_at, ended_at
+                started_at, ended_at
          FROM play_sessions
          WHERE id = $1 AND user_id = $2",
     )
@@ -266,7 +242,6 @@ pub async fn get_session(
         status: session.status,
         fee_amount: session.fee_amount,
         final_score: session.final_score,
-        payout_status: session.payout_status,
         started_at: session.started_at,
         ended_at: session.ended_at,
         game_title: Some(game_title.0),
@@ -282,7 +257,7 @@ pub async fn end_session(
 ) -> Result<Json<SessionResponse>> {
     let session = sqlx::query_as::<_, PlaySession>(
         "SELECT id, game_id, user_id, status, fee_amount, final_score,
-                payout_status, started_at, ended_at
+                started_at, ended_at
          FROM play_sessions
          WHERE id = $1 AND user_id = $2",
     )
@@ -296,49 +271,17 @@ pub async fn end_session(
         return Err(AppError::Validation("Session is not active".to_string()));
     }
 
-    let game = sqlx::query_as::<_, (Uuid, Decimal)>(
-        "SELECT developer_id, fee_per_session FROM games WHERE id = $1",
-    )
-    .bind(session.game_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
-
-    let platform_percentage = Decimal::from_str_exact(PLATFORM_FEE_PERCENTAGE)
-        .unwrap_or(Decimal::new(15, 2));
-    let developer_percentage = Decimal::ONE - platform_percentage;
-
-    let developer_share = session.fee_amount * developer_percentage;
-    let platform_share = session.fee_amount * platform_percentage;
-
     let updated_session = sqlx::query_as::<_, PlaySession>(
         "UPDATE play_sessions
-         SET status = 'completed', final_score = $1, ended_at = NOW(), payout_status = 'pending'
+         SET status = 'completed', final_score = $1, ended_at = NOW()
          WHERE id = $2
          RETURNING id, game_id, user_id, status, fee_amount, final_score,
-                   payout_status, started_at, ended_at",
+                   started_at, ended_at",
     )
     .bind(payload.final_score)
     .bind(session_id)
     .fetch_one(&pool)
     .await?;
-
-    if session.fee_amount > Decimal::ZERO {
-        sqlx::query(
-            "INSERT INTO game_revenue (id, game_id, developer_id, session_id, amount,
-                                      developer_share, platform_share, status, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW())",
-        )
-        .bind(Uuid::new_v4())
-        .bind(session.game_id)
-        .bind(game.0)
-        .bind(session_id)
-        .bind(session.fee_amount)
-        .bind(developer_share)
-        .bind(platform_share)
-        .execute(&pool)
-        .await?;
-    }
 
     let game_title: (String,) = sqlx::query_as(
         "SELECT title FROM games WHERE id = $1",
@@ -355,7 +298,6 @@ pub async fn end_session(
         status: updated_session.status,
         fee_amount: updated_session.fee_amount,
         final_score: updated_session.final_score,
-        payout_status: updated_session.payout_status,
         started_at: updated_session.started_at,
         ended_at: updated_session.ended_at,
         game_title: Some(game_title.0),
@@ -371,7 +313,7 @@ pub async fn submit_score(
 ) -> Result<Json<SessionResponse>> {
     let session = sqlx::query_as::<_, PlaySession>(
         "SELECT id, game_id, user_id, status, fee_amount, final_score,
-                payout_status, started_at, ended_at
+                started_at, ended_at
          FROM play_sessions
          WHERE id = $1 AND user_id = $2",
     )
@@ -430,7 +372,6 @@ pub async fn submit_score(
         status: session.status,
         fee_amount: session.fee_amount,
         final_score: Some(payload.score),
-        payout_status: session.payout_status,
         started_at: session.started_at,
         ended_at: session.ended_at,
         game_title: Some(game_title.0),

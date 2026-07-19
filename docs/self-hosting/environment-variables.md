@@ -10,7 +10,12 @@ Variables marked **required** will cause the backend to fail at startup if absen
 | Variable | Example | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgres://magnetite:pw@postgres:5432/magnetite` | PostgreSQL connection string |
+| `REDIS_URL` | `redis://redis:6379` | Redis connection URL |
 | `JWT_SECRET` | `$(openssl rand -hex 32)` | JWT signing secret — minimum 32 characters, never commit |
+
+PostgreSQL and Redis are the only external services the backend requires. Everything
+below — email, OAuth, media, external comms providers, a real chain rail — is
+optional.
 
 ---
 
@@ -59,7 +64,8 @@ Variables marked **required** will cause the backend to fail at startup if absen
 
 ## OAuth providers
 
-Leave unused providers blank. At least one is required for social login.
+Optional. Leave unused providers blank — keypair and password login still work.
+At least one is required for social login.
 
 | Variable | Description |
 |----------|-------------|
@@ -91,27 +97,58 @@ Leave blank to disable the GitHub App integration in development.
 
 ---
 
-## Payments
+## Payments (non-custodial crypto)
 
-All payment variables are optional. If a provider key is absent, the corresponding
-endpoints return HTTP 502 (`ProviderUnconfigured`) instead of fabricating a successful
-transfer. Set `PAYMENTS_SANDBOX=true` in local dev to receive labelled sandbox responses
-without real credentials.
+There is no fiat and no custody. Buyers pay sellers wallet-to-wallet through the
+`PaymentRail` seam; the platform holds no funds, so there is nothing to deposit,
+withdraw or pay out. The signed receipt *is* the entitlement — the node re-verifies
+the rail signature, so a database row alone never grants access. A refund voids the
+receipt and revokes the entitlement rather than moving a balance.
+
+All payment variables are optional; the defaults need no external service.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PAYSTACK_SECRET_KEY` | — | Paystack secret key for fiat on-ramp (deposits + subscriptions) |
-| `WISE_API_TOKEN` | — | Wise API token for developer payout disbursements |
-| `WISE_PROFILE_ID` | — | Wise sending-profile ID (business or personal) used for outbound transfers |
-| `WISE_SANDBOX` | `false` | `true` routes Wise requests to `api.sandbox.transferwise.tech`; results are labelled sandbox |
-| `PAYMENTS_SANDBOX` | `false` | `true` enables sandbox mode across providers: labelled placeholder results, no real money moves |
+| `PAYMENT_RAIL` | `mock` | Settlement rail. `mock` issues deterministic signed receipts fully offline — this is what CI and `magnetite dev` use |
+| `PROTOCOL_FEE_BPS` | `0` | Protocol fee in basis points, taken **on top of** the subtotal. The developer receives the whole subtotal |
+| `OPERATOR_WALLET_PUBKEY` | — | Hex Ed25519 pubkey that receives hosting / paid-tier fees. Only needed if this node sells hosting or paid tiers |
+| `CHAIN_RPC_URL` | — | Placeholder. **Unused** by the mock rail; reserved for a future on-chain rail |
+| `CHAIN_ID` | — | Placeholder. **Unused** by the mock rail |
+| `STABLECOIN_ADDRESS` | — | Placeholder. **Unused** by the mock rail |
+
+No real on-chain rail is implemented yet.
+
+---
+
+## Comms
+
+Magnetite builds no chat/voice/video/streaming of its own; `COMMS_PROVIDER` selects
+which system serves it. A provider whose service is not configured falls back to
+`builtin` with a warning.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMMS_PROVIDER` | `builtin` | `builtin` \| `matrix` \| `jitsi` \| `livekit` \| `owncast`. `builtin` is the in-house stack and requires no external service |
+| `NODE_SIGNING_SEED` | — | 64 hex chars (32 bytes). The node mints comms join credentials with this key. Unset — an ephemeral key is generated at boot and credentials do not survive a restart |
+| `MATRIX_HOMESERVER` | — | Set to enable the Matrix provider |
+| `MATRIX_SERVER_NAME` | — | Matrix server name |
+| `MATRIX_ALIAS_PREFIX` | `magnetite` | Room alias prefix |
+| `MATRIX_SHARED_SECRET` | — | Only needed if the homeserver trusts this node as a JWT/SSO identity provider |
+| `JITSI_DOMAIN` | — | Set to enable the Jitsi provider |
+| `JITSI_APP_ID` | `magnetite` | Jitsi JWT app ID (optional — an open deployment needs neither) |
+| `JITSI_JWT_SECRET` | — | Jitsi JWT secret (optional) |
+| `LIVEKIT_URL` | — | Set to enable the LiveKit provider |
+| `LIVEKIT_API_KEY` | — | Without the key/secret pair no access token is minted |
+| `LIVEKIT_API_SECRET` | — | See above |
+| `OWNCAST_URL` | — | Set to enable the Owncast provider |
+| `OWNCAST_STREAM_KEY` | — | Owncast stream key |
 
 ---
 
 ## Email
 
 Set `EMAIL_PROVIDER` to choose a transport. Leave all credentials blank to disable
-outbound email (verification and notification emails will not be sent — a clear error
+outbound email — it is optional (verification and notification emails will not be sent — a clear error
 is returned rather than silent no-op).
 
 | Variable | Default | Description |
@@ -143,7 +180,7 @@ Generate SES SMTP credentials in the AWS console under **IAM → SES SMTP creden
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEDIA_SERVER_BASE_URL` | — | Base URL of the external MediaMTX media server (e.g. `http://mediamtx:8888`). The backend proxies `/streams/:id/hls.m3u8` to this URL. If unset, the watch endpoint returns HTTP 503. **Bucket-D external dependency** — requires a separately deployed MediaMTX instance. |
+| `MEDIA_SERVER_BASE_URL` | — | Base URL of an external MediaMTX (or equivalent) media server (e.g. `http://mediamtx:8888`). The backend proxies `/streams/:id/hls.m3u8` to this URL. Empty by default; if unset, the watch endpoint returns HTTP 503. Optional — the backend has no dependency on a media server, and in Docker Compose MediaMTX sits behind the `media` profile. Media is per-operator: a stream/room record carries its own `media_host`, which always wins. |
 
 ---
 

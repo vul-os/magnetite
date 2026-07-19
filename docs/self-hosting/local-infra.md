@@ -1,8 +1,12 @@
-# Local Infrastructure Stand-ins (Bucket D)
+# Local Infrastructure Stand-ins
 
-This page documents how to run every Bucket-D external service locally so that
+This page documents how to run every optional external service locally so that
 the full create-build-play loop works on a single developer machine without any
 cloud accounts.
+
+Only PostgreSQL and Redis are actually required. The default configuration —
+`PAYMENT_RAIL=mock`, `COMMS_PROVIDER=builtin`, no media server — needs no
+third-party account and works fully offline.
 
 ---
 
@@ -14,17 +18,18 @@ localhost
   ├── :3000  Frontend (React SPA, nginx)
   ├── :8080  Backend API (Axum)
   ├── :9000  magnetite-runtime (authoritative game-server)
-  ├── :8888  MediaMTX (HLS / RTMP / WebRTC)
-  ├── :1935  MediaMTX RTMP ingest
+  ├── :8888  MediaMTX (HLS / RTMP / WebRTC)   ← optional, `media` profile
+  ├── :1935  MediaMTX RTMP ingest             ← optional, `media` profile
   ├── :5432  PostgreSQL
   ├── :6379  Redis
   ├── :1025  MailHog SMTP  (dev email preview)
   └── :8025  MailHog Web UI
 ```
 
-The backend connects to MediaMTX at `http://mediamtx:8888` (inside Docker
-Compose networking) and to the runtime at `ws://magnetite-runtime:9000`.
-All four env vars that enable this are pre-wired in `docker-compose.override.yml`.
+The backend connects to the runtime at `ws://magnetite-runtime:9000`, pre-wired in
+`docker-compose.override.yml`. It has **no** dependency on MediaMTX:
+`MEDIA_SERVER_BASE_URL` is empty by default and you set it yourself if you start
+the `media` profile.
 
 ---
 
@@ -41,9 +46,14 @@ This starts:
 - PostgreSQL + Redis (data stores)
 - Backend API (port 8080)
 - Frontend with nginx (port 3000)
-- MediaMTX media server (ports 8888, 1935, 8189/udp)
 - magnetite-runtime authoritative game-server (port 9000)
 - MailHog email preview (ports 1025, 8025)
+
+MediaMTX is **not** included — it is optional and behind the `media` profile:
+
+```bash
+docker compose --profile media up -d      # adds ports 8888, 1935, 8189/udp
+```
 
 Verify the stack is healthy:
 
@@ -68,11 +78,15 @@ curl --include --no-buffer \
 
 ---
 
-## Service: MediaMTX (HLS / RTMP / WHIP)
+## Service: MediaMTX (HLS / RTMP / WHIP) — optional
 
-MediaMTX is the media plane for live-stream watch (HLS) and RTMP egress to
-Twitch or YouTube. It replaces the "Bucket-D: requires a separately deployed
-MediaMTX instance" note in the external-dependencies guide.
+MediaMTX is **one optional** media plane for live-stream watch (HLS) and RTMP
+egress to Twitch or YouTube. Media is per-operator: every operator runs their own,
+and the backend depends on none. Start it with `docker compose --profile media up`.
+
+If you use an external comms provider instead (`COMMS_PROVIDER=jitsi`, `livekit`
+or `owncast`), that provider brings its own media plane and you do not need
+MediaMTX at all.
 
 ### What it enables
 
@@ -85,7 +99,7 @@ MediaMTX instance" note in the external-dependencies guide.
 ### Environment variables
 
 ```bash
-# Set in .env (already pre-configured for Docker Compose)
+# Empty by default. Set in .env only if you started the `media` profile.
 MEDIA_SERVER_BASE_URL=http://mediamtx:8888
 
 # Optional overrides
@@ -175,8 +189,11 @@ docker compose up magnetite-runtime
 
 The `docker-compose.override.yml` pre-configures:
 - `GAME_SERVER_WS_BASE=ws://magnetite-runtime:9000` in the backend service
-- `MEDIA_SERVER_BASE_URL=http://mediamtx:8888` in the backend service
+- `COMMS_PROVIDER=builtin` in the backend service
 - Port mapping `:9000 → 9000`
+
+It does **not** set `MEDIA_SERVER_BASE_URL` — set that yourself if you run the
+`media` profile.
 
 ### End-to-end play loop
 

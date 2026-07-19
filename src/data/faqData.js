@@ -5,23 +5,23 @@ export const faqData = [
     questions: [
       {
         q: "How do I start playing?",
-        a: "Create an account by clicking the Sign Up button, verify your email address, add funds to your wallet using a credit card or bank transfer via Paystack, and browse our game marketplace to find matches. Once you find a game you like, click Play and you'll be matched with other players."
+        a: "Create an account by clicking the Sign Up button, verify your email address, and browse our game marketplace. Free games need nothing else. If you want to buy an item or a paid session, link a wallet you control and pay in USDC — Magnetite never holds a balance for you."
       },
       {
         q: "How do I create an account?",
         a: "Visit our registration page and enter your email address, username, and password. You'll receive a verification email - click the link inside to activate your account. You can also sign up using Google or Discord for faster access."
       },
       {
-        q: "How do I add funds to my wallet?",
-        a: "Navigate to your Wallet page and click Add Funds. We accept major credit cards (Visa, Mastercard, American Express) and bank transfers via Paystack. Funds are typically available instantly after payment confirmation."
+        q: "How do I link my wallet?",
+        a: "Go to your Wallet page and paste the 32-byte hex Ed25519 public key of a wallet you control. There is nothing to top up: your wallet stays yours, and each purchase pays the developer or operator directly from it."
       },
       {
-        q: "What is the minimum deposit amount?",
-        a: "The minimum deposit is $5.00 USD. There's no maximum deposit limit, but transactions over $10,000 may require additional verification."
+        q: "Is there a minimum amount I have to load up front?",
+        a: "No. Because Magnetite is non-custodial there is no deposit and no stored balance — you pay per purchase, straight from your own wallet, for exactly the amount shown at checkout."
       },
       {
         q: "Is my information secure?",
-        a: "Yes. We use bank-level 256-bit SSL encryption for all data transmission. Your payment information is processed by PCI-compliant payment providers and we never store your full credit card details on our servers."
+        a: "Yes. All traffic is TLS-encrypted, and because payments settle wallet to wallet we never hold your funds or store card details at all. Your private key never leaves your wallet — Magnetite only ever sees your public key."
       }
     ]
   },
@@ -35,11 +35,11 @@ export const faqData = [
       },
       {
         q: "What payment methods do you accept?",
-        a: "We accept credit and debit cards (Visa, Mastercard, Amex) and bank transfers via Paystack. All transactions are secured with end-to-end encryption. No cryptocurrency required."
+        a: "Payments settle in USDC from a wallet you control. Checkout is a single atomic transaction that pays the developer (and the server operator, for hosting fees) and mints a signed receipt — there is no intermediary holding the money."
       },
       {
         q: "How do I withdraw my earnings?",
-        a: "Go to your Wallet page and click Withdraw. Enter the amount and your bank details. Withdrawals are processed via Wise and typically arrive in your bank account within 1-2 business days."
+        a: "There is nothing to withdraw. Earnings arrive in your own wallet at the moment of sale, so the funds are already yours — the Wallet page just lists the signed receipts that prove each settlement."
       },
       {
         q: "Why is my game not loading?",
@@ -65,7 +65,7 @@ export const faqData = [
       },
       {
         q: "What are the revenue share terms?",
-        a: "Developers receive 70% of all session fees collected from their games. There are no upfront costs to publish — we only earn when you earn. Payouts are processed weekly via Wise to your connected bank account for balances over $50."
+        a: "The buyer's wallet pays your wallet the full subtotal. The protocol fee defaults to 0 bps, so by default you keep 100% of the sale, and there are no upfront costs to publish. Where a hosting fee applies it goes to the server operator, split atomically in the same transaction."
       },
       {
         q: "Do you provide an SDK?",
@@ -73,7 +73,7 @@ export const faqData = [
       },
       {
         q: "How do payouts work?",
-        a: "Earnings are calculated weekly. If your balance exceeds $50, we process a payout to your connected bank account via Wise. Transfers typically arrive within 1-2 business days. You configure your bank details once in Developer Settings."
+        a: "There are no payouts, because there is no float. Each purchase settles straight into your wallet and mints a signed receipt; the only thing you configure is which wallet address to be paid at."
       },
       {
         q: "What are the technical requirements for games?",
@@ -81,7 +81,7 @@ export const faqData = [
       },
       {
         q: "Can I use my own payment system?",
-        a: "No, all payments must go through our platform to ensure secure escrow and fair matchmaking. This protects both players and developers and enables our anti-cheat system to function properly."
+        a: "Entitlements are granted from signed receipts, so anything sold in-platform has to go through the payment rail that mints them. That rail is non-custodial and its protocol fee defaults to 0 bps, so it costs you nothing to use — and you keep your own wallet either way."
       }
     ]
   },
@@ -91,7 +91,7 @@ export const faqData = [
     questions: [
       {
         q: "Is my money safe?",
-        a: "Absolutely. Player funds are held in a segregated escrow account and never used for company operations. All transactions use 256-bit SSL encryption. We're also SOC 2 Type II compliant and regular third-party security audits are conducted."
+        a: "We never take custody of it, which is the strongest guarantee we can offer: there is no platform balance to freeze, lose or misuse. Funds sit in your wallet until you spend them, and every settlement leaves a signed receipt you can verify yourself."
       },
       {
         q: "How does anti-cheat work?",
@@ -103,7 +103,7 @@ export const faqData = [
       },
       {
         q: "How do you protect against match manipulation?",
-        a: "Our system detects unusual betting patterns and match outcomes. We use algorithmic analysis to identify rings of colluding players. All suspicious activity triggers manual review before any action is taken."
+        a: "Match results are server-authoritative and every session produces a replay log that anyone can re-simulate to detect tampering. Suspicious patterns and colluding players are flagged for manual review before any action is taken."
       },
       {
         q: "Is my personal data protected?",

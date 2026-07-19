@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { GithubIcon, TwitterIcon, DiscordIcon } from '../assets/icons';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './Footer.css';
 
 // Column definitions use i18n keys; labels are resolved via t() in the component.
@@ -94,7 +95,7 @@ export default function Footer() {
           {/* Brand column */}
           <div className="footer-brand">
             <Link to="/" className="footer-logo" aria-label={t('footer.logoLabel')}>
-              <div className="logo-icon" aria-hidden="true">M</div>
+              <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
               <span className="logo-text">Magnetite</span>
             </Link>
 

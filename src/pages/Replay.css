@@ -42,7 +42,7 @@
 
 .replay-back-link:hover {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.35);
+  border-color: rgba(123, 97, 255, 0.35);
   color: var(--color-accent);
 }
 
@@ -115,7 +115,7 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #07070b;
+  background: #08090c;
 }
 
 .replay-canvas {

@@ -109,12 +109,12 @@ export default function HeroSection() {
               <span className="trust-sep" aria-hidden="true" />
               <span className="trust-item">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Wise Payouts
+                Non-Custodial
               </span>
               <span className="trust-sep" aria-hidden="true" />
               <span className="trust-item">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                15% Platform Fee
+                0 bps Protocol Fee
               </span>
             </div>
 
@@ -193,7 +193,7 @@ export default function HeroSection() {
               <div className="hero-chip chip-accent">Bevy 0.14</div>
               <div className="hero-chip chip-amber">WASM</div>
               <div className="hero-chip chip-info">Matchmaking</div>
-              <div className="hero-chip chip-success">Wise Payouts</div>
+              <div className="hero-chip chip-success">USDC Receipts</div>
             </div>
           </div>
         </div>

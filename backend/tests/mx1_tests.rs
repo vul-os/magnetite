@@ -1,13 +1,13 @@
 // mx1_tests.rs — Tests for MX1 feature set (post-audit medium/low findings).
 //
 // Topics covered (per AUDIT.md medium/low section + DECISIONS.md §7b/§7c):
-//   1. Refunds          — AdminRefundRequest/Response serialization; provider routing logic;
-//                         "provider_unconfigured" path without PAYSTACK_SECRET_KEY/WISE_API_TOKEN.
+//   1. Refunds          — non-custodial refund = receipt void + entitlement revoke;
+//                         no payment-provider routing exists any more.
 //   2. Content rating   — validate_content_rating whitelist logic (public fn tested indirectly
 //                         via CreateGameRequest / UpdateGameRequest deserialization).
 //   3. Block / unblock  — FriendService API shape; BlockedUser serialization.
 //   4. Analytics        — GameAnalytics / RevenueBreakdown / SessionStats / DailyPlayerData shapes;
-//                         time-series serialization round-trip; 70/30 split math.
+//                         time-series serialization round-trip; full-subtotal settlement math.
 //   5. CORS allowlist   — get_allowed_origins environment-variable branching (logic extracted
 //                         from cors.rs and tested without spinning up a server).
 //   6. Session revocation — JWT Claims shape; session_id propagation; validate_token returns
@@ -20,129 +20,63 @@
 // directly on the structs the modules expose as `pub`.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Refunds — provider routing logic + response shape (pure-logic tests)
+// 1. Refunds — receipt void, no provider routing (NON-CUSTODIAL)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// NOTE: The admin refund handler (POST /api/v1/admin/transactions/:id/refund)
-// is specified in AUDIT.md ("Refunds: no mechanism exists — add admin refund").
-// These tests verify the refund routing logic independently of the DB layer,
-// exercising the same decision tree the handler uses.
+// The old admin refund handler called out to Paystack (deposits) or Wise
+// (withdrawals) and reversed a custodial balance. All of that is DELETED: there
+// is no payment processor to route to and no balance to reverse. A refund now
+// voids the signed receipt and revokes the entitlement it granted, which is
+// handled by the marketplace service, not an admin money button.
+//
+// These tests pin the properties that replaced provider routing.
 
 #[cfg(test)]
 mod refund_tests {
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-    use uuid::Uuid;
-
-    /// Mirror of the provider-selection logic: "deposit" → paystack, "withdrawal" → wise.
-    fn provider_for_tx_type(tx_type: &str) -> &'static str {
-        match tx_type {
-            "deposit" => "paystack",
-            "withdrawal" => "wise",
-            _ => "none",
-        }
+    /// Refund outcome under non-custodial settlement.
+    #[derive(Debug, PartialEq, Eq)]
+    enum RefundOutcome {
+        /// Receipt voided, entitlement revoked. The only success path.
+        ReceiptVoided,
+        /// No verified receipt to void.
+        NothingToRefund,
     }
 
-    /// When the relevant API key is not set, the status should be "provider_unconfigured".
-    fn attempt_refund_status_without_key(provider: &str) -> &'static str {
-        let key_var = match provider {
-            "paystack" => "PAYSTACK_SECRET_KEY",
-            "wise" => "WISE_API_TOKEN",
-            _ => return "completed", // no provider = no-op
-        };
-        if std::env::var(key_var).is_err() {
-            "provider_unconfigured"
+    fn refund(has_verified_receipt: bool) -> RefundOutcome {
+        if has_verified_receipt {
+            RefundOutcome::ReceiptVoided
         } else {
-            "completed" // would attempt real call
+            RefundOutcome::NothingToRefund
         }
     }
 
     #[test]
-    fn deposit_transaction_routes_to_paystack() {
-        assert_eq!(provider_for_tx_type("deposit"), "paystack");
+    fn refund_voids_a_receipt_and_never_calls_a_payment_provider() {
+        assert_eq!(refund(true), RefundOutcome::ReceiptVoided);
     }
 
     #[test]
-    fn withdrawal_transaction_routes_to_wise() {
-        assert_eq!(provider_for_tx_type("withdrawal"), "wise");
+    fn refund_without_a_receipt_is_a_no_op_not_a_credit() {
+        // Under custody this would have credited a balance. It must not now:
+        // there is no balance, so an absent receipt means there is nothing to do.
+        assert_eq!(refund(false), RefundOutcome::NothingToRefund);
     }
 
     #[test]
-    fn unknown_transaction_type_routes_to_none() {
-        assert_eq!(provider_for_tx_type("fee"), "none");
-        assert_eq!(provider_for_tx_type("refund"), "none");
-        assert_eq!(provider_for_tx_type(""), "none");
-    }
-
-    #[test]
-    fn unconfigured_paystack_returns_provider_unconfigured_status() {
-        // Without PAYSTACK_SECRET_KEY set, refund must return "provider_unconfigured".
-        let saved = std::env::var("PAYSTACK_SECRET_KEY").ok();
-        unsafe {
-            std::env::remove_var("PAYSTACK_SECRET_KEY");
+    fn there_is_no_provider_unconfigured_state() {
+        // Every refund resolves locally. No external credential can make the
+        // refund path unavailable, so the old "provider_unconfigured" status
+        // has no non-custodial equivalent.
+        for has_receipt in [true, false] {
+            let outcome = refund(has_receipt);
+            assert!(
+                matches!(
+                    outcome,
+                    RefundOutcome::ReceiptVoided | RefundOutcome::NothingToRefund
+                ),
+                "refund must always resolve locally"
+            );
         }
-
-        let status = attempt_refund_status_without_key("paystack");
-        assert_eq!(status, "provider_unconfigured");
-
-        unsafe {
-            if let Some(v) = saved {
-                std::env::set_var("PAYSTACK_SECRET_KEY", v);
-            }
-        }
-    }
-
-    #[test]
-    fn unconfigured_wise_returns_provider_unconfigured_status() {
-        // Without WISE_API_TOKEN set, refund must return "provider_unconfigured".
-        let saved = std::env::var("WISE_API_TOKEN").ok();
-        unsafe {
-            std::env::remove_var("WISE_API_TOKEN");
-        }
-
-        let status = attempt_refund_status_without_key("wise");
-        assert_eq!(status, "provider_unconfigured");
-
-        unsafe {
-            if let Some(v) = saved {
-                std::env::set_var("WISE_API_TOKEN", v);
-            }
-        }
-    }
-
-    /// Refund response shape (serde round-trip via ad-hoc struct).
-    #[test]
-    fn refund_response_shape_round_trip() {
-        #[derive(serde::Serialize, serde::Deserialize)]
-        struct RefundResponse {
-            refund_id: Uuid,
-            transaction_id: Uuid,
-            user_id: Uuid,
-            amount: Decimal,
-            provider: String,
-            provider_ref: Option<String>,
-            status: String,
-        }
-
-        let resp = RefundResponse {
-            refund_id: Uuid::new_v4(),
-            transaction_id: Uuid::new_v4(),
-            user_id: Uuid::new_v4(),
-            amount: dec!(49.99),
-            provider: "paystack".to_string(),
-            provider_ref: Some("ps_refund_abc".to_string()),
-            status: "completed".to_string(),
-        };
-
-        let json = serde_json::to_string(&resp).unwrap();
-        assert!(json.contains("paystack"));
-        assert!(json.contains("completed"));
-        assert!(json.contains("49.99"));
-        assert!(json.contains("ps_refund_abc"));
-
-        let back: RefundResponse = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.provider, "paystack");
-        assert_eq!(back.status, "completed");
     }
 }
 
@@ -333,8 +267,8 @@ mod analytics_time_series_tests {
             },
             revenue_breakdown: RevenueBreakdown {
                 total_revenue: dec!(1000.00),
-                platform_fee: dec!(300.00),
-                developer_earnings: dec!(700.00),
+                platform_fee: dec!(0.00),
+                developer_earnings: dec!(1000.00),
                 session_count: 100,
             },
             daily_revenue: vec![],
@@ -378,25 +312,32 @@ mod analytics_time_series_tests {
     }
 
     #[test]
-    fn revenue_breakdown_70_30_split() {
-        // Verify the 70/30 (dev/platform) split math:
-        let total = dec!(1000.00);
-        let platform_fee = dec!(300.00); // 30%
-        let dev_earnings = dec!(700.00); // 70%
+    fn revenue_breakdown_settles_full_subtotal_to_developer() {
+        // The 70/30 platform cut is gone. The developer receives the whole
+        // subtotal and the protocol fee (default 0) rides on top.
+        let subtotal = dec!(1000.00);
+        let platform_fee = dec!(0.00); // PROTOCOL_FEE_BPS = 0
+        let dev_earnings = subtotal;
 
-        assert_eq!(platform_fee + dev_earnings, total);
+        assert_eq!(
+            dev_earnings, subtotal,
+            "developer must receive 100% of the subtotal"
+        );
+        assert!(
+            platform_fee.is_zero(),
+            "default protocol fee must be zero"
+        );
 
-        let ratio = dev_earnings / total;
-        // 700/1000 = 0.7
-        assert_eq!(ratio, dec!(0.7));
+        let ratio = dev_earnings / subtotal;
+        assert_eq!(ratio, dec!(1), "developer share ratio is 1.0, not 0.7");
     }
 
     #[test]
     fn revenue_breakdown_serializes_correctly() {
         let rb = RevenueBreakdown {
             total_revenue: dec!(500.00),
-            platform_fee: dec!(150.00),
-            developer_earnings: dec!(350.00),
+            platform_fee: dec!(0.00),
+            developer_earnings: dec!(500.00),
             session_count: 50,
         };
 

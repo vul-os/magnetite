@@ -276,7 +276,7 @@
   font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  background: rgba(7, 7, 11, 0.75);
+  background: rgba(8, 9, 12, 0.75);
   color: var(--color-accent);
   padding: 2px 8px;
   border-radius: var(--radius-full);
@@ -382,7 +382,7 @@
 .igs-confirm-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(7, 7, 11, 0.80);
+  background: rgba(8, 9, 12, 0.80);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: flex;

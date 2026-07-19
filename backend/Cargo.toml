@@ -46,6 +46,12 @@ metrics-exporter-prometheus = { version = "0.18", default-features = false }
 # calls. Geo fields degrade gracefully to NULL when no database is configured.
 maxminddb = "0.24"
 
+# Decentralization seams (DECENTRALIZATION.md §3): content-addressed BlobStore
+# hashing + Discovery `SessionAd` shape. Used to express the demotion of the
+# central `runtime_instances` poll toward self-advertising nodes, and to resolve
+# games by content hash. Pulls in no external service — offline defaults only.
+magnetite-seams = { path = "../magnetite-seams" }
+
 [dev-dependencies]
 tokio-test = "0.4"
 rust_decimal_macros = "1"

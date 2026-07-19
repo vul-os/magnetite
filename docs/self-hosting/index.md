@@ -1,6 +1,12 @@
 # Self-Hosting Guide
 
-Deploy your own Magnetite instance on any Linux server or cloud provider.
+Deploy your own Magnetite instance on any Linux server or cloud provider. There is
+no central Magnetite cloud and no hosted service to sign up for — anyone runs the
+node, and yours is a peer of every other.
+
+The backend requires PostgreSQL and Redis. Everything else — email, OAuth
+providers, a media server, external comms providers, a real chain rail — is
+optional, and the default configuration needs no third-party account at all.
 
 ## Architecture
 
@@ -41,7 +47,7 @@ including dev-only extras (MailHog email preview, pgAdmin).
 | [Quickstart](./quickstart.md) | Full stack up in three commands |
 | [Docker Deployment](./docker.md) | Complete Compose reference with backups |
 | [Environment Variables](./environment-variables.md) | All configuration options |
-| [External Dependencies](./external-dependencies.md) | Bucket-D items: MediaMTX, CI runners, game servers, payment keys |
+| [External Dependencies](./external-dependencies.md) | What is required (Postgres, Redis) vs optional (email, OAuth, MediaMTX, external comms providers) |
 | [Database](./database.md) | PostgreSQL setup, migrations, backups |
 | [SSL/TLS](./ssl.md) | Let's Encrypt and HTTPS configuration |
 | [Fly.io](./fly-io.md) | Deploy to Fly.io with autoscaling |

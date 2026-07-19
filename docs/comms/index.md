@@ -1,9 +1,20 @@
-# Comms — Overview
+# Comms — the builtin provider
 
-Magnetite ships a **Discord-class communications suite** as a first-class platform
-service. Every game can plug into it without building its own chat or voice stack:
-servers (communities), channels, real-time text chat, member presence, voice rooms,
-and game streaming all come pre-wired.
+> **Read [Comms](../comms.md) first.** Chat, voice, video, and streaming are
+> **pluggable** in Magnetite: they sit behind the `CommsProvider` seam, and
+> Matrix / Jitsi / LiveKit / Owncast adapters can be selected with
+> `COMMS_PROVIDER`. Magnetite does not operate a communications service.
+>
+> **This page documents the `builtin` provider** — the in-house stack described
+> below. It is the *default* only because it needs zero external services and
+> therefore runs offline out of the box; it is one adapter among several, not
+> the thing every game must depend on. Media hosting (MediaMTX) is an **opt-in
+> Docker Compose profile**, not a dependency, and `media_host` is per-node
+> rather than one global server.
+
+The builtin provider offers communities (servers/guilds), channels, real-time
+text chat, member presence, voice rooms, and game streaming, all pre-wired
+against the node's own Postgres and WebSocket layer.
 
 ---
 
@@ -129,8 +140,13 @@ A user in a voice room can **go live**, which:
    watch in-platform without joining the voice room.
 
 Viewers connect to the watch URL; the backend (or CDN) serves the HLS playlist.
-Heavy media infrastructure (CDN transcoding, RTMP ingest relay) is documented as
-the scale path and is not required for local or self-hosted deployments.
+
+**Media hosting is optional and per-node.** `streams.media_host`,
+`voice_rooms.media_host`, and `comms_rooms.media_host` replaced the single
+global `MEDIA_SERVER_BASE_URL`, which now survives only as *this* node's
+default and is empty unless you set it. MediaMTX ships as a Docker Compose
+profile (`docker compose --profile media up`) and the backend has no dependency
+on it. There is no global media server.
 
 ---
 
@@ -170,8 +186,25 @@ See [realtime.md](./realtime.md) for the WebSocket event types layered on top.
 
 ---
 
+## Join credentials and paid rooms
+
+Even on the builtin provider, joining a room goes through the seam: the node
+mints a scoped, short-lived credential from the **player's own keypair** via
+`AuthProvider::mint_scoped_token`, and voice-room join returns a
+provider-agnostic credential rather than a builtin-specific one. Switching
+`COMMS_PROVIDER` to Matrix or LiveKit renders that same credential as a Matrix
+login token or a LiveKit grant.
+
+A **paid room** additionally requires a re-verified, non-voided payment
+receipt, and demands a *proven* (linked) key rather than a derived one before
+the receipt is even looked up. Both checks fail closed. See
+[Payments](../payments.md).
+
+---
+
 ## See also
 
+- [Comms (the seam)](../comms.md) — the `CommsProvider` model and the external providers
 - [Realtime Protocol](./realtime.md) — WS chat/presence protocol + WebRTC voice signaling
 - [Data Model](./data-model.md) — communities / channels / messages / voice_rooms / streams
 - [In-Game Usage](./in-game.md) — SDK `platform::comms` for lobby/match chat+voice

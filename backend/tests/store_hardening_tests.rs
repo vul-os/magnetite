@@ -162,39 +162,36 @@ mod entitlement_idempotency_tests {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3–4  Refund — balance reversal + entitlement revocation
+// 3–4  Refund — receipt void + entitlement revocation (NON-CUSTODIAL)
 // ─────────────────────────────────────────────────────────────────────────────
+//
+// There is no balance to reverse: the buyer paid the developer directly on the
+// rail. A refund is therefore the VOID of the signed receipt plus revocation of
+// the entitlement it granted. These tests pin that shape.
 
 #[cfg(test)]
 mod refund_tests {
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
     use uuid::Uuid;
 
-    // Wallet balance tracker used to simulate refund balance reversal.
-    struct MockWallet {
-        balance: Decimal,
+    /// A stored receipt: signed proof of a wallet-to-wallet transfer.
+    struct MockReceipt {
+        total_units: u64,
+        voided: bool,
     }
 
-    impl MockWallet {
-        fn new(initial: Decimal) -> Self {
-            Self { balance: initial }
+    impl MockReceipt {
+        fn new(total_units: u64) -> Self {
+            Self { total_units, voided: false }
         }
-
-        fn debit(&mut self, amount: Decimal) -> Result<(), &'static str> {
-            if self.balance < amount {
-                return Err("insufficient funds");
-            }
-            self.balance -= amount;
-            Ok(())
+        fn void(&mut self) {
+            self.voided = true;
         }
-
-        fn credit(&mut self, amount: Decimal) {
-            self.balance += amount;
+        /// A receipt only proves an entitlement while it stands.
+        fn grants(&self) -> bool {
+            !self.voided
         }
     }
 
-    // In-memory entitlement that can be revoked.
     struct MockEntitlement {
         #[allow(dead_code)]
         item_id: Uuid,
@@ -203,96 +200,62 @@ mod refund_tests {
 
     impl MockEntitlement {
         fn new(item_id: Uuid) -> Self {
-            Self {
-                item_id,
-                revoked: false,
-            }
+            Self { item_id, revoked: false }
         }
-
         fn revoke(&mut self) {
             self.revoked = true;
         }
-
         fn is_owned(&self) -> bool {
             !self.revoked
         }
     }
 
-    // ── Tests ────────────────────────────────────────────────────────────────
-
     #[test]
-    fn refund_credits_buyer_wallet_with_purchase_amount() {
-        let purchase_price = dec!(9.99);
-        let initial_balance = dec!(50.00);
-        let mut wallet = MockWallet::new(initial_balance);
+    fn refund_voids_the_receipt_rather_than_moving_money() {
+        let mut receipt = MockReceipt::new(999);
+        assert!(receipt.grants());
 
-        // Simulate purchase: debit buyer
-        wallet.debit(purchase_price).expect("debit should succeed");
-        assert_eq!(wallet.balance, dec!(40.01));
+        receipt.void();
 
-        // Refund: credit buyer back
-        wallet.credit(purchase_price);
+        assert!(!receipt.grants(), "a voided receipt must prove nothing");
         assert_eq!(
-            wallet.balance, initial_balance,
-            "refund must restore exact balance"
+            receipt.total_units, 999,
+            "voiding must not rewrite the historical amount — the transfer really happened"
         );
     }
 
     #[test]
-    fn refund_restores_balance_exactly_including_cents() {
-        // Edge: fractional amounts must round-trip exactly with rust_decimal.
-        let price = dec!(0.01);
-        let mut wallet = MockWallet::new(dec!(1.00));
-        wallet.debit(price).unwrap();
-        assert_eq!(wallet.balance, dec!(0.99));
-        wallet.credit(price);
-        assert_eq!(wallet.balance, dec!(1.00));
-    }
-
-    #[test]
     fn refund_revokes_entitlement() {
-        let item_id = Uuid::new_v4();
-        let mut ent = MockEntitlement::new(item_id);
-
-        // Before refund: user owns the item
-        assert!(ent.is_owned(), "entitlement must be active before refund");
-
-        // Refund: revoke
+        let mut ent = MockEntitlement::new(Uuid::new_v4());
+        assert!(ent.is_owned());
         ent.revoke();
-
-        // After refund: user no longer owns the item
-        assert!(!ent.is_owned(), "entitlement must be revoked after refund");
-    }
-
-    #[test]
-    fn revoked_entitlement_is_not_active() {
-        let item_id = Uuid::new_v4();
-        let mut ent = MockEntitlement::new(item_id);
-        ent.revoke();
-        // Revoked must not count as owned
         assert!(!ent.is_owned());
     }
 
     #[test]
+    fn voided_receipt_and_live_entitlement_is_an_inconsistent_state() {
+        // This is exactly what the superadmin `voided_receipts_grant_nothing`
+        // compliance check exists to catch.
+        let mut receipt = MockReceipt::new(500);
+        let ent = MockEntitlement::new(Uuid::new_v4());
+        receipt.void();
+        assert!(
+            !(receipt.grants()) && ent.is_owned(),
+            "voided receipt + unrevoked entitlement must be detectable"
+        );
+    }
+
+    #[test]
     fn unrevoked_entitlement_is_active() {
-        let item_id = Uuid::new_v4();
-        let ent = MockEntitlement::new(item_id);
+        let ent = MockEntitlement::new(Uuid::new_v4());
         assert!(ent.is_owned());
     }
 
     #[test]
-    fn balance_after_multiple_refunds_is_additive() {
-        let price1 = dec!(5.00);
-        let price2 = dec!(3.50);
-        let initial = dec!(100.00);
-        let mut wallet = MockWallet::new(initial);
-
-        wallet.debit(price1).unwrap();
-        wallet.debit(price2).unwrap();
-        // Refund both
-        wallet.credit(price1);
-        wallet.credit(price2);
-        assert_eq!(wallet.balance, initial);
+    fn revoked_entitlement_is_not_active() {
+        let mut ent = MockEntitlement::new(Uuid::new_v4());
+        ent.revoke();
+        assert!(!ent.is_owned());
     }
 }
 
@@ -316,8 +279,9 @@ mod purchase_history_shape_tests {
             game_id: Uuid::new_v4(),
             price_paid: dec!(9.99),
             currency: "USD".to_string(),
-            developer_share: Some(dec!(6.99)),
-            platform_fee: Some(dec!(3.00)),
+            // Non-custodial: developer takes the whole subtotal, fee defaults to 0.
+            developer_share: Some(dec!(9.99)),
+            platform_fee: Some(dec!(0.00)),
             status: "completed".to_string(),
             idempotency_key: Some("idem-key-usd-001".to_string()),
             metadata: None,
@@ -380,8 +344,15 @@ mod purchase_history_shape_tests {
             json.contains("platform_fee"),
             "USD purchase must include platform_fee"
         );
-        assert!(json.contains("6.99"), "developer_share value must appear");
-        assert!(json.contains("3"), "platform_fee value must appear");
+        // Full-subtotal settlement: the developer's share IS the price.
+        assert!(
+            json.contains("9.99"),
+            "developer_share must equal the full price"
+        );
+        assert!(
+            json.contains("0.00"),
+            "platform_fee is 0 at the default protocol rate"
+        );
     }
 
     #[test]
@@ -446,70 +417,95 @@ mod purchase_history_shape_tests {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6  Revenue-share math — 70/30 split
+// 6  Settlement split math — developer takes the FULL subtotal
 // ─────────────────────────────────────────────────────────────────────────────
+//
+// The 70/30 platform cut is gone. Non-custodially the developer receives the
+// whole subtotal and the protocol fee (default 0 bps) rides on top, so the
+// buyer's total is subtotal + fee and the receipt legs must sum to that total.
 
 #[cfg(test)]
-mod revenue_share_math_tests {
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-
-    fn developer_share(price: Decimal) -> Decimal {
-        price * Decimal::new(70, 2) // 0.70
+mod settlement_split_math_tests {
+    /// Protocol fee in the rail's smallest unit, from basis points.
+    fn protocol_fee(subtotal: u64, bps: u16) -> u64 {
+        subtotal * bps as u64 / 10_000
     }
 
-    fn platform_fee(price: Decimal) -> Decimal {
-        price * Decimal::new(30, 2) // 0.30
+    /// What the buyer is charged: the developer's subtotal plus the fee.
+    fn buyer_total(subtotal: u64, bps: u16) -> u64 {
+        subtotal + protocol_fee(subtotal, bps)
+    }
+
+    /// The developer leg of a `PaymentSplit`, mirroring `payment::sale_split`:
+    /// the seller is credited the subtotal itself, regardless of protocol fee.
+    fn developer_leg(subtotal: u64, _bps: u16) -> u64 {
+        subtotal
     }
 
     #[test]
-    fn shares_sum_to_total_price() {
-        let prices = [
-            dec!(9.99),
-            dec!(4.99),
-            dec!(0.99),
-            dec!(24.99),
-            dec!(100.00),
-        ];
-        for price in prices {
-            let dev = developer_share(price);
-            let plat = platform_fee(price);
+    fn developer_receives_the_entire_subtotal_not_seventy_percent() {
+        for subtotal in [999u64, 499, 99, 2499, 10_000] {
+            let legacy_70_pct = subtotal * 70 / 100;
+            let actual = developer_leg(subtotal, 0);
+
             assert_eq!(
-                dev + plat,
-                price,
-                "developer_share + platform_fee must equal price for {price}"
+                actual, subtotal,
+                "the developer must receive 100% of the subtotal"
+            );
+            assert!(
+                actual > legacy_70_pct,
+                "the old 70/30 custodial split must be gone (got {actual}, legacy would be {legacy_70_pct})"
             );
         }
     }
 
     #[test]
-    fn developer_gets_70_pct_of_price() {
-        let price = dec!(100.00);
-        let dev = developer_share(price);
-        assert_eq!(dev, dec!(70.00));
+    fn protocol_fee_does_not_shrink_the_developer_leg() {
+        let subtotal = 10_000;
+        assert_eq!(
+            developer_leg(subtotal, 0),
+            developer_leg(subtotal, 500),
+            "raising the protocol fee must not take anything from the seller"
+        );
     }
 
     #[test]
-    fn platform_gets_30_pct_of_price() {
-        let price = dec!(100.00);
-        let plat = platform_fee(price);
-        assert_eq!(plat, dec!(30.00));
+    fn default_protocol_fee_is_zero_so_buyer_pays_exactly_the_price() {
+        let subtotal = 999;
+        assert_eq!(protocol_fee(subtotal, 0), 0);
+        assert_eq!(buyer_total(subtotal, 0), subtotal);
     }
 
     #[test]
-    fn zero_price_yields_zero_shares() {
-        let dev = developer_share(dec!(0));
-        let plat = platform_fee(dec!(0));
-        assert!(dev.is_zero());
-        assert!(plat.is_zero());
+    fn receipt_legs_sum_to_total_including_fee() {
+        let subtotal = 10_000;
+        let bps = 250; // 2.5%, if governance ever enables one
+        let fee = protocol_fee(subtotal, bps);
+        let total = buyer_total(subtotal, bps);
+
+        assert_eq!(fee, 250);
+        assert_eq!(
+            subtotal + fee,
+            total,
+            "developer leg + protocol fee must equal the receipt total"
+        );
     }
 
     #[test]
-    fn fractional_price_shares_round_trip() {
-        let price = dec!(0.99);
-        let dev = developer_share(price);
-        let plat = platform_fee(price);
-        assert_eq!(dev + plat, price);
+    fn fee_never_comes_out_of_the_developer_leg() {
+        let subtotal = 500;
+        let bps = 1_000; // 10%
+        let total = buyer_total(subtotal, bps);
+        assert!(
+            total > subtotal,
+            "a protocol fee must be charged ON TOP, never deducted from the developer"
+        );
+    }
+
+    #[test]
+    fn zero_price_settles_to_zero() {
+        assert_eq!(buyer_total(0, 0), 0);
+        assert_eq!(protocol_fee(0, 500), 0);
     }
 }
 

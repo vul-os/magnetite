@@ -12,8 +12,8 @@
 }
 
 @keyframes speakingPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(56, 225, 200, 0.4); }
-  50%       { box-shadow: 0 0 0 4px rgba(56, 225, 200, 0.15); }
+  0%, 100% { box-shadow: 0 0 0 2px rgba(123, 97, 255, 0.4); }
+  50%       { box-shadow: 0 0 0 4px rgba(123, 97, 255, 0.15); }
 }
 
 @keyframes connDot {
@@ -54,10 +54,10 @@
 
 .game-overlay-fab:hover,
 .game-overlay-fab[aria-expanded="true"] {
-  background: rgba(56, 225, 200, 0.10);
-  border-color: rgba(56, 225, 200, 0.4);
+  background: rgba(123, 97, 255, 0.10);
+  border-color: rgba(123, 97, 255, 0.4);
   color: var(--color-accent);
-  box-shadow: 0 0 14px rgba(56, 225, 200, 0.12);
+  box-shadow: 0 0 14px rgba(123, 97, 255, 0.12);
 }
 
 .game-overlay-fab:focus-visible {
@@ -166,7 +166,7 @@
 
 .overlay-tab-btn[aria-selected="true"] {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
   color: var(--color-accent);
 }
 
@@ -420,7 +420,7 @@
 .overlay-chat-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(56, 225, 200, 0.12);
+  box-shadow: 0 0 0 2px rgba(123, 97, 255, 0.12);
 }
 
 .overlay-chat-input::placeholder {
@@ -433,7 +433,7 @@
   justify-content: center;
   padding: 0.4rem 0.625rem;
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.3);
+  border: 1px solid rgba(123, 97, 255, 0.3);
   border-radius: var(--radius-xs);
   color: var(--color-accent);
   cursor: pointer;
@@ -447,7 +447,7 @@
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-bg-primary);
-  box-shadow: 0 0 10px rgba(56, 225, 200, 0.25);
+  box-shadow: 0 0 10px rgba(123, 97, 255, 0.25);
 }
 
 .overlay-chat-send-btn:focus-visible {

@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
 import { usePresence } from '../hooks/usePresence';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import {
   MenuIcon,
   CloseIcon,
@@ -37,8 +38,28 @@ function DmIcon(props) {
   );
 }
 
+/** Discovery / server-browser glyph — stacked nodes, not a single datacenter. */
+function ServerIcon(props) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <rect x="3" y="4" width="18" height="6" rx="1.5" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" />
+      <path d="M7 7h.01M7 17h.01" />
+    </svg>
+  );
+}
+
 const NAV_LINKS = [
   { path: '/',             labelKey: 'nav.marketplace', icon: HomeIcon },
+  { path: '/servers',      labelKey: 'nav.servers',     icon: ServerIcon },
   { path: '/communities',  labelKey: 'nav.communities', icon: UsersIcon },
   { path: '/developers',   labelKey: 'nav.developers',  icon: UsersIcon },
   { path: '/leaderboard',  labelKey: 'nav.leaderboard', icon: TrophyIcon },
@@ -161,7 +182,7 @@ export default function Navbar() {
           {/* Left: logo + nav links */}
           <div className="navbar-left">
             <Link to="/home" className="navbar-logo" aria-label={t('navbar.logoLabel')}>
-              <div className="logo-icon" aria-hidden="true">M</div>
+              <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
               <span className="logo-text">Magnetite</span>
             </Link>
 
@@ -367,7 +388,7 @@ export default function Navbar() {
       >
         <div className="mobile-menu-header">
           <Link to="/" className="navbar-logo" onClick={() => setIsMobileMenuOpen(false)}>
-            <div className="logo-icon" aria-hidden="true">M</div>
+            <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
             <span className="logo-text">Magnetite</span>
           </Link>
           <button

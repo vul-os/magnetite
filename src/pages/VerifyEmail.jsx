@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
 
 /* Shared auth page shell — defined at module level to avoid lint errors */
@@ -16,7 +17,7 @@ function AuthShell({ children }) {
       <div className="auth-container-center">
         <div className="auth-card">
           <div className="auth-logo-container" style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
-            <div className="auth-logo-icon">M</div>
+            <img src={magnetiteLogo} className="auth-logo-icon" aria-hidden="true" alt="" />
             <span className="auth-logo-text">Magnetite</span>
           </div>
           {children}

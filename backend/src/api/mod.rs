@@ -5,6 +5,7 @@ pub mod categories;
 pub mod channels;
 pub mod communities;
 pub mod developer;
+pub mod discovery;
 pub mod distribution;
 pub mod games;
 pub mod github;

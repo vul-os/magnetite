@@ -90,11 +90,14 @@ pub struct FeatureGameRequest {
 pub struct RevenueDashboard {
     pub total_platform_revenue: Decimal,
     pub total_game_revenue: Decimal,
-    pub total_withdrawals: Decimal,
-    pub total_payouts: Decimal,
+    /// Gross value SETTLED wallet-to-wallet, summed from verified receipts.
+    /// Non-custodial: we never held this money, we only witnessed the transfers.
+    pub total_settled_units: i64,
+    /// Receipts voided by a refund. There is no balance to claw back — voiding
+    /// the signed receipt is what revokes the entitlement it granted.
+    pub voided_receipts: i64,
     pub active_users: i64,
     pub total_games: i64,
-    pub pending_payouts: i64,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -107,28 +110,7 @@ pub struct AdminTransaction {
     pub tx_type: String,
     pub amount: Decimal,
     pub status: String,
-    pub payout_status: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ProcessPayoutRequest {
-    pub user_id: Uuid,
-    pub amount: Decimal,
-    pub destination: String,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct Payout {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub username: Option<String>,
-    pub amount: Decimal,
-    pub destination: String,
-    pub status: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub processed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub cancelled_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,7 +126,9 @@ pub struct MetricsResponse {
     pub total_games: i64,
     pub total_transactions: i64,
     pub active_games: i64,
-    pub pending_payouts: i64,
+    /// Verified, non-voided receipts — the non-custodial replacement for
+    /// "pending payouts" (nothing is ever pending: settlement is atomic).
+    pub settled_receipts: i64,
 }
 
 async fn require_admin(pool: &PgPool, user_id: Uuid) -> Result<()> {
@@ -421,17 +405,17 @@ pub async fn revenue_dashboard(
     .fetch_one(&pool)
     .await?;
 
-    let total_withdrawals = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM wallet_transactions WHERE tx_type = 'withdrawal' AND status = 'completed'",
+    // Settlement, not custody: sum what the rail actually moved.
+    let total_settled_units = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(total), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
 
-    let total_payouts = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM payouts WHERE status = 'completed'",
-    )
-    .fetch_one(&pool)
-    .await?;
+    let voided_receipts =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payment_receipts WHERE voided = true")
+            .fetch_one(&pool)
+            .await?;
 
     let active_users =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE banned_at IS NULL")
@@ -442,19 +426,13 @@ pub async fn revenue_dashboard(
         .fetch_one(&pool)
         .await?;
 
-    let pending_payouts =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payouts WHERE status = 'pending'")
-            .fetch_one(&pool)
-            .await?;
-
     Ok(Json(RevenueDashboard {
         total_platform_revenue,
         total_game_revenue,
-        total_withdrawals,
-        total_payouts,
+        total_settled_units,
+        voided_receipts,
         active_users,
         total_games,
-        pending_payouts,
     }))
 }
 
@@ -475,11 +453,10 @@ pub async fn list_transactions(
 
     let transactions = sqlx::query_as::<_, AdminTransaction>(
         "SELECT t.id, t.user_id, u.username, t.game_id, g.title as game_title,
-                t.type as tx_type, t.amount, t.status, wt.payout_status, t.created_at
+                t.type as tx_type, t.amount, t.status, t.created_at
          FROM transactions t
          LEFT JOIN users u ON t.user_id = u.id
          LEFT JOIN games g ON t.game_id = g.id
-         LEFT JOIN wallet_transactions wt ON wt.reference_id = t.id::text
          ORDER BY t.created_at DESC LIMIT $1 OFFSET $2",
     )
     .bind(limit)
@@ -496,77 +473,6 @@ pub async fn list_transactions(
         total,
         total_pages,
     }))
-}
-
-pub async fn process_payout(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-    Json(payload): Json<ProcessPayoutRequest>,
-) -> Result<Json<Payout>> {
-    require_admin(&pool, user_id).await?;
-
-    let user_balance = sqlx::query_scalar::<_, Decimal>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
-    )
-    .bind(payload.user_id)
-    .fetch_optional(&pool)
-    .await?
-    .unwrap_or(Decimal::ZERO);
-
-    if user_balance < payload.amount {
-        return Err(AppError::InsufficientFunds(
-            "Insufficient balance for payout".to_string(),
-        ));
-    }
-
-    sqlx::query(
-        "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USD'",
-    )
-    .bind(payload.amount)
-    .bind(payload.user_id)
-    .execute(&pool)
-    .await?;
-
-    let payout_id = Uuid::new_v4();
-    let payout = sqlx::query_as::<_, Payout>(
-        "INSERT INTO payouts (id, user_id, amount, destination, status, processed_at)
-         VALUES ($1, $2, $3, $4, 'completed', NOW())
-         RETURNING p.id, p.user_id, u.username, p.amount, p.destination, p.status, p.created_at, p.processed_at, p.cancelled_at
-         FROM payouts p
-         LEFT JOIN users u ON p.user_id = u.id
-         WHERE p.id = $1",
-    )
-    .bind(payout_id)
-    .bind(payload.user_id)
-    .bind(payload.amount)
-    .bind(&payload.destination)
-    .fetch_one(&pool)
-    .await?;
-
-    Ok(Json(payout))
-}
-
-pub async fn cancel_payout(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-    Path(payout_id): Path<Uuid>,
-) -> Result<Json<Payout>> {
-    require_admin(&pool, user_id).await?;
-
-    let payout = sqlx::query_as::<_, Payout>(
-        "UPDATE payouts SET status = 'cancelled', cancelled_at = NOW()
-         WHERE id = $1 AND status = 'pending'
-         RETURNING p.id, p.user_id, u.username, p.amount, p.destination, p.status, p.created_at, p.processed_at, p.cancelled_at
-         FROM payouts p
-         LEFT JOIN users u ON p.user_id = u.id
-         WHERE p.id = $1",
-    )
-    .bind(payout_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Payout not found or not cancellable".to_string()))?;
-
-    Ok(Json(payout))
 }
 
 pub async fn health_check(
@@ -611,8 +517,8 @@ pub async fn get_metrics(
     .fetch_one(&pool)
     .await?;
 
-    let pending_payouts =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payouts WHERE status = 'pending'")
+    let settled_receipts =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payment_receipts WHERE voided = false")
             .fetch_one(&pool)
             .await?;
 
@@ -621,7 +527,7 @@ pub async fn get_metrics(
         total_games,
         total_transactions,
         active_games,
-        pending_payouts,
+        settled_receipts,
     }))
 }
 
@@ -651,7 +557,8 @@ pub struct RevenueByGame {
     pub total_revenue: Decimal,
     pub play_sessions: i64,
     pub platform_fee: Decimal,
-    pub developer_payout: Decimal,
+    /// Settled to the developer's wallet at checkout (never held by us).
+    pub developer_settled: Decimal,
 }
 
 #[derive(Debug, Serialize)]
@@ -661,7 +568,7 @@ pub struct RevenueAnalytics {
     pub monthly: Vec<RevenueTimeSeries>,
     pub by_game: Vec<RevenueByGame>,
     pub total_platform_revenue: Decimal,
-    pub total_developer_payouts: Decimal,
+    pub total_developer_settled: Decimal,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -835,7 +742,7 @@ pub async fn analytics_revenue(
             COALESCE(SUM(t.amount), 0) as total_revenue,
             COUNT(t.id) as play_sessions,
             COALESCE(SUM(CASE WHEN t.type = 'platform_fee' THEN t.amount ELSE 0 END), 0) as platform_fee,
-            COALESCE(SUM(CASE WHEN t.type = 'game_fee' THEN t.amount ELSE 0 END), 0) as developer_payout
+            COALESCE(SUM(CASE WHEN t.type = 'game_fee' THEN t.amount ELSE 0 END), 0) as developer_settled
          FROM games g
          LEFT JOIN transactions t ON g.id = t.game_id AND t.type IN ('platform_fee', 'game_fee')
          LEFT JOIN users u ON g.developer_id = u.id
@@ -851,7 +758,7 @@ pub async fn analytics_revenue(
     .fetch_one(&pool)
     .await?;
 
-    let total_developer_payouts = sqlx::query_scalar::<_, Decimal>(
+    let total_developer_settled = sqlx::query_scalar::<_, Decimal>(
         "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'game_fee'",
     )
     .fetch_one(&pool)
@@ -863,7 +770,7 @@ pub async fn analytics_revenue(
         monthly,
         by_game,
         total_platform_revenue,
-        total_developer_payouts,
+        total_developer_settled,
     }))
 }
 
@@ -1138,15 +1045,8 @@ pub async fn seed_test_data(
     .execute(&pool)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO wallet_balances (id, user_id, currency, balance)
-         VALUES ($1, $2, 'USD', 1000.0)
-         ON CONFLICT (user_id, currency) DO NOTHING",
-    )
-    .bind(Uuid::new_v4())
-    .bind(regular_user_id)
-    .execute(&pool)
-    .await?;
+    // Non-custodial: there is no balance to seed. A test player pays from their
+    // own wallet through the mock rail and receives a signed receipt.
 
     let status = StatusCode::CREATED;
     Ok((
@@ -1199,195 +1099,6 @@ pub struct ReviewReportActionRequest {
     pub action: String,
     /// Optional note recorded on the report
     pub note: Option<String>,
-}
-
-// ── Admin refund ──────────────────────────────────────────────────────────────
-//
-// POST /admin/transactions/:id/refund
-//   • Reverses the user's wallet balance (credits them back).
-//   • Writes a reversal wallet_transactions row.
-//   • Writes a refund_records row (always, so audit trail exists regardless of
-//     provider outcome).
-//   • For deposits (tx_type = 'deposit'), optionally calls Paystack refund API
-//     when PAYSTACK_SECRET_KEY is configured; otherwise records status =
-//     'provider_unconfigured' and still credits the user.
-
-#[derive(Debug, Deserialize)]
-pub struct AdminRefundRequest {
-    /// Human-readable reason for the refund (stored in refund_records.reason).
-    pub reason: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AdminRefundResponse {
-    pub refund_id: uuid::Uuid,
-    pub transaction_id: uuid::Uuid,
-    pub user_id: uuid::Uuid,
-    pub amount: rust_decimal::Decimal,
-    pub provider: String,
-    pub provider_ref: Option<String>,
-    pub status: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-pub async fn admin_refund_transaction(
-    State(pool): State<PgPool>,
-    Extension(admin_id): Extension<Uuid>,
-    Path(tx_id): Path<Uuid>,
-    Json(payload): Json<AdminRefundRequest>,
-) -> Result<Json<AdminRefundResponse>> {
-    require_admin(&pool, admin_id).await?;
-
-    // ── 1. Fetch the original wallet transaction ──────────────────────────────
-    let tx = sqlx::query_as::<_, (Uuid, String, rust_decimal::Decimal, String)>(
-        "SELECT user_id, tx_type, amount, status FROM wallet_transactions WHERE id = $1",
-    )
-    .bind(tx_id)
-    .fetch_optional(&pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Transaction not found".to_string()))?;
-
-    let (user_id, tx_type, amount, tx_status) = tx;
-
-    if tx_status == "refunded" {
-        return Err(AppError::BadRequest(
-            "Transaction has already been refunded".to_string(),
-        ));
-    }
-
-    // ── 2. Credit the user's wallet balance ──────────────────────────────────
-    // Upsert wallet_balances row so the query never silently no-ops.
-    sqlx::query(
-        "INSERT INTO wallet_balances (id, user_id, currency, balance)
-         VALUES ($1, $2, 'USD', $3)
-         ON CONFLICT (user_id, currency)
-         DO UPDATE SET balance = wallet_balances.balance + EXCLUDED.balance",
-    )
-    .bind(Uuid::new_v4())
-    .bind(user_id)
-    .bind(amount)
-    .execute(&pool)
-    .await?;
-
-    // ── 3. Insert a reversal wallet_transactions row ──────────────────────────
-    let reversal_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, status, reference_id, created_at)
-         VALUES ($1, $2, 'refund', $3, 'completed', $4, NOW())",
-    )
-    .bind(reversal_id)
-    .bind(user_id)
-    .bind(amount)
-    .bind(tx_id.to_string())
-    .execute(&pool)
-    .await?;
-
-    // Mark the original transaction as refunded.
-    sqlx::query("UPDATE wallet_transactions SET status = 'refunded' WHERE id = $1")
-        .bind(tx_id)
-        .execute(&pool)
-        .await?;
-
-    // ── 4. Optionally call Paystack for deposit transactions ──────────────────
-    let (provider, provider_ref, refund_status) = if tx_type == "deposit" {
-        let paystack_key = std::env::var("PAYSTACK_SECRET_KEY").ok();
-        if let Some(key) = paystack_key {
-            // Retrieve the Paystack reference stored in the original tx.
-            let paystack_ref: Option<String> =
-                sqlx::query_scalar("SELECT reference_id FROM wallet_transactions WHERE id = $1")
-                    .bind(tx_id)
-                    .fetch_optional(&pool)
-                    .await?
-                    .flatten();
-
-            if let Some(ref ps_ref) = paystack_ref {
-                let client = reqwest::Client::new();
-                // Amount in kobo (ZAR cents).
-                let amount_kobo = (amount * rust_decimal::Decimal::new(100, 0)).to_string();
-                let resp = client
-                    .post("https://api.paystack.co/refund")
-                    .header("Authorization", format!("Bearer {}", key))
-                    .json(&serde_json::json!({
-                        "transaction": ps_ref,
-                        "amount": amount_kobo
-                    }))
-                    .send()
-                    .await;
-
-                match resp {
-                    Ok(r) if r.status().is_success() => {
-                        let body: serde_json::Value = r.json().await.unwrap_or_default();
-                        let ps_refund_ref = body["data"]["id"].as_i64().map(|id| id.to_string());
-                        (
-                            "paystack".to_string(),
-                            ps_refund_ref,
-                            "completed".to_string(),
-                        )
-                    }
-                    Ok(r) => {
-                        tracing::warn!(
-                            "Paystack refund API returned non-success status {} for tx {}",
-                            r.status(),
-                            tx_id
-                        );
-                        ("paystack".to_string(), None, "failed".to_string())
-                    }
-                    Err(e) => {
-                        tracing::warn!("Paystack refund request error for tx {}: {}", tx_id, e);
-                        ("paystack".to_string(), None, "failed".to_string())
-                    }
-                }
-            } else {
-                // No Paystack reference found — platform-credit-only refund.
-                ("none".to_string(), None, "completed".to_string())
-            }
-        } else {
-            tracing::info!(
-                "PAYSTACK_SECRET_KEY not configured; recording refund for tx {} as provider_unconfigured",
-                tx_id
-            );
-            (
-                "none".to_string(),
-                None,
-                "provider_unconfigured".to_string(),
-            )
-        }
-    } else {
-        // Non-deposit transaction — no provider to call.
-        ("none".to_string(), None, "completed".to_string())
-    };
-
-    // ── 5. Write the refund_records row ──────────────────────────────────────
-    let refund_id = Uuid::new_v4();
-    let now = chrono::Utc::now();
-    sqlx::query(
-        "INSERT INTO refund_records
-             (id, transaction_id, user_id, admin_id, amount, provider, provider_ref, status, reason, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)",
-    )
-    .bind(refund_id)
-    .bind(tx_id)
-    .bind(user_id)
-    .bind(admin_id)
-    .bind(amount)
-    .bind(&provider)
-    .bind(&provider_ref)
-    .bind(&refund_status)
-    .bind(payload.reason.as_deref())
-    .bind(now)
-    .execute(&pool)
-    .await?;
-
-    Ok(Json(AdminRefundResponse {
-        refund_id,
-        transaction_id: tx_id,
-        user_id,
-        amount,
-        provider,
-        provider_ref,
-        status: refund_status,
-        created_at: now,
-    }))
 }
 
 pub async fn list_review_reports(
@@ -1875,20 +1586,6 @@ pub fn router(pool: PgPool) -> Router {
             )),
         )
         .route(
-            "/payouts/process",
-            post(process_payout).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        .route(
-            "/payouts/:id/cancel",
-            post(cancel_payout).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        .route(
             "/health",
             get(health_check).layer(from_fn_with_state(
                 pool.clone(),
@@ -1957,15 +1654,6 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/review-reports/:id/action",
             post(act_on_review_report).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        // ── Refunds ────────────────────────────────────────────────────────────
-        // POST /admin/transactions/:id/refund — reverse wallet balance + write refund_records
-        .route(
-            "/transactions/:id/refund",
-            post(admin_refund_transaction).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

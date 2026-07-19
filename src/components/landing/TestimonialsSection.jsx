@@ -21,11 +21,11 @@ const testimonials = [
   },
   {
     quote:
-      'Wise payouts every week, straight to my bank account. No chargebacks, no waiting 60 days. It\'s the financial infrastructure I always wished existed for game developers.',
+      'Every sale lands in my own wallet the moment it happens, with a signed receipt to prove it. Nobody holds my money, so there is nothing to charge back and no payout queue to wait on.',
     name: 'Yuki Tanaka',
     role: 'Solo Developer',
     avatar: 'YT',
-    tech: 'Wise Payouts',
+    tech: 'Direct Settlement',
   },
   {
     quote:

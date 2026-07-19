@@ -4,9 +4,22 @@ import AdminSidebar from '../../components/admin/AdminSidebar';
 import Pagination from '../../components/Pagination';
 import Button from '../../components/common/Button';
 import { api } from '../../api/client';
+import { formatUSDC, formatProtocolFee, shortKey } from '../../utils/currency';
 import './admin.css';
 
+/*
+ * Admin finance — NON-CUSTODIAL (seam §3.6 `PaymentRail`).
+ *
+ * This node never holds funds, so there is no float to reconcile, no pending
+ * payout queue and no deposit ledger. What an admin can see is the stream of
+ * *signed receipts* minted by checkout, and the protocol fee those receipts
+ * carried (which defaults to 0 bps — the developer keeps the full subtotal).
+ */
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+/** Protocol fee charged by this node, in basis points. Default: none. */
+const PROTOCOL_FEE_BPS = 0;
 
 function authFetch(endpoint, options = {}) {
   const token = localStorage.getItem('token');
@@ -20,180 +33,111 @@ function authFetch(endpoint, options = {}) {
   });
 }
 
+const RAIL_PUBKEY = '3ac9017e5fb2d846902ce15b7a4d3f80c6e1927b5d0af348e2c76b91045fd8a2';
+
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_TRANSACTIONS = import.meta.env.VITE_USE_MOCKS
+const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS
   ? [
-      { id: 'txn_001', type: 'game_fee', user: 'CryptoGamer42',  amount:    2.50, game: 'Cosmic Raiders',    date: '2024-05-19 14:32', status: 'completed' },
-      { id: 'txn_002', type: 'game_fee', user: 'NeonRacer99',    amount:    1.50, game: 'Neon Drift',        date: '2024-05-19 14:28', status: 'completed' },
-      { id: 'txn_003', type: 'payout',   user: 'PixelMaster',    amount: -500.00, game: 'Galaxy Conquest',   date: '2024-05-19 13:45', status: 'pending'   },
+      { id: 'rcpt_01HQ8ZK3NP', kind: 'item_purchase', buyer: 'CryptoGamer42', payee: '5c8de401f9b7236a0d14e8c93b750af26e1d3809c47ba62e91d70b385ac64f13', game: 'Cosmic Raiders',  total:  2.50, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-16 14:32', voided: false },
+      { id: 'rcpt_01HQ7WX8TM', kind: 'hosting_fee',   buyer: 'NeonRacer99',   payee: '7e30b8a1cd94c25e06f381ba47d9e2c0518736fa9db4e18c02735d6ab91af4e2', game: 'Neon Drift',      total:  1.50, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-16 14:28', voided: false },
+      { id: 'rcpt_01HQ5MC2QD', kind: 'tier',          buyer: 'PixelMaster',   payee: 'b0561ea38c7d29f4013a8ce65b27d09f4e81a6c37d520fb98e14c7302a6db85f', game: 'Galaxy Conquest', total:  9.99, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-15 13:45', voided: false },
+      { id: 'rcpt_01HQ2FA9RB', kind: 'item_purchase', buyer: 'IndieDev_Mike', payee: 'd41b9c07a5e8f236104b7dd9ce8215af6390b7e04c2d18f5a6b93e70d1c4825f', game: 'Dungeon Realms',  total:  1.49, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-14 20:55', voided: true  },
     ]
   : null;
 
-const MOCK_PENDING_PAYOUTS = import.meta.env.VITE_USE_MOCKS
-  ? [
-      { id: 1, user: 'PixelMaster',    amount: 500.00, games: 'Galaxy Conquest',         requestDate: '2024-05-19', method: 'Wise'   },
-      { id: 2, user: 'CryptoGamer42',  amount: 750.00, games: 'Cosmic Raiders',           requestDate: '2024-05-18', method: 'Wise'   },
-      { id: 3, user: 'IndieDev_Mike',  amount: 320.00, games: 'Dungeon Realms',           requestDate: '2024-05-17', method: 'Bank Transfer' },
-    ]
-  : null;
-
-const MOCK_STATS = import.meta.env.VITE_USE_MOCKS
-  ? { totalRevenue: 45892.5, monthlyRevenue: 12450.0, platformFees: 6883.88, pendingPayouts: 1570.0 }
-  : null;
-
-function normaliseTransaction(t) {
+function normaliseReceipt(r) {
   return {
-    id:     t.id,
-    type:   t.tx_type ?? t.type ?? 'unknown',
-    user:   t.username ?? t.user ?? 'Unknown',
-    amount: parseFloat(t.amount ?? 0),
-    game:   t.game_title ?? t.game ?? '—',
-    date:   t.created_at ? t.created_at.replace('T', ' ').slice(0, 16) : '',
-    status: t.status ?? 'unknown',
+    id:          r.id,
+    kind:        r.kind ?? r.tx_type ?? r.type ?? 'unknown',
+    buyer:       r.username ?? r.buyer ?? r.user ?? 'Unknown',
+    payee:       r.payee ?? r.counterparty ?? r.developer_pubkey ?? null,
+    game:        r.game_title ?? r.game ?? '—',
+    total:       Math.abs(parseFloat(r.total ?? r.amount ?? 0)),
+    protocolFee: Math.abs(parseFloat(r.protocol_fee ?? 0)),
+    rail:        r.rail_pubkey ?? r.rail ?? null,
+    date:        r.created_at ? r.created_at.replace('T', ' ').slice(0, 16) : (r.date ?? ''),
+    voided:      Boolean(r.voided ?? (r.status === 'refunded')),
   };
 }
 
+/** Human label for a receipt `kind`. */
+function kindLabel(kind) {
+  if (kind === 'item_purchase') return 'Item';
+  if (kind === 'hosting_fee')   return 'Hosting';
+  if (kind === 'tier')          return 'Tier';
+  return 'Receipt';
+}
+
 export default function Finance() {
-  const [stats, setStats]                       = useState(MOCK_STATS);
-  const [transactions, setTransactions]         = useState(MOCK_TRANSACTIONS ?? []);
-  const [pendingPayouts, setPendingPayouts]     = useState(MOCK_PENDING_PAYOUTS ?? []);
-  const [loadingStats, setLoadingStats]         = useState(!MOCK_STATS);
-  const [loadingTxns, setLoadingTxns]           = useState(!MOCK_TRANSACTIONS);
-  const [error, setError]                       = useState(null);
-  const [transactionFilter, setTransactionFilter] = useState('all');
-  const [currentPage, setCurrentPage]             = useState(1);
-  const [processingPayout, setProcessingPayout]   = useState(null);
-  const [payoutError, setPayoutError]             = useState(null);
-  const [refundingTxn, setRefundingTxn]           = useState(null);   // txn being refunded
-  const [refundReason, setRefundReason]           = useState('');
-  const [refundError, setRefundError]             = useState(null);
-  const [refundSuccess, setRefundSuccess]         = useState(null);
+  const [receipts, setReceipts]           = useState(MOCK_RECEIPTS ?? []);
+  const [loadingReceipts, setLoading]     = useState(!MOCK_RECEIPTS);
+  const [error, setError]                 = useState(null);
+  const [kindFilter, setKindFilter]       = useState('all');
+  const [currentPage, setCurrentPage]     = useState(1);
+  const [voidingReceipt, setVoidingReceipt] = useState(null);   // receipt being voided
+  const [voidReason, setVoidReason]         = useState('');
+  const [voidError, setVoidError]           = useState(null);
+  const [voidSuccess, setVoidSuccess]       = useState(null);
   const perPage = 10;
 
   const fetchData = useCallback(async () => {
     if (import.meta.env.VITE_USE_MOCKS) return;
 
-    setLoadingStats(true);
-    setLoadingTxns(true);
+    setLoading(true);
     setError(null);
 
     try {
-      const [revenueRes, txnRes] = await Promise.all([
-        authFetch('/api/admin/revenue'),
-        authFetch('/api/admin/transactions?limit=100'),
-      ]);
-
-      if (revenueRes.ok) {
-        const d = await revenueRes.json();
-        setStats({
-          totalRevenue:   parseFloat(d.total_game_revenue ?? d.total_platform_revenue ?? 0),
-          monthlyRevenue: parseFloat(d.total_platform_revenue ?? 0),
-          platformFees:   parseFloat(d.total_platform_revenue ?? 0),
-          pendingPayouts: parseFloat(d.pending_payouts ?? 0),
-        });
-      }
-
-      if (txnRes.ok) {
-        const d = await txnRes.json();
+      const res = await authFetch('/api/admin/transactions?limit=100');
+      if (res.ok) {
+        const d = await res.json();
         const raw = d.data ?? d ?? [];
-        const normalised = Array.isArray(raw) ? raw.map(normaliseTransaction) : [];
-        setTransactions(normalised);
-        /* pending payouts are payout-type txns with status pending */
-        setPendingPayouts(
-          normalised
-            .filter(t => (t.type === 'payout' || t.type === 'withdrawal') && t.status === 'pending')
-            .map((t, i) => ({
-              id:          t.id,
-              user:        t.user,
-              amount:      Math.abs(t.amount),
-              games:       t.game,
-              requestDate: t.date.split(' ')[0],
-              method:      'Wise',
-              _idx:        i,
-            }))
-        );
+        setReceipts(Array.isArray(raw) ? raw.map(normaliseReceipt) : []);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load finance data');
+      setError(err.message || 'Failed to load receipts');
     } finally {
-      setLoadingStats(false);
-      setLoadingTxns(false);
+      setLoading(false);
     }
   }, []);
 
-  // Fetch finance data from the admin API (external system) on mount.
+  // Fetch receipt data from the admin API (external system) on mount.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const filteredTransactions = transactions.filter(txn => {
-    if (transactionFilter === 'payouts')   return txn.type === 'payout' || txn.type === 'withdrawal';
-    if (transactionFilter === 'game_fees') return txn.type === 'game_fee' || txn.type === 'fee';
+  const filteredReceipts = receipts.filter(r => {
+    if (kindFilter === 'hosting') return r.kind === 'hosting_fee';
+    if (kindFilter === 'items')   return r.kind === 'item_purchase';
+    if (kindFilter === 'tiers')   return r.kind === 'tier';
     return true;
   });
 
-  const paginatedTransactions = filteredTransactions.slice(
+  const paginatedReceipts = filteredReceipts.slice(
     (currentPage - 1) * perPage,
     currentPage * perPage
   );
 
-  const handleProcessPayout = async (payoutId) => {
-    setProcessingPayout(payoutId);
-    setPayoutError(null);
-    try {
-      const res = await authFetch(`/api/admin/payouts/${payoutId}/process`, { method: 'POST' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `Failed to process payout (HTTP ${res.status})`);
-      }
-      setPendingPayouts(prev => prev.filter(p => p.id !== payoutId));
-    } catch (err) {
-      setPayoutError(err.message);
-    } finally {
-      setProcessingPayout(null);
-    }
-  };
+  const liveReceipts    = receipts.filter(r => !r.voided);
+  const grossSettled    = liveReceipts.reduce((sum, r) => sum + r.total, 0);
+  const protocolFees    = liveReceipts.reduce((sum, r) => sum + r.protocolFee, 0);
+  const toCounterparties = grossSettled - protocolFees;
+  const voidedCount     = receipts.length - liveReceipts.length;
 
-  const handleProcessAll = async () => {
-    setProcessingPayout('all');
-    setPayoutError(null);
-    const errors = [];
-    for (const payout of pendingPayouts) {
-      try {
-        const res = await authFetch(`/api/admin/payouts/${payout.id}/process`, { method: 'POST' });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          errors.push(err.message || `Failed for ${payout.user}`);
-        } else {
-          setPendingPayouts(prev => prev.filter(p => p.id !== payout.id));
-        }
-      } catch (err) {
-        errors.push(err.message);
-      }
-    }
-    if (errors.length > 0) {
-      setPayoutError(errors.join('; '));
-    }
-    setProcessingPayout(null);
-  };
-
-  const handleRefundConfirm = async () => {
-    if (!refundingTxn) return;
-    setRefundError(null);
+  const handleVoidConfirm = async () => {
+    if (!voidingReceipt) return;
+    setVoidError(null);
     try {
-      await api.admin.refundTransaction(refundingTxn.id, { reason: refundReason || undefined });
-      setRefundSuccess(`Refund initiated for transaction ${String(refundingTxn.id).slice(0, 12)}`);
-      setRefundingTxn(null);
-      setRefundReason('');
-      // Mark the transaction as refunded in local state
-      setTransactions(prev =>
-        prev.map(t => t.id === refundingTxn.id ? { ...t, status: 'refunded' } : t)
+      await api.admin.refundTransaction(voidingReceipt.id, { reason: voidReason || undefined });
+      setVoidSuccess(`Receipt ${String(voidingReceipt.id).slice(0, 12)} voided`);
+      setVoidingReceipt(null);
+      setVoidReason('');
+      // Mark the receipt as voided in local state
+      setReceipts(prev =>
+        prev.map(r => r.id === voidingReceipt.id ? { ...r, voided: true } : r)
       );
     } catch (err) {
-      setRefundError(err.message || 'Refund failed');
+      setVoidError(err.message || 'Void failed');
     }
   };
-
-  const displayStats = stats || { totalRevenue: 0, monthlyRevenue: 0, platformFees: 0, pendingPayouts: 0 };
 
   return (
     <Layout>
@@ -204,7 +148,7 @@ export default function Finance() {
             <div>
               <span className="kicker">// Platform Control</span>
               <h1>Finance Dashboard</h1>
-              <p>Revenue, fees, and payout management</p>
+              <p>Signed receipts and protocol-fee totals — this node holds no funds</p>
             </div>
           </header>
 
@@ -218,38 +162,31 @@ export default function Finance() {
             </div>
           )}
 
-          {payoutError && (
+          {voidError && (
             <div className="admin-error-banner" role="alert">
               <span className="auth-error-icon" aria-hidden="true">!</span>
-              {payoutError}
-            </div>
-          )}
-
-          {refundError && (
-            <div className="admin-error-banner" role="alert">
-              <span className="auth-error-icon" aria-hidden="true">!</span>
-              Refund error: {refundError}
-              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={() => setRefundError(null)}>
+              Void error: {voidError}
+              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={() => setVoidError(null)}>
                 Dismiss
               </button>
             </div>
           )}
 
-          {refundSuccess && (
+          {voidSuccess && (
             <div className="admin-success-banner" role="status" style={{ padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: 'var(--radius)', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--color-success, #22c55e)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
-              {refundSuccess}
-              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={() => setRefundSuccess(null)}>
+              {voidSuccess}
+              <button className="settings-action-btn" style={{ marginLeft: '1rem' }} onClick={() => setVoidSuccess(null)}>
                 Dismiss
               </button>
             </div>
           )}
 
-          {/* Refund confirmation modal */}
-          {refundingTxn && (
+          {/* Void confirmation modal */}
+          {voidingReceipt && (
             <div
               role="dialog"
               aria-modal="true"
-              aria-labelledby="refund-dialog-title"
+              aria-labelledby="void-dialog-title"
               style={{
                 position: 'fixed', inset: 0, zIndex: 'var(--z-modal, 1000)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -264,19 +201,19 @@ export default function Finance() {
                 maxWidth: 420,
                 width: '90%',
               }}>
-                <h2 id="refund-dialog-title" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)', marginBottom: '0.5rem', color: 'var(--color-text-primary)' }}>
-                  // CONFIRM REFUND
+                <h2 id="void-dialog-title" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-base)', marginBottom: '0.5rem', color: 'var(--color-text-primary)' }}>
+                  // CONFIRM VOID
                 </h2>
                 <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: '1.25rem' }}>
-                  Refund transaction <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-accent)' }}>{String(refundingTxn.id).slice(0, 12)}</code> of <strong>${Math.abs(refundingTxn.amount).toFixed(2)}</strong> for user <strong>{refundingTxn.user}</strong>?
+                  Void receipt <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-accent)' }}>{String(voidingReceipt.id).slice(0, 12)}</code> for <strong>{formatUSDC(voidingReceipt.total)}</strong>, minted for <strong>{voidingReceipt.buyer}</strong>? This revokes the entitlement it backs. It does not move funds — settlement already happened wallet to wallet.
                 </p>
                 <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: '0.4rem' }}>
                   Reason (optional)
                 </label>
                 <textarea
-                  value={refundReason}
-                  onChange={e => setRefundReason(e.target.value)}
-                  placeholder="e.g. duplicate charge, user request"
+                  value={voidReason}
+                  onChange={e => setVoidReason(e.target.value)}
+                  placeholder="e.g. duplicate receipt, disputed entitlement"
                   rows={2}
                   style={{
                     width: '100%', boxSizing: 'border-box',
@@ -295,16 +232,16 @@ export default function Finance() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setRefundingTxn(null); setRefundReason(''); setRefundError(null); }}
+                    onClick={() => { setVoidingReceipt(null); setVoidReason(''); setVoidError(null); }}
                   >
                     Cancel
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={handleRefundConfirm}
+                    onClick={handleVoidConfirm}
                   >
-                    Confirm Refund
+                    Confirm Void
                   </Button>
                 </div>
               </div>
@@ -312,7 +249,7 @@ export default function Finance() {
           )}
 
           <div className="admin-stats-grid">
-            {loadingStats ? (
+            {loadingReceipts ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="admin-stat-card skeleton-card" aria-busy="true">
                   <div className="skeleton skeleton-icon" />
@@ -325,169 +262,153 @@ export default function Finance() {
             ) : (
               <>
                 <div className="admin-stat-card">
-                  <div className="admin-stat-icon">$</div>
+                  <div className="admin-stat-icon">§</div>
                   <div className="admin-stat-info">
-                    <span className="admin-stat-label">Total Revenue</span>
-                    <span className="admin-stat-value">${displayStats.totalRevenue.toLocaleString()}</span>
+                    <span className="admin-stat-label">Receipts Minted</span>
+                    <span className="admin-stat-value">{receipts.length.toLocaleString()}</span>
                   </div>
                 </div>
                 <div className="admin-stat-card">
                   <div className="admin-stat-icon">↗</div>
                   <div className="admin-stat-info">
-                    <span className="admin-stat-label">Platform Revenue</span>
-                    <span className="admin-stat-value">${displayStats.monthlyRevenue.toLocaleString()}</span>
+                    <span className="admin-stat-label">Gross Settled</span>
+                    <span className="admin-stat-value">{formatUSDC(grossSettled)}</span>
                   </div>
                 </div>
                 <div className="admin-stat-card">
                   <div className="admin-stat-icon">%</div>
                   <div className="admin-stat-info">
-                    <span className="admin-stat-label">Platform Fees (15%)</span>
-                    <span className="admin-stat-value">${displayStats.platformFees.toLocaleString()}</span>
+                    <span className="admin-stat-label">Protocol Fees ({formatProtocolFee(PROTOCOL_FEE_BPS)})</span>
+                    <span className="admin-stat-value">{formatUSDC(protocolFees)}</span>
                   </div>
                 </div>
-                <div className="admin-stat-card warning">
-                  <div className="admin-stat-icon">⏳</div>
+                <div className="admin-stat-card">
+                  <div className="admin-stat-icon">⊘</div>
                   <div className="admin-stat-info">
-                    <span className="admin-stat-label">Pending Payouts</span>
-                    <span className="admin-stat-value">${displayStats.pendingPayouts.toLocaleString()}</span>
+                    <span className="admin-stat-label">Voided Receipts</span>
+                    <span className="admin-stat-value">{voidedCount.toLocaleString()}</span>
                   </div>
                 </div>
               </>
             )}
           </div>
 
-          {/* Pending payouts */}
+          {/* Settlement — replaces the old custodial payout queue */}
           <section className="admin-section">
             <div className="admin-section-header">
-              <h2 className="admin-section-title">// PENDING PAYOUTS</h2>
-              {pendingPayouts.length > 0 && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  loading={processingPayout === 'all'}
-                  onClick={handleProcessAll}
-                >
-                  Process All
-                </Button>
-              )}
+              <h2 className="admin-section-title">// SETTLEMENT</h2>
             </div>
-            {pendingPayouts.length === 0 ? (
-              <p style={{ padding: '1rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
-                No pending payouts
+            <div style={{ padding: '1rem', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+              <p style={{ marginTop: 0 }}>
+                There is no float to reconcile and no payout queue. Checkout is a single
+                atomic wallet-to-wallet transaction: the buyer pays the developer (and,
+                for hosting fees, the operator) and the node mints a signed receipt.
+                Entitlements are read from those receipts.
               </p>
-            ) : (
-              <table className="admin-table" aria-label="Pending payouts">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Amount</th>
-                    <th>Games</th>
-                    <th>Requested</th>
-                    <th>Method</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
+              <table className="admin-table" aria-label="Settlement summary">
                 <tbody>
-                  {pendingPayouts.map(payout => (
-                    <tr key={payout.id}>
-                      <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{payout.user}</td>
-                      <td className="amount-cell">${payout.amount.toLocaleString()}</td>
-                      <td className="games-cell">{payout.games}</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>
-                        {payout.requestDate}
-                      </td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                        {payout.method}
-                      </td>
-                      <td>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          loading={processingPayout === payout.id}
-                          onClick={() => handleProcessPayout(payout.id)}
-                        >
-                          Process
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                  <tr>
+                    <td style={{ color: 'var(--color-text-muted)' }}>Held by this node</td>
+                    <td className="amount-cell">{formatUSDC(0)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-text-muted)' }}>Settled to developers &amp; operators</td>
+                    <td className="amount-cell">{formatUSDC(toCounterparties)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-text-muted)' }}>Protocol fee</td>
+                    <td className="amount-cell">{formatProtocolFee(PROTOCOL_FEE_BPS)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: 'var(--color-text-muted)' }}>Rail key</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                      {shortKey(receipts.find(r => r.rail)?.rail)}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
-            )}
+            </div>
           </section>
 
-          {/* Transactions */}
+          {/* Receipts */}
           <section className="admin-section">
             <div className="admin-section-header">
-              <h2 className="admin-section-title">// RECENT TRANSACTIONS</h2>
+              <h2 className="admin-section-title">// RECENT RECEIPTS</h2>
               <div className="finance-filter-row">
                 <select
-                  value={transactionFilter}
-                  onChange={(e) => { setTransactionFilter(e.target.value); setCurrentPage(1); }}
-                  aria-label="Filter transactions"
+                  value={kindFilter}
+                  onChange={(e) => { setKindFilter(e.target.value); setCurrentPage(1); }}
+                  aria-label="Filter receipts"
                 >
                   <option value="all">All</option>
-                  <option value="game_fees">Game Fees</option>
-                  <option value="payouts">Payouts</option>
+                  <option value="items">Item Purchases</option>
+                  <option value="hosting">Hosting Fees</option>
+                  <option value="tiers">Tiers</option>
                 </select>
               </div>
             </div>
-            {loadingTxns ? (
+            {loadingReceipts ? (
               <div className="admin-loading" aria-busy="true" style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                <span className="spinner" aria-hidden="true" /> Loading transactions&hellip;
+                <span className="spinner" aria-hidden="true" /> Loading receipts&hellip;
               </div>
-            ) : filteredTransactions.length === 0 ? (
+            ) : filteredReceipts.length === 0 ? (
               <p style={{ padding: '1rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
-                No transactions found
+                No receipts found
               </p>
             ) : (
               <>
-                <table className="admin-table" aria-label="Transactions">
+                <table className="admin-table" aria-label="Receipts">
                   <thead>
                     <tr>
-                      <th>ID</th>
-                      <th>Type</th>
-                      <th>User</th>
+                      <th>Receipt</th>
+                      <th>Kind</th>
+                      <th>Buyer</th>
+                      <th>Paid To</th>
                       <th>Game</th>
-                      <th>Amount</th>
+                      <th>Total</th>
+                      <th>Protocol Fee</th>
                       <th>Date</th>
                       <th>Status</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedTransactions.map(txn => (
-                      <tr key={txn.id}>
-                        <td className="txn-id">{String(txn.id).slice(0, 12)}</td>
+                    {paginatedReceipts.map(receipt => (
+                      <tr key={receipt.id}>
+                        <td className="txn-id">{String(receipt.id).slice(0, 12)}</td>
                         <td>
-                          <span className={`type-badge ${txn.type}`}>
-                            {txn.type === 'game_fee' || txn.type === 'fee' ? 'Fee' : 'Payout'}
+                          <span className={`type-badge ${receipt.kind}`}>
+                            {kindLabel(receipt.kind)}
                           </span>
                         </td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                          {txn.user}
-                        </td>
-                        <td style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                          {txn.game}
-                        </td>
-                        <td className={`amount-cell${txn.amount < 0 ? ' negative' : ''}`}>
-                          {txn.amount < 0 ? '-' : '+'}${Math.abs(txn.amount).toFixed(2)}
+                          {receipt.buyer}
                         </td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>
-                          {txn.date}
+                          {shortKey(receipt.payee)}
+                        </td>
+                        <td style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                          {receipt.game}
+                        </td>
+                        <td className="amount-cell">{formatUSDC(receipt.total)}</td>
+                        <td className="amount-cell">{formatUSDC(receipt.protocolFee)}</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>
+                          {receipt.date}
                         </td>
                         <td>
-                          <span className={`status-badge ${txn.status}`}>{txn.status}</span>
+                          <span className={`status-badge ${receipt.voided ? 'refunded' : 'completed'}`}>
+                            {receipt.voided ? 'voided' : 'valid'}
+                          </span>
                         </td>
                         <td>
-                          {txn.status !== 'refunded' && txn.amount > 0 && (
+                          {!receipt.voided && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => { setRefundingTxn(txn); setRefundError(null); setRefundSuccess(null); }}
-                              aria-label={`Refund transaction ${String(txn.id).slice(0, 12)}`}
+                              onClick={() => { setVoidingReceipt(receipt); setVoidError(null); setVoidSuccess(null); }}
+                              aria-label={`Void receipt ${String(receipt.id).slice(0, 12)}`}
                             >
-                              Refund
+                              Void
                             </Button>
                           )}
                         </td>
@@ -497,7 +418,7 @@ export default function Finance() {
                 </table>
                 <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--color-border)' }}>
                   <Pagination
-                    total={filteredTransactions.length}
+                    total={filteredReceipts.length}
                     perPage={perPage}
                     currentPage={currentPage}
                     onPageChange={setCurrentPage}

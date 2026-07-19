@@ -27,7 +27,7 @@
 | backend | `ghcr.io/magnetite/backend` | 8080 | Axum REST + WebSocket; `/api/v1/*`, `/ws/*` |
 | frontend | `ghcr.io/magnetite/frontend` | 80 | nginx SPA; reverse-proxies `/api/`, `/ws` → backend |
 | magnetite-runtime | `ghcr.io/magnetite/runtime` | 9000 | Authoritative WASM game-server; WebSocket only |
-| mediamtx | `bluenviron/mediamtx:latest` | 8888/1935/8889/8554 | HLS, RTMP, WebRTC/WHIP, RTSP |
+| mediamtx | `bluenviron/mediamtx:latest` | 8888/1935/8889/8554 | **Optional.** HLS, RTMP, WebRTC/WHIP, RTSP. Per-operator; behind the `media` compose profile and no backend dependency |
 | postgres | `postgres:16-alpine` | 5432 | Stateful; replace with managed RDS/Neon for scale |
 | redis | `redis:7-alpine` | 6379 | Stateful; replace with ElastiCache/Upstash for scale |
 
@@ -36,7 +36,10 @@
 - PostgreSQL → AWS RDS, Neon, Supabase, or the bundled StatefulSet.
 - Redis → AWS ElastiCache, Upstash, or the bundled StatefulSet.
 - Email → Resend (default) or AWS SES via SMTP. Set `EMAIL_PROVIDER` + `RESEND_API_KEY`.
-- Payments → Paystack (`PAYSTACK_SECRET_KEY`), Wise payouts (`WISE_API_TOKEN`).
+- Payments → none. Non-custodial: buyers pay sellers wallet-to-wallet and the
+  platform holds no funds. `PAYMENT_RAIL=mock` (the default) is fully offline.
+- Comms → none required. `COMMS_PROVIDER=builtin` (the default) needs no external
+  service; `matrix` / `jitsi` / `livekit` / `owncast` need their own deployment.
 - TLS → cert-manager + Let's Encrypt (Kubernetes) or Caddy/Traefik (Nomad).
 - Artifact storage → S3 (or any S3-compatible store) for compiled `game.wasm` artifacts.
 
@@ -148,9 +151,6 @@ host_volume "redis_data" {
 nomad var put magnetite/secrets \
   DATABASE_URL="postgres://magnetite:password@postgres.service.consul:5432/magnetite" \
   JWT_SECRET="your-32+-char-secret" \
-  PAYSTACK_SECRET_KEY="sk_live_..." \
-  WISE_API_TOKEN="T-live-..." \
-  WISE_PROFILE_ID="1234567" \
   RESEND_API_KEY="re_..." \
   BUILD_RUNNER_TOKEN="tok_..."
 ```
@@ -422,11 +422,17 @@ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.5/confi
 |-----------|-------------|--------------|
 | `DATABASE_URL` | PostgreSQL connection string | `Config::database_url` |
 | `JWT_SECRET` | HMAC signing key (min 32 bytes in production) | `Config::jwt_secret` |
-| `PAYSTACK_SECRET_KEY` | Paystack live key (`sk_live_...`) | `Config::paystack_secret_key` |
-| `WISE_API_TOKEN` | Wise API token (`T-live-...`) | `Config::wise_api_token` |
-| `WISE_PROFILE_ID` | Wise sending profile ID | `Config::wise_profile_id` |
+| `REDIS_URL` | Redis connection URL | `Config::redis_url` |
 | `RESEND_API_KEY` | Resend transactional email key | `Config::resend_api_key` |
 | `BUILD_RUNNER_TOKEN` | Bearer token for the WASM build runner | provisioning auth |
+
+Only `DATABASE_URL`, `REDIS_URL` and `JWT_SECRET` are strictly required.
+
+There are **no payment secrets**. The `PaymentRail` seam is non-custodial — the
+platform holds no funds, so there is no provider key, no payout credential and
+nothing to fund. `PAYMENT_RAIL=mock` (the default) signs receipts locally.
+`OPERATOR_WALLET_PUBKEY` is a public key, not a secret, and is only needed if
+this node sells hosting or paid tiers.
 
 OAuth keys (GOOGLE, DISCORD, GITHUB, GITLAB client IDs + secrets) are optional —
 leave empty if those providers are not used.

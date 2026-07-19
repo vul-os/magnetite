@@ -19,7 +19,7 @@
 
 .composer-inner:focus-within {
   border-color: var(--color-border-strong);
-  box-shadow: 0 0 0 1px rgba(56, 225, 200, 0.15);
+  box-shadow: 0 0 0 1px rgba(123, 97, 255, 0.15);
 }
 
 /* Textarea */
@@ -122,7 +122,7 @@
 .composer-send-btn--active:hover {
   background: var(--color-accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(56, 225, 200, 0.3);
+  box-shadow: 0 4px 12px rgba(123, 97, 255, 0.3);
 }
 
 .composer-send-btn:focus-visible {

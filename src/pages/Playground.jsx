@@ -171,7 +171,7 @@ export default function Playground() {
       canvas.height = window.innerHeight;
 
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#07070b';
+      ctx.fillStyle = '#08090c';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // draw a faint grid (industrial motif)
@@ -194,7 +194,7 @@ export default function Playground() {
           Math.random() * 2 + 0.5,
           0, Math.PI * 2
         );
-        ctx.fillStyle = `rgba(56, 225, 200, ${Math.random() * 0.25 + 0.05})`;
+        ctx.fillStyle = `rgba(123, 97, 255, ${Math.random() * 0.25 + 0.05})`;
         ctx.fill();
       }
     };

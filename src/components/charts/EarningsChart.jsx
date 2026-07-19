@@ -3,13 +3,13 @@ import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 
 const colors = {
   primary:    '#f5a524',   /* --color-amber */
-  secondary:  '#38e1c8',   /* --color-accent */
+  secondary:  '#7b61ff',   /* --color-accent */
   tertiary:   '#5b9dff',   /* --color-info */
   quaternary: '#3ddc84',   /* --color-success */
   quinary:    '#a78bfa',   /* violet */
   grid:       '#23232e',   /* --color-border */
   text:       '#6b6b78',   /* --color-text-muted */
-  background: '#14141d',   /* --color-bg-card */
+  background: '#111319',   /* --color-bg-card */
   border:     '#23232e',   /* --color-border */
 };
 

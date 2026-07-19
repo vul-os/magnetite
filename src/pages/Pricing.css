@@ -244,17 +244,15 @@
 .btn-lg { padding: 0.875rem 2rem; font-size: var(--text-base); }
 
 .btn-primary {
-  background: var(--color-accent);
-  color: #000;
-  border-color: var(--color-accent);
+  background: var(--gradient-primary);
+  color: #0a0715;
+  border-color: transparent;
 }
 
 .btn-primary:hover {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  filter: brightness(1.08);
   box-shadow: var(--shadow-glow);
   transform: translateY(-2px);
-  color: #000;
 }
 
 .btn-secondary {

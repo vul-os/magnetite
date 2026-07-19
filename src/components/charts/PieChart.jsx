@@ -1,6 +1,6 @@
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const COLORS = ['#f5a524', '#38e1c8', '#3ddc84', '#5b9dff', '#a78bfa', '#f472b6'];
+const COLORS = ['#f5a524', '#7b61ff', '#3ddc84', '#5b9dff', '#a78bfa', '#f472b6'];
 
 export default function PieChart({ data, nameKey, valueKey, title }) {
   return (
@@ -23,7 +23,7 @@ export default function PieChart({ data, nameKey, valueKey, title }) {
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{ background: '#14141d', border: '1px solid #23232e', borderRadius: 8 }}
+            contentStyle={{ background: '#111319', border: '1px solid #23232e', borderRadius: 8 }}
             labelStyle={{ color: '#f4f4f6' }}
           />
           <Legend

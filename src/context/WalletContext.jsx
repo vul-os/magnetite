@@ -1,41 +1,27 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useMemo } from 'react';
+import { useWallet as useWalletData } from '../hooks/useWallet';
 
-const WalletContext = createContext();
+/**
+ * WalletContext — NON-CUSTODIAL (seam §3.6 `PaymentRail`).
+ *
+ * Previously this provider simulated a custodial balance with `deposit()` and
+ * `withdraw()` mutating a number. That model is gone: the node holds no funds,
+ * so there is no balance to mutate. The provider now just shares the linked
+ * address + signed receipts from `useWallet` so several surfaces can read them
+ * without each firing its own request.
+ */
+
+const WalletContext = createContext(null);
 
 export function WalletProvider({ children }) {
-  const [balance, setBalance] = useState(100);
-  // Lazy initializer keeps the impure Date.now() call out of render.
-  const [transactions, setTransactions] = useState(() => [
-    { id: 1, type: 'deposit', amount: 100, currency: 'USD', timestamp: Date.now() - 86400000, status: 'completed' },
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { address, custodial, rail, receipts, link, loading, error } = useWalletData();
 
-  const deposit = async (amount) => {
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    const newTx = { id: Date.now(), type: 'deposit', amount, currency: 'USD', timestamp: Date.now(), status: 'completed' };
-    setTransactions(prev => [newTx, ...prev]);
-    setBalance(prev => prev + amount);
-    setIsLoading(false);
-    return { success: true };
-  };
-
-  const withdraw = async (amount) => {
-    if (amount > balance) return { success: false, error: 'Insufficient balance' };
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    const newTx = { id: Date.now(), type: 'withdraw', amount, currency: 'USD', timestamp: Date.now(), status: 'completed' };
-    setTransactions(prev => [newTx, ...prev]);
-    setBalance(prev => prev - amount);
-    setIsLoading(false);
-    return { success: true };
-  };
-
-  return (
-    <WalletContext.Provider value={{ balance, transactions, isLoading, deposit, withdraw }}>
-      {children}
-    </WalletContext.Provider>
+  const value = useMemo(
+    () => ({ address, custodial, rail, receipts, link, loading, error }),
+    [address, custodial, rail, receipts, link, loading, error],
   );
+
+  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
 // Provider + its consumer hook are intentionally colocated.

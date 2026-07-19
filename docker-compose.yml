@@ -37,7 +37,12 @@ services:
     networks:
       - magnetite
 
+  # OPTIONAL. Media is per-operator and comms are pluggable (§3.5): the default
+  # `builtin` comms provider works without it, and Jitsi/LiveKit/Owncast bring
+  # their own media. Start it only if you want this node to host media:
+  #   docker compose --profile media up
   mediamtx:
+    profiles: ["media"]
     image: bluenviron/mediamtx:latest
     restart: unless-stopped
     environment:
@@ -71,7 +76,8 @@ services:
       SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
       SERVER_PORT: ${SERVER_PORT:-8080}
       RUST_LOG: ${RUST_LOG:-info}
-      MEDIA_SERVER_BASE_URL: ${MEDIA_SERVER_BASE_URL:-http://mediamtx:8888}
+      # Empty unless this node hosts media (see the `media` profile).
+      MEDIA_SERVER_BASE_URL: ${MEDIA_SERVER_BASE_URL:-}
       # OAuth
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -103,16 +109,20 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SES_FROM_ARN: ${AWS_SES_FROM_ARN:-}
-      # Integrations
-      CIRCLE_API_KEY: ${CIRCLE_API_KEY:-}
-      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      # Payments — non-custodial crypto (DECENTRALIZATION.md §3.6).
+      # `mock` = deterministic signed receipts, fully offline, zero external
+      # services. There is no fiat processor and no custody.
+      PAYMENT_RAIL: ${PAYMENT_RAIL:-mock}
+      PROTOCOL_FEE_BPS: ${PROTOCOL_FEE_BPS:-0}
+      OPERATOR_WALLET_PUBKEY: ${OPERATOR_WALLET_PUBKEY:-}
+      # Comms — pluggable (§3.5). `builtin` needs no external service.
+      COMMS_PROVIDER: ${COMMS_PROVIDER:-builtin}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mediamtx:
-        condition: service_healthy
+      # NOTE: no mediamtx dependency — it is an optional profile.
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     healthcheck:

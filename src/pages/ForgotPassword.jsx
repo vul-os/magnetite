@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
 
 export default function ForgotPassword() {
@@ -80,7 +81,7 @@ export default function ForgotPassword() {
         <div className="auth-hero-grain" aria-hidden="true" />
         <div className="auth-hero-content">
           <Link to="/" className="auth-hero-logo" tabIndex="-1">
-            <div className="auth-hero-logo-mark">M</div>
+            <img src={magnetiteLogo} className="auth-hero-logo-mark" aria-hidden="true" alt="" />
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
           <div className="auth-hero-pitch reveal reveal-2">

@@ -107,7 +107,7 @@
 .auth-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(7, 7, 11, 0.75);
+  background: rgba(8, 9, 12, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -587,13 +587,13 @@
 }
 
 .btn-primary {
-  background: var(--color-accent);
-  color: #000;
-  border-color: var(--color-accent);
+  background: var(--gradient-primary);
+  color: #0a0715;
+  border-color: transparent;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  filter: brightness(1.08);
   box-shadow: var(--shadow-glow);
   transform: translateY(-1px);
 }

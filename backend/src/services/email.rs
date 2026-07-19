@@ -292,31 +292,6 @@ impl EmailService {
         self.send_email(to, subject, &text, &html).await
     }
 
-    /// Send the payout-completed email.
-    ///
-    /// `amount`      — human-readable amount string (e.g. "250.00")
-    /// `destination` — bank account or provider reference
-    /// `transfer_id` — Wise/sandbox transfer identifier
-    pub async fn send_payout_complete_email(
-        &self,
-        to: &str,
-        username: &str,
-        amount: &str,
-        destination: &str,
-        transfer_id: &str,
-    ) -> Result<()> {
-        let subject = format!("Payout of {amount} USD Complete");
-        let text = format!(
-            "Hi {username},\n\nYour payout of {amount} USD has been processed.\n\n\
-             Destination: {destination}\nTransfer ID: {transfer_id}\n\n\
-             View your earnings: {base}/earnings\n\nCheers, the Magnetite team",
-            base = self.base_url
-        );
-        let html =
-            render_payout_complete(username, amount, destination, transfer_id, &self.base_url);
-        self.send_email(to, &subject, &text, &html).await
-    }
-
     /// Send the subscription-confirmation email.
     ///
     /// `tier_name`   — display name of the plan (e.g. "Pro")
@@ -473,55 +448,6 @@ fn render_password_reset(username: &str, token: &str, link: &str, base_url: &str
         link = esc(link),
     );
     email_wrapper("Reset your Magnetite password", &content, base_url)
-}
-
-fn render_payout_complete(
-    username: &str,
-    amount: &str,
-    destination: &str,
-    transfer_id: &str,
-    base_url: &str,
-) -> String {
-    let content = format!(
-        r#"
-  <tr><td style="padding:50px 30px 20px 30px;text-align:center;">
-    <h1 style="margin:0 0 12px 0;font-size:28px;font-weight:700;color:#ffffff;line-height:1.2;">Payout Complete</h1>
-    <p style="margin:0;font-size:18px;color:#10b981;font-weight:600;">{amount} USD</p>
-  </td></tr>
-  <tr><td style="padding:0 30px 30px 30px;text-align:center;">
-    <p style="margin:0;font-size:16px;color:#9ca3af;line-height:1.6;">Hi {username}, your payout has been processed successfully.</p>
-  </td></tr>
-  <tr><td style="padding:0 30px 30px 30px;">
-    <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
-      <tr><td style="padding:24px;background-color:#1a1a26;border-radius:12px;">
-        <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
-          <tr><td style="padding:0 0 16px 0;border-bottom:1px solid #2a2a3a;">
-            <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Amount</p>
-            <p style="margin:0;font-size:24px;color:#ffffff;font-weight:700;">{amount} USD</p>
-          </td></tr>
-          <tr><td style="padding:16px 0 0 0;">
-            <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Destination</p>
-            <p style="margin:0;font-size:14px;color:#ffffff;font-family:monospace;">{destination}</p>
-          </td></tr>
-        </table>
-      </td></tr>
-    </table>
-  </td></tr>
-  <tr><td style="padding:0 30px 30px 30px;text-align:center;">
-    <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Transfer ID</p>
-    <p style="margin:0;font-size:14px;color:#9ca3af;font-family:monospace;">{transfer_id}</p>
-  </td></tr>
-  <tr><td style="padding:0 30px 50px 30px;text-align:center;">
-    <a href="{base_url}/earnings" style="display:inline-block;padding:16px 40px;background-color:#8b5cf6;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;border-radius:8px;">View Earnings</a>
-  </td></tr>
-"#,
-        username = esc(username),
-        amount = esc(amount),
-        destination = esc(destination),
-        transfer_id = esc(transfer_id),
-        base_url = base_url,
-    );
-    email_wrapper("Payout Complete", &content, base_url)
 }
 
 fn render_subscription_confirmation(
@@ -710,22 +636,6 @@ mod tests {
         let year = chrono::Utc::now().format("%Y").to_string();
         assert!(html.contains(&year));
         assert!(html.contains("content"));
-    }
-
-    #[test]
-    fn test_render_payout_complete_contains_fields() {
-        let html = render_payout_complete(
-            "alice",
-            "250.00",
-            "0xdeadbeef",
-            "transfer_abc123",
-            "http://localhost",
-        );
-        assert!(html.contains("250.00"));
-        assert!(html.contains("0xdeadbeef"));
-        assert!(html.contains("transfer_abc123"));
-        assert!(html.contains("alice"));
-        assert!(html.contains("http://localhost/earnings"));
     }
 
     #[test]

@@ -9,7 +9,7 @@ GET /api/v1/developer/games/:gameId/players
 Authorization: Bearer <developer-jwt>
 ```
 
-(Also accessible as `GET /api/developer/analytics/:gameId` via the legacy path.)
+Also mounted as `GET /api/v1/developer/games/:gameId/analytics` (same handler).
 
 ## Response Shape
 
@@ -29,7 +29,13 @@ Authorization: Bearer <developer-jwt>
     "platform_fee": "300.00",
     "developer_earnings": "700.00",
     "session_count": 100
-  }
+  },
+  "daily_revenue": [
+    { "date": "2026-06-01", "revenue_usd": "42.00" }
+  ],
+  "daily_playtime": [
+    { "date": "2026-06-01", "total_minutes": 3120 }
+  ]
 }
 ```
 
@@ -55,18 +61,33 @@ Aggregate session statistics over the 30-day window:
 
 ### revenue_breakdown
 
-Revenue split using the platform's 70/30 model:
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_revenue` | `decimal string` | Sum of the legacy `game_revenue` table for this game (USD). |
+| `platform_fee` | `decimal string` | See the warning below. |
+| `developer_earnings` | `decimal string` | `total_revenue − platform_fee`. |
+| `session_count` | `integer` | Sessions for this game. |
+
+> ⚠️ **Known inconsistency — do not treat these three fields as authoritative.**
+> `platform_fee` is still computed as a hardcoded `total_revenue × 0.30` in
+> `backend/src/api/developer.rs`, reading the legacy `game_revenue` table. That
+> is a leftover from the deleted 70/30 model and **contradicts the shipped
+> non-custodial system**, where the developer receives the entire subtotal and
+> the only deduction is `PROTOCOL_FEE_BPS` (default 0). Settlement is
+> authoritatively reported by `GET /api/v1/developer/earnings`, which sums
+> signed, non-voided `payment_receipts`. Use that endpoint for money; treat
+> this block as a stale analytics artifact pending cleanup.
+
+### daily_revenue / daily_playtime
+
+Both are 30-day daily buckets.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `total_revenue` | `decimal string` | Gross revenue from session fees (USD). |
-| `platform_fee` | `decimal string` | Platform's 30% share. |
-| `developer_earnings` | `decimal string` | Developer's 70% share. |
-| `session_count` | `integer` | Sessions that generated revenue. |
-
-## Revenue Time-Series (Roadmap)
-
-The current analytics response does not include a daily revenue chart (time-series of earnings per day).  This is a planned enhancement — see AUDIT.md medium-severity finding "Developer analytics: no revenue time-series per game".  When implemented, the response will include a `daily_revenue` array with the same date format as `daily_active_players`.
+| `daily_revenue[].date` | `string` | ISO 8601 date. |
+| `daily_revenue[].revenue_usd` | `decimal string` | Revenue recorded that day (`game_revenue`). |
+| `daily_playtime[].date` | `string` | ISO 8601 date. |
+| `daily_playtime[].total_minutes` | `integer` | Total minutes played by all users that day. |
 
 ## Frontend Usage
 

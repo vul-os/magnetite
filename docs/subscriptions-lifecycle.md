@@ -1,78 +1,105 @@
 # Subscription Lifecycle
 
-Magnetite uses a tiered subscription model. Paystack is the payment on-ramp (fiat) for all paid tiers; platform and free tiers require no payment.
+Subscriptions are **receipt-backed feature flags**, not a recurring charge.
+
+There is no payment processor. A paid tier is activated by presenting a signed,
+non-voided `payment_receipts` row that the subscriber owns — proof that they
+already paid the node operator wallet-to-wallet through the `PaymentRail` seam.
+The node verifies the receipt; it never charges anyone. Paystack, ZAR pricing,
+and the auto-renewing subscription charge were **deleted**.
+
+Consequently a tier **expires** at the end of its period rather than
+auto-renewing: nothing on the node is capable of taking money again.
 
 ## Tiers
 
-| Slug | Price (ZAR/month) | Max Games |
-|------|-------------------|-----------|
+| Slug | Price (`price_usdc` / month) | Max Games |
+|------|------------------------------|-----------|
 | `free` | 0 | 1 |
-| `basic` | ~150 | 3 |
-| `pro` | ~350 | 10 |
-| `unlimited` | ~800 | unlimited |
+| `basic` | see `subscription_tiers` | 3 |
+| `pro` | see `subscription_tiers` | 10 |
+| `unlimited` | see `subscription_tiers` | unlimited |
 
-Prices in `price_usdc` and `price_zar` columns are stored in `subscription_tiers` and returned by `GET /api/v1/subscriptions`.
+Prices live in `subscription_tiers.price_usdc` and are returned by
+`GET /api/v1/subscriptions`. The `price_zar` column is gone. Tiers with
+`price_usdc = 0` require no payment at all.
+
+Paid tiers pay the operator identified by `OPERATOR_WALLET_PUBKEY`; if that is
+unset, paid tiers cannot be activated (fails closed).
 
 ## REST Endpoints
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/subscriptions` | no | List all active tiers (aliased from `/plans`) |
+| `GET` | `/api/v1/subscriptions` | no | List active tiers |
+| `GET` | `/api/v1/subscriptions/plans` | no | Alias of the above |
 | `GET` | `/api/v1/subscriptions/me` | yes | Current user's active subscription |
-| `POST` | `/api/v1/subscriptions` | yes | Subscribe to a tier (free = no payment; paid = Paystack ref required) |
-| `DELETE` | `/api/v1/subscriptions` | yes | Cancel — sets `cancel_at_period_end = true`, expires at period end |
+| `GET` | `/api/v1/subscriptions/current` | yes | Alias of `/me` |
+| `POST` | `/api/v1/subscriptions` | yes | Subscribe to a tier |
+| `DELETE` | `/api/v1/subscriptions` | yes | Cancel — sets `cancel_at_period_end = true` |
 | `POST` | `/api/v1/subscriptions/cancel` | yes | Named alias for `DELETE /` (same handler) |
-| `POST` | `/api/v1/subscriptions/upgrade` | yes | Upgrade or downgrade tier (see proration below) |
+| `POST` | `/api/v1/subscriptions/upgrade` | yes | Move to a higher tier |
+| `POST` | `/api/v1/subscriptions/downgrade` | yes | Move to a lower tier |
 | `GET` | `/api/v1/subscriptions/hours` | yes | Included compute hours for the current tier |
 | `GET` | `/api/v1/subscriptions/usage` | yes | Game-slot usage this period |
 
+## Subscribing
+
+`POST /api/v1/subscriptions` — body: `{ tier_id, payment_id?, payment_provider? }`
+
+- **Free / zero-price tiers:** no `payment_id` required.
+- **Paid tiers:** `payment_id` must be the UUID of a `payment_receipts` row.
+  The only accepted `payment_provider` values are `receipt` (default),
+  `crypto`, `platform`, or `free`. Anything else is rejected.
+
+The receipt is checked to be **found, not voided, and owned by the calling
+user**. Any of those failing rejects the subscription — a row alone is never
+proof.
+
 ## Upgrade / Downgrade (Proration)
 
-`POST /api/v1/subscriptions/upgrade` — body: `{ tier_id: UUID, payment_id?: string }`
+`POST /api/v1/subscriptions/upgrade` and `/downgrade` share one handler.
 
-- The current active subscription is immediately cancelled.
+- The current active subscription is cancelled immediately.
 - A new subscription is created at the target tier for a 30-day period starting now.
-- For paid tier upgrades, a `payment_id` (Paystack reference) covering the upgrade cost must be supplied. The Paystack charge is verified server-side before the subscription is activated.
-- For downgrades or free-tier moves, `payment_id` is omitted.
-
-### Proration math
-
-The recommended client-side proration display formula:
+- The prorated delta is computed as:
 
 ```
-factor = remaining_seconds / total_seconds  (clamped to [0, 1])
-upgrade_charge = (new_price - old_price) * factor
+factor           = remaining_seconds / total_seconds   (clamped to [0, 1])
+prorated_delta   = (new_price_usdc − old_price_usdc) × factor
 ```
 
-The backend does not currently issue a partial refund for downgrade credit; the unused days are forfeited. Future work (see TASKS.md) will add a credit mechanism.
+- If the delta is positive, a `payment_id` covering it is **required** — but
+  the node only *verifies* that receipt. It never moves money itself.
+- Downgrades and moves to free omit `payment_id`. Unused days are forfeited;
+  there is no downgrade credit.
 
 ## Cancel Behaviour
 
-Cancellation sets `status = 'cancel_pending'` and `cancel_at_period_end = true`. The subscription remains active until `current_period_end`. The renewal job then marks it `cancelled` at expiry.
-
-This differs from the legacy behaviour (immediate `status = 'cancelled'`), which is the standard SaaS cancel-at-period-end expectation.
+Cancelling sets `status = 'cancel_pending'` and `cancel_at_period_end = true`.
+The subscription stays active until `current_period_end`, then expires. Since
+nothing renews automatically, "cancel" is really "do not extend".
 
 ## Frontend API client
 
 ```js
 import { api } from 'src/api/client';
 
-// List tiers
 const { data: tiers } = await api.subscriptions.plans();
+const { data: sub }   = await api.subscriptions.current();
 
-// Current subscription (includes cancel_at_period_end)
-const { data: sub } = await api.subscriptions.current();
+// Upgrade — the second argument is a payment_receipts id, not a processor ref
+await api.subscriptions.upgrade(tierUuid, receiptId);
 
-// Upgrade
-await api.subscriptions.upgrade(tierUuid, paystackPaymentRef);
-
-// Downgrade to free (no payment_id)
+// Downgrade to free (no receipt needed)
 await api.subscriptions.upgrade(freeTierUuid);
 
-// Cancel
 await api.subscriptions.cancel();
 
-// Usage
 const { data: usage } = await api.subscriptions.usage();
-// { used_games: 2, max_games: 5, remaining_days: 14 }
 ```
+
+## See also
+
+- [Payments](./payments.md) — the `PaymentRail` seam and receipt verification
+- [Refunds](./refunds.md) — voiding a receipt

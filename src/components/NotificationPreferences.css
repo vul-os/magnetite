@@ -156,7 +156,7 @@
 }
 
 .np-channel-row:hover {
-  background: rgba(56, 225, 200, 0.03);
+  background: rgba(123, 97, 255, 0.03);
 }
 
 .np-channel-name {
@@ -246,7 +246,7 @@
   border-radius: var(--radius);
   border: none;
   background: var(--color-accent);
-  color: #07070b;
+  color: #08090c;
   font-family: var(--font-display);
   font-size: var(--text-sm);
   font-weight: 600;
@@ -277,8 +277,8 @@
   display: inline-block;
   width: 0.875rem;
   height: 0.875rem;
-  border: 2px solid rgba(7, 7, 11, 0.3);
-  border-top-color: #07070b;
+  border: 2px solid rgba(8, 9, 12, 0.3);
+  border-top-color: #08090c;
   border-radius: 50%;
   animation: np-spin 0.6s linear infinite;
   flex-shrink: 0;
@@ -325,7 +325,7 @@
 
   .np-spinner {
     animation: none;
-    border-top-color: #07070b;
+    border-top-color: #08090c;
     opacity: 0.7;
   }
 

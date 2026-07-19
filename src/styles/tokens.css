@@ -9,11 +9,11 @@
 
 /* ─── Root (dark, default) ────────────────────────────────────────────────── */
 :root {
-  /* Background layers */
-  --color-bg-primary:    #07070b;
-  --color-bg-secondary:  #0f0f16;
-  --color-bg-card:       #14141d;
-  --color-bg-elevated:   #1b1b27;
+  /* Background layers — graphite ramp, matched to site/index.html */
+  --color-bg-primary:    #08090c;
+  --color-bg-secondary:  #0c0d12;
+  --color-bg-card:       #111319;
+  --color-bg-elevated:   #15171f;
 
   /* Text */
   --color-text-primary:  #f4f4f6;
@@ -24,11 +24,12 @@
   --color-border:        #23232e;
   --color-border-strong: #33333f;
 
-  /* ── Accent: electric teal primary + amber secondary ── */
-  --color-accent:        #38e1c8;
-  --color-accent-hover:  #19c7ad;
-  --color-accent-soft:   rgba(56, 225, 200, 0.12);
-  --color-accent-glow:   rgba(56, 225, 200, 0.18);
+  /* ── Accent: violet -> magenta "magnetic field" duo ── */
+  --color-accent:        #7b61ff;
+  --color-accent-2:      #ff4d9d;
+  --color-accent-hover:  #6a4bf5;
+  --color-accent-soft:   rgba(123, 97, 255, 0.12);
+  --color-accent-glow:   rgba(123, 97, 255, 0.18);
 
   --color-amber:         #f5a524;
   --color-amber-hover:   #d98c18;
@@ -37,7 +38,7 @@
   /* ── Legacy aliases (kept for backward-compat with page-level code) ── */
   --color-primary:       var(--color-accent);
   --color-primary-hover: var(--color-accent-hover);
-  --color-primary-light: #5ef0da;
+  --color-primary-light: #a599ff;
   --color-secondary:     var(--color-amber);
 
   /* ── Status ── */
@@ -47,9 +48,9 @@
   --color-info:    #5b9dff;
 
   /* ── Gradients ── */
-  --gradient-primary: linear-gradient(135deg, #38e1c8 0%, #5b9dff 100%);
+  --gradient-primary: linear-gradient(135deg, #7b61ff 0%, #ff4d9d 100%);
   --gradient-energy:  linear-gradient(135deg, #f5a524 0%, #ff5468 100%);
-  --gradient-hero:    radial-gradient(ellipse at 50% 0%, #16161f 0%, #07070b 60%);
+  --gradient-hero:    radial-gradient(ellipse at 50% 0%, #15171f 0%, #08090c 60%);
 
   /* ── Typography ── */
   /* Display (headings): Archivo — industrial, characterful, credible for Rust infra */
@@ -92,7 +93,7 @@
   --shadow-xl:  0 24px 48px rgba(0, 0, 0, 0.7);
   --shadow-glow:        0 0 24px var(--color-accent-glow);
   --shadow-glow-amber:  0 0 24px rgba(245, 165, 36, 0.18);
-  --shadow-glow-focus:  0 0 0 3px rgba(56, 225, 200, 0.22);
+  --shadow-glow-focus:  0 0 0 3px rgba(123, 97, 255, 0.22);
 
   /* ── Motion ── */
   --ease-out:      cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -132,8 +133,8 @@
   --color-border-strong: #b8b8c8;
 
   /* accents stay the same (just adjust soft/glow for light bg) */
-  --color-accent-soft:   rgba(56, 225, 200, 0.10);
-  --color-accent-glow:   rgba(56, 225, 200, 0.12);
+  --color-accent-soft:   rgba(123, 97, 255, 0.10);
+  --color-accent-glow:   rgba(123, 97, 255, 0.12);
   --color-amber-soft:    rgba(245, 165, 36, 0.10);
 
   --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -191,8 +192,8 @@
   inset: 0;
   /* Magnetic grid: subtle crosshatch */
   background-image:
-    linear-gradient(rgba(56, 225, 200, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 225, 200, 0.028) 1px, transparent 1px);
+    linear-gradient(rgba(123, 97, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(123, 97, 255, 0.028) 1px, transparent 1px);
   background-size: 52px 52px;
   pointer-events: none;
   z-index: 0;
@@ -243,8 +244,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(56, 225, 200, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 225, 200, 0.028) 1px, transparent 1px);
+    linear-gradient(rgba(123, 97, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(123, 97, 255, 0.028) 1px, transparent 1px);
   background-size: 52px 52px;
   pointer-events: none;
   z-index: 0;

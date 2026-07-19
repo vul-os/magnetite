@@ -93,8 +93,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(56, 225, 200, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 225, 200, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(123, 97, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(123, 97, 255, 0.035) 1px, transparent 1px);
   background-size: 40px 40px;
   z-index: 1;
   pointer-events: none;
@@ -406,7 +406,7 @@
 }
 
 .achievement-preview-item:hover {
-  border-color: rgba(56, 225, 200, 0.25);
+  border-color: rgba(123, 97, 255, 0.25);
   background: var(--color-accent-soft);
   color: var(--color-text-primary);
 }
@@ -819,7 +819,7 @@
   margin-bottom: 1.25rem;
   padding: 0.5rem 1rem;
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.22);
+  border: 1px solid rgba(123, 97, 255, 0.22);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -1086,7 +1086,7 @@
 .recent-icon {
   font-size: 32px;
   line-height: 1;
-  filter: drop-shadow(0 0 8px rgba(56, 225, 200, 0.25));
+  filter: drop-shadow(0 0 8px rgba(123, 97, 255, 0.25));
 }
 
 .recent-name {
@@ -1168,7 +1168,7 @@
 }
 
 .achievement-card.unlocked {
-  border-color: rgba(56, 225, 200, 0.2);
+  border-color: rgba(123, 97, 255, 0.2);
 }
 
 .achievement-card.unlocked::before {
@@ -1183,7 +1183,7 @@
 }
 
 .achievement-card.unlocked:hover {
-  border-color: rgba(56, 225, 200, 0.45);
+  border-color: rgba(123, 97, 255, 0.45);
   box-shadow: var(--shadow-md), var(--shadow-glow);
   transform: translateY(-2px);
 }
@@ -1213,8 +1213,8 @@
 
 .achievement-card.unlocked .achievement-icon {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.28);
-  box-shadow: 0 0 12px rgba(56, 225, 200, 0.12);
+  border-color: rgba(123, 97, 255, 0.28);
+  box-shadow: 0 0 12px rgba(123, 97, 255, 0.12);
 }
 
 .achievement-content { flex: 1; min-width: 0; }

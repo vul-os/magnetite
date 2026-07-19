@@ -118,16 +118,9 @@
 .auth-hero-logo-mark {
   width: 40px;
   height: 40px;
-  background: var(--color-accent);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #000;
-  font-size: 20px;
-  font-weight: 800;
-  font-family: var(--font-display);
-  box-shadow: var(--shadow-glow);
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(123, 97, 255, 0.35));
   flex-shrink: 0;
 }
 
@@ -414,16 +407,9 @@
 .auth-logo-icon {
   width: 44px;
   height: 44px;
-  background: var(--color-accent);
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #000;
-  font-size: 22px;
-  font-weight: 800;
-  font-family: var(--font-display);
-  box-shadow: var(--shadow-glow);
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(123, 97, 255, 0.35));
   flex-shrink: 0;
 }
 
@@ -701,7 +687,7 @@
 .auth-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(7, 7, 11, 0.75);
+  background: rgba(8, 9, 12, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;

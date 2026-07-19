@@ -95,6 +95,46 @@ enum Commands {
         max_players: u32,
     },
 
+    /// Run a capacity-elastic node hosting a content-addressed game.
+    ///
+    /// Unlike `dev` (a fixed SingleRoom convenience server), `node` boots the
+    /// full decentralized host described in DECENTRALIZATION.md §4:
+    ///
+    ///   1. Build (or load `--wasm`) the game module.
+    ///   2. Content-address it: game id = BLAKE3 hash of the module bytes.
+    ///   3. Measure THIS box's hardware → capacity (player cap is emergent, not
+    ///      a constant — more cores means more shards means more players).
+    ///   4. Self-advertise a `SessionAd` via a `Discovery` provider (LAN default)
+    ///      instead of polling a central provisioning table.
+    ///   5. Load the module by hash, VERIFY the hash, and serve it.
+    ///
+    /// Runs fully offline with the default providers — no tracker, no chain.
+    Node {
+        /// Path to the game crate (defaults to the current directory).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Serve an already-compiled `.wasm` module instead of building `path`.
+        #[arg(long)]
+        wasm: Option<PathBuf>,
+
+        /// Bind host.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Port to listen on (0 = OS-assigned).
+        #[arg(long, default_value_t = 9000u16)]
+        port: u16,
+
+        /// Shard cell size in world units (used when capacity implies sharding).
+        #[arg(long, default_value_t = 500.0f32)]
+        cell_size: f32,
+
+        /// Deterministic RNG seed for the match.
+        #[arg(long, default_value_t = 0xDEAD_BEEF_CAFE_1234u64)]
+        seed: u64,
+    },
+
     /// Deploy the game to a Magnetite runtime instance.
     ///
     /// Steps:
@@ -139,6 +179,14 @@ fn run(cli: Cli) -> Result<()> {
             port,
             max_players,
         } => cmd_dev(&path, port, max_players),
+        Commands::Node {
+            path,
+            wasm,
+            host,
+            port,
+            cell_size,
+            seed,
+        } => cmd_node(&path, wasm.as_deref(), &host, port, cell_size, seed),
         Commands::Deploy { path } => cmd_deploy(&path),
     }
 }
@@ -478,6 +526,159 @@ fn cmd_dev(crate_path: &Path, port: u16, max_players: u32) -> Result<()> {
         GameServer::serve_wasm(wasm_path, limits, server_cfg)
             .await
             .map_err(|e| anyhow::anyhow!("server error: {e}"))
+    })?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `magnetite node`
+// ---------------------------------------------------------------------------
+
+/// This node's signing identity for tracker announcements.
+///
+/// A tracker refuses unsigned ads and binds a `(game, node)` slot to the key
+/// that first claimed it, so the key must be STABLE across restarts or the node
+/// loses its own listing. `MAGNETITE_NODE_SEED` (32-byte hex) sets it
+/// explicitly; otherwise it is derived deterministically from the bind address.
+///
+/// TODO(node-key): persist a generated keypair under the node's data dir so an
+/// operator's identity survives a change of bind address, and expose it to
+/// `magnetite node --print-key`.
+fn node_identity(bind_addr: &str) -> magnetite_seams::identity::RawKeypairAuth {
+    use magnetite_seams::identity::RawKeypairAuth;
+    if let Ok(hex_seed) = std::env::var("MAGNETITE_NODE_SEED") {
+        if let Ok(raw) = hex::decode(hex_seed.trim()) {
+            if let Ok(seed) = <[u8; 32]>::try_from(raw.as_slice()) {
+                return RawKeypairAuth::from_seed(seed);
+            }
+        }
+        eprintln!("warning: MAGNETITE_NODE_SEED is not 32 bytes of hex — deriving instead");
+    }
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(magnetite_seams::blobstore::Hash::of(bind_addr.as_bytes()).0.as_slice());
+    RawKeypairAuth::from_seed(seed)
+}
+
+fn cmd_node(
+    crate_path: &Path,
+    wasm_override: Option<&Path>,
+    host: &str,
+    port: u16,
+    cell_size: f32,
+    seed: u64,
+) -> Result<()> {
+    use magnetite_runtime::{
+        content_address, BlobStore, Discovery, FanoutDiscovery, Filter, LanDiscovery,
+        LocalBlobStore, NodeConfig,
+    };
+    use std::sync::Arc;
+
+    // Step 1: obtain the module bytes — either a prebuilt --wasm or build the crate.
+    let wasm_path = match wasm_override {
+        Some(p) => p
+            .canonicalize()
+            .with_context(|| format!("resolving --wasm `{}`", p.display()))?,
+        None => {
+            let crate_path = crate_path
+                .canonicalize()
+                .with_context(|| format!("resolving path `{}`", crate_path.display()))?;
+            cmd_build(&crate_path)?;
+            locate_wasm(&crate_path)?
+        }
+    };
+    let wasm_bytes =
+        std::fs::read(&wasm_path).with_context(|| format!("reading `{}`", wasm_path.display()))?;
+
+    // Step 2: content-address the module (game id = BLAKE3 hash of the bytes).
+    let game = content_address(&wasm_bytes);
+    let bind_addr = format!("{host}:{port}");
+
+    // Step 3: build the tokio runtime and stand up the node.
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("creating tokio runtime")?;
+
+    rt.block_on(async move {
+        // Default, fully-offline providers: local content store + LAN phonebook.
+        let blobs = LocalBlobStore::new();
+        let stored = blobs.put(&wasm_bytes).await;
+        debug_assert_eq!(stored, game, "stored hash must equal computed content address");
+        // Phonebooks, in order of how little they need: LAN always, plus an
+        // HTTP tracker if (and only if) TRACKER_URL was set. Fanning out means
+        // the SAME discovery handle is announced to, renewed on, and retracted
+        // from — so the background heartbeat keeps us listed everywhere, not
+        // just on the LAN.
+        let tracker = magnetite_runtime::tracker::from_env(node_identity(&bind_addr));
+        let tracker_configured = tracker.is_some();
+        let mut backends: Vec<Box<dyn Discovery + Send + Sync>> = vec![Box::new(LanDiscovery::new())];
+        if let Some(t) = tracker {
+            backends.push(Box::new(t));
+        }
+        let discovery = Arc::new(FanoutDiscovery::new(backends));
+
+        let cfg = NodeConfig {
+            bind_addr: bind_addr.clone(),
+            cell_size,
+            seed,
+            ..Default::default()
+        };
+
+        // Prepare (measure capacity + verify hash + advertise) so we can print
+        // the emergent numbers before blocking in the serve loop.
+        let prepared = magnetite_runtime::prepare_game(&blobs, discovery.as_ref(), &game, &cfg)
+            .await
+            .map_err(|e| anyhow::anyhow!("node bring-up failed: {e}"))?;
+
+        let cap = &prepared.ad.capacity;
+        println!();
+        println!("Magnetite node — capacity-elastic, self-advertising");
+        println!();
+        println!("  Game id (BLAKE3) : {}", game.to_hex());
+        println!("  Connect URL      : ws://{bind_addr}");
+        println!("  Topology         : {:?}", prepared.match_config.topology);
+        println!(
+            "  Measured HW      : {} cores, {} MB RAM",
+            cap.cpu_cores, cap.ram_mb
+        );
+        println!(
+            "  Emergent cap     : {} shards, {} player slots (derived from HW, not a constant)",
+            cap.max_shards, prepared.match_config.max_players
+        );
+
+        // Confirm the ad is discoverable by game hash (the phonebook now knows us).
+        let found = discovery.find(game, Filter::default()).await;
+        println!("  Advertised       : {} session(s) discoverable by hash", found.len());
+
+        // OPT-IN: an HTTP tracker. LAN discovery is the zero-config default and
+        // needs no service at all; a tracker is a redundant, swappable
+        // phonebook you point at with TRACKER_URL. Failing to reach one is a
+        // lost hint, never a failure to host — the fanout above already
+        // announced best-effort and the node serves regardless.
+        if tracker_configured {
+            println!(
+                "  Tracker          : announcing (signed by this node's key) to {}",
+                std::env::var(magnetite_runtime::tracker::TRACKER_URL_ENV).unwrap_or_default()
+            );
+        } else {
+            println!(
+                "  Tracker          : none configured (set {} to opt in)",
+                magnetite_runtime::tracker::TRACKER_URL_ENV
+            );
+        }
+        println!(
+            "  Lease            : renewed every {}s while serving; retracted on shutdown",
+            cfg.lease.as_secs() / 2
+        );
+        println!();
+        println!("Press Ctrl-C to stop.");
+        println!();
+
+        // Serve the verified, content-addressed game.
+        magnetite_runtime::run_node(&blobs, Arc::clone(&discovery), &game, cfg)
+            .await
+            .map_err(|e| anyhow::anyhow!("node error: {e}"))
     })?;
 
     Ok(())

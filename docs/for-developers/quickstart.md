@@ -27,9 +27,13 @@ the Studio diverges.
 | `magnetite` CLI | — | `cargo install --path magnetite-cli` |
 | Docker + Compose | 24+ / 2.20+ | https://docs.docker.com (for the local platform stack) |
 
-> **Web Studio path:** no local tools required — sign in at
-> `magnetite.gg/studio`, pick a template, and the scaffold is generated
-> for you in the browser. Skip to [Step 2](#step-2--implement-gamelog).
+> **Web Studio path:** no local tools required — sign in to the Studio on
+> whichever Magnetite storefront you use, pick a template, and the scaffold is
+> generated for you in the browser. Skip to [Step 2](#step-2--implement-gamelog).
+>
+> `magnetite.gg` and `api.magnetite.gg` appear throughout these docs as
+> **placeholder hostnames**. Magnetite operates no central cloud; substitute
+> the node or storefront you are actually talking to.
 
 ---
 
@@ -38,9 +42,14 @@ the Studio diverges.
 ### Option A — CLI
 
 ```bash
-magnetite new my-game --template arena-shooter
+magnetite new my-game
 cd my-game
 ```
+
+> `magnetite new` takes a name only — there is **no `--template` flag**. It
+> emits one canonical scaffold. To start from a richer starter, copy
+> `game-template/`, `game-template-authoritative/`, `game-template-fps/`, or
+> `game-template-motorsport/` from this repository instead.
 
 `magnetite new` creates a ready-to-build crate:
 
@@ -51,10 +60,9 @@ my-game/
     └── lib.rs    # AuthoritativeGame stub + Wasm ABI exports (mag_init, mag_step, …)
 ```
 
-Available `--template` values: `minimal`, `arena-shooter`, `fps-starter`,
-`motorsport-starter`. See
-[src/data/templates.js](../../src/data/templates.js) for the full list
-and blurbs, and the
+Template tiers (`minimal`, `arena-shooter`, `fps-starter`,
+`motorsport-starter`) are offered by the **Web Studio**, which scaffolds from
+`src/data/templates.js` — not by the CLI. See the
 [in-browser guide](../moat/develop-in-browser.md#step-1--create-a-project-in-the-web-studio)
 for per-tier details.
 

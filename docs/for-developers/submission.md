@@ -1,66 +1,52 @@
 # Game Submission
 
-Submit your game to the Magnetite platform for review and deployment.
+Submit your game to a Magnetite storefront for review and listing.
 
-## CI/CD Requirements
+> **Submission is optional.** Listing on a storefront is one way to distribute
+> a game, not a requirement for running one. A game is a content-addressed
+> WASM module: `magnetite dev` runs it with no backend, and `magnetite node`
+> hosts it on your own hardware and self-advertises to whatever discovery
+> tracker you point it at — no review queue involved. This page describes the
+> curated-storefront path.
 
-Your game must pass all CI checks before deployment.
+## CI
 
-### Build Pipeline
+CI runs as a **GitHub Actions workflow**, not a Magnetite-specific manifest.
+The canonical reference is `.github/workflows/game-ci.yml` in this repository;
+copy it into your game repo and adjust. There is no `.magnetite/ci.yaml` and no
+`magnetite.yaml` manifest — those do not exist.
 
-```yaml
-# .magnetite/ci.yaml
-stages:
-  - build
-  - test
-  - security
-  - deploy
+### Jobs in `game-ci.yml`
 
-build:
-  script:
-    - cargo build --release
-    - cargo test
-  artifacts:
-    paths:
-      - target/release/my_game
+| Job | What it runs |
+|-----|--------------|
+| `check` | `cargo check` + `cargo clippy` (host, `--no-default-features`) |
+| `test` | `cargo test` (host, `--no-default-features`) |
+| `build-wasm` | `cargo build --release --target wasm32-unknown-unknown --features wasm`, then `wasm-bindgen`, then `wasm-opt -Oz`, then uploads the deploy artifact |
+| `audit` | `cargo audit` — currently non-blocking (`|| true`) |
 
-test:
-  script:
-    - cargo clippy
-    - cargo fmt --check
-  coverage: true
-```
+### Registering with the platform
 
-### Automated Checks
-
-| Check | Tool | Required |
-|-------|------|----------|
-| Compilation | cargo build | Yes |
-| Unit Tests | cargo test | Yes |
-| Linting | cargo clippy | Yes |
-| Formatting | cargo fmt | Yes |
-| Security | cargo audit | Yes |
-| Coverage | tarpaulin | No |
-
-### Required Files
-
-```
-my-game/
-├── Cargo.toml
-├── magnetite.yaml
-├── .magnetite/
-│   ├── ci.yaml
-│   └── icon.png
-├── src/
-│   └── lib.rs
-└── README.md
-```
+Register your repository with the Magnetite GitHub App
+(`POST /api/v1/github/repos/register`) so push and check events reach the
+backend and build status is tracked. Artifacts are registered against a game
+version through the distribution API — see
+[Build & Distribution Pipeline](./build-pipeline.md).
 
 ## Security Scan
 
-All games undergo automated security scanning.
+> ⚠️ **Status: not implemented.** The backend's `run_security_scan` is a stub
+> that records a build-log line and returns; it performs **no analysis**. The
+> `cargo audit` CI job is non-blocking. The patterns below describe the
+> *intended* policy, not an enforced one.
+>
+> What actually constrains a game is the **runtime sandbox**, which is real:
+> games execute inside `magnetite-sandbox` (Wasmtime) under fuel, memory, and
+> epoch limits with WASI stubbed, so filesystem, network, environment, and
+> process access are unavailable at execution time regardless of what the
+> source contains. See [Security & Sandboxing](../security/index.md).
 
-### Prohibited Patterns
+### Prohibited Patterns (intended policy)
 
 ```rust
 // ❌ Forbidden: File system access
@@ -93,15 +79,12 @@ log::info!("Player moved")
 ### Running Security Checks
 
 ```bash
-# Local security scan
-magnetite security scan
-
-# Check for vulnerabilities
+# Check dependencies for known vulnerabilities
 cargo audit
-
-# Verify no forbidden patterns
-magnetite security check --allowed-only
 ```
+
+There is no `magnetite security` subcommand. The CLI's commands are
+`new`, `build`, `dev`, `node`, and `deploy`.
 
 ## Review Process
 
@@ -117,34 +100,35 @@ magnetite security check --allowed-only
                          └──────────┘     └──────────┘
 ```
 
-### Review Stages
+Review turnaround is a policy each storefront operator sets, not a platform
+guarantee. Anyone can run a node and a storefront; there is no single "platform
+team" gating the network.
 
-| Stage | Duration | Description |
-|-------|----------|-------------|
-| Build | 5-10 min | Automated compilation and testing |
-| Security | 10-15 min | Automated vulnerability scan |
-| Review | 24-72 hrs | Human code review |
-| Approval | - | Final review by platform team |
+### Submitting
 
-### Submission Command
+There is no `magnetite submit` command. The real path:
 
 ```bash
-magnetite submit --game my-game --version 1.0.0
+# 1. Build the WASM artifact
+magnetite build
+
+# 2. Register it as a version with a storefront's distribution API
+#    (MAGNETITE_API_URL, MAGNETITE_GAME_ID, MAGNETITE_API_TOKEN)
+magnetite deploy
 ```
 
-### Required Metadata
+Then move the game into review from the developer portal or with
+`PUT /api/v1/developer/games/:id/status`. The operator's admin acts on it via
+`PUT /api/v1/admin/games/:id/review` and `/approve`.
 
-```yaml
-# magnetite.yaml
-name: my-game
-version: 1.0.0
-author: your_username
-description: A short description of your game
-category: arcade  # arcade, puzzle, strategy, action
-max_players: 4
-entry_fee: 100
-prize_pool: 80
-```
+### Metadata
+
+Game metadata lives in the platform's `games` record (created through
+`POST /api/v1/games` or the developer portal) and in
+`magnetite_sdk::game::GameMetadata` returned by your game code. There is no
+`magnetite.yaml` file — that manifest does not exist. Note also that entry-fee
+and prize-pool fields are not part of the shipped model; paid access is
+receipt-gated (see [Payments](../payments.md)).
 
 ## Versioning
 
@@ -163,29 +147,36 @@ major.minor.patch
 
 ### Update Process
 
-```bash
-# Submit new version
-magnetite update --game my-game --version 1.1.0
+Version promotion and rollback are **API operations**, not CLI subcommands.
+`magnetite update`, `magnetite rollback`, `magnetite metrics`, and
+`magnetite stats` do not exist.
 
-# Rollback if issues
-magnetite rollback --game my-game --version 1.0.0
+```bash
+# Register a new version (bump MAGNETITE_VERSION, then)
+magnetite deploy
+
+# Promote it live
+curl -X PUT "$MAGNETITE_API_URL/api/v1/developer/games/$GAME_ID/versions/$VERSION_ID/promote" \
+  -H "Authorization: Bearer $MAGNETITE_API_TOKEN"
+
+# Roll back
+curl -X PUT "$MAGNETITE_API_URL/api/v1/developer/games/$GAME_ID/versions/$VERSION_ID/rollback" \
+  -H "Authorization: Bearer $MAGNETITE_API_TOKEN"
 ```
 
 ## Post-Deployment
 
 ### Monitoring
 
-```bash
-# View game metrics
-magnetite metrics --game my-game
+| Surface | Endpoint |
+|---------|----------|
+| Per-game analytics | `GET /api/v1/developer/games/:id/analytics` |
+| Developer dashboard | `GET /api/v1/developer/dashboard` |
+| Build status | `GET /api/v1/developer/games/:id/build-status` |
+| Node metrics (Prometheus) | `GET /metrics` |
 
-# Check player count
-magnetite stats --game my-game --period 24h
-```
+### Hotfixes
 
-### Hotfix Process
-
-1. Fix bug in source
-2. Bump patch version
-3. Submit with `--hotfix` flag
-4. Automatic deployment (no review)
+There is no `--hotfix` flag and no review-bypass path. A hotfix is an ordinary
+version: build, `magnetite deploy`, promote. Whether promotion requires a
+review step is the storefront operator's policy.

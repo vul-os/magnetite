@@ -520,6 +520,141 @@ impl ShardedRuntime {
     pub fn executor_count(&self) -> usize {
         self.executors.len()
     }
+
+    /// Advance one tick, routing each handoff's state blob through a
+    /// [`HandoffTransport`] — the seam that becomes real cross-node networking in
+    /// multi-node "Bucket D".
+    ///
+    /// Behaves exactly like [`step`](Self::step) for the local simulation, but
+    /// additionally hands the migrating player's serialized state to `transport`.
+    /// With [`LoopbackTransport`] this is an in-process copy (single box); a
+    /// future `NetworkHandoffTransport` would POST it to the target node.
+    pub fn step_with_transport(
+        &mut self,
+        tick: Tick,
+        inputs: &[(PlayerId, Input)],
+        transport: &mut dyn HandoffTransport,
+    ) -> ShardedStepOutput {
+        let out = self.step(tick, inputs);
+        for event in &out.handoffs {
+            // The source shard's snapshot is the player-state blob to move.
+            let blob = self
+                .executors
+                .get(&event.to_shard)
+                .map(|e| e.snapshot())
+                .unwrap_or_default();
+            if let Err(e) = transport.transfer(event, &blob) {
+                warn!(player = %event.player, error = %e, "handoff transport failed");
+            }
+        }
+        out
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-node handoff transport seam (real "Bucket D" scaffold)
+// ---------------------------------------------------------------------------
+
+/// Why a cross-node handoff transfer failed.
+#[derive(Debug)]
+pub enum HandoffError {
+    /// The transport has no route to the target node.
+    NoRoute(ShardId),
+    /// The target node rejected or dropped the transfer.
+    Rejected(String),
+    /// The transport is a not-yet-implemented network backend.
+    Unimplemented,
+}
+
+impl std::fmt::Display for HandoffError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HandoffError::NoRoute(s) => write!(f, "no route to shard {s}"),
+            HandoffError::Rejected(m) => write!(f, "target rejected handoff: {m}"),
+            HandoffError::Unimplemented => write!(f, "network handoff transport not implemented"),
+        }
+    }
+}
+
+impl std::error::Error for HandoffError {}
+
+/// Moves a migrating player's serialized state from one shard host to another.
+///
+/// Single-process runs use [`LoopbackTransport`] (a working in-memory copy).
+/// Multi-node runs will use a network transport that ships the blob to the node
+/// owning the target shard. The trait is the seam; the network backend is the
+/// remaining TODO (see [`NetworkHandoffTransport`]).
+pub trait HandoffTransport: Send {
+    /// Transfer `player_state_blob` to wherever `event.to_shard` is hosted.
+    fn transfer(&mut self, event: &HandoffEvent, player_state_blob: &[u8])
+        -> Result<(), HandoffError>;
+}
+
+/// In-process handoff transport — the working single-node path.
+///
+/// It doesn't cross a network (the target shard lives in the same process), so
+/// "transfer" just records that the handoff occurred. This is the default and is
+/// fully correct for single-box multi-shard hosting.
+#[derive(Debug, Default)]
+pub struct LoopbackTransport {
+    /// Audit log of `(player, from, to, blob_len)` transfers, for tests/metrics.
+    pub transfers: Vec<(PlayerId, ShardId, ShardId, usize)>,
+}
+
+impl LoopbackTransport {
+    /// A fresh loopback transport.
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// How many handoffs this transport has carried.
+    pub fn count(&self) -> usize {
+        self.transfers.len()
+    }
+}
+
+impl HandoffTransport for LoopbackTransport {
+    fn transfer(
+        &mut self,
+        event: &HandoffEvent,
+        player_state_blob: &[u8],
+    ) -> Result<(), HandoffError> {
+        // Single process: the target executor already holds the restored state
+        // (ShardedRuntime::step does the copy). We only record the transfer.
+        self.transfers.push((
+            event.player,
+            event.from_shard,
+            event.to_shard,
+            player_state_blob.len(),
+        ));
+        Ok(())
+    }
+}
+
+/// Network handoff transport — the real cross-node "Bucket D" backend.
+///
+/// TODO(N3, multi-node): implement the wire transfer:
+///   1. Resolve `event.to_shard` → the owning node's address (from the
+///      [`crate::node`] discovery layer / a cluster routing table).
+///   2. Open an authenticated channel to that node (reuse the node keypair from
+///      `magnetite_seams::identity`).
+///   3. POST the `player_state_blob` to the target's `restore` endpoint and wait
+///      for an ack before releasing the player locally (no double-authority).
+///   4. Forward the player's WS connection to the target node's URL.
+///
+/// Until then it fails closed with [`HandoffError::Unimplemented`] so nothing
+/// silently pretends a cross-node move succeeded.
+#[derive(Debug, Default)]
+pub struct NetworkHandoffTransport;
+
+impl HandoffTransport for NetworkHandoffTransport {
+    fn transfer(
+        &mut self,
+        _event: &HandoffEvent,
+        _player_state_blob: &[u8],
+    ) -> Result<(), HandoffError> {
+        // Real networking is deliberately unbuilt; the seam above is what's real.
+        Err(HandoffError::Unimplemented)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -755,5 +890,206 @@ mod tests {
         };
         // Should not panic.
         mgr.apply_handoff(&ev, b"some_state_blob");
+    }
+
+    // ------------------------------------------------------------------ //
+    // Single-box multi-shard: real world across many shards, determinism  //
+    // ------------------------------------------------------------------ //
+
+    use magnetite_sdk::authority::{
+        AuthoritativeGame, GameExecutor, MatchConfig, NativeExecutor, RejectReason, StepCtx,
+    };
+
+    /// A minimal spatial game whose state is order-insensitive so a multi-shard
+    /// run is deterministic regardless of how players are distributed.
+    struct MoveGame {
+        moves: u64,
+    }
+    #[derive(serde::Serialize, serde::Deserialize, Clone)]
+    struct MoveSnap {
+        moves: u64,
+    }
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct MoveDelta {
+        moves: u64,
+    }
+    #[derive(serde::Serialize)]
+    struct MoveView {
+        moves: u64,
+    }
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct MoveCmd;
+
+    impl AuthoritativeGame for MoveGame {
+        type Snapshot = MoveSnap;
+        type Delta = MoveDelta;
+        type View = MoveView;
+        type Command = MoveCmd;
+        fn init(_cfg: &MatchConfig) -> Self {
+            MoveGame { moves: 0 }
+        }
+        fn validate(
+            &self,
+            _p: PlayerId,
+            _i: &Input,
+            _t: Tick,
+        ) -> Result<Vec<MoveCmd>, RejectReason> {
+            Ok(vec![MoveCmd])
+        }
+        fn step(&mut self, _ctx: &mut StepCtx, cmds: &[(PlayerId, MoveCmd)]) {
+            self.moves += cmds.len() as u64;
+        }
+        fn snapshot(&self) -> MoveSnap {
+            MoveSnap { moves: self.moves }
+        }
+        fn restore(s: &MoveSnap, _cfg: &MatchConfig) -> Self {
+            MoveGame { moves: s.moves }
+        }
+        fn delta(&self, since: &MoveSnap) -> MoveDelta {
+            MoveDelta {
+                moves: self.moves.saturating_sub(since.moves),
+            }
+        }
+        fn view_for(&self, _p: PlayerId) -> MoveView {
+            MoveView { moves: self.moves }
+        }
+    }
+
+    fn move_factory() -> ExecutorFactory {
+        Box::new(|_shard, cfg: &MatchConfig| {
+            Box::new(NativeExecutor::<MoveGame>::new(cfg.clone())) as Box<dyn GameExecutor>
+        })
+    }
+
+    fn sharded_cfg() -> MatchConfig {
+        MatchConfig {
+            topology: Topology::Sharded {
+                tick_hz: 20,
+                cell_size: 100.0,
+                max_per_shard: 64,
+            },
+            max_players: 512,
+            tick_hz: 20,
+            seed: 0xABCD_1234,
+            snapshot_every: 300,
+        }
+    }
+
+    /// Drive a world across multiple shards and return the ordered per-shard
+    /// state hashes plus the number of active shards touched.
+    fn run_multishard_world() -> (Vec<(ShardId, u64)>, usize) {
+        let mut rt = ShardedRuntime::new(sharded_cfg(), move_factory());
+        // Five players; spread them so they occupy different cells over time.
+        let players: Vec<PlayerId> = (1..=5).map(PlayerId::new).collect();
+        for p in &players {
+            rt.join(*p);
+        }
+
+        // Each tick, players drift east at different rates → multiple cell
+        // crossings → multiple live shards in one process.
+        for tick in 1u64..=6 {
+            let inputs: Vec<(PlayerId, Input)> = players
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    (
+                        *p,
+                        Input {
+                            mouse: MouseState {
+                                delta_x: 40.0 * (i as f64 + 1.0),
+                                delta_y: 0.0,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                    )
+                })
+                .collect();
+            rt.step(tick, &inputs);
+        }
+
+        let active = rt.active_shards();
+        let hashes: Vec<(ShardId, u64)> = active
+            .iter()
+            .map(|s| {
+                let bytes = rt.snapshot_shard(*s).unwrap_or_default();
+                (*s, fnv(&bytes))
+            })
+            .collect();
+        (hashes, active.len())
+    }
+
+    /// Tiny stable hash for comparing serialized shard snapshots in tests.
+    fn fnv(data: &[u8]) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in data {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h
+    }
+
+    #[test]
+    fn single_box_runs_many_shards() {
+        let (_hashes, active) = run_multishard_world();
+        assert!(
+            active > 1,
+            "world must fan out across more than one shard in one process (got {active})"
+        );
+    }
+
+    #[test]
+    fn multishard_run_is_deterministic() {
+        let (a, na) = run_multishard_world();
+        let (b, nb) = run_multishard_world();
+        assert_eq!(na, nb, "same inputs ⇒ same number of active shards");
+        assert_eq!(
+            a, b,
+            "same inputs ⇒ identical per-shard state hashes (determinism holds across shards)"
+        );
+    }
+
+    #[test]
+    fn loopback_transport_carries_every_handoff() {
+        let mut rt = ShardedRuntime::new(sharded_cfg(), move_factory());
+        let mut transport = LoopbackTransport::new();
+        let p = PlayerId::new(1);
+        rt.join(p);
+
+        // One big eastward move → at least one cell crossing → one handoff.
+        let inputs = vec![(
+            p,
+            Input {
+                mouse: MouseState {
+                    delta_x: 250.0,
+                    delta_y: 0.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )];
+        let out = rt.step_with_transport(1, &inputs, &mut transport);
+        assert_eq!(
+            transport.count(),
+            out.handoffs.len(),
+            "every handoff must pass through the transport seam"
+        );
+        assert!(out.handoffs.len() >= 1);
+    }
+
+    #[test]
+    fn network_transport_fails_closed() {
+        let mut t = NetworkHandoffTransport;
+        let ev = HandoffEvent {
+            player: PlayerId::new(1),
+            from_shard: ShardId::LOCAL,
+            to_shard: ShardId(1),
+            target_addr: Some("ws://other-node:9000".into()),
+        };
+        // The unbuilt network backend must never pretend success.
+        assert!(matches!(
+            t.transfer(&ev, b"blob"),
+            Err(HandoffError::Unimplemented)
+        ));
     }
 }
