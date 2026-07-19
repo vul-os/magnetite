@@ -265,7 +265,6 @@ pub async fn get_artifact(pool: &PgPool, artifact_id: Uuid) -> Result<GameArtifa
     .await?
     .ok_or_else(|| AppError::NotFound("Artifact not found".to_string()))
 }
-
 /// Resolve an artifact purely by its **content address** (its `sha256_hash`).
 ///
 /// This is the backend counterpart to the decentralized "a game IS the hash of
@@ -276,6 +275,8 @@ pub async fn get_artifact(pool: &PgPool, artifact_id: Uuid) -> Result<GameArtifa
 /// the central mirror of that content-addressed lookup.
 ///
 /// The hash is compared case-insensitively over its hex form.
+// No in-crate caller yet: consumed by the node/discovery surface.
+#[allow(dead_code)]
 pub async fn get_artifact_by_hash(pool: &PgPool, content_hash: &str) -> Result<GameArtifact> {
     let normalized = content_hash.trim().to_ascii_lowercase();
     sqlx::query_as::<_, GameArtifact>(

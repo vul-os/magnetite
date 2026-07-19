@@ -58,17 +58,14 @@ cd magnetite
 cp .env.example .env
 ```
 
-The default `.env` works for local development with no edits. All external
-credentials (Paystack, Wise, Resend) are empty by default — the backend
-returns clear HTTP 502 errors for the affected endpoints rather than silent
-failures.
+The default `.env` works for local development with no edits, and needs **no
+third-party accounts**: `PAYMENT_RAIL=mock` signs receipts offline and
+`COMMS_PROVIDER=builtin` needs no external service. Optional credentials
+(Resend, OAuth providers) are empty by default — the backend returns clear
+HTTP 502 errors for the affected endpoints rather than silent failures.
 
-To enable sandbox payment simulation add:
-
-```dotenv
-PAYMENTS_SANDBOX=true
-WISE_SANDBOX=true
-```
+PostgreSQL and Redis are the only services the backend actually requires; Docker
+Compose starts both for you.
 
 ---
 
@@ -78,8 +75,16 @@ WISE_SANDBOX=true
 docker compose up -d
 ```
 
-This starts: PostgreSQL, Redis, MediaMTX, the Backend API, the Frontend, and
-MailHog. The `magnetite-runtime` process runs separately (step 5).
+This starts: PostgreSQL, Redis, the Backend API, the Frontend, and MailHog. The
+`magnetite-runtime` process runs separately (step 5).
+
+MediaMTX is **not** started — it is optional, per-operator, and sits behind the
+`media` compose profile. Add it only if you want HLS live-stream watch on this
+node:
+
+```bash
+docker compose --profile media up -d
+```
 
 Wait for all services to be healthy:
 
@@ -406,8 +411,8 @@ ensure `wasm-build-runner.sh` reports `outcome: success` for the game UUID.
 - [streaming.md](streaming.md) — MediaMTX configuration, RTMP egress to
   Twitch/YouTube, HLS latency tuning
 - [environment-variables.md](environment-variables.md) — all env vars
-- [external-dependencies.md](external-dependencies.md) — what each Bucket-D
-  service enables and its honest absent behaviour
+- [external-dependencies.md](external-dependencies.md) — what is required
+  (Postgres, Redis) vs optional, and each service's honest absent behaviour
 - [../moat/play-in-browser.md](../moat/play-in-browser.md) — browser play
   flow deep-dive (web client protocol, renderer extension)
 - [../moat/quickstart.md](../moat/quickstart.md) — CLI developer walkthrough

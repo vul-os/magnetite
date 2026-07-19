@@ -7,7 +7,7 @@
 //   4. Season-scoped leaderboard    — key format for archived boards
 //   5. Search ranking               — SearchQuery parsing and result shapes
 //   6. Notification push shape      — WsNotification / NotificationBroadcast serialization
-//   7. Wise IBAN validation         — RecipientDetails with iban/bic fields, sandbox
+//   7. (removed) Wise IBAN validation — custodial payouts no longer exist
 //   8. NotificationType round-trip  — as_str / from_str symmetry
 //   9. Subscription upgrade request — UpgradeRequest deserialization
 //  10. Friend-request self-send guard — FriendService::send_request to self returns BadRequest
@@ -592,7 +592,7 @@ mod notification_type_tests {
             NotificationType::AchievementUnlocked,
             NotificationType::GameInvite,
             NotificationType::FriendRequest,
-            NotificationType::PayoutComplete,
+            NotificationType::PaymentSettled,
             NotificationType::SubscriptionRenewal,
             NotificationType::System,
         ];
@@ -624,7 +624,7 @@ mod notification_type_tests {
     }
 
     #[test]
-    fn payout_complete_notification_as_str_is_correct() {
-        assert_eq!(NotificationType::PayoutComplete.as_str(), "PAYOUT_COMPLETE");
+    fn settlement_notification_as_str_is_correct() {
+        assert_eq!(NotificationType::PaymentSettled.as_str(), "PAYMENT_SETTLED");
     }
 }

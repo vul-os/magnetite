@@ -419,7 +419,6 @@ fn libc_kill(pid: i32) -> i32 {
 // `RuntimeInstance` into the *same* `SessionAd` shape, so the central path can
 // emit ads to the phonebook too and both models converge — the first concrete
 // step of the demotion rather than a hard cutover.
-
 /// Build a decentralized [`SessionAd`](magnetite_seams::discovery::SessionAd)
 /// for a running instance, so it can be published to a `Discovery` provider
 /// instead of being polled out of the `runtime_instances` table.
@@ -427,6 +426,8 @@ fn libc_kill(pid: i32) -> i32 {
 /// Returns `None` for an instance that is not yet reachable (no `ws_endpoint`).
 /// `game_hash` is the content address of the game module (§3.3); `capacity` is
 /// the node's self-measured hardware budget (§4).
+// No in-crate caller yet: consumed by the node/discovery surface.
+#[allow(dead_code)]
 pub fn instance_session_ad(
     instance: &RuntimeInstance,
     game_hash: magnetite_seams::blobstore::Hash,

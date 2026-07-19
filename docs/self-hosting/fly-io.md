@@ -172,8 +172,14 @@ fly secrets set DISCORD_CLIENT_ID=your_discord_client_id
 fly secrets set DISCORD_CLIENT_SECRET=your_discord_client_secret
 fly secrets set GITHUB_CLIENT_ID=your_github_client_id
 fly secrets set GITHUB_CLIENT_SECRET=your_github_client_secret
-fly secrets set PAYSTACK_SECRET_KEY=your_paystack_key
-fly secrets set CIRCLE_API_KEY=your_circle_key
+```
+
+Payments need no secrets: the default `PAYMENT_RAIL=mock` issues deterministic
+signed receipts offline, and there is no fiat provider to configure. Set
+`OPERATOR_WALLET_PUBKEY` only if this node sells hosting or paid tiers:
+
+```bash
+fly secrets set OPERATOR_WALLET_PUBKEY=<hex ed25519 pubkey>
 ```
 
 ### 4. Deploy

@@ -79,9 +79,6 @@ EOT
       # {{- with secret "secret/data/magnetite/backend" }}
       # DATABASE_URL={{ .Data.data.database_url }}
       # JWT_SECRET={{ .Data.data.jwt_secret }}
-      # PAYSTACK_SECRET_KEY={{ .Data.data.paystack_secret_key }}
-      # WISE_API_TOKEN={{ .Data.data.wise_api_token }}
-      # WISE_PROFILE_ID={{ .Data.data.wise_profile_id }}
       # RESEND_API_KEY={{ .Data.data.resend_api_key }}
       # {{- end }}
       # EOT
@@ -97,14 +94,18 @@ EOT
         FRONTEND_URL         = "https://magnetite.gg"
         CORS_ALLOWED_ORIGINS = "https://magnetite.gg"
         REDIS_URL            = "redis://{{ env "NOMAD_UPSTREAM_ADDR_redis" }}"
+        # Optional: only set when THIS node hosts media.
         MEDIA_SERVER_BASE_URL = "http://{{ env "NOMAD_UPSTREAM_ADDR_mediamtx" }}"
         GAME_SERVER_WS_BASE  = "wss://runtime.magnetite.gg"
         EMAIL_PROVIDER       = "resend"
         EMAIL_FROM_ADDRESS   = "noreply@magnetite.gg"
         EMAIL_FROM_NAME      = "Magnetite"
         RUST_LOG             = "info"
-        PAYMENTS_SANDBOX     = "false"
-        WISE_SANDBOX         = "false"
+        # Non-custodial settlement (§3.6); `mock` needs no external service.
+        PAYMENT_RAIL         = "mock"
+        PROTOCOL_FEE_BPS     = "0"
+        # Pluggable comms (§3.5); `builtin` needs no external service.
+        COMMS_PROVIDER       = "builtin"
         ACCESS_TOKEN_EXPIRY  = "900"
         REFRESH_TOKEN_EXPIRY = "604800"
       }

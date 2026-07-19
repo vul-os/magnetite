@@ -1,7 +1,9 @@
 version: "3.9"
 
 services:
+  # Only applies when the optional `media` profile is started.
   mediamtx:
+    profiles: ["media"]
     environment:
       MTX_LOGLEVEL: debug
     volumes:
@@ -17,7 +19,9 @@ services:
       RUST_LOG: debug
       DATABASE_URL: postgres://magnetite:magnetite_dev_password@postgres:5432/magnetite
       REDIS_URL: redis://redis:6379
-      MEDIA_SERVER_BASE_URL: http://mediamtx:8888
+      # Offline-by-default dev: mock rail + builtin comms need no external service.
+      PAYMENT_RAIL: mock
+      COMMS_PROVIDER: builtin
     volumes:
       - ./backend:/app
       - cargo_cache:/app/target
@@ -25,8 +29,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      mediamtx:
         condition: service_healthy
 
   frontend:

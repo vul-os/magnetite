@@ -197,18 +197,31 @@ pub async fn get_room(pool: &PgPool, id: Uuid) -> Result<RoomRecord> {
 ///
 /// This is the ONLY sanctioned way to obtain a `ClientCred`: it fuses the three
 /// rules — pay first (§3.6), node mints (§3.1), provider renders (§3.5).
+///
+/// A PAID room additionally requires a PROVEN key ([`AccountKey::for_authorization`]).
+/// Admission to a paid room is a purchased grant bound to a keypair, so a
+/// naming-only derived key must not reach it — see [`AccountKey`]. Free rooms
+/// only ever address, so unlinked legacy accounts still join them.
 pub async fn join(
     pool: &PgPool,
     room_id: Uuid,
     user_id: Uuid,
-    user_key: PubKey,
+    user_key: AccountKey,
 ) -> Result<ClientCred> {
     let room = get_room(pool, room_id).await?;
-    gate::require_paid(pool, user_id, room.id, room.price_units).await?;
+
+    let key = if room.price_units > 0 {
+        // Fail closed BEFORE the receipt lookup: no proven key, no paid room.
+        let key = user_key.for_authorization()?;
+        gate::require_paid(pool, user_id, room.id, room.price_units).await?;
+        key
+    } else {
+        user_key.for_addressing()
+    };
 
     let p = provider();
     let addr = RoomAddr(room.addr.clone());
-    let cred = p.issue_join_credential(&user_key, &addr).await;
+    let cred = p.issue_join_credential(&key, &addr).await;
     Ok(p.render(&cred, room.media_host.as_deref()))
 }
 
@@ -219,14 +232,19 @@ pub async fn join(
 /// and gets back the same provider-agnostic credential a seam-native room would
 /// produce. That is what makes the old stack one provider rather than the only
 /// path — the endpoint's contract stops depending on it.
+///
+/// ADDRESSING ONLY: these legacy surfaces are already authorized by the caller's
+/// session (and by their own membership rows) before we get here; the key merely
+/// names the joiner to the provider. Anything that gates on payment or on key
+/// possession must go through [`join`], which demands a proven key.
 pub async fn credential_for(
     addr: &str,
     media_host: Option<&str>,
-    user_key: PubKey,
+    user_key: AccountKey,
 ) -> ClientCred {
     let p = provider();
     let cred = p
-        .issue_join_credential(&user_key, &RoomAddr(addr.to_string()))
+        .issue_join_credential(&user_key.for_addressing(), &RoomAddr(addr.to_string()))
         .await;
     p.render(&cred, media_host)
 }
@@ -257,16 +275,100 @@ pub async fn close_room(pool: &PgPool, room_id: Uuid, user_id: Uuid) -> Result<(
     Ok(())
 }
 
+/// Where an account's comms key came from — and therefore what it may be used for.
+///
+/// This distinction is a SECURITY boundary, not bookkeeping. See [`AccountKey`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyProvenance {
+    /// The account linked a real Ed25519 key it controls. Holding the matching
+    /// secret is provable, so this key may back an authorization decision.
+    Linked,
+    /// A key derived deterministically from the account id (SHA-256 of a
+    /// domain-separated account UUID). Nobody holds a secret for it — it is a
+    /// public, guessable *name*. It may address and route; it may never prove.
+    Derived,
+}
+
+/// The identity key a local account presents to comms, tagged with its provenance.
+///
+/// # Why this is a type and not a `PubKey`
+///
+/// A derived key NAMES an account, it does not PROVE one: it is a pure function
+/// of a UUID, so anyone who learns the account id can recompute it and no secret
+/// exists to sign with. Passing a bare `PubKey` around made "named" and "proven"
+/// indistinguishable at the call site, which is exactly the shape of an
+/// authorization bypass. The two uses are therefore separated in the type:
+///
+/// * [`AccountKey::for_addressing`] — infallible. Routing, room membership,
+///   display names, builtin-provider handles. Nothing is granted by knowing it.
+/// * [`AccountKey::for_authorization`] — fallible. Anything where possessing the
+///   key IS the credential: paid-room admission, receipt ownership, wallet
+///   binding, externally-minted scoped tokens. Derived keys are REJECTED here.
+///
+/// Legacy accounts that never linked a key keep working on the demoted builtin
+/// path (free rooms, chat, voice) because that path only ever addresses.
+///
+/// TODO(identity): drop [`KeyProvenance::Derived`] entirely once every account
+/// carries a real pubkey; then this type collapses back to a `PubKey`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AccountKey {
+    key: PubKey,
+    provenance: KeyProvenance,
+}
+
+impl AccountKey {
+    /// A proven key the account demonstrably controls.
+    pub fn linked(key: PubKey) -> Self {
+        Self { key, provenance: KeyProvenance::Linked }
+    }
+
+    /// A naming-only key derived from an account id. Cannot authorize.
+    pub fn derived(user_id: Uuid) -> Self {
+        Self { key: derived_key(user_id), provenance: KeyProvenance::Derived }
+    }
+
+    pub fn provenance(&self) -> KeyProvenance {
+        self.provenance
+    }
+
+    /// True only for keys whose secret the account actually holds.
+    pub fn is_proven(&self) -> bool {
+        self.provenance == KeyProvenance::Linked
+    }
+
+    /// The key, for ROUTING/ADDRESSING only (room handles, display, membership).
+    ///
+    /// Safe for every account because knowing this key grants nothing.
+    pub fn for_addressing(&self) -> PubKey {
+        self.key
+    }
+
+    /// The key, for AUTHORIZATION — where holding it is the credential.
+    ///
+    /// Fails closed for derived keys: they are guessable from a public account
+    /// id, so honouring one would let anyone who knows a UUID act as that user.
+    pub fn for_authorization(&self) -> Result<PubKey> {
+        match self.provenance {
+            KeyProvenance::Linked => Ok(self.key),
+            KeyProvenance::Derived => Err(AppError::Validation(DERIVED_KEY_CANNOT_AUTHORIZE.to_string())),
+        }
+    }
+}
+
+/// Refusal message when a naming-only key is offered as a credential.
+pub const DERIVED_KEY_CANNOT_AUTHORIZE: &str =
+    "this account has no linked identity key — link a wallet/keypair before \
+     using a credential that grants access (a derived account key names you, \
+     it cannot prove you)";
+
 /// The identity key a local account presents to comms.
 ///
 /// Prefers the account's linked wallet/identity key (keypair identity is the
-/// default under §3.1); falls back to a deterministic key derived from the
-/// account id so the demoted builtin path keeps working for legacy accounts
-/// that have not linked a key yet.
-///
-/// TODO(identity): drop the derived fallback once every account carries a
-/// pubkey — a derived key proves nothing, it only names the account.
-pub async fn user_key(pool: &PgPool, user_id: Uuid) -> PubKey {
+/// default under §3.1); falls back to a naming-only derived key so the demoted
+/// builtin path keeps working for legacy accounts that have not linked one.
+/// The returned [`AccountKey`] carries which of the two it is — callers must go
+/// through [`AccountKey::for_authorization`] before treating it as a credential.
+pub async fn user_key(pool: &PgPool, user_id: Uuid) -> AccountKey {
     let linked: Option<(Option<String>,)> =
         sqlx::query_as("SELECT wallet_address FROM users WHERE id = $1")
             .bind(user_id)
@@ -278,13 +380,17 @@ pub async fn user_key(pool: &PgPool, user_id: Uuid) -> PubKey {
         .and_then(|r| r.0)
         .and_then(|h| PubKey::from_hex(h.trim_start_matches("0x")).ok())
     {
-        return pk;
+        return AccountKey::linked(pk);
     }
-    derived_key(user_id)
+    AccountKey::derived(user_id)
 }
 
 /// Deterministic, non-secret key naming a local account.
-fn derived_key(user_id: Uuid) -> PubKey {
+///
+/// PUBLIC INPUT, NO SECRET: this is `SHA-256(domain ‖ account uuid)`. It exists
+/// so unlinked accounts still have a stable comms handle. Never authorize on it
+/// — use [`AccountKey`], which enforces that at the type level.
+pub(crate) fn derived_key(user_id: Uuid) -> PubKey {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
     h.update(b"magnetite/comms/derived-account-key/v1");

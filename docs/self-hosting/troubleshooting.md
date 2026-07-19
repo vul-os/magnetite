@@ -2,55 +2,49 @@
 
 Solutions for common issues when self-hosting Magnetite.
 
-## Subscription Issues
+## Payment Issues
 
-### Payments not processing
+Payments are non-custodial: the buyer pays the seller wallet-to-wallet through the
+`PaymentRail` seam and the node holds no funds. There is no payment provider
+account, no deposit, no withdrawal and no payout to debug. What can go wrong is
+receipt verification.
 
-**Symptoms**: Users cannot subscribe, payments fail silently.
+### Purchases or subscriptions rejected
+
+**Symptoms**: A purchase or paid tier is refused even though payment was made.
 
 **Solutions**:
 
-1. Verify payment provider credentials are set:
+1. Check the configured rail:
    ```bash
-   # At least one provider must be configured
-   PAYSTACK_SECRET_KEY=your_paystack_key
-   CIRCLE_API_KEY=your_circle_key
-   SUBSCRIPTION_WEBHOOK_SECRET=your_webhook_secret
+   PAYMENT_RAIL=mock          # default — deterministic signed receipts, offline
+   PROTOCOL_FEE_BPS=0         # default — fee rides on top of the subtotal
+   ```
+   `mock` needs no external service. `CHAIN_RPC_URL`, `CHAIN_ID` and
+   `STABLECOIN_ADDRESS` are unused placeholders — no real chain rail is
+   implemented yet, so setting them changes nothing.
+
+2. The node re-verifies the rail signature on every access, so a receipt row in
+   the database is not sufficient. Check the logs for verification failures:
+   ```bash
+   docker compose logs api | grep -i receipt
    ```
 
-2. Check webhook configuration:
-   - Ensure webhook endpoints are reachable from your payment provider
-   - Verify `SUBSCRIPTION_WEBHOOK_SECRET` matches your provider's webhook secret
-   - Webhook URLs typically follow: `https://your-domain.com/api/webhooks/subscription`
+3. If this node sells hosting or paid tiers, confirm `OPERATOR_WALLET_PUBKEY` is
+   set to the hex Ed25519 pubkey that should receive the operator split.
 
-3. Review payment provider dashboard for:
-   - API key status (active/suspended)
-   - Webhook delivery failures
-   - Transaction logs for specific error codes
+### Entitlement missing after a purchase
 
-### Webhook not receiving events
-
-**Symptoms**: Subscription status doesn't update after payment.
+**Symptoms**: The buyer paid but does not have access.
 
 **Solutions**:
 
-1. Verify webhook secret matches your payment provider configuration
-2. Check logs for incoming webhook requests:
-   ```bash
-   docker compose logs api | grep webhook
-   ```
-3. Ensure your deployment is accessible from the internet on port 443
-4. Check your payment provider's webhook delivery logs for failure reasons
-
-### Subscription shows as "past_due"
-
-**Symptoms**: User paid but subscription still shows past due status.
-
-**Solutions**:
-
-1. Webhook may not have been received - check webhook logs
-2. Manually verify payment in payment provider dashboard
-3. Update subscription status manually via admin interface if needed
+1. The signed receipt *is* the entitlement. Confirm the receipt exists and
+   verifies — a database row alone never grants access.
+2. Confirm the receipt has not been voided. A refund voids the receipt and
+   revokes the entitlement; no balance is moved, so there is nothing to reconcile
+   on a ledger.
+3. Confirm the buyer's linked wallet address matches the receipt's buyer pubkey.
 
 ## Database Issues
 

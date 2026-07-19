@@ -31,7 +31,6 @@ pub(super) fn nav(active: &str) -> Vec<Nav<'static>> {
         ("/superadmin/users", "Users", "users"),
         ("/superadmin/games", "Games", "games"),
         ("/superadmin/transactions", "Money", "money"),
-        ("/superadmin/payouts", "Payouts", "payouts"),
         ("/superadmin/billing", "Billing compliance", "billing"),
         ("/superadmin/settings", "Platform settings", "settings"),
         ("/superadmin/moderation", "Moderation", "moderation"),
@@ -156,7 +155,6 @@ pub async fn overview(
         .count();
     let an = analytics::overview(pool).await;
 
-    let platform_rev = sum.platform_session_revenue + sum.platform_store_revenue;
 
     let compliance_pill = if failing > 0 {
         pill("bad", &format!("{failing} failing"))
@@ -173,12 +171,12 @@ pub async fn overview(
 <div class=\"grid\">\
 {users}{devs}{banned}{games}{pending}{active}\
 </div>\
-<h2>Money</h2><div class=\"grid\">\
-<div class=\"card\"><div class=\"k\">Platform revenue</div><div class=\"v accent\">{prev}</div></div>\
-<div class=\"card\"><div class=\"k\">Developer earnings</div><div class=\"v\">{dev_earn}</div></div>\
-<div class=\"card\"><div class=\"k\">Paid out</div><div class=\"v sm\">{paid}</div></div>\
-<div class=\"card\"><div class=\"k\">Pending payouts</div><div class=\"v sm amber\">{pending_pay}</div></div>\
-<div class=\"card\"><div class=\"k\">Wallet liability</div><div class=\"v sm\">{liab}</div></div>\
+<h2>Settlement</h2><div class=\"grid\">\
+<div class=\"card\"><div class=\"k\">Gross sales</div><div class=\"v accent\">{gross}</div></div>\
+<div class=\"card\"><div class=\"k\">Settled to developers</div><div class=\"v\">{dev_earn}</div></div>\
+<div class=\"card\"><div class=\"k\">Protocol fees</div><div class=\"v sm\">{fees}</div></div>\
+<div class=\"card\"><div class=\"k\">Voided receipts</div><div class=\"v sm amber\">{voided}</div></div>\
+<div class=\"card\"><div class=\"k\">Custodial liability</div><div class=\"v sm ok\">{liab}</div></div>\
 </div>\
 <h2>Health</h2><div class=\"grid\">\
 <div class=\"card\"><div class=\"k\">Billing compliance</div><div class=\"v sm\">{cpill}</div>\
@@ -197,11 +195,11 @@ pub async fn overview(
         games = kpi("Games", &k.games.to_string(), ""),
         pending = kpi("Pending review", &k.pending_games.to_string(), if k.pending_games > 0 { "amber" } else { "" }),
         active = kpi("Active games", &k.active_games.to_string(), ""),
-        prev = money(platform_rev),
-        dev_earn = money(sum.developer_session_revenue),
-        paid = money(sum.total_paid_out),
-        pending_pay = money(sum.pending_payouts),
-        liab = money(sum.wallet_liability),
+        gross = money(sum.gross_store_revenue),
+        dev_earn = money(sum.developer_settled),
+        fees = money(sum.protocol_fees),
+        voided = sum.voided_receipts,
+        liab = money(sum.custodial_liability),
         cpill = compliance_pill,
         req24 = an.last_24h,
         err = an.error_rate_pct,
@@ -252,7 +250,7 @@ pub async fn users_list(
 
     let rows = sqlx::query_as::<_, UserRow>(
         "SELECT u.id, u.username, u.email, u.is_admin, u.is_developer, u.is_banned, u.created_at,
-                COALESCE((SELECT balance FROM wallet_balances w WHERE w.user_id=u.id AND w.currency='USD'),0) AS balance
+                COALESCE(u.wallet_address,'') AS wallet_address
          FROM users u
          WHERE ($1 = '' OR u.username ILIKE $2 OR u.email ILIKE $2)
          ORDER BY u.created_at DESC
@@ -349,16 +347,11 @@ struct UserDetail {
 }
 
 #[derive(FromRow)]
-struct PayoutRow {
-    amount: Decimal,
-    status: String,
+struct ReceiptRow {
+    total: i64,
+    voided: bool,
+    kind: String,
     created_at: DateTime<Utc>,
-}
-
-#[derive(FromRow)]
-struct WalletRow {
-    currency: String,
-    balance: Decimal,
 }
 
 pub async fn user_detail(
@@ -389,51 +382,56 @@ pub async fn user_detail(
         }
     };
 
-    let wallets = sqlx::query_as::<_, WalletRow>(
-        "SELECT currency, balance FROM wallet_balances WHERE user_id = $1 ORDER BY currency",
+    // Non-custodial: a user has a linked wallet ADDRESS (we hold no balance for
+    // them) and a history of signed receipts (transfers we witnessed).
+    let linked_wallet = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT wallet_address FROM users WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+    .flatten();
+
+    let receipts = sqlx::query_as::<_, ReceiptRow>(
+        "SELECT total, voided, kind, created_at FROM payment_receipts \
+         WHERE buyer_id = $1 ORDER BY created_at DESC LIMIT 8",
     )
     .bind(id)
     .fetch_all(pool)
     .await
     .unwrap_or_default();
 
-    let payouts = sqlx::query_as::<_, PayoutRow>(
-        "SELECT amount, status, created_at FROM payouts WHERE user_id = $1 ORDER BY created_at DESC LIMIT 8",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
-
-    let earned = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(developer_share),0) FROM game_revenue WHERE developer_id = $1 AND status='completed'",
+    let settled = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(total),0)::bigint FROM payment_receipts \
+         WHERE buyer_id = $1 AND voided = false",
     )
     .bind(id)
     .fetch_one(pool)
     .await
-    .unwrap_or(Decimal::ZERO);
+    .unwrap_or(0);
 
-    let wallet_html = if wallets.is_empty() {
-        "<span class=\"muted\">no wallet</span>".to_string()
-    } else {
-        wallets
-            .iter()
-            .map(|w| format!("{} <b>{}</b>", esc(&w.currency), money(w.balance)))
-            .collect::<Vec<_>>()
-            .join(" · ")
+    let wallet_html = match linked_wallet.as_deref() {
+        Some(a) if !a.is_empty() => format!("<code>{}</code>", esc(a)),
+        _ => "<span class=\"muted\">no linked wallet</span>".to_string(),
     };
 
-    let mut payout_rows = String::new();
-    for p in &payouts {
-        payout_rows.push_str(&format!(
+    let mut receipt_rows = String::new();
+    for r in &receipts {
+        receipt_rows.push_str(&format!(
             "<tr><td>{}</td><td>{}</td><td class=\"muted\">{}</td></tr>",
-            money(p.amount),
-            pill(payout_pill(&p.status), &p.status),
-            dt(p.created_at)
+            r.total,
+            if r.voided {
+                pill("bad", "voided")
+            } else {
+                pill("ok", &esc(&r.kind))
+            },
+            dt(r.created_at)
         ));
     }
-    if payouts.is_empty() {
-        payout_rows.push_str("<tr><td colspan=\"3\" class=\"muted\">No payouts.</td></tr>");
+    if receipts.is_empty() {
+        receipt_rows.push_str("<tr><td colspan=\"3\" class=\"muted\">No receipts.</td></tr>");
     }
 
     let csrf = esc(&sess.csrf);
@@ -452,7 +450,7 @@ pub async fn user_detail(
 <div class=\"card\"><div class=\"k\">Status</div><div class=\"v sm\">{status}</div></div>\
 <div class=\"card\"><div class=\"k\">Roles</div><div class=\"v sm\">{roles}</div></div>\
 <div class=\"card\"><div class=\"k\">Wallet</div><div class=\"v sm\">{wallet}</div></div>\
-<div class=\"card\"><div class=\"k\">Accrued earnings</div><div class=\"v sm\">{earned}</div></div>\
+<div class=\"card\"><div class=\"k\">Settled (units)</div><div class=\"v sm\">{earned}</div></div>\
 </div>\
 {ban_note}\
 <h2>Actions</h2>\
@@ -473,8 +471,8 @@ pub async fn user_detail(
 <input type=\"hidden\" name=\"value\" value=\"{toggle_dev}\">\
 <button class=\"btn\" type=\"submit\">{dev_label}</button></form>\
 </div>\
-<h2>Recent payouts</h2>\
-<table><tr><th>Amount</th><th>Status</th><th>When</th></tr>{payout_rows}</table>",
+<h2>Recent receipts</h2>\
+<table><tr><th>Units</th><th>Kind</th><th>When</th></tr>{receipt_rows}</table>",
         user = esc(&u.username),
         flash = flash(&fq),
         email = esc(&u.email),
@@ -503,7 +501,7 @@ pub async fn user_detail(
             v.join(" ")
         },
         wallet = wallet_html,
-        earned = money(earned),
+        earned = settled,
         ban_note = match &u.ban_reason {
             Some(r) if u.is_banned => format!("<div class=\"flash err\">Banned: {}</div>", esc(r)),
             _ => String::new(),
@@ -525,17 +523,9 @@ pub async fn user_detail(
         } else {
             "Grant developer"
         },
-        payout_rows = payout_rows,
+        receipt_rows = receipt_rows,
     );
     Html(html::page(&u.username, &nav("users"), &body)).into_response()
-}
-
-pub(super) fn payout_pill(status: &str) -> &'static str {
-    match status {
-        "completed" | "paid" => "ok",
-        "failed" | "cancelled" => "bad",
-        _ => "warn",
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -869,20 +859,22 @@ pub async fn transactions(State(state): State<Arc<SuperAdminState>>) -> Html<Str
 
     let body = format!(
         "<h1>Money flow</h1>\
+<p class=\"sub\">Non-custodial: every figure below is a transfer we WITNESSED, not funds we held. \
+Sales settle wallet-to-wallet and the signed receipt is the record.</p>\
 <div class=\"grid\">\
-<div class=\"card\"><div class=\"k\">Gross session revenue</div><div class=\"v sm\">{gsr}</div></div>\
-<div class=\"card\"><div class=\"k\">Platform (15%)</div><div class=\"v sm accent\">{psr}</div></div>\
-<div class=\"card\"><div class=\"k\">Developer (85%)</div><div class=\"v sm\">{dsr}</div></div>\
-<div class=\"card\"><div class=\"k\">Store revenue</div><div class=\"v sm\">{gst}</div></div>\
-<div class=\"card\"><div class=\"k\">Store platform (30%)</div><div class=\"v sm accent\">{pst}</div></div>\
+<div class=\"card\"><div class=\"k\">Gross sales</div><div class=\"v sm\">{gst}</div></div>\
+<div class=\"card\"><div class=\"k\">Settled to developers</div><div class=\"v sm\">{dsr}</div></div>\
+<div class=\"card\"><div class=\"k\">Protocol fees</div><div class=\"v sm accent\">{pst}</div></div>\
+<div class=\"card\"><div class=\"k\">Settled units (receipts)</div><div class=\"v sm\">{units}</div></div>\
+<div class=\"card\"><div class=\"k\">Voided receipts</div><div class=\"v sm amber\">{voided}</div></div>\
 </div>\
 <h2>Recent transactions</h2>\
 <table><tr><th>When</th><th>User</th><th>Game</th><th>Type</th><th>Amount</th></tr>{rows}</table>",
-        gsr = money(sum.gross_session_revenue),
-        psr = money(sum.platform_session_revenue),
-        dsr = money(sum.developer_session_revenue),
+        dsr = money(sum.developer_settled),
         gst = money(sum.gross_store_revenue),
-        pst = money(sum.platform_store_revenue),
+        pst = money(sum.protocol_fees),
+        units = sum.settled_units,
+        voided = sum.voided_receipts,
         rows = rows,
     );
     Html(html::page("Money", &nav("money"), &body))
@@ -952,7 +944,7 @@ pub async fn billing_page(State(state): State<Arc<SuperAdminState>>) -> Html<Str
 
     let body = format!(
         "<h1>Billing-model compliance</h1>\
-<p class=\"sub\">Sessions split 15/85 · store sales split 30/70 · payouts ≤ accrued · subscriptions = list price · wallets reconcile.</p>\
+<p class=\"sub\">Developer takes the full subtotal · protocol fee = PROTOCOL_FEE_BPS (default 0) · every paid entitlement is receipt-backed · receipts verify · custody stays dormant.</p>\
 {headline}{cards}",
         headline = headline,
         cards = cards,

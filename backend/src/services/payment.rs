@@ -771,6 +771,122 @@ pub async fn has_hosting_access(pool: &PgPool, user_id: Uuid, server_id: Uuid) -
     Ok(count > 0)
 }
 
+// ── Receipt-backed entitlement checks ───────────────────────────────────────
+//
+// An entitlement is a SIGNATURE, never a row. Every check below reconstructs the
+// stored receipt and re-verifies it against the active rail, so editing the
+// database directly grants nothing. All paths fail CLOSED.
+
+/// Reconstruct the newest non-voided receipt for `(buyer_id, item_id)`.
+///
+/// Returns `Ok(None)` when there is no such receipt OR when the stored row is
+/// malformed — a row that cannot be parsed back into the receipt it claims to be
+/// is not a receipt.
+pub async fn load_receipt(
+    pool: &PgPool,
+    buyer_id: Uuid,
+    item_id: Uuid,
+) -> Result<Option<Receipt>> {
+    let row: Option<(String, i64, i64, serde_json::Value, String, String, String)> =
+        sqlx::query_as(
+            r#"
+            SELECT buyer_pubkey, total, protocol_fee, payouts, nonce, rail_pubkey, sig
+              FROM payment_receipts
+             WHERE buyer_id = $1
+               AND item_id  = $2
+               AND voided   = false
+             ORDER BY created_at DESC
+             LIMIT 1
+            "#,
+        )
+        .bind(buyer_id)
+        .bind(item_id)
+        .fetch_optional(pool)
+        .await?;
+
+    let Some((buyer, total, fee, payouts, nonce, rail_pk, sig)) = row else {
+        return Ok(None);
+    };
+
+    let Ok(buyer) = PubKey::from_hex(&buyer) else {
+        return Ok(None);
+    };
+    let Ok(rail_pubkey) = PubKey::from_hex(&rail_pk) else {
+        return Ok(None);
+    };
+    let Some(nonce) = hex::decode(&nonce)
+        .ok()
+        .and_then(|b| <[u8; 32]>::try_from(b).ok())
+    else {
+        return Ok(None);
+    };
+    let Some(sig) = hex::decode(&sig)
+        .ok()
+        .and_then(|b| <[u8; 64]>::try_from(b).ok())
+    else {
+        return Ok(None);
+    };
+
+    let empty = Vec::new();
+    let mut parsed = Vec::new();
+    for p in payouts.as_array().unwrap_or(&empty) {
+        let (Some(w), Some(a)) = (
+            p.get("wallet").and_then(|v| v.as_str()),
+            p.get("amount").and_then(|v| v.as_u64()),
+        ) else {
+            return Ok(None);
+        };
+        let Ok(wallet) = PubKey::from_hex(w) else {
+            return Ok(None);
+        };
+        parsed.push(PayOut { wallet, amount: a });
+    }
+
+    Ok(Some(Receipt {
+        buyer,
+        payouts: parsed,
+        protocol_fee: fee.max(0) as u64,
+        total: total.max(0) as u64,
+        nonce,
+        rail_pubkey,
+        sig: Sig(sig),
+    }))
+}
+
+/// Whether `buyer_id` holds a verified, non-voided receipt for `item_id`
+/// covering at least `min_units`.
+///
+/// Fails CLOSED on any error. Also refuses receipts bound to the account's
+/// naming-only derived key (see `comms::AccountKey`) — such a receipt could only
+/// come from a forged or back-filled row, because checkout always binds a
+/// receipt to a LINKED wallet.
+pub async fn has_verified_receipt(
+    pool: &PgPool,
+    buyer_id: Uuid,
+    item_id: Uuid,
+    min_units: u64,
+) -> bool {
+    if min_units == 0 {
+        return true;
+    }
+    match load_receipt(pool, buyer_id, item_id).await {
+        Ok(Some(r)) => {
+            if r.buyer == crate::comms::derived_key(buyer_id) {
+                tracing::error!(
+                    "payments: receipt for item {item_id} is bound to a DERIVED account key — refusing"
+                );
+                return false;
+            }
+            r.total >= min_units && verify_receipt(&r)
+        }
+        Ok(None) => false,
+        Err(e) => {
+            tracing::error!("payments: receipt lookup failed for item {item_id}: {e}");
+            false
+        }
+    }
+}
+
 /// Build the split for a single-seller sale: the developer takes the whole
 /// subtotal, an optional operator takes a hosting cut, protocol fee rides on top.
 pub fn sale_split(developer: PubKey, amount: u64, operator: Option<(PubKey, u64)>) -> PaymentSplit {

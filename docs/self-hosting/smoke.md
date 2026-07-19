@@ -18,7 +18,7 @@ printed to stdout with colour highlights.
 
 | Step | What it proves | Prereqs | Skip condition |
 |------|---------------|---------|----------------|
-| 1 | `docker-compose.yml` parses; postgres, redis, backend, frontend, mediamtx services all defined | `docker` on PATH | `docker` / `docker compose` absent |
+| 1 | `docker-compose.yml` parses; postgres, redis, backend, frontend services all defined (plus `mediamtx`, defined but behind the optional `media` profile) | `docker` on PATH | `docker` / `docker compose` absent |
 | 2 | `game-template-authoritative` compiles to `wasm32-wasip1` with the `mag_*` ABI | `cargo`, `rustup`, Rust nightly wasm32-wasip1 target | `SKIP_WASM_BUILD=1`, or `cargo`/`rustup` absent, or target unavailable |
 | 3 | Full-stack WebSocket tests: real GameServer + tokio-tungstenite clients — Welcome, Snapshot, Delta, Ack, convergence, replay | `cargo` | `cargo` absent |
 | 4 | `verify_replay` returns `Clean` over 20 ticks (in-proc determinism proof) | `cargo` | `cargo` absent |

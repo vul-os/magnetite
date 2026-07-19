@@ -1,9 +1,41 @@
-# Live Streaming with MediaMTX
+# Live Streaming with MediaMTX (optional)
 
-Magnetite uses [MediaMTX](https://github.com/bluenviron/mediamtx) as its media
-plane for live-stream broadcast and watch. This guide covers the full flow from
-a streamer going live via RTMP to a viewer watching via HLS, plus the relevant
-configuration knobs.
+[MediaMTX](https://github.com/bluenviron/mediamtx) is **one optional** media plane
+for live-stream broadcast and watch. It is not required: the backend has no
+dependency on it, `MEDIA_SERVER_BASE_URL` is empty by default, and in
+`docker-compose.yml` the `mediamtx` service sits behind the `media` compose
+profile, so it only starts when you ask for it:
+
+```bash
+docker compose --profile media up
+```
+
+Media is **per-operator**. Every operator runs their own media server — there is no
+single global one, and a stream/room record carries its own `media_host`, which
+always wins over `MEDIA_SERVER_BASE_URL`.
+
+This guide covers the full flow from a streamer going live via RTMP to a viewer
+watching via HLS, plus the relevant configuration knobs.
+
+---
+
+## Alternatives: pluggable comms providers
+
+Streaming, voice and video sit behind the `CommsProvider` seam, selected with
+`COMMS_PROVIDER`. Providers that bring their own media plane need no MediaMTX at
+all:
+
+| `COMMS_PROVIDER` | Media plane |
+|------------------|-------------|
+| `builtin` (default) | The demoted in-house stack — optionally MediaMTX for HLS |
+| `jitsi` | Jitsi's own SFU |
+| `livekit` | LiveKit's own SFU |
+| `owncast` | Owncast's own live/VOD server |
+| `matrix` | Text / DMs / presence (no media plane of its own) |
+
+A provider whose service is not configured falls back to `builtin` with a warning.
+Only choose the MediaMTX path below if you are running `builtin` and want HLS
+broadcast on this node.
 
 ---
 
@@ -33,9 +65,10 @@ Streamer (OBS / FFmpeg)
       (HLS.js / native <video>)
 ```
 
-MediaMTX and the backend communicate entirely within the Docker Compose network
-(`magnetite` bridge). Only the ports listed in `docker-compose.yml` are exposed
-to the host.
+When the `media` profile is up, MediaMTX and the backend communicate entirely
+within the Docker Compose network (`magnetite` bridge). Only the ports listed in
+`docker-compose.yml` are exposed to the host. The backend declares no
+`depends_on` for `mediamtx` — it starts and runs fine without it.
 
 ---
 
@@ -206,6 +239,9 @@ access. The WHIP negotiation happens over HTTP POST; media flows over UDP.
 ## Verifying MediaMTX is running
 
 ```bash
+# Started only with the media profile:
+#   docker compose --profile media up -d
+
 # REST API — returns global config JSON
 curl -s http://localhost:8888/v3/config/global/get | jq '.loglevel'
 # → "info"
@@ -223,7 +259,9 @@ docker compose ps mediamtx
 
 ### OBS fails to connect
 
-- Confirm the `mediamtx` container is running: `docker compose ps mediamtx`
+- Confirm the `mediamtx` container is running: `docker compose ps mediamtx`. If it
+  is missing entirely, you did not start the `media` profile —
+  `docker compose --profile media up -d mediamtx`.
 - Check port 1935 is not already used: `lsof -i :1935`
 - Try `rtmp://127.0.0.1:1935/live` (explicit IPv4 if `localhost` resolves IPv6)
 
@@ -236,7 +274,9 @@ docker compose ps mediamtx
 
 ### Backend returns HTTP 503 for `/streams/:id/hls`
 
-`MEDIA_SERVER_BASE_URL` is not set or is empty. Set it in `.env`:
+`MEDIA_SERVER_BASE_URL` is not set or is empty — this is the default, and it is
+the correct state if you are not running a media server. To enable HLS watch on
+this node, start the `media` profile and set it in `.env`:
 
 ```dotenv
 MEDIA_SERVER_BASE_URL=http://mediamtx:8888

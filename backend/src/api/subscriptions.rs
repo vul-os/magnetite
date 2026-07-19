@@ -72,7 +72,6 @@ pub struct SubscriptionTierDb {
     pub name: String,
     pub slug: String,
     pub price_usdc: Decimal,
-    pub price_zar: Decimal,
     pub features: serde_json::Value,
     pub max_games: Option<i32>,
     pub is_active: bool,
@@ -84,7 +83,6 @@ pub struct SubscriptionTierResponse {
     pub name: String,
     pub slug: String,
     pub price_usdc: Decimal,
-    pub price_zar: Decimal,
     pub features: serde_json::Value,
     pub max_games: Option<i32>,
 }
@@ -136,8 +134,10 @@ pub type DowngradeRequest = UpgradeRequest;
 #[derive(Debug, Serialize)]
 pub struct ChangeTierResponse {
     pub subscription: UserSubscriptionResponse,
-    /// Prorated ZAR amount charged (positive) or credited (negative) for this tier change.
-    pub prorated_amount_zar: Decimal,
+    /// Prorated stablecoin amount owed (positive) or forgone (negative) for this
+    /// tier change. Nothing is charged or credited here — a positive delta means the
+    /// subscriber must present a receipt for their own wallet→wallet top-up.
+    pub prorated_amount_usdc: Decimal,
     /// Human-readable description of what happened.
     pub message: String,
 }
@@ -162,7 +162,7 @@ pub async fn list_tiers(
     State(pool): State<PgPool>,
 ) -> Result<Json<response::ApiResponse<Vec<SubscriptionTierResponse>>>> {
     let tiers = sqlx::query_as::<_, SubscriptionTierDb>(
-        "SELECT id, name, slug, price_usdc, price_zar, features, max_games, is_active
+        "SELECT id, name, slug, price_usdc, features, max_games, is_active
          FROM subscription_tiers WHERE is_active = true ORDER BY price_usdc ASC",
     )
     .fetch_all(&pool)
@@ -176,7 +176,6 @@ pub async fn list_tiers(
             name: t.name,
             slug: t.slug,
             price_usdc: t.price_usdc,
-            price_zar: t.price_zar,
             features: t.features,
             max_games: t.max_games,
         })
@@ -206,7 +205,7 @@ pub async fn get_my_subscription(
     match subscription {
         Some(sub) => {
             let tier = sqlx::query_as::<_, SubscriptionTierDb>(
-                "SELECT id, name, slug, price_usdc, price_zar, features, max_games, is_active
+                "SELECT id, name, slug, price_usdc, features, max_games, is_active
                  FROM subscription_tiers WHERE id = $1",
             )
             .bind(sub.tier_id)
@@ -221,7 +220,6 @@ pub async fn get_my_subscription(
                     name: tier.name,
                     slug: tier.slug,
                     price_usdc: tier.price_usdc,
-                    price_zar: tier.price_zar,
                     features: tier.features,
                     max_games: tier.max_games,
                 },
@@ -241,7 +239,7 @@ pub async fn subscribe(
     Json(payload): Json<SubscribeRequest>,
 ) -> Result<Json<response::ApiResponse<UserSubscriptionResponse>>> {
     let tier = sqlx::query_as::<_, SubscriptionTierDb>(
-        "SELECT id, name, slug, price_usdc, price_zar, features, max_games, is_active
+        "SELECT id, name, slug, price_usdc, features, max_games, is_active
          FROM subscription_tiers WHERE id = $1 AND is_active = true",
     )
     .bind(payload.tier_id)
@@ -349,11 +347,11 @@ pub async fn subscribe(
         let tx_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO subscription_transactions (id, user_subscription_id, amount, currency, status, payment_provider, payment_id, created_at)
-             VALUES ($1, $2, $3, 'ZAR', 'completed', $4, $5, NOW())",
+             VALUES ($1, $2, $3, 'USDC', 'completed', $4, $5, NOW())",
         )
         .bind(tx_id)
         .bind(subscription_id)
-        .bind(tier.price_zar)
+        .bind(tier.price_usdc)
         .bind(&provider)
         .bind(&verified_payment_id)
         .execute(&pool)
@@ -406,7 +404,6 @@ pub async fn subscribe(
             name: tier.name,
             slug: tier.slug,
             price_usdc: tier.price_usdc,
-            price_zar: tier.price_zar,
             features: tier.features,
             max_games: tier.max_games,
         },
@@ -500,9 +497,10 @@ pub async fn cancel_subscription(
 
 /// Core logic for tier changes (upgrade and downgrade).
 ///
-/// Proration: prorated_delta = (new_price_zar − old_price_zar) × remaining_fraction.
+/// Proration: prorated_delta = (new_price_usdc − old_price_usdc) × remaining_fraction.
 /// Positive delta (upgrade)  → requires payment_id covering the top-up charge.
-/// Negative delta (downgrade) → records a credit transaction (nothing is refunded on-node).
+/// Negative delta (downgrade) → recorded for the record only; there is no balance to
+/// credit and nothing is refunded on-node.
 ///
 /// The old subscription is immediately cancelled. The new subscription inherits the
 /// remaining period so the user does not lose paid days.
@@ -515,7 +513,7 @@ async fn change_subscription_tier(
 ) -> Result<ChangeTierResponse> {
     // Load target tier.
     let new_tier = sqlx::query_as::<_, SubscriptionTierDb>(
-        "SELECT id, name, slug, price_usdc, price_zar, features, max_games, is_active
+        "SELECT id, name, slug, price_usdc, features, max_games, is_active
          FROM subscription_tiers WHERE id = $1 AND is_active = true",
     )
     .bind(new_tier_id)
@@ -539,10 +537,10 @@ async fn change_subscription_tier(
     .await
     .map_err(|e| AppError::Database(e.to_string()))?;
 
-    // Compute proration factor and ZAR delta.
-    let (prorated_amount_zar, old_period_end) = if let Some(ref cur) = current {
+    // Compute proration factor and stablecoin delta.
+    let (prorated_amount_usdc, old_period_end) = if let Some(ref cur) = current {
         let old_tier = sqlx::query_as::<_, SubscriptionTierDb>(
-            "SELECT id, name, slug, price_usdc, price_zar, features, max_games, is_active
+            "SELECT id, name, slug, price_usdc, features, max_games, is_active
              FROM subscription_tiers WHERE id = $1",
         )
         .bind(cur.tier_id)
@@ -550,7 +548,7 @@ async fn change_subscription_tier(
         .await
         .map_err(|e| AppError::Database(e.to_string()))?;
         let factor = proration_factor(cur.current_period_start, cur.current_period_end);
-        let delta = new_tier.price_zar - old_tier.price_zar;
+        let delta = new_tier.price_usdc - old_tier.price_usdc;
         let prorated = (delta * factor).round_dp(2);
         (prorated, Some(cur.current_period_end))
     } else {
@@ -560,10 +558,10 @@ async fn change_subscription_tier(
     // No charging here: a tier change in a non-custodial model is settled by the
     // subscriber's own wallet→wallet checkout. If a top-up is owed we require the
     // receipt id but never move money from this node.
-    if prorated_amount_zar > Decimal::ZERO && payment_id.is_none() {
+    if prorated_amount_usdc > Decimal::ZERO && payment_id.is_none() {
         return Err(AppError::BadRequest(format!(
             "payment_id (a payment_receipts id) is required for {} (amount owed: {})",
-            direction, prorated_amount_zar
+            direction, prorated_amount_usdc
         )));
     }
 
@@ -581,7 +579,7 @@ async fn change_subscription_tier(
     // Create new subscription inheriting the remaining period.
     let now = chrono::Utc::now();
     let period_end = old_period_end.unwrap_or_else(|| now + chrono::Duration::days(30));
-    let provider = if new_tier.price_zar > Decimal::ZERO {
+    let provider = if new_tier.price_usdc > Decimal::ZERO {
         "receipt"
     } else {
         "free"
@@ -608,8 +606,8 @@ async fn change_subscription_tier(
     .map_err(|e| AppError::Database(e.to_string()))?;
 
     // Record the proration transaction.
-    if prorated_amount_zar != Decimal::ZERO {
-        let tx_type = if prorated_amount_zar > Decimal::ZERO {
+    if prorated_amount_usdc != Decimal::ZERO {
+        let tx_type = if prorated_amount_usdc > Decimal::ZERO {
             direction
         } else {
             "downgrade_credit"
@@ -623,7 +621,7 @@ async fn change_subscription_tier(
         )
         .bind(tx_id)
         .bind(new_subscription_id)
-        .bind(prorated_amount_zar)
+        .bind(prorated_amount_usdc)
         .bind(payment_id.unwrap_or(""))
         .bind(tx_type)
         .execute(pool)
@@ -631,16 +629,16 @@ async fn change_subscription_tier(
         .map_err(|e| AppError::Database(e.to_string()))?;
     }
 
-    let message = if prorated_amount_zar > Decimal::ZERO {
+    let message = if prorated_amount_usdc > Decimal::ZERO {
         format!(
-            "Upgraded to {}. Prorated charge of {} ZAR applied for remaining period.",
-            new_tier.name, prorated_amount_zar
+            "Upgraded to {}. Prorated amount of {} owed for the remaining period — settle it from your wallet.",
+            new_tier.name, prorated_amount_usdc
         )
-    } else if prorated_amount_zar < Decimal::ZERO {
+    } else if prorated_amount_usdc < Decimal::ZERO {
         format!(
-            "Downgraded to {}. Prorated credit of {} ZAR recorded.",
+            "Downgraded to {}. Prorated difference of {} recorded (nothing is refunded — settlement is non-custodial).",
             new_tier.name,
-            prorated_amount_zar.abs()
+            prorated_amount_usdc.abs()
         )
     } else {
         format!("Switched to {} tier.", new_tier.name)
@@ -654,7 +652,6 @@ async fn change_subscription_tier(
                 name: new_tier.name,
                 slug: new_tier.slug,
                 price_usdc: new_tier.price_usdc,
-                price_zar: new_tier.price_zar,
                 features: new_tier.features,
                 max_games: new_tier.max_games,
             },
@@ -663,7 +660,7 @@ async fn change_subscription_tier(
             current_period_start: new_sub.current_period_start,
             current_period_end: new_sub.current_period_end,
         },
-        prorated_amount_zar,
+        prorated_amount_usdc,
         message,
     })
 }
