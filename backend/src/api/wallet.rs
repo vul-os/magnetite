@@ -1,7 +1,11 @@
-// Wallet API — fiat USD balance, Paystack deposits, Wise-payout withdrawals.
+// Wallet API — NON-CUSTODIAL (seam §3.6).
 //
-// Deposit: verify a Paystack payment reference, credit USD balance.
-// Withdraw: insert a payout_requests row (status=pending) for the Wise payout job (main.rs).
+// This node holds no funds. There is no balance, no deposit, no withdrawal and no
+// payout. A "wallet" here is nothing but the Ed25519 address a user has linked, so
+// that a purchase can pay them (or charge them) directly, wallet→wallet.
+//
+// The fiat endpoints (`/deposit`, `/withdraw`) and the `wallet_balances` /
+// `wallet_transactions` custody tables are GONE.
 
 use axum::{
     extract::{Extension, State},
@@ -9,317 +13,205 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::api::middleware;
-use crate::api::response;
 use crate::error::{AppError, Result};
-use crate::services::payment::PaymentService;
+use crate::services::payment;
 
+/// The user's linked wallet — an address, never a balance.
 #[derive(Debug, Serialize)]
-pub struct WalletBalance {
+pub struct LinkedWallet {
     pub user_id: Uuid,
-    pub balance: Decimal,
-    pub currency: String,
-    pub subscription_tier: Option<String>,
+    /// Hex-encoded Ed25519 public key, or `null` if the user has not linked one.
+    pub wallet_address: Option<String>,
+    /// Always `false` — this node never holds user funds.
+    pub custodial: bool,
+    /// Rail in use (`mock` by default; offline and deterministic).
+    pub rail: String,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DepositRequest {
-    /// Kept for API compatibility; the actual credited amount is derived from the
-    /// Paystack-VERIFIED amount converted at the server-authoritative ZAR_USD_RATE.
-    /// A caller cannot self-credit an arbitrary amount by manipulating this field.
-    #[allow(dead_code)]
-    pub amount: Decimal,
-    /// Paystack payment reference to verify before crediting the USD balance.
-    pub payment_id: String,
+pub struct LinkWalletRequest {
+    /// Hex-encoded Ed25519 public key (with or without a `0x` prefix).
+    pub wallet_address: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct WithdrawRequest {
-    pub amount: Decimal,
-    /// Payout destination — Wise recipient details (e.g. email or bank).
-    /// Stored on the payout_requests row; the Wise payout job resolves the actual recipient.
-    pub destination: String,
+fn rail_name() -> String {
+    std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string())
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct Transaction {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub tx_type: String,
-    pub amount: Decimal,
-    pub status: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-pub async fn get_balance(
+/// GET /api/v1/wallet — report the linked wallet address.
+pub async fn get_wallet(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
-) -> Result<Json<response::ApiResponse<WalletBalance>>> {
-    let balance = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
-    )
-    .bind(user_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let subscription_tier = sqlx::query_as::<_, (String,)>(
-        "SELECT st.slug FROM user_subscriptions us
-         JOIN subscription_tiers st ON us.tier_id = st.id
-         WHERE us.user_id = $1 AND us.status = 'active'
-         ORDER BY us.created_at DESC LIMIT 1",
-    )
-    .bind(user_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?
-    .map(|t| t.0);
-
-    match balance {
-        Some(b) => Ok(response::success_response(WalletBalance {
-            user_id,
-            balance: b.0,
-            currency: "USD".to_string(),
-            subscription_tier,
-        })),
-        None => Ok(response::success_response(WalletBalance {
-            user_id,
-            balance: Decimal::ZERO,
-            currency: "USD".to_string(),
-            subscription_tier,
-        })),
-    }
-}
-
-pub async fn deposit(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-    Json(payload): Json<DepositRequest>,
-) -> Result<Json<response::ApiResponse<WalletBalance>>> {
-    if payload.amount <= Decimal::ZERO {
-        return Err(AppError::Validation(
-            "Deposit amount must be positive".to_string(),
-        ));
-    }
-
-    // --- Idempotency: reject if this payment_id has already been credited. ---
-    let existing: Option<(Uuid,)> =
-        sqlx::query_as("SELECT id FROM wallet_transactions WHERE reference_id = $1 LIMIT 1")
-            .bind(&payload.payment_id)
-            .fetch_optional(&pool)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-    if existing.is_some() {
-        return Err(AppError::BadRequest(format!(
-            "Payment '{}' has already been credited — replay rejected",
-            payload.payment_id
-        )));
-    }
-
-    let payment_svc = PaymentService::from_env();
-
-    // Verify the Paystack payment before crediting.
-    let verification = payment_svc
-        .verify_paystack_payment(&payload.payment_id)
-        .await
-        .map_err(|e| AppError::Internal(format!("Payment verification failed: {}", e)))?;
-
-    let ok_statuses = ["success", "sandbox_success"];
-    if !ok_statuses.contains(&verification.status.as_str()) {
-        return Err(AppError::BadRequest(format!(
-            "Paystack payment '{}' has status '{}' — not credited",
-            payload.payment_id, verification.status
-        )));
-    }
-
-    // Use the Paystack-VERIFIED amount (in ZAR) converted to USD at the server-authoritative
-    // exchange rate.  The rate is read from the ZAR_USD_RATE env var (default: 0.054, i.e.
-    // 1 ZAR ≈ 0.054 USD at time of writing).  A user cannot self-credit an arbitrary amount
-    // by manipulating the JSON body — the credited amount is always derived from the amount
-    // that Paystack actually charged.
-    let zar_usd_rate: Decimal = std::env::var("ZAR_USD_RATE")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| Decimal::new(54, 3)); // 0.054
-
-    let credit_amount = verification.amount * zar_usd_rate;
-
-    if credit_amount <= Decimal::ZERO {
-        return Err(AppError::Internal(
-            "Computed credit amount is zero — check ZAR_USD_RATE env var".to_string(),
-        ));
-    }
-
-    // Credit the wallet with the Paystack-verified USD amount.
-    sqlx::query(
-        "INSERT INTO wallet_balances (id, user_id, currency, balance)
-         VALUES ($1, $2, 'USD', $3)
-         ON CONFLICT (user_id, currency) DO UPDATE SET balance = wallet_balances.balance + $3",
-    )
-    .bind(Uuid::new_v4())
-    .bind(user_id)
-    .bind(credit_amount)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    sqlx::query(
-        "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-         VALUES ($1, $2, 'deposit', $3, $4, 'completed', NOW())",
-    )
-    .bind(Uuid::new_v4())
-    .bind(user_id)
-    .bind(credit_amount)
-    .bind(&payload.payment_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let new_balance = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    Ok(response::success_response(WalletBalance {
+) -> Result<Json<LinkedWallet>> {
+    let wallet = payment::wallet_of(&pool, user_id).await?;
+    Ok(Json(LinkedWallet {
         user_id,
-        balance: new_balance.0,
-        currency: "USD".to_string(),
-        subscription_tier: None,
+        wallet_address: wallet.map(|w| w.to_hex()),
+        custodial: false,
+        rail: rail_name(),
     }))
 }
 
-pub async fn withdraw(
+/// POST /api/v1/wallet/link — link (or replace) the user's wallet address.
+///
+/// TODO(chain): require a signed challenge proving control of the key before
+/// accepting it, once `AuthProvider::challenge` is wired into this route.
+pub async fn link_wallet(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
-    Json(payload): Json<WithdrawRequest>,
-) -> Result<Json<response::ApiResponse<WalletBalance>>> {
-    if payload.amount <= Decimal::ZERO {
-        return Err(AppError::Validation(
-            "Withdrawal amount must be positive".to_string(),
-        ));
-    }
+    Json(payload): Json<LinkWalletRequest>,
+) -> Result<Json<LinkedWallet>> {
+    let hex_key = payload.wallet_address.trim().trim_start_matches("0x");
+    let parsed = payment::PubKey::from_hex(hex_key).map_err(|_| {
+        AppError::Validation("wallet_address must be a 32-byte hex Ed25519 key".to_string())
+    })?;
 
-    let current = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
-    )
-    .bind(user_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    sqlx::query("UPDATE users SET wallet_address = $1 WHERE id = $2")
+        .bind(parsed.to_hex())
+        .bind(user_id)
+        .execute(&pool)
+        .await?;
 
-    let current_balance = current.map(|b| b.0).unwrap_or(Decimal::ZERO);
-
-    if current_balance < payload.amount {
-        return Err(AppError::InsufficientFunds(
-            "Insufficient balance".to_string(),
-        ));
-    }
-
-    // Debit the balance and record a pending withdrawal transaction.
-    sqlx::query(
-        "UPDATE wallet_balances SET balance = balance - $1 WHERE user_id = $2 AND currency = 'USD'",
-    )
-    .bind(payload.amount)
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let payout_id = Uuid::new_v4();
-
-    // Insert a payout_requests row so the Wise payout job (spawned in main.rs) picks it up.
-    sqlx::query(
-        "INSERT INTO payout_requests (id, developer_id, amount, currency, destination, status, created_at)
-         VALUES ($1, $2, $3, 'USD', $4, 'pending', NOW())",
-    )
-    .bind(payout_id)
-    .bind(user_id)
-    .bind(payload.amount)
-    .bind(&payload.destination)
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    sqlx::query(
-        "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-         VALUES ($1, $2, 'withdrawal', $3, $4, 'pending', NOW())",
-    )
-    .bind(Uuid::new_v4())
-    .bind(user_id)
-    .bind(payload.amount)
-    .bind(payout_id.to_string())
-    .execute(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let new_balance = sqlx::query_as::<_, (Decimal,)>(
-        "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    Ok(response::success_response(WalletBalance {
+    Ok(Json(LinkedWallet {
         user_id,
-        balance: new_balance.0,
-        currency: "USD".to_string(),
-        subscription_tier: None,
+        wallet_address: Some(parsed.to_hex()),
+        custodial: false,
+        rail: rail_name(),
     }))
 }
 
-pub async fn get_transactions(
+/// GET /api/v1/wallet/receipts — the signed receipts this user paid for.
+/// This replaces the custodial transaction ledger.
+pub async fn get_receipts(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
-) -> Result<Json<response::PaginatedResponse<Transaction>>> {
-    let transactions = sqlx::query_as::<_, Transaction>(
-        "SELECT id, user_id, tx_type, amount, status, created_at
-         FROM wallet_transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100",
+) -> Result<Json<Vec<serde_json::Value>>> {
+    type Row = (
+        Uuid,
+        String,
+        i64,
+        i64,
+        String,
+        bool,
+        chrono::DateTime<chrono::Utc>,
+    );
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, kind, total, protocol_fee, rail_pubkey, voided, created_at
+         FROM payment_receipts WHERE buyer_id = $1 ORDER BY created_at DESC LIMIT 200",
     )
     .bind(user_id)
     .fetch_all(&pool)
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    .await?;
 
-    let total = transactions.len() as u64;
-    Ok(response::paginated(transactions, 1, 100, total))
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, kind, total, fee, rail_pubkey, voided, created_at)| {
+                serde_json::json!({
+                    "id": id,
+                    "kind": kind,
+                    "total": total,
+                    "protocol_fee": fee,
+                    "rail_pubkey": rail_pubkey,
+                    "voided": voided,
+                    "created_at": created_at,
+                })
+            })
+            .collect(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HostingFeeRequest {
+    /// Operator wallet (hex Ed25519 pubkey) receiving the hosting fee.
+    pub operator_pubkey: String,
+    /// Fee in the rail's smallest unit (e.g. USDC cents).
+    pub amount: u64,
+    /// Server this fee buys access to.
+    pub server_id: Uuid,
+}
+
+/// POST /api/v1/wallet/hosting/pay — pay an operator's hosting fee.
+///
+/// Scaffold for §3.6(b): the operator is paid per-seat/per-hour and joining a paid
+/// server requires the resulting receipt (see `GET /wallet/hosting/:server_id`).
+pub async fn pay_hosting_fee(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Json(payload): Json<HostingFeeRequest>,
+) -> Result<Json<serde_json::Value>> {
+    let operator = payment::PubKey::from_hex(payload.operator_pubkey.trim_start_matches("0x"))
+        .map_err(|_| {
+            AppError::Validation("operator_pubkey must be a 32-byte hex Ed25519 key".to_string())
+        })?;
+
+    let receipt = payment::charge_hosting_fee(
+        &pool,
+        user_id,
+        &operator,
+        payload.amount,
+        Some(payload.server_id),
+    )
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "paid": true,
+        "total": receipt.total,
+        "rail_pubkey": receipt.rail_pubkey.to_hex(),
+        "server_id": payload.server_id,
+    })))
+}
+
+/// GET /api/v1/wallet/hosting/:server_id — may the caller join this paid server?
+pub async fn hosting_access(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    axum::extract::Path(server_id): axum::extract::Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let allowed = payment::has_hosting_access(&pool, user_id, server_id).await?;
+    Ok(Json(serde_json::json!({
+        "server_id": server_id,
+        "allowed": allowed,
+    })))
 }
 
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         .route(
-            "/balance",
-            get(get_balance).layer(from_fn_with_state(
+            "/",
+            get(get_wallet).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),
         )
         .route(
-            "/deposit",
-            post(deposit).layer(from_fn_with_state(
+            "/link",
+            post(link_wallet).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),
         )
         .route(
-            "/withdraw",
-            post(withdraw).layer(from_fn_with_state(
+            "/hosting/pay",
+            post(pay_hosting_fee).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),
         )
         .route(
-            "/transactions",
-            get(get_transactions).layer(from_fn_with_state(
+            "/hosting/:server_id",
+            get(hosting_access).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/receipts",
+            get(get_receipts).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

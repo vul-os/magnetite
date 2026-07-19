@@ -1,5 +1,12 @@
 // Marketplace service — dev store CRUD, item CRUD, purchase flow, entitlements.
-// Revenue-share reuses the 70/30 split defined in payout service constants.
+//
+// NON-CUSTODIAL (seam §3.6): a paid purchase is an atomic wallet→wallet checkout
+// through `PaymentRail`. There is no platform balance to debit and no developer
+// balance to credit — the developer is paid at the instant of sale. The signed
+// `Receipt` is stored and IS the entitlement; refunds void the receipt and revoke
+// the entitlement (there is nothing to claw back).
+//
+// `points`-priced items are unchanged: points are off-chain and are not money.
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
@@ -10,6 +17,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
+use crate::services::payment;
+use crate::services::payment::PaymentRail as _;
 use crate::services::points::PointsService;
 
 // ─── Receipt (purchase + item detail joined) ──────────────────────────────────
@@ -46,15 +55,11 @@ pub struct RefundRequest {
     pub reason: Option<String>,
 }
 
-// ─── Revenue-share constants (mirrors payout.rs 70/30 split) ─────────────────
-
-fn developer_share_pct() -> Decimal {
-    Decimal::new(70, 2) // 0.70
-}
-
-fn platform_fee_pct() -> Decimal {
-    Decimal::new(30, 2) // 0.30
-}
+// ─── Revenue share ───────────────────────────────────────────────────────────
+//
+// There is no 70/30 platform cut any more. The developer receives the whole
+// subtotal; the only optional deduction is `protocol_fee_bps` (default 0),
+// which the rail adds on top of the subtotal and pays to the protocol.
 
 // ─── Domain types ─────────────────────────────────────────────────────────────
 
@@ -438,8 +443,9 @@ impl MarketplaceService {
 
     /// Purchase an item.
     ///
-    /// - USD items: debit wallet_balances, record revenue-share amounts.
-    /// - Points items: call PointsService::spend.
+    /// - USD items: atomic wallet→wallet checkout via `PaymentRail`; the signed
+    ///   receipt is stored and linked to the entitlement.
+    /// - Points items: call PointsService::spend (off-chain, unchanged).
     /// - Creates an entitlement on success.
     pub async fn purchase(
         &self,
@@ -488,8 +494,10 @@ impl MarketplaceService {
         // Grant entitlement
         sqlx::query(
             r#"
-            INSERT INTO entitlements (id, user_id, item_id, purchase_id, granted_at, revoked)
-            VALUES ($1, $2, $3, $4, NOW(), false)
+            INSERT INTO entitlements (id, user_id, item_id, purchase_id, receipt_id, granted_at, revoked)
+            VALUES ($1, $2, $3, $4,
+                    (SELECT id FROM payment_receipts WHERE purchase_id = $4 AND voided = false LIMIT 1),
+                    NOW(), false)
             ON CONFLICT (user_id, item_id) DO NOTHING
             "#,
         )
@@ -503,6 +511,11 @@ impl MarketplaceService {
         Ok(purchase)
     }
 
+    /// Paid purchase: buyer wallet pays the developer wallet directly.
+    ///
+    /// No balance is debited and no balance is credited — the `PaymentRail`
+    /// performs an atomic split and returns a signed receipt, which we verify and
+    /// persist. Failure to verify aborts the purchase (fail-closed).
     async fn purchase_usd(
         &self,
         user_id: Uuid,
@@ -511,51 +524,23 @@ impl MarketplaceService {
         idempotency_key: Option<&str>,
     ) -> Result<StorePurchase> {
         let price = item.price;
-        // developer_share_pct() returns 0.70 (the fractional form), so multiply directly.
-        let developer_share = price * developer_share_pct();
-        let platform_fee = price * platform_fee_pct();
+        let buyer_wallet = payment::require_wallet(&self.pool, user_id, "buyer").await?;
+        let dev_wallet =
+            payment::require_wallet(&self.pool, store.developer_id, "store developer").await?;
 
-        let mut tx = self.pool.begin().await?;
-
-        // Lock buyer wallet
-        let balance: Decimal = sqlx::query_as::<_, (Decimal,)>(
-            "SELECT balance FROM wallet_balances WHERE user_id = $1 AND currency = 'USD' FOR UPDATE",
-        )
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .map(|r| r.0)
-        .unwrap_or(Decimal::ZERO);
-
-        if balance < price {
-            return Err(AppError::InsufficientFunds(format!(
-                "Insufficient USD balance. Have {balance}, need {price}"
-            )));
+        let amount = payment::units_from_usd(price);
+        // TODO(hosting): when the game is served by a third-party operator, add the
+        // operator's per-sale cut here as `PaymentSplit::operator`.
+        let split = payment::sale_split(dev_wallet, amount, None);
+        let receipt = payment::rail().checkout(&buyer_wallet, split).await;
+        if !payment::verify_receipt(&receipt) {
+            return Err(AppError::Internal(
+                "payment receipt failed verification — purchase aborted".to_string(),
+            ));
         }
 
-        // Debit buyer
-        sqlx::query(
-            "UPDATE wallet_balances SET balance = balance - $1, updated_at = NOW()
-             WHERE user_id = $2 AND currency = 'USD'",
-        )
-        .bind(price)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
-
-        // Credit developer balance (mirrors payout service)
-        sqlx::query(
-            r#"
-            INSERT INTO developer_balances (user_id, balance, updated_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (user_id) DO UPDATE
-                SET balance = developer_balances.balance + $2, updated_at = NOW()
-            "#,
-        )
-        .bind(store.developer_id)
-        .bind(developer_share)
-        .execute(&mut *tx)
-        .await?;
+        let developer_share = price;
+        let platform_fee = Decimal::new(receipt.protocol_fee as i64, 2);
 
         let purchase_id = Uuid::new_v4();
         let purchase = sqlx::query_as::<_, StorePurchase>(
@@ -578,10 +563,20 @@ impl MarketplaceService {
         .bind(developer_share)
         .bind(platform_fee)
         .bind(idempotency_key)
-        .fetch_one(&mut *tx)
+        .fetch_one(&self.pool)
         .await?;
 
-        tx.commit().await?;
+        payment::store_receipt(
+            &self.pool,
+            &receipt,
+            "item_purchase",
+            user_id,
+            Some(purchase.id),
+            Some(item.id),
+            Some(item.game_id),
+        )
+        .await?;
+
         Ok(purchase)
     }
 
@@ -630,12 +625,87 @@ impl MarketplaceService {
 
     // ── Entitlements ──────────────────────────────────────────────────────────
 
+    /// Cryptographically verify the entitlement: reload the stored receipt,
+    /// re-check the rail signature and its internal arithmetic. A row alone is
+    /// NOT proof — `verify_receipt` is what gates a paid entitlement.
+    ///
+    /// Returns `Ok(true)` for points-purchased (receipt-less) entitlements, which
+    /// are off-chain by design.
+    pub async fn verify_entitlement(&self, user_id: Uuid, item_id: Uuid) -> Result<bool> {
+        if !self.has_entitlement(user_id, item_id).await? {
+            return Ok(false);
+        }
+
+        type Row = (String, i64, i64, String, String, String, serde_json::Value);
+        let row = sqlx::query_as::<_, Row>(
+            "SELECT r.buyer_pubkey, r.total, r.protocol_fee, r.nonce, r.rail_pubkey, r.sig, r.payouts
+             FROM entitlements e
+             JOIN payment_receipts r ON r.id = e.receipt_id
+             WHERE e.user_id = $1 AND e.item_id = $2 AND r.voided = false",
+        )
+        .bind(user_id)
+        .bind(item_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some((buyer, total, fee, nonce, rail_pk, sig, payouts)) = row else {
+            // No linked receipt => points purchase (off-chain) or legacy grant.
+            return Ok(true);
+        };
+
+        let parse_pk = |h: &str| payment::PubKey::from_hex(h).ok();
+        let (Some(buyer), Some(rail_pubkey)) = (parse_pk(&buyer), parse_pk(&rail_pk)) else {
+            return Ok(false);
+        };
+        let Ok(sig_bytes) = hex::decode(&sig) else {
+            return Ok(false);
+        };
+        let Ok(sig_arr) = <[u8; 64]>::try_from(sig_bytes.as_slice()) else {
+            return Ok(false);
+        };
+        let Ok(nonce_bytes) = hex::decode(&nonce) else {
+            return Ok(false);
+        };
+        let Ok(nonce_arr) = <[u8; 32]>::try_from(nonce_bytes.as_slice()) else {
+            return Ok(false);
+        };
+
+        let mut parsed_payouts = Vec::new();
+        for p in payouts.as_array().unwrap_or(&Vec::new()) {
+            let (Some(w), Some(a)) = (
+                p.get("wallet").and_then(|v| v.as_str()).and_then(parse_pk),
+                p.get("amount").and_then(|v| v.as_u64()),
+            ) else {
+                return Ok(false);
+            };
+            parsed_payouts.push(payment::PayOut {
+                wallet: w,
+                amount: a,
+            });
+        }
+
+        let receipt = payment::Receipt {
+            buyer,
+            payouts: parsed_payouts,
+            protocol_fee: fee as u64,
+            total: total as u64,
+            nonce: nonce_arr,
+            rail_pubkey,
+            sig: payment::Sig(sig_arr),
+        };
+
+        Ok(payment::verify_receipt(&receipt))
+    }
+
     pub async fn has_entitlement(&self, user_id: Uuid, item_id: Uuid) -> Result<bool> {
         let row = sqlx::query_as::<_, (bool,)>(
             "SELECT EXISTS(
-                SELECT 1 FROM entitlements
-                WHERE user_id = $1 AND item_id = $2 AND revoked = false
-                  AND (expires_at IS NULL OR expires_at > NOW())
+                SELECT 1 FROM entitlements e
+                WHERE e.user_id = $1 AND e.item_id = $2 AND e.revoked = false
+                  AND (e.expires_at IS NULL OR e.expires_at > NOW())
+                  AND (e.receipt_id IS NULL OR EXISTS(
+                        SELECT 1 FROM payment_receipts r
+                        WHERE r.id = e.receipt_id AND r.voided = false))
              )",
         )
         .bind(user_id)
@@ -893,36 +963,22 @@ impl MarketplaceService {
         // For USD, the whole reversal happens inside a single transaction.
         match purchase.currency.as_str() {
             "USD" => {
+                // Non-custodial refund: there is no custodial balance to credit and
+                // no developer balance to claw back. The refund is the *void* of the
+                // signed receipt plus revocation of the entitlement it granted.
+                //
+                // TODO(chain): with a real rail, issue a compensating wallet→wallet
+                // transfer from the developer back to the buyer (or settle from an
+                // escrow/dispute window) and record its receipt here.
                 let mut tx = self.pool.begin().await?;
 
-                // Refund buyer's wallet
                 sqlx::query(
-                    r#"
-                    INSERT INTO wallet_balances (user_id, currency, balance, updated_at)
-                    VALUES ($1, 'USD', $2, NOW())
-                    ON CONFLICT (user_id, currency) DO UPDATE
-                        SET balance = wallet_balances.balance + $2, updated_at = NOW()
-                    "#,
+                    "UPDATE payment_receipts SET voided = true, voided_at = NOW() \
+                     WHERE purchase_id = $1",
                 )
-                .bind(purchase.user_id)
-                .bind(purchase.price_paid)
+                .bind(purchase_id)
                 .execute(&mut *tx)
                 .await?;
-
-                // Claw back developer share
-                if let Some(dev_share) = purchase.developer_share {
-                    if dev_share > Decimal::ZERO {
-                        sqlx::query(
-                            "UPDATE developer_balances \
-                             SET balance = GREATEST(balance - $1, 0), updated_at = NOW()
-                             WHERE user_id = (SELECT developer_id FROM dev_stores WHERE id = $2)",
-                        )
-                        .bind(dev_share)
-                        .bind(purchase.store_id)
-                        .execute(&mut *tx)
-                        .await?;
-                    }
-                }
 
                 // Revoke entitlement
                 sqlx::query(
@@ -1036,13 +1092,42 @@ impl MarketplaceService {
 mod tests {
     use super::*;
 
-    #[test]
-    fn revenue_share_sums_to_price() {
+    /// Non-custodial: the developer receives the whole subtotal — there is no
+    /// 70/30 platform cut. The only deduction is `protocol_fee_bps` (default 0).
+    #[tokio::test]
+    async fn developer_receives_full_subtotal() {
+        let buyer = payment::PubKey([0xB0; 32]);
+        let dev = payment::PubKey([0xD0; 32]);
         let price = Decimal::new(1000, 2); // 10.00
-                                           // developer_share_pct() = 0.70, platform_fee_pct() = 0.30; no extra /100.
-        let dev = price * developer_share_pct();
-        let fee = price * platform_fee_pct();
-        assert_eq!(dev + fee, price);
+        let amount = payment::units_from_usd(price);
+
+        let receipt = payment::rail()
+            .checkout(&buyer, payment::sale_split(dev, amount, None))
+            .await;
+
+        assert_eq!(receipt.total, 1000, "10.00 USD == 1000 cents");
+        assert_eq!(receipt.protocol_fee, 0, "default protocol fee is 0 bps");
+        assert_eq!(receipt.payouts.len(), 1);
+        assert_eq!(receipt.payouts[0].wallet, dev);
+        assert_eq!(receipt.payouts[0].amount, 1000);
+        assert!(payment::verify_receipt(&receipt));
+    }
+
+    /// A purchase only grants an entitlement if its receipt verifies; a forged
+    /// receipt must be rejected before it is ever stored.
+    #[tokio::test]
+    async fn forged_receipt_is_rejected_before_storage() {
+        let buyer = payment::PubKey([0xB1; 32]);
+        let mut receipt = payment::rail()
+            .checkout(
+                &buyer,
+                payment::sale_split(payment::PubKey([0xD1; 32]), 2500, None),
+            )
+            .await;
+        assert!(payment::verify_receipt(&receipt));
+
+        receipt.total = 1; // pretend the buyer paid a cent
+        assert!(!payment::verify_receipt(&receipt));
     }
 
     #[test]
@@ -1060,10 +1145,8 @@ mod tests {
     }
 
     #[test]
-    fn developer_share_is_70_pct() {
-        let price = Decimal::new(100_00, 2); // 100.00
-                                             // developer_share_pct() = 0.70; multiply directly — no extra /100 needed.
-        let dev = price * developer_share_pct();
-        assert_eq!(dev, Decimal::new(70_00, 2));
+    fn usd_prices_map_to_rail_units() {
+        assert_eq!(payment::units_from_usd(Decimal::new(100_00, 2)), 10_000);
+        assert_eq!(payment::units_from_usd(Decimal::new(99, 2)), 99);
     }
 }

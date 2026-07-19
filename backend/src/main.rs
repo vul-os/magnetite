@@ -59,7 +59,6 @@ use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
 use crate::middleware::request_metrics::record_request_metrics;
 use crate::services::payment::SubscriptionService;
-use crate::services::payout::PayoutService;
 use crate::ws::comms;
 use crate::ws::game as ws_game;
 use crate::ws::gauges::WsGauges;
@@ -253,20 +252,8 @@ async fn main() {
     // ── Background jobs (same tokio::spawn + interval pattern as notification_cleanup) ──
     tokio::spawn(notification_cleanup::run_cleanup_job(pool.clone()));
 
-    // Payout batch: process pending developer payouts every hour.
-    let payout_pool = pool.clone();
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
-        loop {
-            ticker.tick().await;
-            let svc = PayoutService::new(payout_pool.clone());
-            match svc.process_pending_payouts().await {
-                Ok(n) if n > 0 => tracing::info!("Processed {} pending payouts", n),
-                Ok(_) => {}
-                Err(e) => tracing::error!("Payout batch failed: {}", e),
-            }
-        }
-    });
+    // No payout batch: payments are non-custodial and settle wallet→wallet at
+    // point of sale, so nothing is ever accrued or disbursed by this node.
 
     // Subscription renewal: process expired subscriptions every hour.
     let renewal_pool = pool.clone();

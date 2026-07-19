@@ -242,10 +242,13 @@ pub async fn check_entitlement(
     Path(item_id): Path<Uuid>,
 ) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
     let svc = MarketplaceService::new(pool);
-    let owned = svc.has_entitlement(user_id, item_id).await?;
+    // Non-custodial: ownership is proven by a verifiable signed receipt, not by
+    // the existence of a row. `verify_entitlement` re-checks the rail signature.
+    let owned = svc.verify_entitlement(user_id, item_id).await?;
     Ok(response::success_response(serde_json::json!({
         "item_id": item_id,
-        "owned": owned
+        "owned": owned,
+        "receipt_verified": owned
     })))
 }
 

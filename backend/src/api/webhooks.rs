@@ -1,4 +1,7 @@
-// Webhooks API — Paystack, GitHub event handlers; platform surface.
+// Webhooks API — game/GitHub event handlers; platform surface.
+//
+// The Paystack (fiat) receiver is REMOVED: payments are non-custodial and settle
+// wallet→wallet, so no payment processor ever calls back into this node.
 #![allow(dead_code)]
 
 use axum::{
@@ -10,19 +13,15 @@ use axum::{
     Json, Router,
 };
 use hmac::{Hmac, Mac};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::api::middleware;
-use crate::api::notifications::NotificationService;
 use crate::error::{AppError, Result};
 
 type HmacSha256 = Hmac<Sha256>;
-
-const PAYSTACK_HEADER: &str = "x-paystack-signature";
 
 fn compute_hmac_bytes(secret: &str, payload: &[u8]) -> Vec<u8> {
     let mut mac =
@@ -33,19 +32,6 @@ fn compute_hmac_bytes(secret: &str, payload: &[u8]) -> Vec<u8> {
 
 fn compute_hmac_sha256(secret: &str, payload: &[u8]) -> String {
     hex::encode(compute_hmac_bytes(secret, payload))
-}
-
-/// Constant-time HMAC-SHA256 signature verification.
-/// Uses `hmac::Mac::verify_slice` which is constant-time, avoiding timing side-channels.
-fn verify_paystack_signature(secret: &str, signature: &str, payload: &[u8]) -> bool {
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
-    mac.update(payload);
-    // Decode the hex signature to raw bytes for constant-time comparison.
-    match hex::decode(signature) {
-        Ok(sig_bytes) => mac.verify_slice(&sig_bytes).is_ok(),
-        Err(_) => false,
-    }
 }
 
 /// Constant-time HMAC-SHA256 verification supporting optional "sha256=" prefix.
@@ -64,169 +50,10 @@ fn verify_hmac_signature(secret: &str, signature: &str, payload: &[u8]) -> bool 
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct PaystackWebhook {
-    pub event: String,
-    pub data: PaystackTransaction,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PaystackTransaction {
-    pub id: i64,
-    pub reference: String,
-    pub amount: i64,
-    pub currency: String,
-    pub status: String,
-    pub customer: PaystackCustomer,
-    pub metadata: Option<PaystackMetadata>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PaystackCustomer {
-    pub id: i64,
-    pub email: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PaystackMetadata {
-    pub user_id: Option<Uuid>,
-}
-
 #[derive(Debug, Serialize)]
 pub struct WebhookResponse {
     pub status: String,
     pub message: String,
-}
-
-pub async fn handle_paystack(
-    State(pool): State<PgPool>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<Json<WebhookResponse>> {
-    let secret_key = std::env::var("PAYSTACK_SECRET_KEY")
-        .map_err(|_| AppError::Internal("PAYSTACK_SECRET_KEY not configured".to_string()))?;
-
-    let payload = body.to_vec();
-
-    let signature = headers
-        .get(PAYSTACK_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Paystack signature".to_string()))?;
-
-    if !verify_paystack_signature(&secret_key, signature, &payload) {
-        return Err(AppError::Unauthorized(
-            "Invalid Paystack signature".to_string(),
-        ));
-    }
-
-    let event: PaystackWebhook = serde_json::from_slice(&payload)
-        .map_err(|e| AppError::BadRequest(format!("Failed to parse Paystack webhook: {}", e)))?;
-
-    tracing::info!("Paystack webhook received: event={}", event.event);
-
-    match event.event.as_str() {
-        "charge.success" => {
-            let user_id = event
-                .data
-                .metadata
-                .as_ref()
-                .and_then(|m| m.user_id)
-                .ok_or_else(|| AppError::BadRequest("Missing user_id in metadata".to_string()))?;
-
-            // Idempotency: skip if this reference was already processed.
-            let existing: Option<(Uuid,)> = sqlx::query_as(
-                "SELECT id FROM wallet_transactions WHERE reference_id = $1 LIMIT 1",
-            )
-            .bind(&event.data.reference)
-            .fetch_optional(&pool)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-            if existing.is_some() {
-                tracing::info!(
-                    "Paystack webhook charge.success for reference '{}' already processed — skipping",
-                    event.data.reference
-                );
-                return Ok(Json(WebhookResponse {
-                    status: "ok".to_string(),
-                    message: "Already processed".to_string(),
-                }));
-            }
-
-            // Paystack webhook amount is in kobo (ZAR cents); convert to ZAR then to USD.
-            let zar_amount = Decimal::from(event.data.amount) / Decimal::from(100);
-            let zar_usd_rate: Decimal = std::env::var("ZAR_USD_RATE")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or_else(|| Decimal::new(54, 3)); // 0.054
-            let amount = zar_amount * zar_usd_rate;
-
-            sqlx::query(
-                "INSERT INTO wallet_transactions (id, user_id, tx_type, amount, reference_id, status, created_at)
-                 VALUES ($1, $2, 'deposit', $3, $4, 'completed', NOW())",
-            )
-            .bind(Uuid::new_v4())
-            .bind(user_id)
-            .bind(amount)
-            .bind(&event.data.reference)
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-            sqlx::query(
-                "INSERT INTO wallet_balances (id, user_id, currency, balance)
-                 VALUES ($1, $2, 'USD', $3)
-                 ON CONFLICT (user_id, currency) DO UPDATE SET balance = wallet_balances.balance + $3",
-            )
-            .bind(Uuid::new_v4())
-            .bind(user_id)
-            .bind(amount)
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-            let notif_service = NotificationService::new(pool.clone());
-            let _ = notif_service
-                .create_system_notification(
-                    user_id,
-                    "Deposit Received",
-                    &format!("Your wallet has been credited with {} USD", amount),
-                )
-                .await;
-
-            tracing::info!(
-                "Credited user {} wallet with {} USD from Paystack",
-                user_id,
-                amount
-            );
-        }
-        "transfer.success" => {
-            let _user_id = event
-                .data
-                .metadata
-                .as_ref()
-                .and_then(|m| m.user_id)
-                .ok_or_else(|| AppError::BadRequest("Missing user_id in metadata".to_string()))?;
-
-            sqlx::query(
-                "UPDATE wallet_transactions SET status = 'completed' WHERE reference_id = $1",
-            )
-            .bind(&event.data.reference)
-            .execute(&pool)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-            tracing::info!("Marked withdrawal {} as completed", event.data.reference);
-        }
-        _ => {
-            tracing::info!("Unhandled Paystack event: {}", event.event);
-        }
-    }
-
-    Ok(Json(WebhookResponse {
-        status: "ok".to_string(),
-        message: format!("Processed Paystack event: {}", event.event),
-    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -534,7 +361,6 @@ pub async fn delete_endpoint(
 pub fn router(pool: PgPool) -> Router {
     Router::new()
         // Inbound webhook receivers — no auth (called by external services, HMAC-signed).
-        .route("/paystack", post(handle_paystack))
         .route("/game", post(handle_game))
         // Endpoint management — requires authentication.
         .route(

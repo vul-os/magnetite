@@ -1,232 +1,97 @@
-// service_tests.rs — unit / integration-style tests for the gap-closure work (F1/F2/F3).
-// These tests do NOT require a live DB. They exercise pure-logic paths that were
-// previously mock/stub/hardcoded and are now real code.
+// service_tests.rs — pure-logic tests that do NOT require a live DB.
 //
 // Topics covered:
-//   1. PaymentService — sandbox vs unconfigured error selection.
-//   2. PaymentService — calculate_earnings (30% platform / 70% dev split per D-PAY-1).
-//   3. Payout fee split (30% platform / 70% dev via payout service constants).
-//   4. Paystack verification sandbox path.
-//   5. Matchmaking wait-estimate formula (queue depth × 30 s, clamped 5-600 s).
-//   6. Matchmaking region filter (in-memory version passes all players through).
-//   7. Matchmaking SkillRange logic.
-//   8. Email provider — ResendProvider absent when key is missing.
-//   9. Email template rendering (no HTTP call needed).
-//  10. EarningsBreakdown shape correctness.
+//   1. Non-custodial checkout — split arithmetic + signed receipt verification.
+//   2. Receipt tampering fails closed (a forged receipt never grants entitlement).
+//   3. Deterministic offline rail (same inputs => same receipt, no network).
+//   4. Matchmaking wait-estimate formula (queue depth × 30 s, clamped 5-600 s).
+//   5. Matchmaking region filter (in-memory version passes all players through).
+//   6. Matchmaking SkillRange logic.
+//   7. Email provider — ResendProvider absent when key is missing.
+//   8. Email template rendering (no HTTP call needed).
 
 #[cfg(test)]
-mod payment_provider_tests {
-    use magnetite_backend::services::payment::PaymentService;
+mod noncustodial_payment_tests {
+    use magnetite_backend::services::payment::{
+        rail, sale_split, units_from_usd, verify_receipt, PaymentRail, PubKey,
+    };
+    use rust_decimal_macros::dec;
 
-    // ── Sandbox mode ───────────────────────────────────────────────────────────
+    // ── Split arithmetic ──────────────────────────────────────────────────────
 
-    #[test]
-    fn sandbox_mode_on_mock_constructor() {
-        // PaymentService::mock() always sets sandbox=true.
-        // Circle is removed; only Paystack on-ramp remains.
-        let svc = PaymentService::mock();
-        // (No panics = mock constructor works.)
-        let _ = svc;
+    #[tokio::test]
+    async fn developer_receives_the_whole_subtotal() {
+        // There is no 70/30 platform cut in the non-custodial model.
+        let receipt = rail()
+            .checkout(
+                &PubKey([0xB0; 32]),
+                sale_split(PubKey([0xD0; 32]), units_from_usd(dec!(100.00)), None),
+            )
+            .await;
+
+        assert_eq!(receipt.total, 10_000);
+        assert_eq!(receipt.protocol_fee, 0);
+        assert_eq!(receipt.payouts.len(), 1);
+        assert_eq!(receipt.payouts[0].amount, 10_000);
     }
 
     #[tokio::test]
-    async fn unconfigured_production_paystack_returns_error() {
-        // Without PAYSTACK_SECRET_KEY and without PAYMENTS_SANDBOX=true,
-        // verify_paystack_payment must return an Err (not a fabricated success).
-        let saved_paystack = std::env::var("PAYSTACK_SECRET_KEY").ok();
-        let saved_sandbox = std::env::var("PAYMENTS_SANDBOX").ok();
+    async fn operator_cut_is_paid_atomically_in_the_same_receipt() {
+        let receipt = rail()
+            .checkout(
+                &PubKey([0xB1; 32]),
+                sale_split(PubKey([0xD1; 32]), 900, Some((PubKey([0x0B; 32]), 100))),
+            )
+            .await;
 
-        // Clear payment env vars.
-        unsafe {
-            std::env::remove_var("PAYSTACK_SECRET_KEY");
-            std::env::remove_var("PAYMENTS_SANDBOX");
-        }
+        assert_eq!(receipt.total, 1000);
+        assert_eq!(receipt.payouts.len(), 2);
+        let sum: u64 = receipt.payouts.iter().map(|p| p.amount).sum();
+        assert_eq!(sum, receipt.total, "payouts must sum to the total");
+    }
 
-        let svc = PaymentService::from_env();
-        let result = svc.verify_paystack_payment("FAKE_REF").await;
+    // ── Receipt verification (this is what grants entitlements) ───────────────
 
-        // Restore env vars before asserting.
-        unsafe {
-            if let Some(v) = saved_paystack {
-                std::env::set_var("PAYSTACK_SECRET_KEY", v);
-            }
-            if let Some(v) = saved_sandbox {
-                std::env::set_var("PAYMENTS_SANDBOX", v);
-            }
-        }
-
-        assert!(
-            result.is_err(),
-            "unconfigured verify_paystack_payment must return Err, not fabricated success"
-        );
-        let msg = result.err().unwrap().to_string();
-        assert!(
-            msg.contains("payments not configured") || msg.contains("PAYSTACK_SECRET_KEY"),
-            "error message should mention missing key: {msg}"
-        );
+    #[tokio::test]
+    async fn fresh_receipt_verifies() {
+        let receipt = rail()
+            .checkout(&PubKey([0xB2; 32]), sale_split(PubKey([0xD2; 32]), 4200, None))
+            .await;
+        assert!(verify_receipt(&receipt));
     }
 
     #[tokio::test]
-    async fn sandbox_verify_paystack_has_labeled_status() {
-        let svc = PaymentService::mock();
-        let result = svc.verify_paystack_payment("TEST_REF_001").await;
-        assert!(result.is_ok());
-        let verification = result.unwrap();
-        assert!(
-            verification.status.contains("sandbox"),
-            "sandbox verification status should be labeled: {}",
-            verification.status
-        );
-        assert_eq!(verification.reference, "TEST_REF_001");
+    async fn inflated_total_fails_verification() {
+        let mut receipt = rail()
+            .checkout(&PubKey([0xB3; 32]), sale_split(PubKey([0xD3; 32]), 4200, None))
+            .await;
+        receipt.total = 1;
+        assert!(!verify_receipt(&receipt), "must fail closed");
+    }
+
+    // ── Offline determinism (CI runs with zero external services) ─────────────
+
+    #[tokio::test]
+    async fn receipts_are_deterministic_offline() {
+        let buyer = PubKey([0xB4; 32]);
+        let a = rail()
+            .checkout(&buyer, sale_split(PubKey([0xD4; 32]), 777, None))
+            .await;
+        let b = rail()
+            .checkout(&buyer, sale_split(PubKey([0xD4; 32]), 777, None))
+            .await;
+        assert_eq!(a.nonce, b.nonce);
+        assert_eq!(a.sig.0, b.sig.0);
+    }
+
+    #[test]
+    fn usd_maps_to_smallest_rail_unit() {
+        assert_eq!(units_from_usd(dec!(0.01)), 1);
+        assert_eq!(units_from_usd(dec!(12.34)), 1234);
     }
 }
 
-// ── Earnings/fee split tests ───────────────────────────────────────────────────
-
-#[cfg(test)]
-mod earnings_split_tests {
-    use magnetite_backend::services::payment::PaymentService;
-    use rust_decimal_macros::dec;
-
-    #[test]
-    fn calculate_earnings_developer_gets_70_pct() {
-        // PaymentService::calculate_earnings uses 30% platform / 70% developer (D-PAY-1, D-PAY-5).
-        let svc = PaymentService::mock();
-        let revenue = dec!(10_000.00);
-        let breakdown = svc.calculate_earnings(revenue);
-
-        // Platform gets 30%, developer gets 70%.
-        let expected_platform = dec!(3_000.00);
-        let expected_developer = dec!(7_000.00);
-
-        assert_eq!(
-            breakdown.platform_share, expected_platform,
-            "platform share should be 30% = 3000"
-        );
-        assert_eq!(
-            breakdown.developer_share, expected_developer,
-            "developer share should be 70% = 7000"
-        );
-        assert_eq!(
-            breakdown.developer_percentage,
-            dec!(70),
-            "developer_percentage field should be 70 (not 0.70)"
-        );
-        assert_eq!(breakdown.total_revenue, revenue);
-    }
-
-    #[test]
-    fn calculate_earnings_shares_sum_to_total() {
-        let svc = PaymentService::mock();
-        let revenue = dec!(327.49);
-        let b = svc.calculate_earnings(revenue);
-        // platform_share + developer_share == total (within decimal precision)
-        let reconstructed = b.platform_share + b.developer_share;
-        let diff = (reconstructed - revenue).abs();
-        assert!(
-            diff < dec!(0.01),
-            "shares don't sum to total: {reconstructed} vs {revenue}"
-        );
-    }
-
-    #[test]
-    fn calculate_earnings_developer_beats_platform() {
-        let svc = PaymentService::mock();
-        let revenue = dec!(1_000.00);
-        let b = svc.calculate_earnings(revenue);
-        assert!(
-            b.developer_share > b.platform_share,
-            "developer should always earn more than platform"
-        );
-    }
-
-    #[test]
-    fn calculate_earnings_zero_revenue() {
-        let svc = PaymentService::mock();
-        let b = svc.calculate_earnings(rust_decimal::Decimal::ZERO);
-        assert_eq!(b.developer_share, rust_decimal::Decimal::ZERO);
-        assert_eq!(b.platform_share, rust_decimal::Decimal::ZERO);
-    }
-}
-
-// ── Payout service fee split (30/70) ──────────────────────────────────────────
-// The payout service uses a separate 30/70 split from PaymentService's 15/85.
-// Tests verify the arithmetic is correct (no extra /100 divisor).
-
-#[cfg(test)]
-mod payout_fee_split_tests {
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-
-    // Replicate the payout service logic here to test in isolation.
-    fn platform_fee_percent() -> Decimal {
-        Decimal::new(30, 2) // 0.30
-    }
-
-    fn developer_share_percent() -> Decimal {
-        Decimal::new(70, 2) // 0.70
-    }
-
-    #[test]
-    fn platform_fee_is_30_pct() {
-        assert_eq!(
-            platform_fee_percent(),
-            dec!(0.30),
-            "platform_fee_percent should be 0.30 (30%), not 30.0 or 0.003"
-        );
-    }
-
-    #[test]
-    fn developer_share_is_70_pct() {
-        assert_eq!(
-            developer_share_percent(),
-            dec!(0.70),
-            "developer_share_percent should be 0.70 (70%), not 70.0 or 0.007"
-        );
-    }
-
-    #[test]
-    fn fee_split_sums_to_one() {
-        assert_eq!(
-            platform_fee_percent() + developer_share_percent(),
-            dec!(1.00),
-            "platform fee + developer share must equal 1.00"
-        );
-    }
-
-    #[test]
-    fn revenue_split_arithmetic_correct() {
-        let revenue = dec!(1_000.00);
-        let platform = revenue * platform_fee_percent();
-        let developer = revenue * developer_share_percent();
-
-        assert_eq!(
-            platform,
-            dec!(300.00),
-            "platform should get 300 on 1000 revenue"
-        );
-        assert_eq!(
-            developer,
-            dec!(700.00),
-            "developer should get 700 on 1000 revenue"
-        );
-        assert_eq!(platform + developer, revenue);
-    }
-
-    #[test]
-    fn revenue_split_not_fractional_percent() {
-        // Regression guard: the old bug multiplied by 0.70 / 100, giving 0.7% not 70%.
-        let revenue = dec!(100.00);
-        let developer = revenue * developer_share_percent();
-        // 70% = 70.00, NOT 0.70
-        assert!(
-            developer > dec!(60.00),
-            "developer share on 100 must be > 60 (was giving 0.70 with the bug): {developer}"
-        );
-    }
-}
-
-// ZAR→USDC conversion removed (Wave PAY — D-PAY-1: Circle/USDC removed; fiat USD only).
+// Fiat (ZAR/USD on-ramp) removed entirely — payments are non-custodial crypto.
 
 // ── Matchmaking wait estimate formula ─────────────────────────────────────────
 
@@ -491,42 +356,3 @@ mod email_template_tests {
         );
     }
 }
-
-// ── EarningsBreakdown struct correctness ──────────────────────────────────────
-
-#[cfg(test)]
-mod earnings_breakdown_tests {
-    use magnetite_backend::services::payment::{EarningsBreakdown, PaymentService};
-    use rust_decimal::Decimal;
-    use rust_decimal_macros::dec;
-
-    #[test]
-    fn earnings_breakdown_developer_percentage_is_70() {
-        // Wave PAY D-PAY-1/D-PAY-5: 70/30 split (Wise payouts, Paystack on-ramp).
-        let svc = PaymentService::mock();
-        let breakdown = svc.calculate_earnings(dec!(1000.00));
-        // developer_percentage is stored as 70 (the integer percentage), not 0.70.
-        assert_eq!(breakdown.developer_percentage, dec!(70));
-    }
-
-    #[test]
-    fn earnings_breakdown_fields_are_correct_type() {
-        let svc = PaymentService::mock();
-        let breakdown: EarningsBreakdown = svc.calculate_earnings(dec!(500.00));
-        assert!(breakdown.total_revenue > Decimal::ZERO);
-        assert!(breakdown.developer_share > Decimal::ZERO);
-        assert!(breakdown.platform_share > Decimal::ZERO);
-    }
-
-    #[test]
-    fn earnings_breakdown_platform_is_30_pct() {
-        let svc = PaymentService::mock();
-        let revenue = dec!(2000.00);
-        let b = svc.calculate_earnings(revenue);
-        // 30% of 2000 = 600
-        assert_eq!(b.platform_share, dec!(600.00));
-    }
-}
-
-// PaymentService Circle payout methods removed in Wave PAY (D-PAY-2/D-PAY-4).
-// Payout tests now live in payout.rs (Agent A); Wise sandbox tests in wise.rs.

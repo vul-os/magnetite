@@ -22,13 +22,20 @@ pub struct Config {
     pub github_client_secret: String,
     pub gitlab_client_id: String,
     pub gitlab_client_secret: String,
-    pub paystack_secret_key: Option<String>,
-    /// Wise API token for developer payouts (WISE_API_TOKEN env var).
-    pub wise_api_token: Option<String>,
-    /// Wise profile ID for transfers (WISE_PROFILE_ID env var).
-    pub wise_profile_id: Option<String>,
-    /// Use Wise sandbox API (WISE_SANDBOX=true). Defaults to false.
-    pub wise_sandbox: bool,
+    /// Payment rail selector (`PAYMENT_RAIL`). Default `mock` — deterministic,
+    /// offline, zero external services. Any other value currently falls back to
+    /// the mock rail with a warning (see TODO(chain) in services/payment.rs).
+    pub payment_rail: String,
+    /// Protocol fee in basis points (`PROTOCOL_FEE_BPS`). Default 0.
+    pub protocol_fee_bps: u16,
+    /// Operator wallet that receives hosting/subscription fees (`OPERATOR_WALLET_PUBKEY`).
+    pub operator_wallet_pubkey: Option<String>,
+    /// Placeholder chain config — unused by the mock rail.
+    pub chain_rpc_url: Option<String>,
+    /// Placeholder chain id — unused by the mock rail.
+    pub chain_id: Option<String>,
+    /// Placeholder stablecoin contract address — unused by the mock rail.
+    pub stablecoin_address: Option<String>,
     pub email_provider: String,
     pub resend_api_key: Option<String>,
     pub smtp_host: Option<String>,
@@ -88,12 +95,15 @@ impl Config {
             gitlab_client_id: env::var("GITLAB_CLIENT_ID").unwrap_or_else(|_| "".to_string()),
             gitlab_client_secret: env::var("GITLAB_CLIENT_SECRET")
                 .unwrap_or_else(|_| "".to_string()),
-            paystack_secret_key: env::var("PAYSTACK_SECRET_KEY").ok(),
-            wise_api_token: env::var("WISE_API_TOKEN").ok(),
-            wise_profile_id: env::var("WISE_PROFILE_ID").ok(),
-            wise_sandbox: env::var("WISE_SANDBOX")
-                .map(|v| v == "true")
-                .unwrap_or(false),
+            payment_rail: env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string()),
+            protocol_fee_bps: env::var("PROTOCOL_FEE_BPS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
+            operator_wallet_pubkey: env::var("OPERATOR_WALLET_PUBKEY").ok(),
+            chain_rpc_url: env::var("CHAIN_RPC_URL").ok(),
+            chain_id: env::var("CHAIN_ID").ok(),
+            stablecoin_address: env::var("STABLECOIN_ADDRESS").ok(),
             email_provider: env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "resend".to_string()),
             resend_api_key: env::var("RESEND_API_KEY").ok(),
             smtp_host: env::var("SMTP_HOST").ok(),

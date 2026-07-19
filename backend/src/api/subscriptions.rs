@@ -1,4 +1,9 @@
-// Subscriptions API — tier management and billing; Paystack fiat on-ramp + free/platform tiers.
+// Subscriptions API — tier management; free/platform tiers + receipt-backed paid tiers.
+//
+// NON-CUSTODIAL: there is no fiat charging, no proration charge and no recurring
+// card mandate. A paid tier is a feature flag activated by a signed, non-voided
+// `payment_receipts` row (produced by the `PaymentRail` seam, paying the operator
+// wallet). Renewal means the subscriber performs a new checkout.
 #![allow(dead_code)]
 
 use axum::{
@@ -18,7 +23,6 @@ use crate::api::response;
 use crate::error::{AppError, Result};
 use crate::services::auth::get_user_by_id;
 use crate::services::email::EmailService;
-use crate::services::payment::PaymentService;
 
 /// Proration factor for an upgrade/downgrade: remaining-period fraction.
 /// Returns a value in [0.0, 1.0].
@@ -112,16 +116,16 @@ pub struct UserSubscriptionResponse {
 #[derive(Debug, Deserialize)]
 pub struct SubscribeRequest {
     pub tier_id: Uuid,
-    /// Paystack payment reference to verify. Required for paid tiers.
+    /// Receipt id (`payment_receipts.id`) proving payment. Required for paid tiers.
     pub payment_id: Option<String>,
-    /// Payment provider. Only "paystack" (or "platform" for free) is accepted.
+    /// Payment provider. Only "receipt" (or "free"/"platform") is accepted.
     pub payment_provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpgradeRequest {
     pub tier_id: Uuid,
-    /// Paystack payment reference for any proration charge.  Required if the
+    /// Receipt id for any tier change.  Required if the
     /// new tier costs more than the current tier.
     pub payment_id: Option<String>,
 }
@@ -266,39 +270,46 @@ pub async fn subscribe(
     let provider = payload
         .payment_provider
         .as_deref()
-        .unwrap_or("paystack")
+        .unwrap_or("receipt")
         .to_string();
 
-    // For paid tiers, verify the Paystack payment before creating the subscription record.
+    // For paid tiers, require a signed, non-voided receipt owned by this user.
+    // The receipt IS the proof of payment — there is no processor to call.
     let (subscription_status, verified_payment_id) = if is_paid {
-        let payment_id = payload.payment_id.as_deref().ok_or_else(|| {
-            AppError::BadRequest("payment_id is required for paid subscription tiers".to_string())
+        let receipt_id = payload.payment_id.as_deref().ok_or_else(|| {
+            AppError::BadRequest(
+                "payment_id (a payment_receipts id) is required for paid subscription tiers"
+                    .to_string(),
+            )
         })?;
 
-        let payment_svc = PaymentService::from_env();
-
         match provider.as_str() {
-            "paystack" => {
-                let verification = payment_svc
-                    .verify_paystack_payment(payment_id)
-                    .await
-                    .map_err(|e| {
-                        AppError::Internal(format!("Paystack verification failed: {}", e))
-                    })?;
+            "receipt" | "crypto" | "platform" => {
+                let parsed = Uuid::parse_str(receipt_id).map_err(|_| {
+                    AppError::BadRequest("payment_id must be a receipt uuid".to_string())
+                })?;
+                let ok: Option<(Uuid,)> = sqlx::query_as(
+                    "SELECT id FROM payment_receipts \
+                     WHERE id = $1 AND buyer_id = $2 AND voided = false",
+                )
+                .bind(parsed)
+                .bind(user_id)
+                .fetch_optional(&pool)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
 
-                let ok_statuses = ["success", "sandbox_success"];
-                if !ok_statuses.contains(&verification.status.as_str()) {
+                if ok.is_none() {
                     return Err(AppError::BadRequest(format!(
-                        "Paystack payment '{}' has status '{}' — subscription not activated",
-                        payment_id, verification.status
+                        "receipt '{receipt_id}' not found, voided, or not owned by this user — \
+                         subscription not activated"
                     )));
                 }
 
-                ("active", payment_id.to_string())
+                ("active", receipt_id.to_string())
             }
             _ => {
                 return Err(AppError::BadRequest(format!(
-                    "Unknown payment provider '{}'. Use 'paystack'.",
+                    "Unknown payment provider '{}'. Use 'receipt'.",
                     provider
                 )));
             }
@@ -491,7 +502,7 @@ pub async fn cancel_subscription(
 ///
 /// Proration: prorated_delta = (new_price_zar − old_price_zar) × remaining_fraction.
 /// Positive delta (upgrade)  → requires payment_id covering the top-up charge.
-/// Negative delta (downgrade) → records a credit transaction (no Paystack refund in v1).
+/// Negative delta (downgrade) → records a credit transaction (nothing is refunded on-node).
 ///
 /// The old subscription is immediately cancelled. The new subscription inherits the
 /// remaining period so the user does not lose paid days.
@@ -546,26 +557,14 @@ async fn change_subscription_tier(
         (Decimal::ZERO, None)
     };
 
-    // Verify Paystack payment when a top-up is required.
-    if prorated_amount_zar > Decimal::ZERO {
-        let pid = payment_id.ok_or_else(|| {
-            AppError::BadRequest(format!(
-                "payment_id is required for {} (prorated charge: {} ZAR)",
-                direction, prorated_amount_zar
-            ))
-        })?;
-        let payment_svc = PaymentService::from_env();
-        let verification = payment_svc
-            .verify_paystack_payment(pid)
-            .await
-            .map_err(|e| AppError::Internal(format!("Paystack verification failed: {}", e)))?;
-        let ok_statuses = ["success", "sandbox_success"];
-        if !ok_statuses.contains(&verification.status.as_str()) {
-            return Err(AppError::BadRequest(format!(
-                "Paystack payment '{}' has status '{}' — {} not activated",
-                pid, verification.status, direction
-            )));
-        }
+    // No charging here: a tier change in a non-custodial model is settled by the
+    // subscriber's own wallet→wallet checkout. If a top-up is owed we require the
+    // receipt id but never move money from this node.
+    if prorated_amount_zar > Decimal::ZERO && payment_id.is_none() {
+        return Err(AppError::BadRequest(format!(
+            "payment_id (a payment_receipts id) is required for {} (amount owed: {})",
+            direction, prorated_amount_zar
+        )));
     }
 
     // Deactivate current subscription.
@@ -583,7 +582,7 @@ async fn change_subscription_tier(
     let now = chrono::Utc::now();
     let period_end = old_period_end.unwrap_or_else(|| now + chrono::Duration::days(30));
     let provider = if new_tier.price_zar > Decimal::ZERO {
-        "paystack"
+        "receipt"
     } else {
         "free"
     };
@@ -620,7 +619,7 @@ async fn change_subscription_tier(
             "INSERT INTO subscription_transactions
                  (id, user_subscription_id, amount, currency, status,
                   payment_provider, payment_id, transaction_type, created_at)
-             VALUES ($1, $2, $3, 'ZAR', 'completed', 'paystack', $4, $5, NOW())",
+             VALUES ($1, $2, $3, 'USD', 'completed', 'receipt', $4, $5, NOW())",
         )
         .bind(tx_id)
         .bind(new_subscription_id)

@@ -1,313 +1,103 @@
+//! Wallet tests — NON-CUSTODIAL model (DECENTRALIZATION.md §2 + §3.6).
+//!
+//! The old suite tested a custodial USD balance, Paystack deposits and Wise
+//! withdrawals. None of that exists any more: a wallet is an *address*, a purchase
+//! is a wallet→wallet checkout on the `PaymentRail` seam, and the signed `Receipt`
+//! is the entitlement.
+//!
+//! Everything here runs OFFLINE against `MockPaymentRail` — no DB, no network.
+
 #[cfg(test)]
-mod tests {
-    use chrono::Utc;
-
+mod noncustodial_wallet_tests {
+    use magnetite_backend::api::wallet::{LinkWalletRequest, LinkedWallet};
+    use magnetite_backend::services::payment::{
+        rail, sale_split, units_from_usd, verify_receipt, PaymentRail, PubKey,
+    };
     use rust_decimal_macros::dec;
-
     use uuid::Uuid;
 
-    mod wallet_models_tests {
-        use super::*;
+    #[test]
+    fn linked_wallet_reports_an_address_and_never_a_balance() {
+        let wallet = LinkedWallet {
+            user_id: Uuid::new_v4(),
+            wallet_address: Some(PubKey([0xAB; 32]).to_hex()),
+            custodial: false,
+            rail: "mock".to_string(),
+        };
 
-        #[test]
-        fn test_wallet_balance_serialization() {
-            let balance = magnetite_backend::api::wallet::WalletBalance {
-                user_id: Uuid::new_v4(),
-                balance: dec!(100.50),
-                currency: "USDC".to_string(),
-                subscription_tier: None,
-            };
-
-            let json = serde_json::to_string(&balance).unwrap();
-            assert!(json.contains("USDC"));
-            assert!(json.contains("100.5"));
-        }
-
-        #[test]
-        fn test_deposit_request_deserialization() {
-            let json = r#"{
-                "amount": "50.25",
-                "payment_id": "pi_123456789"
-            }"#;
-
-            let request: magnetite_backend::api::wallet::DepositRequest =
-                serde_json::from_str(json).unwrap();
-
-            assert_eq!(request.amount, dec!(50.25));
-            assert_eq!(request.payment_id, "pi_123456789");
-        }
-
-        #[test]
-        fn test_withdraw_request_deserialization() {
-            let json = r#"{
-                "amount": "25.00",
-                "destination": "0x1234567890abcdef"
-            }"#;
-
-            let request: magnetite_backend::api::wallet::WithdrawRequest =
-                serde_json::from_str(json).unwrap();
-
-            assert_eq!(request.amount, dec!(25.00));
-            assert_eq!(request.destination, "0x1234567890abcdef");
-        }
-
-        #[test]
-        fn test_transaction_serialization() {
-            let tx = magnetite_backend::api::wallet::Transaction {
-                id: Uuid::new_v4(),
-                user_id: Uuid::new_v4(),
-                tx_type: "deposit".to_string(),
-                amount: dec!(100.00),
-                status: "completed".to_string(),
-                created_at: Utc::now(),
-            };
-
-            let json = serde_json::to_string(&tx).unwrap();
-            assert!(json.contains("deposit"));
-            assert!(json.contains("completed"));
-            assert!(json.contains("100"));
-        }
+        let json = serde_json::to_string(&wallet).unwrap();
+        assert!(json.contains("wallet_address"));
+        assert!(json.contains("\"custodial\":false"));
+        assert!(
+            !json.contains("balance"),
+            "a non-custodial wallet must never expose a balance: {json}"
+        );
     }
 
-    mod wallet_service_models_tests {
-        use super::*;
-
-        #[test]
-        fn test_wallet_struct_serialization() {
-            let wallet = magnetite_backend::services::wallet::Wallet {
-                user_id: Uuid::new_v4(),
-                currency: "USDC".to_string(),
-                balance: dec!(500.75),
-                updated_at: Utc::now(),
-            };
-
-            let json = serde_json::to_string(&wallet).unwrap();
-            assert!(json.contains("500.75"));
-        }
-
-        #[test]
-        fn test_transaction_struct_serialization() {
-            let tx = magnetite_backend::services::wallet::Transaction {
-                id: Uuid::new_v4(),
-                user_id: Uuid::new_v4(),
-                tx_type: "deposit".to_string(),
-                amount: dec!(250.00),
-                reference_id: Some("ref_123".to_string()),
-                status: "completed".to_string(),
-                created_at: Utc::now(),
-            };
-
-            let json = serde_json::to_string(&tx).unwrap();
-            assert!(json.contains("deposit"));
-            assert!(json.contains("250"));
-        }
-
-        #[test]
-        fn test_transaction_without_reference_id() {
-            let tx = magnetite_backend::services::wallet::Transaction {
-                id: Uuid::new_v4(),
-                user_id: Uuid::new_v4(),
-                tx_type: "deposit".to_string(),
-                amount: dec!(100.00),
-                reference_id: None,
-                status: "pending".to_string(),
-                created_at: Utc::now(),
-            };
-
-            let json = serde_json::to_string(&tx).unwrap();
-            assert!(json.contains("deposit"));
-        }
+    #[test]
+    fn link_request_accepts_hex_pubkey() {
+        let key = PubKey([0x11; 32]).to_hex();
+        let json = format!(r#"{{ "wallet_address": "{key}" }}"#);
+        let req: LinkWalletRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(req.wallet_address, key);
+        assert!(PubKey::from_hex(&req.wallet_address).is_ok());
     }
 
-    mod balance_calculation_tests {
-        use super::*;
-
-        #[test]
-        fn test_decimal_precision_deposit() {
-            let initial = dec!(100.00);
-            let deposit = dec!(50.25);
-            let expected = dec!(150.25);
-
-            assert_eq!(initial + deposit, expected);
-        }
-
-        #[test]
-        fn test_decimal_precision_withdraw() {
-            let initial = dec!(100.00);
-            let withdrawal = dec!(30.50);
-            let expected = dec!(69.50);
-
-            assert_eq!(initial - withdrawal, expected);
-        }
-
-        #[test]
-        fn test_insufficient_funds_check() {
-            let balance = dec!(50.00);
-            let requested = dec!(100.00);
-
-            assert!(requested > balance);
-        }
-
-        #[test]
-        fn test_exact_balance_withdraw() {
-            let balance = dec!(100.00);
-            let withdrawal = dec!(100.00);
-
-            assert!(balance >= withdrawal);
-            assert_eq!(balance - withdrawal, dec!(0));
-        }
-
-        #[test]
-        fn test_small_amount_operations() {
-            let balance = dec!(0.01);
-            let deposit = dec!(0.02);
-
-            assert_eq!(balance + deposit, dec!(0.03));
-        }
-
-        #[test]
-        fn test_large_amount_operations() {
-            let balance = dec!(1_000_000.00);
-            let deposit = dec!(500_000.00);
-
-            assert_eq!(balance + deposit, dec!(1_500_000.00));
-        }
+    #[test]
+    fn link_request_rejects_garbage_pubkey() {
+        assert!(PubKey::from_hex("not-a-key").is_err());
+        assert!(PubKey::from_hex("dead").is_err(), "wrong length rejected");
     }
 
-    mod transaction_type_tests {
-        #[test]
-        fn test_deposit_type_string() {
-            let tx_type = "deposit";
-            assert_eq!(tx_type, "deposit");
-        }
+    /// checkout → receipt → (would-be) entitlement, entirely offline.
+    #[tokio::test]
+    async fn checkout_receipt_gates_entitlement() {
+        let buyer = PubKey([0xB0; 32]);
+        let developer = PubKey([0xD0; 32]);
+        let amount = units_from_usd(dec!(19.99));
 
-        #[test]
-        fn test_withdrawal_type_string() {
-            let tx_type = "withdrawal";
-            assert_eq!(tx_type, "withdrawal");
-        }
+        let receipt = rail()
+            .checkout(&buyer, sale_split(developer, amount, None))
+            .await;
 
-        #[test]
-        fn test_transaction_type_case_sensitivity() {
-            let deposit = "deposit";
-            let deposit_upper = "DEPOSIT";
-
-            assert_ne!(deposit, deposit_upper);
-        }
+        assert_eq!(receipt.buyer, buyer);
+        assert_eq!(receipt.total, 1999);
+        assert_eq!(receipt.protocol_fee, 0, "protocol fee defaults to 0 bps");
+        assert_eq!(receipt.payouts[0].wallet, developer);
+        assert!(
+            verify_receipt(&receipt),
+            "a fresh receipt must verify — this is what grants the entitlement"
+        );
     }
 
-    mod error_handling_tests {
+    /// The receipt is the entitlement, so forging it must fail closed.
+    #[tokio::test]
+    async fn tampered_receipt_never_grants_entitlement() {
+        let buyer = PubKey([0xB1; 32]);
+        let mut receipt = rail()
+            .checkout(&buyer, sale_split(PubKey([0xD1; 32]), 5000, None))
+            .await;
+        assert!(verify_receipt(&receipt));
 
-        use axum::response::IntoResponse;
-        use magnetite_backend::error::AppError;
-
-        #[test]
-        fn test_insufficient_funds_error() {
-            let error = AppError::InsufficientFunds("Insufficient balance".to_string());
-            assert!(error.to_string().contains("Insufficient"));
-        }
-
-        #[test]
-        fn test_error_status_code_insufficient_funds() {
-            let error = AppError::InsufficientFunds("Insufficient balance".to_string());
-            let response = error.into_response();
-
-            assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
-        }
-
-        #[test]
-        fn test_error_status_code_database() {
-            let error = AppError::Database("Connection failed".to_string());
-            let response = error.into_response();
-
-            assert_eq!(
-                response.status(),
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR
-            );
-        }
-
-        #[test]
-        fn test_error_status_code_unauthorized() {
-            let error = AppError::Unauthorized("Invalid token".to_string());
-            let response = error.into_response();
-
-            assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
-        }
-
-        #[test]
-        fn test_error_status_code_not_found() {
-            let error = AppError::NotFound("User not found".to_string());
-            let response = error.into_response();
-
-            assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
-        }
-
-        #[test]
-        fn test_error_json_serialization() {
-            let error = AppError::BadRequest("Invalid input".to_string());
-            let response = error.into_response();
-
-            assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
-        }
+        // Redirect the payout to an attacker wallet.
+        receipt.payouts[0].wallet = PubKey([0xEE; 32]);
+        assert!(!verify_receipt(&receipt), "forged payee must be rejected");
     }
 
-    mod decimal_edge_cases_tests {
-        use super::*;
-
-        #[test]
-        fn test_zero_balance() {
-            let balance = dec!(0);
-            assert!(balance.is_zero());
-        }
-
-        #[test]
-        fn test_negative_amount_rejected() {
-            let balance = dec!(100.00);
-            let negative = dec!(-50.00);
-
-            assert!(negative < dec!(0));
-            assert!(balance + negative < balance);
-        }
-
-        #[test]
-        fn test_zero_deposit_no_change() {
-            let balance = dec!(100.00);
-            let zero_deposit = dec!(0);
-
-            assert_eq!(balance + zero_deposit, balance);
-        }
-
-        #[test]
-        fn test_zero_withdrawal_no_change() {
-            let balance = dec!(100.00);
-            let zero_withdrawal = dec!(0);
-
-            assert_eq!(balance - zero_withdrawal, balance);
-        }
-
-        #[test]
-        fn test_decimal_rounding() {
-            let balance = dec!(100.00);
-            let deposit = dec!(33.33);
-            let expected = dec!(133.33);
-
-            assert_eq!(balance + deposit, expected);
-        }
+    /// Hosting fees (§3.6b) ride a payment channel; the mock rail is deterministic.
+    #[tokio::test]
+    async fn hosting_channel_is_deterministic_and_offline() {
+        let operator = PubKey([0x0B; 32]);
+        let a = rail().open_channel(&operator).await;
+        let b = rail().open_channel(&operator).await;
+        assert_eq!(a.id, b.id, "channel id must be deterministic");
+        assert_eq!(a.peer, operator);
     }
 
-    mod currency_tests {
-        #[test]
-        fn test_usdc_currency_code() {
-            let currency = "USDC";
-            assert_eq!(currency.len(), 4);
-        }
-
-        #[test]
-        fn test_currency_case_sensitivity() {
-            let usdc_lower = "usdc";
-            let usdc_upper = "USDC";
-
-            assert_ne!(usdc_lower, usdc_upper);
-        }
+    #[test]
+    fn usd_prices_convert_to_rail_units() {
+        assert_eq!(units_from_usd(dec!(0.01)), 1);
+        assert_eq!(units_from_usd(dec!(25.00)), 2500);
+        assert_eq!(units_from_usd(dec!(1234.56)), 123_456);
     }
 }

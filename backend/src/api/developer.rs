@@ -15,8 +15,7 @@ use crate::api::response;
 use crate::api::templates;
 use crate::error::{AppError, Result};
 use crate::services::distribution as dist_svc;
-use crate::services::payout::PayoutService;
-use crate::services::wise::{RecipientDetails, WiseClient};
+use crate::services::payment;
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterDeveloperRequest {
@@ -82,26 +81,6 @@ pub struct EarningsByGame {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PayoutRequest {
-    pub id: Uuid,
-    pub amount: Decimal,
-    pub status: String,
-    pub requested_at: DateTime<Utc>,
-    pub processed_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreatePayoutRequest {
-    pub amount: Decimal,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PayoutHistory {
-    pub payouts: Vec<PayoutRequest>,
-    pub total_paid: Decimal,
-}
-
-#[derive(Debug, Serialize)]
 pub struct GameAnalytics {
     pub game_id: Uuid,
     pub daily_active_players: Vec<DailyPlayerData>,
@@ -159,44 +138,7 @@ pub struct DailyPlaytime {
 ///   • Email: set `email`
 ///   • IBAN (SEPA/international): set `iban`; optionally set `bic` for non-SEPA routes
 ///   • US ACH: set `routing_number` + `account_number`
-#[derive(Debug, Deserialize)]
-pub struct CreateWiseRecipientRequest {
-    pub account_holder_name: String,
-    /// ISO 4217 currency code (USD, EUR, GBP, …)
-    pub currency: String,
-    /// ISO 3166-1 alpha-2 country code
-    pub country: String,
-    /// "checking" or "savings" — for ACH bank accounts.
-    #[serde(default)]
-    pub account_type: Option<String>,
-    /// US ABA routing number — for ACH bank accounts.
-    #[serde(default)]
-    pub routing_number: Option<String>,
-    /// Bank account number — for ACH bank accounts.
-    #[serde(default)]
-    pub account_number: Option<String>,
-    /// Email address — for email/PayPal payouts.
-    #[serde(default)]
-    pub email: Option<String>,
-    /// IBAN — for SEPA / international transfers (EUR, GBP, etc.).
-    #[serde(default)]
-    pub iban: Option<String>,
-    /// BIC / SWIFT code — required for non-SEPA IBAN routes.
-    #[serde(default)]
-    pub bic: Option<String>,
-}
-
 /// Stored Wise recipient row returned to clients (no sensitive bank details).
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct WiseRecipientRow {
-    pub id: Uuid,
-    pub developer_id: Uuid,
-    pub wise_recipient_id: String,
-    pub currency: String,
-    pub account_holder_name: String,
-    pub created_at: DateTime<Utc>,
-}
-
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -361,35 +303,33 @@ pub async fn delete_game(
     Ok(Json(()))
 }
 
+/// GET /api/v1/developer/earnings
+///
+/// Non-custodial: there is no accrued balance and no payout queue. A developer is
+/// paid at the instant of sale, wallet→wallet. "Earnings" is therefore the sum of
+/// the signed, non-voided receipts for their games, and `total_paid == total_earnings`.
 pub async fn get_earnings_summary(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<EarningsSummary>> {
-    let total_earnings: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM game_revenue WHERE developer_id = $1",
+    // Receipt totals are in the rail's smallest unit (cents) -> back to USD.
+    let cents: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(r.total - r.protocol_fee), 0)::bigint
+         FROM payment_receipts r
+         JOIN games g ON g.id = r.game_id
+         WHERE g.developer_id = $1 AND r.voided = false",
     )
     .bind(user_id)
     .fetch_one(&pool)
     .await?;
+    let total_earnings = Decimal::new(cents, 2);
 
-    let pending_payout: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM payouts WHERE user_id = $1 AND status = 'pending'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await?;
-
-    let total_paid: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM payouts WHERE user_id = $1 AND status = 'completed'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await?;
-
-    let recent_earnings = sqlx::query_as::<_, (Uuid, String, Decimal, i64)>(
-        "SELECT g.id, g.title, COALESCE(SUM(gr.amount), 0), COUNT(DISTINCT gs.user_id)
+    let recent_earnings = sqlx::query_as::<_, (Uuid, String, i64, i64)>(
+        "SELECT g.id, g.title,
+                COALESCE(SUM(r.total - r.protocol_fee) FILTER (WHERE r.voided = false), 0)::bigint,
+                COUNT(DISTINCT gs.user_id)
          FROM games g
-         LEFT JOIN game_revenue gr ON g.id = gr.game_id
+         LEFT JOIN payment_receipts r ON g.id = r.game_id
          LEFT JOIN game_sessions gs ON g.id = gs.game_id
          WHERE g.developer_id = $1
          GROUP BY g.id",
@@ -400,100 +340,35 @@ pub async fn get_earnings_summary(
 
     let earnings_by_game: Vec<EarningsByGame> = recent_earnings
         .into_iter()
-        .map(|(game_id, title, earnings, players)| EarningsByGame {
+        .map(|(game_id, title, cents, players)| EarningsByGame {
             game_id,
             game_title: title,
-            total_earnings: earnings,
+            total_earnings: Decimal::new(cents, 2),
             player_count: players,
         })
         .collect();
 
     Ok(Json(EarningsSummary {
         total_earnings,
-        pending_payout,
-        total_paid,
+        // Always zero: nothing is ever held on the developer's behalf.
+        pending_payout: Decimal::ZERO,
+        total_paid: total_earnings,
         recent_earnings: earnings_by_game,
     }))
 }
 
-/// POST /api/v1/developer/payouts — insert a payout request row.
-/// The actual Wise disbursement is handled by the spawned payout job in main.rs.
-pub async fn request_payout(
+/// GET /api/v1/developer/wallet — the developer's linked payout wallet address.
+/// This is the address sales are paid to directly; the platform never holds funds.
+pub async fn get_developer_wallet(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
-    Json(payload): Json<CreatePayoutRequest>,
-) -> Result<Json<PayoutRequest>> {
-    if payload.amount <= Decimal::ZERO {
-        return Err(AppError::Validation("Amount must be positive".to_string()));
-    }
-
-    // Require the developer to have registered a Wise recipient before requesting a payout.
-    let has_recipient: Option<(i64,)> =
-        sqlx::query_as("SELECT COUNT(*) FROM wise_recipients WHERE developer_id = $1")
-            .bind(user_id)
-            .fetch_optional(&pool)
-            .await?;
-
-    let count = has_recipient.map(|(c,)| c).unwrap_or(0);
-    if count == 0 {
-        return Err(AppError::Validation(
-            "Please register a Wise payout recipient before requesting a payout".to_string(),
-        ));
-    }
-
-    let payout_svc = PayoutService::new(pool.clone());
-    // Use user_id as the destination placeholder; the real Wise recipient id is looked up by the job.
-    let payout_req = payout_svc
-        .request_payout(user_id, payload.amount, &user_id.to_string())
-        .await?;
-
-    Ok(Json(PayoutRequest {
-        id: payout_req.id,
-        amount: payout_req.amount,
-        status: payout_req.status,
-        requested_at: payout_req.created_at,
-        processed_at: None,
-    }))
-}
-
-pub async fn get_payout_history(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-) -> Result<Json<PayoutHistory>> {
-    let payouts =
-        sqlx::query_as::<_, (Uuid, Decimal, String, DateTime<Utc>, Option<DateTime<Utc>>)>(
-            "SELECT id, amount, status, created_at, processed_at
-         FROM payouts WHERE user_id = $1
-         ORDER BY created_at DESC",
-        )
-        .bind(user_id)
-        .fetch_all(&pool)
-        .await?;
-
-    let payout_list: Vec<PayoutRequest> = payouts
-        .into_iter()
-        .map(
-            |(id, amount, status, requested_at, processed_at)| PayoutRequest {
-                id,
-                amount,
-                status,
-                requested_at,
-                processed_at,
-            },
-        )
-        .collect();
-
-    let total_paid: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount), 0)::numeric FROM payouts WHERE user_id = $1 AND status = 'completed'",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await?;
-
-    Ok(Json(PayoutHistory {
-        payouts: payout_list,
-        total_paid,
-    }))
+) -> Result<Json<serde_json::Value>> {
+    let wallet = payment::wallet_of(&pool, user_id).await?;
+    Ok(Json(serde_json::json!({
+        "wallet_address": wallet.map(|w| w.to_hex()),
+        "custodial": false,
+        "note": "Sales settle wallet-to-wallet at point of sale. There are no payouts.",
+    })))
 }
 
 pub async fn get_game_analytics(
@@ -618,125 +493,6 @@ pub async fn get_game_analytics(
         daily_revenue,
         daily_playtime,
     }))
-}
-
-// ---------------------------------------------------------------------------
-// Wise recipient handlers
-// ---------------------------------------------------------------------------
-
-/// POST /api/v1/developer/wise-recipient
-/// Register (or update) the developer's Wise payout recipient. Calls Wise API to create
-/// the recipient, then stores the Wise-assigned id alongside the non-sensitive details.
-pub async fn create_wise_recipient(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-    Json(payload): Json<CreateWiseRecipientRequest>,
-) -> Result<Json<WiseRecipientRow>> {
-    if payload.account_holder_name.trim().is_empty() {
-        return Err(AppError::Validation(
-            "account_holder_name is required".to_string(),
-        ));
-    }
-    if payload.currency.trim().is_empty() {
-        return Err(AppError::Validation("currency is required".to_string()));
-    }
-
-    // Validate: at least one payment method must be specified.
-    let has_method = payload.email.is_some()
-        || payload.iban.is_some()
-        || (payload.routing_number.is_some() && payload.account_number.is_some());
-    if !has_method {
-        return Err(AppError::Validation(
-            "At least one payment method must be specified: email, iban, or routing_number + account_number".to_string(),
-        ));
-    }
-
-    let details = RecipientDetails {
-        account_holder_name: payload.account_holder_name.clone(),
-        country: payload.country.clone(),
-        currency: payload.currency.clone(),
-        account_type: payload.account_type.clone(),
-        routing_number: payload.routing_number.clone(),
-        account_number: payload.account_number.clone(),
-        email: payload.email.clone(),
-        iban: payload.iban.clone(),
-        bic: payload.bic.clone(),
-    };
-
-    let wise = WiseClient::from_env();
-    let wise_recipient_id = wise.create_recipient(&details).await?;
-
-    // Store the details as JSONB (sanitised — raw account/IBAN numbers are NOT returned to clients).
-    let detail_json = serde_json::json!({
-        "country": payload.country,
-        "account_type": payload.account_type,
-        "has_routing_number": payload.routing_number.is_some(),
-        "has_account_number": payload.account_number.is_some(),
-        "email": payload.email,
-        // IBAN: store last 4 chars for display; never the full IBAN
-        "iban_suffix": payload.iban.as_ref().map(|v| &v[v.len().saturating_sub(4)..]),
-        "has_bic": payload.bic.is_some(),
-    });
-
-    let row = sqlx::query_as::<_, WiseRecipientRow>(
-        r#"
-        INSERT INTO wise_recipients (id, developer_id, wise_recipient_id, currency, account_holder_name, detail, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
-        RETURNING id, developer_id, wise_recipient_id, currency, account_holder_name, created_at
-        "#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(user_id)
-    .bind(&wise_recipient_id)
-    .bind(&payload.currency)
-    .bind(&payload.account_holder_name)
-    .bind(&detail_json)
-    .fetch_one(&pool)
-    .await?;
-
-    Ok(Json(row))
-}
-
-/// GET /api/v1/developer/wise-recipient
-/// Return the current (most recently registered) Wise recipient for this developer.
-pub async fn get_wise_recipient(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-) -> Result<Json<Option<WiseRecipientRow>>> {
-    let row = sqlx::query_as::<_, WiseRecipientRow>(
-        r#"
-        SELECT id, developer_id, wise_recipient_id, currency, account_holder_name, created_at
-        FROM wise_recipients
-        WHERE developer_id = $1
-        ORDER BY created_at DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(user_id)
-    .fetch_optional(&pool)
-    .await?;
-
-    Ok(Json(row))
-}
-
-/// DELETE /api/v1/developer/wise-recipient
-/// Remove the developer's current Wise recipient (all stored rows for this developer).
-pub async fn delete_wise_recipient(
-    State(pool): State<PgPool>,
-    Extension(user_id): Extension<Uuid>,
-) -> Result<Json<serde_json::Value>> {
-    let result = sqlx::query("DELETE FROM wise_recipients WHERE developer_id = $1")
-        .bind(user_id)
-        .execute(&pool)
-        .await?;
-
-    if result.rows_affected() == 0 {
-        return Err(AppError::NotFound(
-            "No Wise recipient found for this developer".to_string(),
-        ));
-    }
-
-    Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
 // ---------------------------------------------------------------------------
@@ -1066,15 +822,8 @@ pub fn router(pool: PgPool) -> Router {
             )),
         )
         .route(
-            "/payouts",
-            get(get_payout_history).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        .route(
-            "/payouts",
-            post(request_payout).layer(from_fn_with_state(
+            "/wallet",
+            get(get_developer_wallet).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),
@@ -1090,28 +839,6 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/games/:id/analytics",
             get(get_game_analytics).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        // Wise recipient management
-        .route(
-            "/wise-recipient",
-            post(create_wise_recipient).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        .route(
-            "/wise-recipient",
-            get(get_wise_recipient).layer(from_fn_with_state(
-                pool.clone(),
-                middleware::auth_middleware,
-            )),
-        )
-        .route(
-            "/wise-recipient",
-            delete(delete_wise_recipient).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),
