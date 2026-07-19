@@ -569,8 +569,10 @@ fn cmd_node(
     seed: u64,
 ) -> Result<()> {
     use magnetite_runtime::{
-        content_address, BlobStore, Discovery, Filter, LanDiscovery, LocalBlobStore, NodeConfig,
+        content_address, BlobStore, Discovery, FanoutDiscovery, Filter, LanDiscovery,
+        LocalBlobStore, NodeConfig,
     };
+    use std::sync::Arc;
 
     // Step 1: obtain the module bytes — either a prebuilt --wasm or build the crate.
     let wasm_path = match wasm_override {
@@ -603,7 +605,18 @@ fn cmd_node(
         let blobs = LocalBlobStore::new();
         let stored = blobs.put(&wasm_bytes).await;
         debug_assert_eq!(stored, game, "stored hash must equal computed content address");
-        let discovery = LanDiscovery::new();
+        // Phonebooks, in order of how little they need: LAN always, plus an
+        // HTTP tracker if (and only if) TRACKER_URL was set. Fanning out means
+        // the SAME discovery handle is announced to, renewed on, and retracted
+        // from — so the background heartbeat keeps us listed everywhere, not
+        // just on the LAN.
+        let tracker = magnetite_runtime::tracker::from_env(node_identity(&bind_addr));
+        let tracker_configured = tracker.is_some();
+        let mut backends: Vec<Box<dyn Discovery + Send + Sync>> = vec![Box::new(LanDiscovery::new())];
+        if let Some(t) = tracker {
+            backends.push(Box::new(t));
+        }
+        let discovery = Arc::new(FanoutDiscovery::new(backends));
 
         let cfg = NodeConfig {
             bind_addr: bind_addr.clone(),
@@ -614,7 +627,7 @@ fn cmd_node(
 
         // Prepare (measure capacity + verify hash + advertise) so we can print
         // the emergent numbers before blocking in the serve loop.
-        let prepared = magnetite_runtime::prepare_game(&blobs, &discovery, &game, &cfg)
+        let prepared = magnetite_runtime::prepare_game(&blobs, discovery.as_ref(), &game, &cfg)
             .await
             .map_err(|e| anyhow::anyhow!("node bring-up failed: {e}"))?;
 
@@ -636,36 +649,34 @@ fn cmd_node(
 
         // Confirm the ad is discoverable by game hash (the phonebook now knows us).
         let found = discovery.find(game, Filter::default()).await;
-        println!("  Advertised       : {} session(s) discoverable by hash (LAN)", found.len());
+        println!("  Advertised       : {} session(s) discoverable by hash", found.len());
 
-        // OPT-IN: also list on an HTTP tracker. LAN discovery above is the
-        // zero-config default and needs no service at all; a tracker is a
-        // redundant, swappable phonebook you point at with TRACKER_URL. Failing
-        // to reach one is a lost hint, never a failure to host — so this is
-        // best-effort and the node serves regardless.
-        match magnetite_runtime::tracker::from_env(node_identity(&bind_addr)) {
-            Some(tracker) => {
-                use magnetite_seams::discovery::Discovery as _;
-                match tracker.announce(prepared.ad.clone()).await {
-                    Ok(()) => println!(
-                        "  Tracker          : announced (signed by this node's key) to {}",
-                        std::env::var(magnetite_runtime::tracker::TRACKER_URL_ENV)
-                            .unwrap_or_default()
-                    ),
-                    Err(e) => println!("  Tracker          : announce failed ({e}) — LAN only"),
-                }
-            }
-            None => println!(
+        // OPT-IN: an HTTP tracker. LAN discovery is the zero-config default and
+        // needs no service at all; a tracker is a redundant, swappable
+        // phonebook you point at with TRACKER_URL. Failing to reach one is a
+        // lost hint, never a failure to host — the fanout above already
+        // announced best-effort and the node serves regardless.
+        if tracker_configured {
+            println!(
+                "  Tracker          : announcing (signed by this node's key) to {}",
+                std::env::var(magnetite_runtime::tracker::TRACKER_URL_ENV).unwrap_or_default()
+            );
+        } else {
+            println!(
                 "  Tracker          : none configured (set {} to opt in)",
                 magnetite_runtime::tracker::TRACKER_URL_ENV
-            ),
+            );
         }
+        println!(
+            "  Lease            : renewed every {}s while serving; retracted on shutdown",
+            cfg.lease.as_secs() / 2
+        );
         println!();
         println!("Press Ctrl-C to stop.");
         println!();
 
         // Serve the verified, content-addressed game.
-        magnetite_runtime::run_node(&blobs, &discovery, &game, cfg)
+        magnetite_runtime::run_node(&blobs, Arc::clone(&discovery), &game, cfg)
             .await
             .map_err(|e| anyhow::anyhow!("node error: {e}"))
     })?;

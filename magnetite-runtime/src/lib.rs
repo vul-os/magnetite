@@ -145,7 +145,7 @@ pub use tick::ServerAnticheatConfig;
 // stand up a capacity-elastic, self-advertising, content-addressed node.
 pub use magnetite_seams::blobstore::{BlobStore, Hash, LocalBlobStore};
 pub use magnetite_seams::discovery::{
-    Capacity, Discovery, Filter, LanDiscovery, NodeAddr, Price, SessionAd,
+    Capacity, Discovery, FanoutDiscovery, Filter, LanDiscovery, NodeAddr, Price, SessionAd,
 };
 
 // Re-export the SDK scaling primitives so callers can drive the scheduler and

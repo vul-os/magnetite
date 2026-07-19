@@ -45,7 +45,8 @@ pub use blobstore::{BlobFetcher, BlobStore, Hash, HttpBlobStore, LocalBlobStore}
 
 // Seam §3.4 — Discovery
 pub use discovery::{
-    Capacity, Discovery, Filter, LanDiscovery, NodeAddr, Price, SessionAd, SignedAd, SignedWithdraw,
+    Capacity, Discovery, FanoutDiscovery, Filter, LanDiscovery, NodeAddr, Price, SessionAd,
+    SignedAd, SignedWithdraw,
     TrackerClient, TrackerDiscovery, MAX_AD_TTL_SECS,
 };
 

@@ -618,6 +618,8 @@ async fn an_unsigned_announce_never_reaches_the_phonebook() {
     let ad = SessionAd {
         game,
         node: NodeAddr("ghost.example:9000".into()),
+        operator: None,
+        region: None,
         capacity: node_capacity(),
         ping_hint: 5,
         price: None,

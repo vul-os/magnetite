@@ -437,6 +437,11 @@ pub fn instance_session_ad(
     Some(magnetite_seams::discovery::SessionAd {
         game: game_hash,
         node: magnetite_seams::discovery::NodeAddr(ws),
+        // A centrally-provisioned instance declares no operator/region: we would
+        // only be repeating our own provisioning record back at ourselves, which
+        // is not the same kind of claim a self-hosted node makes.
+        operator: None,
+        region: None,
         capacity,
         ping_hint: 0,
         price: None,

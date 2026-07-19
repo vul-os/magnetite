@@ -54,6 +54,16 @@ pub struct SessionAd {
     pub game: Hash,
     /// Where to reach the hosting node.
     pub node: NodeAddr,
+    /// **Node-declared** operator name. A tracker cannot verify this — it is a
+    /// label the node chose for itself. It is inside the signed body only so it
+    /// is bound to the node key: "the box holding this key calls itself X".
+    /// Never treat it as vouched-for identity. `None` ⇒ the node declared none.
+    #[serde(default)]
+    pub operator: Option<String>,
+    /// **Node-declared** region hint (e.g. `"eu-north"`, `"lan"`). Same caveat
+    /// as [`SessionAd::operator`]: signature-bound, but not certified by anyone.
+    #[serde(default)]
+    pub region: Option<String>,
     /// Self-measured capacity.
     pub capacity: Capacity,
     /// Rough latency hint in ms.
@@ -123,6 +133,18 @@ impl SessionAd {
                 push_bytes(&mut b, r.0.as_bytes());
             }
             None => b.push(0),
+        }
+        // Node-declared labels are covered by the signature too. They are not
+        // *verified* by anybody, but signing them means a relay cannot silently
+        // relabel someone else's box as "eu-north" or as another operator.
+        for opt in [&self.operator, &self.region] {
+            match opt {
+                Some(s) => {
+                    b.push(1);
+                    push_bytes(&mut b, s.as_bytes());
+                }
+                None => b.push(0),
+            }
         }
         b
     }
@@ -313,6 +335,15 @@ pub trait Discovery {
     async fn announce(&self, session: SessionAd) -> Result<()>;
     /// Find sessions for a game, honoring `filter`.
     async fn find(&self, game: Hash, filter: Filter) -> Vec<SessionAd>;
+    /// Retract this node's own ad on a graceful shutdown.
+    ///
+    /// Best-effort and **optional**: the lease lapses on its own within
+    /// [`MAX_AD_TTL_SECS`] regardless, so a provider that cannot retract (or a
+    /// tracker that is unreachable at shutdown) costs a few stale minutes, not
+    /// correctness. The default is a no-op for exactly that reason.
+    async fn withdraw(&self, _ad: &SessionAd) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// In-process registry stub standing in for mDNS/LAN discovery. Offline.
@@ -346,6 +377,86 @@ impl Discovery for LanDiscovery {
             .cloned()
             .collect()
     }
+    async fn withdraw(&self, ad: &SessionAd) -> Result<()> {
+        let mut ads = self.ads.lock().unwrap();
+        ads.retain(|a| !(a.game == ad.game && a.node == ad.node));
+        Ok(())
+    }
+}
+
+/// Announce to, and query, **several phonebooks at once**.
+///
+/// Discovery is meant to be redundant (§3.4): a node lists itself on the LAN
+/// *and* on whatever trackers it was pointed at, and a client merges what came
+/// back. This wrapper makes that the normal case rather than a special one.
+///
+/// Failure semantics are deliberately lopsided, because the two directions have
+/// different stakes:
+///
+/// * [`announce`](Discovery::announce) succeeds if **any** backend accepted it.
+///   Being listed in one phonebook and not another is a partial outcome, not a
+///   failure to host — a node must not refuse to serve because one tracker is
+///   down. It only errors if *every* backend refused.
+/// * [`find`](Discovery::find) merges results and de-duplicates on
+///   `(game, node)`. A backend that errors contributes nothing; it never
+///   removes what another backend found.
+pub struct FanoutDiscovery {
+    backends: Vec<Box<dyn Discovery + Send + Sync>>,
+}
+
+impl FanoutDiscovery {
+    /// Fan out over `backends`. An empty list is a valid (silent) phonebook.
+    pub fn new(backends: Vec<Box<dyn Discovery + Send + Sync>>) -> Self {
+        Self { backends }
+    }
+
+    /// How many phonebooks this fans out to.
+    pub fn len(&self) -> usize {
+        self.backends.len()
+    }
+
+    /// Whether there are no backends at all.
+    pub fn is_empty(&self) -> bool {
+        self.backends.is_empty()
+    }
+}
+
+#[async_trait::async_trait]
+impl Discovery for FanoutDiscovery {
+    async fn announce(&self, session: SessionAd) -> Result<()> {
+        let mut last_err = None;
+        let mut any_ok = false;
+        for b in &self.backends {
+            match b.announce(session.clone()).await {
+                Ok(()) => any_ok = true,
+                Err(e) => last_err = Some(e),
+            }
+        }
+        if any_ok || self.backends.is_empty() {
+            return Ok(());
+        }
+        Err(last_err.unwrap_or_else(|| SeamError::Transport("no discovery backends".into())))
+    }
+
+    async fn find(&self, game: Hash, filter: Filter) -> Vec<SessionAd> {
+        let mut out: Vec<SessionAd> = Vec::new();
+        for b in &self.backends {
+            for ad in b.find(game, filter.clone()).await {
+                if !out.iter().any(|a| a.node == ad.node && a.game == ad.game) {
+                    out.push(ad);
+                }
+            }
+        }
+        out
+    }
+
+    async fn withdraw(&self, ad: &SessionAd) -> Result<()> {
+        // Best-effort everywhere; a phonebook we cannot reach lapses on its own.
+        for b in &self.backends {
+            let _ = b.withdraw(ad).await;
+        }
+        Ok(())
+    }
 }
 
 /// Pluggable HTTP transport for [`TrackerDiscovery`]. A real impl talks to a
@@ -357,6 +468,10 @@ pub trait TrackerClient: Send + Sync {
     async fn announce(&self, base_url: &str, ad: &SessionAd) -> Result<()>;
     /// GET all ads for a game from `{base}/find/{game_hex}`.
     async fn find(&self, base_url: &str, game: &Hash) -> Result<Vec<SessionAd>>;
+    /// DELETE this node's own ad. Optional — see [`Discovery::withdraw`].
+    async fn withdraw(&self, _base_url: &str, _ad: &SessionAd) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Dumb, swappable HTTP tracker (BitTorrent-style). Anyone runs one; they are
@@ -389,6 +504,9 @@ impl<C: TrackerClient> Discovery for TrackerDiscovery<C> {
             .unwrap_or_default();
         ads.into_iter().filter(|a| filter.accepts(a)).collect()
     }
+    async fn withdraw(&self, ad: &SessionAd) -> Result<()> {
+        self.client.withdraw(&self.base_url, ad).await
+    }
 }
 
 #[cfg(test)]
@@ -400,6 +518,8 @@ mod tests {
         SessionAd {
             game: Hash::of(game),
             node: NodeAddr(node.into()),
+            operator: Some("nordfjord".into()),
+            region: Some("eu-north".into()),
             capacity: Capacity {
                 cpu_cores: 8,
                 ram_mb: 16384,
@@ -506,6 +626,59 @@ mod tests {
     }
 
     #[test]
+    fn node_declared_labels_are_signature_bound() {
+        let node = RawKeypairAuth::from_seed([9u8; 32]);
+        let s = SignedAd::sign(&node, ad(b"snake", "n1", 4, 20, None), 1_000, 60);
+        s.verify::<RawKeypairAuth>(1_000, 30).unwrap();
+
+        // A relay cannot relabel someone else's box as a different operator…
+        let mut relabelled = s.clone();
+        relabelled.ad.operator = Some("totally-not-nordfjord".into());
+        assert!(relabelled.verify::<RawKeypairAuth>(1_000, 30).is_err());
+
+        // …nor move it to a nicer-sounding region…
+        let mut moved = s.clone();
+        moved.ad.region = Some("lan".into());
+        assert!(moved.verify::<RawKeypairAuth>(1_000, 30).is_err());
+
+        // …nor strip the labels entirely.
+        let mut stripped = s.clone();
+        stripped.ad.operator = None;
+        stripped.ad.region = None;
+        assert!(stripped.verify::<RawKeypairAuth>(1_000, 30).is_err());
+    }
+
+    #[test]
+    fn undeclared_labels_are_absent_not_invented() {
+        let node = RawKeypairAuth::from_seed([9u8; 32]);
+        let mut anon = ad(b"snake", "n1", 4, 20, None);
+        anon.operator = None;
+        anon.region = None;
+        let s = SignedAd::sign(&node, anon, 1_000, 60);
+        s.verify::<RawKeypairAuth>(1_000, 30).unwrap();
+
+        // Absent on the wire, and absent after a round-trip — never defaulted
+        // to a plausible-looking string.
+        let back: SessionAd = serde_json::from_str(&serde_json::to_string(&s.ad).unwrap()).unwrap();
+        assert_eq!(back.operator, None);
+        assert_eq!(back.region, None);
+    }
+
+    #[tokio::test]
+    async fn withdraw_removes_only_the_withdrawing_nodes_ad() {
+        let d = LanDiscovery::new();
+        let g = Hash::of(b"snake");
+        let mine = ad(b"snake", "n1", 4, 20, None);
+        d.announce(mine.clone()).await.unwrap();
+        d.announce(ad(b"snake", "n2", 4, 20, None)).await.unwrap();
+
+        d.withdraw(&mine).await.unwrap();
+        let left = d.find(g, Filter::default()).await;
+        assert_eq!(left.len(), 1, "only my own slot is retracted");
+        assert_eq!(left[0].node, NodeAddr("n2".into()));
+    }
+
+    #[test]
     fn expired_and_overlong_leases_are_refused() {
         let node = RawKeypairAuth::from_seed([9u8; 32]);
         let s = SignedAd::sign(&node, ad(b"snake", "n1", 4, 20, None), 1_000, 60);
@@ -538,6 +711,69 @@ mod tests {
         assert!(
             forged.verify::<RawKeypairAuth>(1_010, 300).is_err(),
             "nobody may retract another node's ad"
+        );
+    }
+
+    /// A phonebook that refuses everything (a tracker that is down).
+    struct DeadDiscovery;
+    #[async_trait::async_trait]
+    impl Discovery for DeadDiscovery {
+        async fn announce(&self, _s: SessionAd) -> Result<()> {
+            Err(SeamError::Transport("tracker unreachable".into()))
+        }
+        async fn find(&self, _g: Hash, _f: Filter) -> Vec<SessionAd> {
+            Vec::new()
+        }
+    }
+
+    #[tokio::test]
+    async fn fanout_lists_on_every_reachable_phonebook_and_merges_results() {
+        let a = LanDiscovery::new();
+        let b = LanDiscovery::new();
+        let g = Hash::of(b"snake");
+        // Both backends already know a *different* node…
+        a.announce(ad(b"snake", "n1", 4, 20, None)).await.unwrap();
+        b.announce(ad(b"snake", "n2", 4, 25, None)).await.unwrap();
+
+        let fan = FanoutDiscovery::new(vec![
+            Box::new(a),
+            Box::new(b),
+            Box::new(DeadDiscovery), // one is down; must not break anything
+        ]);
+
+        // …and a query merges them.
+        let found = fan.find(g, Filter::default()).await;
+        assert_eq!(found.len(), 2, "results merge across phonebooks");
+
+        // A partial announce is still a success: one dead tracker must never
+        // stop a node from hosting.
+        fan.announce(ad(b"snake", "n3", 4, 30, None))
+            .await
+            .expect("listed somewhere is listed");
+        assert_eq!(fan.find(g, Filter::default()).await.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn fanout_announce_fails_only_when_every_phonebook_refuses() {
+        let fan = FanoutDiscovery::new(vec![Box::new(DeadDiscovery), Box::new(DeadDiscovery)]);
+        assert!(
+            fan.announce(ad(b"snake", "n1", 4, 20, None)).await.is_err(),
+            "if nobody heard us, we are not listed and must say so"
+        );
+    }
+
+    #[tokio::test]
+    async fn fanout_dedups_the_same_node_seen_twice() {
+        let a = LanDiscovery::new();
+        let b = LanDiscovery::new();
+        let same = ad(b"snake", "n1", 4, 20, None);
+        a.announce(same.clone()).await.unwrap();
+        b.announce(same.clone()).await.unwrap();
+        let fan = FanoutDiscovery::new(vec![Box::new(a), Box::new(b)]);
+        assert_eq!(
+            fan.find(Hash::of(b"snake"), Filter::default()).await.len(),
+            1,
+            "one node listed on two trackers is still one node"
         );
     }
 

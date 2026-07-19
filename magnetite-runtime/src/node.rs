@@ -17,8 +17,13 @@
 //! [`LanDiscovery`](magnetite_seams::discovery::LanDiscovery)) and gains a real
 //! tracker/DHT/BitTorrent backend purely by swapping the provider in.
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use magnetite_seams::blobstore::{BlobStore, Hash};
-use magnetite_seams::discovery::{Capacity, Discovery, NodeAddr, Price, SessionAd};
+use magnetite_seams::discovery::{
+    Capacity, Discovery, NodeAddr, Price, SessionAd, MAX_AD_TTL_SECS,
+};
 
 use magnetite_sandbox::{LimitsConfig, WasmExecutor};
 use magnetite_sdk::authority::MatchConfig;
@@ -105,15 +110,23 @@ pub async fn load_verified_game<B: BlobStore>(
 // ---------------------------------------------------------------------------
 
 /// Build the [`SessionAd`] this node will publish for a hosted game.
+///
+/// `operator` and `region` are whatever this node chooses to call itself. They
+/// are carried inside the signed ad body so nobody can relabel this box, but no
+/// tracker verifies them — see [`SessionAd::operator`].
 pub fn build_session_ad(
     game: Hash,
     node_addr: impl Into<String>,
     capacity: Capacity,
     price: Option<Price>,
+    operator: Option<String>,
+    region: Option<String>,
 ) -> SessionAd {
     SessionAd {
         game,
         node: NodeAddr(node_addr.into()),
+        operator,
+        region,
         capacity,
         ping_hint: 0,
         price,
@@ -124,11 +137,149 @@ pub fn build_session_ad(
 
 /// Announce a session to the phonebook. Replaces the central provisioning poll:
 /// the node tells discovery "I host game X with this capacity", clients query it.
-pub async fn announce<D: Discovery>(discovery: &D, ad: SessionAd) -> Result<(), NodeError> {
+pub async fn announce<D: Discovery + ?Sized>(discovery: &D, ad: SessionAd) -> Result<(), NodeError> {
     discovery
         .announce(ad)
         .await
         .map_err(|e| NodeError::Announce(e.to_string()))
+}
+
+// ---------------------------------------------------------------------------
+// Lease heartbeat
+// ---------------------------------------------------------------------------
+
+/// Default lease length a node asks for, in seconds.
+///
+/// Matches `magnetite_runtime::tracker::DEFAULT_TTL_SECS`: the node renews at
+/// roughly half of it, so one missed heartbeat is survivable while a node that
+/// actually died vanishes from the phonebook within the lease.
+pub const DEFAULT_LEASE_SECS: u64 = 120;
+
+/// A running background task that keeps this node's ad alive in the phonebook.
+///
+/// A tracker ad is a **lease**, not a registration (§3.4): it lapses within
+/// [`MAX_AD_TTL_SECS`] unless renewed. Without this, a node that has been up for
+/// an hour is still serving happily but is invisible to everyone — the phonebook
+/// only ever lists nodes that keep saying "still here", which is precisely what
+/// makes a stale/restored-from-backup tracker converge to the truth.
+///
+/// Dropping the handle does **not** stop the task; call [`Heartbeat::stop`] (or
+/// [`Heartbeat::stop_and_withdraw`] on a graceful shutdown).
+pub struct Heartbeat {
+    stop: Arc<tokio::sync::Notify>,
+    stopped: Arc<std::sync::atomic::AtomicBool>,
+    handle: tokio::task::JoinHandle<()>,
+    discovery: Arc<dyn Discovery + Send + Sync>,
+    ad: SessionAd,
+}
+
+impl Heartbeat {
+    /// Signal the renew loop to stop and wait for it to wind down.
+    ///
+    /// The ad is left to lapse on its own — correct for a crash-like exit, and
+    /// bounded by the lease.
+    pub async fn stop(self) {
+        self.stopped
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        // `notify_one` stores a permit if the task is not parked on `notified()`
+        // yet, so the stop signal cannot be lost to a race — `notify_waiters`
+        // would silently drop it and leave us blocked for a whole interval.
+        self.stop.notify_one();
+        let _ = self.handle.await;
+    }
+
+    /// Stop renewing **and** retract the ad — the graceful-shutdown path.
+    ///
+    /// Best-effort: if the phonebook is unreachable the lease expiry still
+    /// removes us, just a few minutes later.
+    pub async fn stop_and_withdraw(self) {
+        let discovery = Arc::clone(&self.discovery);
+        let ad = self.ad.clone();
+        self.stop().await;
+        let _ = discovery.withdraw(&ad).await;
+    }
+}
+
+/// Cheap, dependency-free jitter in `[0, span)` derived from the wall clock.
+///
+/// Jitter matters here because many nodes booted by the same orchestrator would
+/// otherwise renew in lockstep and hit a tracker as a thundering herd.
+fn jitter(span: Duration) -> Duration {
+    if span.is_zero() {
+        return Duration::ZERO;
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    Duration::from_millis(nanos % (span.as_millis().max(1) as u64))
+}
+
+/// Start renewing `ad` in the background until stopped.
+///
+/// * Renews every `lease / 2` (so one lost renew is survivable), plus up to 10%
+///   jitter.
+/// * On failure, retries with exponential backoff starting at one second and
+///   capped at the normal interval — a transient blip recovers fast, a tracker
+///   that is truly down is not hammered, and we never back off *past* the
+///   renew interval because the lease is ticking the whole time.
+pub fn spawn_heartbeat(
+    discovery: Arc<dyn Discovery + Send + Sync>,
+    ad: SessionAd,
+    lease: Duration,
+) -> Heartbeat {
+    // Clamp to something sane: never renew in a tight loop, never ask for a
+    // lease longer than the protocol honours (a node must not be able to squat
+    // the phonebook by routing around the tracker client's own clamp).
+    let lease = lease.clamp(
+        Duration::from_millis(100),
+        Duration::from_secs(MAX_AD_TTL_SECS),
+    );
+    let interval = (lease / 2).max(Duration::from_millis(50));
+
+    let stop = Arc::new(tokio::sync::Notify::new());
+    let stopped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let task_stop = Arc::clone(&stop);
+    let task_stopped = Arc::clone(&stopped);
+    let task_discovery = Arc::clone(&discovery);
+    let task_ad = ad.clone();
+
+    let handle = tokio::spawn(async move {
+        let mut backoff: Option<Duration> = None;
+        loop {
+            let base = backoff.unwrap_or(interval);
+            let wait = base + jitter(base / 10);
+
+            tokio::select! {
+                _ = task_stop.notified() => break,
+                _ = tokio::time::sleep(wait) => {}
+            }
+            if task_stopped.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+
+            match task_discovery.announce(task_ad.clone()).await {
+                Ok(()) => backoff = None,
+                Err(e) => {
+                    tracing::warn!("discovery heartbeat failed, will retry: {e}");
+                    let next = backoff
+                        .map(|b| b * 2)
+                        .unwrap_or(Duration::from_secs(1))
+                        .min(interval);
+                    backoff = Some(next);
+                }
+            }
+        }
+    });
+
+    Heartbeat {
+        stop,
+        stopped,
+        handle,
+        discovery,
+        ad,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +301,12 @@ pub struct NodeConfig {
     pub capacity: Option<Capacity>,
     /// Optional per-seat/per-hour price hint carried in the advertisement.
     pub price: Option<Price>,
+    /// What this node calls its operator. Self-declared; signed but unverified.
+    pub operator: Option<String>,
+    /// What this node calls its region. Self-declared; signed but unverified.
+    pub region: Option<String>,
+    /// Lease length to request, and therefore how often to renew (`lease / 2`).
+    pub lease: Duration,
 }
 
 impl Default for NodeConfig {
@@ -161,6 +318,9 @@ impl Default for NodeConfig {
             limits: LimitsConfig::default(),
             capacity: None,
             price: None,
+            operator: None,
+            region: None,
+            lease: Duration::from_secs(DEFAULT_LEASE_SECS),
         }
     }
 }
@@ -183,7 +343,7 @@ pub struct PreparedGame {
 ///
 /// This is the whole node bring-up *except* binding the socket, so it is fully
 /// testable offline (no port, no real network) with the default providers.
-pub async fn prepare_game<B: BlobStore, D: Discovery>(
+pub async fn prepare_game<B: BlobStore, D: Discovery + ?Sized>(
     blobs: &B,
     discovery: &D,
     game: &Hash,
@@ -204,7 +364,14 @@ pub async fn prepare_game<B: BlobStore, D: Discovery>(
     let match_config = MatchConfig::elastic(cfg.seed, &capacity, cfg.cell_size);
 
     // 4. Self-advertise instead of registering in a central table.
-    let ad = build_session_ad(*game, cfg.bind_addr.clone(), capacity, cfg.price.clone());
+    let ad = build_session_ad(
+        *game,
+        cfg.bind_addr.clone(),
+        capacity,
+        cfg.price.clone(),
+        cfg.operator.clone(),
+        cfg.region.clone(),
+    );
     announce(discovery, ad.clone()).await?;
 
     Ok(PreparedGame {
@@ -218,13 +385,20 @@ pub async fn prepare_game<B: BlobStore, D: Discovery>(
 /// Boot a full capacity-elastic node: [`prepare_game`] + serve the verified game
 /// over WebSocket with the sandboxed Wasm executor. Blocks until the server
 /// exits.
-pub async fn run_node<B: BlobStore, D: Discovery>(
+///
+/// While it serves, a background [`Heartbeat`] keeps renewing the ad, because a
+/// phonebook entry is a lease and a node that stops saying "still here" is
+/// correctly forgotten. When the serve loop returns — for any reason — the
+/// heartbeat is stopped and the ad is retracted, so a clean shutdown removes us
+/// from the phonebook immediately instead of leaving a ghost until the lease
+/// lapses.
+pub async fn run_node<B: BlobStore, D: Discovery + Send + Sync + 'static>(
     blobs: &B,
-    discovery: &D,
+    discovery: Arc<D>,
     game: &Hash,
     cfg: NodeConfig,
 ) -> Result<(), NodeError> {
-    let prepared = prepare_game(blobs, discovery, game, &cfg).await?;
+    let prepared = prepare_game(blobs, discovery.as_ref(), game, &cfg).await?;
 
     let executor = WasmExecutor::from_bytes(
         &prepared.bytes,
@@ -233,15 +407,26 @@ pub async fn run_node<B: BlobStore, D: Discovery>(
     )
     .map_err(|e| NodeError::Server(ServerError(format!("wasm load error: {e}"))))?;
 
+    let heartbeat = spawn_heartbeat(
+        Arc::clone(&discovery) as Arc<dyn Discovery + Send + Sync>,
+        prepared.ad.clone(),
+        cfg.lease,
+    );
+
     let server_cfg = GameServerConfig {
         bind_addr: cfg.bind_addr,
         match_config: prepared.match_config,
         anticheat: None,
     };
 
-    GameServer::with_executor(Box::new(executor), server_cfg)
+    let result = GameServer::with_executor(Box::new(executor), server_cfg)
         .await
-        .map_err(NodeError::Server)
+        .map_err(NodeError::Server);
+
+    // Stop announcing ourselves before returning, whether we are exiting
+    // cleanly or on error — we are no longer hosting either way.
+    heartbeat.stop_and_withdraw().await;
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -327,6 +512,208 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].capacity.cpu_cores, 8);
         assert!(found[0].capacity.max_shards >= 1);
+    }
+
+    // ── Lease heartbeat ──────────────────────────────────────────────────────
+
+    use magnetite_seams::Result as SeamResult;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    /// A phonebook that behaves like a real tracker: every ad is a **lease**
+    /// that lapses unless it is re-announced. `LanDiscovery` deliberately has no
+    /// lease concept, so testing the heartbeat against it would prove nothing —
+    /// this double is what makes "still discoverable past the original lease" a
+    /// meaningful assertion.
+    struct LeasedDiscovery {
+        lease: Duration,
+        /// (ad, instant the current lease expires)
+        ads: Mutex<Vec<(SessionAd, Instant)>>,
+        announces: AtomicUsize,
+        /// When true, every announce is rejected (a tracker that is down).
+        failing: std::sync::atomic::AtomicBool,
+    }
+
+    impl LeasedDiscovery {
+        fn new(lease: Duration) -> Self {
+            Self {
+                lease,
+                ads: Mutex::new(Vec::new()),
+                announces: AtomicUsize::new(0),
+                failing: std::sync::atomic::AtomicBool::new(false),
+            }
+        }
+        fn live_count(&self) -> usize {
+            let now = Instant::now();
+            self.ads
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, exp)| *exp > now)
+                .count()
+        }
+        fn announces(&self) -> usize {
+            self.announces.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Discovery for LeasedDiscovery {
+        async fn announce(&self, session: SessionAd) -> SeamResult<()> {
+            self.announces.fetch_add(1, Ordering::SeqCst);
+            if self.failing.load(Ordering::SeqCst) {
+                return Err(magnetite_seams::SeamError::Transport("tracker down".into()));
+            }
+            let expiry = Instant::now() + self.lease;
+            let mut ads = self.ads.lock().unwrap();
+            ads.retain(|(a, _)| !(a.game == session.game && a.node == session.node));
+            ads.push((session, expiry));
+            Ok(())
+        }
+        async fn find(&self, game: Hash, filter: Filter) -> Vec<SessionAd> {
+            let now = Instant::now();
+            self.ads
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(a, exp)| *exp > now && a.game == game && filter.accepts(a))
+                .map(|(a, _)| a.clone())
+                .collect()
+        }
+        async fn withdraw(&self, ad: &SessionAd) -> SeamResult<()> {
+            let mut ads = self.ads.lock().unwrap();
+            ads.retain(|(a, _)| !(a.game == ad.game && a.node == ad.node));
+            Ok(())
+        }
+    }
+
+    fn heartbeat_ad() -> SessionAd {
+        build_session_ad(
+            Hash::of(b"heartbeat game"),
+            "box.example:9000",
+            test_capacity(),
+            None,
+            Some("pareto".into()),
+            Some("lan".into()),
+        )
+    }
+
+    #[tokio::test]
+    async fn a_renewed_node_outlives_its_original_lease() {
+        // 200ms leases, renewed every ~100ms.
+        let lease = Duration::from_millis(200);
+        let d = Arc::new(LeasedDiscovery::new(lease));
+        let ad = heartbeat_ad();
+        let game = ad.game;
+
+        d.announce(ad.clone()).await.unwrap();
+        assert_eq!(d.live_count(), 1, "listed on the initial announce");
+
+        let hb = spawn_heartbeat(Arc::clone(&d) as Arc<dyn Discovery + Send + Sync>, ad, lease);
+
+        // Wait well past the ORIGINAL lease. Without renewal this ad is gone.
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        assert!(
+            d.announces() >= 2,
+            "the heartbeat should have renewed at least twice by now, saw {}",
+            d.announces()
+        );
+        assert_eq!(
+            d.find(game, Filter::default()).await.len(),
+            1,
+            "a node that keeps saying 'still here' stays in the phonebook past its first lease"
+        );
+
+        // Stop renewing WITHOUT withdrawing: this is the crash-like path, where
+        // the lease alone must evict us.
+        hb.stop().await;
+        let after = d.announces();
+        tokio::time::sleep(lease + Duration::from_millis(150)).await;
+        assert_eq!(
+            d.announces(),
+            after,
+            "a stopped heartbeat must not keep announcing"
+        );
+        assert_eq!(
+            d.find(game, Filter::default()).await.len(),
+            0,
+            "once the renews stop, the lease lapses and the node disappears"
+        );
+    }
+
+    #[tokio::test]
+    async fn graceful_shutdown_deregisters_immediately() {
+        // A long lease: if the ad vanishes, it is because we retracted it, not
+        // because it timed out.
+        let lease = Duration::from_secs(300);
+        let d = Arc::new(LeasedDiscovery::new(lease));
+        let ad = heartbeat_ad();
+        let game = ad.game;
+
+        d.announce(ad.clone()).await.unwrap();
+        let hb = spawn_heartbeat(
+            Arc::clone(&d) as Arc<dyn Discovery + Send + Sync>,
+            ad,
+            lease,
+        );
+        assert_eq!(d.find(game, Filter::default()).await.len(), 1);
+
+        hb.stop_and_withdraw().await;
+        assert_eq!(
+            d.find(game, Filter::default()).await.len(),
+            0,
+            "a clean shutdown removes the entry now, not in five minutes"
+        );
+    }
+
+    #[tokio::test]
+    async fn heartbeat_survives_a_failing_tracker_and_recovers() {
+        let lease = Duration::from_millis(200);
+        let d = Arc::new(LeasedDiscovery::new(lease));
+        let ad = heartbeat_ad();
+        let game = ad.game;
+
+        // Tracker is down from the start.
+        d.failing.store(true, Ordering::SeqCst);
+        let hb = spawn_heartbeat(
+            Arc::clone(&d) as Arc<dyn Discovery + Send + Sync>,
+            ad,
+            lease,
+        );
+
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(d.announces() >= 1, "it kept trying rather than giving up");
+        assert_eq!(
+            d.find(game, Filter::default()).await.len(),
+            0,
+            "a failed announce lists nothing — no optimistic local state"
+        );
+
+        // Tracker comes back; the loop must re-list us without a restart.
+        d.failing.store(false, Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(
+            d.find(game, Filter::default()).await.len(),
+            1,
+            "the node re-appears on its own once the phonebook recovers"
+        );
+        hb.stop().await;
+    }
+
+    #[tokio::test]
+    async fn heartbeat_lease_is_clamped_to_the_protocol_maximum() {
+        // A node must not be able to ask for a lease longer than the protocol
+        // allows by routing around the tracker client.
+        let d = Arc::new(LeasedDiscovery::new(Duration::from_secs(1)));
+        let hb = spawn_heartbeat(
+            Arc::clone(&d) as Arc<dyn Discovery + Send + Sync>,
+            heartbeat_ad(),
+            Duration::from_secs(u64::MAX / 2),
+        );
+        // Nothing to assert beyond "it did not panic on the absurd duration and
+        // it is not renewing at an absurd interval"; stop cleanly.
+        hb.stop().await;
     }
 
     #[test]

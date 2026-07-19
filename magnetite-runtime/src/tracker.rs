@@ -157,6 +157,14 @@ impl<I: Identity + Send + Sync> TrackerClient for HttpTrackerClient<I> {
             .map_err(|e| SeamError::Transport(format!("tracker find: bad json: {e}")))?;
         Ok(parse_sessions(&body))
     }
+
+    /// Retract this node's ad. Delegates to the signed
+    /// [`HttpTrackerClient::withdraw`] so `TrackerDiscovery::withdraw` — and
+    /// therefore the node's graceful-shutdown path — actually reaches the
+    /// tracker instead of silently no-op'ing.
+    async fn withdraw(&self, base_url: &str, ad: &SessionAd) -> Result<()> {
+        HttpTrackerClient::withdraw(self, base_url, ad).await
+    }
 }
 
 /// Pull `SessionAd`s out of a tracker's `GET /sessions` body.
@@ -208,6 +216,8 @@ mod tests {
         SessionAd {
             game: Hash::of(b"content-addressed game"),
             node: NodeAddr("box.example:9000".into()),
+            operator: Some("pareto".into()),
+            region: Some("eu-north".into()),
             capacity: Capacity {
                 cpu_cores: 8,
                 ram_mb: 32768,

@@ -315,6 +315,13 @@
   color: var(--color-text-muted);
 }
 
+/* A hash this tracker has no catalog entry for. Not an error state — the
+   content address IS the identity — so it is muted, not alarming. */
+.game-version-unknown {
+  font-style: italic;
+  opacity: 0.7;
+}
+
 /* Node */
 .cell-node {
   display: flex;
@@ -333,9 +340,32 @@
 }
 
 .node-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   color: var(--color-text-muted);
+}
+
+/* Operator/region are claims a node makes about itself. They are signed by the
+   node key (so nobody can rewrite them in flight) but no tracker can verify
+   them, and the UI must never imply otherwise. */
+.declared-tag {
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--radius-xs);
+  border: 1px dashed var(--color-border-strong);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  opacity: 0.85;
+}
+
+.node-meta-none,
+.players-count-unknown {
+  font-style: italic;
+  opacity: 0.6;
 }
 
 .node-comms {
@@ -366,6 +396,14 @@
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-text-primary);
+}
+
+/* Occupancy counters are unsigned display hints and entirely optional; a node
+   that publishes none is normal, not broken. */
+.players-count-unknown {
+  font-size: var(--text-2xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 
 .players-max {
@@ -503,4 +541,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .browser { animation: none; }
+}
+
+/* When a tracker has no catalog entry, the content address IS the title —
+   rendered once, in mono, rather than duplicated as title + chip. */
+.game-title-hash {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-primary);
 }
