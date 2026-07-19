@@ -345,6 +345,8 @@ async fn async_main(args: Args) {
         bind_addr,
         match_config: match_config.clone(),
         anticheat: None, // use the runtime default: RateLimit(120) + InputSchema
+        // Single-node serve: no cluster membership, so no session follow.
+        fleet: None,
     };
 
     let result = match &args.wasm {

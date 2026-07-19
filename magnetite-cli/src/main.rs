@@ -520,6 +520,7 @@ fn cmd_dev(crate_path: &Path, port: u16, max_players: u32) -> Result<()> {
             bind_addr: bind_addr.clone(),
             match_config: match_cfg,
             anticheat: None,
+            fleet: None,
         };
         let limits = LimitsConfig::default();
 

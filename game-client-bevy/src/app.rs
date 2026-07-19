@@ -208,6 +208,21 @@ fn handle_server_message(
                 build_view_from_predicted(&predictor.authoritative, predictor.player_id);
             predictor.reconcile_ack(seq, auth_view);
         }
+
+        // Fleet session-follow frames. This reference client is single-node and
+        // does not follow migrated shards, so it must NOT act on them — a
+        // client that half-follows a redirect (reconnecting without verifying
+        // the issuer signature and pinning `target_key`) is exactly the hijack
+        // the protocol exists to prevent. See `magnetite-web-client` for a
+        // client that implements the follow properly.
+        ServerNet::NodeIdentity { .. } => {}
+        ServerNet::Redirect { .. } => {
+            eprintln!(
+                "[client] server sent a session redirect; this client does not \
+                 implement session follow — disconnecting rather than following \
+                 it unverified"
+            );
+        }
     }
 }
 

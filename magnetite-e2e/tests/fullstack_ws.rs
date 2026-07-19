@@ -95,6 +95,7 @@ async fn start_fullstack_server() -> (String, watch::Sender<bool>) {
         bind_addr: addr.to_string(),
         match_config: cfg,
         anticheat: None,
+        fleet: None,
     };
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -193,6 +194,8 @@ async fn drive_client(ws_url: &str) -> ClientObservation {
                                 reject_seqs.push(s);
                             }
                             ServerNet::Welcome { .. } => {}
+                            // Fleet frames: not exercised by this harness.
+                            ServerNet::NodeIdentity { .. } | ServerNet::Redirect { .. } => {}
                         }
                     }
                 }
@@ -446,6 +449,7 @@ async fn fullstack_ws_dedicated_topology_smoke() {
         bind_addr: addr.to_string(),
         match_config: cfg,
         anticheat: None,
+        fleet: None,
     };
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);

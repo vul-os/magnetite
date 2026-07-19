@@ -172,6 +172,23 @@ impl ShardManager {
         shard
     }
 
+    /// Place a player directly on a named shard.
+    ///
+    /// Used by the session-follow path: a player that followed a migrated shard
+    /// to this node belongs on *that* shard, not on whatever shard a fresh join
+    /// would have picked. Only ever called after
+    /// `cluster::FollowAdmission::admit` has accepted the follow token, so the
+    /// shard number comes from a credential this node verified, not from the
+    /// client's say-so.
+    pub fn place(&mut self, player: PlayerId, shard: ShardId) -> ShardId {
+        self.player_shard.insert(player, shard);
+        if matches!(self.topology, Topology::Sharded { .. }) {
+            self.positions.entry(player).or_default();
+        }
+        debug!(%player, %shard, "player placed on shard (session follow)");
+        shard
+    }
+
     /// Return the shard a player is currently on, if known.
     pub fn shard_of(&self, player: PlayerId) -> Option<ShardId> {
         self.player_shard.get(&player).copied()

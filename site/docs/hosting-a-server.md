@@ -61,13 +61,35 @@ contributed by whoever chooses to run a node.
 > route with the key **pinned**. Discovery supplies addresses only — see
 > "Who is allowed to receive a shard" below.
 >
-> **A player's session now follows the shard.** When a shard commits a migration
-> from A to B, A hands each affected client a `SignedRedirect` — the target's
-> address *and* pinned node key, the shard, the new epoch, an expiry, and a
-> short-lived single-use `FollowToken` — signed by A's node key, which the client
-> has already authenticated. The client reconnects to B, aborts unless B presents
-> the pinned key, and presents the token. It is a **redirect, not a proxy**: the
+> **A player's session now follows the shard — through the actual socket.**
+> When a shard commits a migration from A to B, A hands each affected client a
+> `SignedRedirect` — the target's address *and* pinned node key, the shard, the
+> new epoch, an expiry, and a short-lived single-use `FollowToken` — signed by
+> A's node key. The client reconnects to B, aborts unless B proves it holds the
+> pinned key, and presents the token. It is a **redirect, not a proxy**: the
 > source does not stay in the path, which is the whole point of moving the shard.
+>
+> This is wired end to end, not just as a mechanism. Attach a
+> `follow::FleetSession` to `GameServerConfig::fleet` and the node's own
+> WebSocket listener will: track who is connected on which shard; deliver the
+> redirect on the player's live socket the moment a migration commits, then close
+> that connection; and run any incoming `ClientNet::Follow` through
+> `FollowAdmission::admit` before attaching the player — under the player id the
+> redirect was minted for, so the session is continuous rather than a fresh join.
+> `magnetite-runtime/tests/session_follow.rs` proves it over real sockets between
+> two real nodes, along with the refusals: a forged redirect, an expired one, one
+> retargeted at another player, one from a non-member node, and a replayed one.
+> A failed migration is proven to deliver **nothing**.
+>
+> **The client verifies.** `magnetite-web-client/src/follow.js` checks the
+> redirect's issuer signature (Ed25519 via WebCrypto — no hand-rolled curve
+> arithmetic, no added dependency) against the node key the session already
+> pinned, refuses an expired one, and pins `target_key` on the new connection: it
+> asks the far side to sign a fresh nonce and aborts unless the key matches and
+> the signature verifies. Where WebCrypto cannot do Ed25519, the follow is
+> **refused** — "cannot check" is never treated as "checks out". A client that
+> blindly followed a redirect could be walked onto an attacker's node, which is
+> the entire threat this protocol exists to stop.
 >
 > **What is NOT proven:** all of this is tested over real sockets between
 > processes on one machine and on a LAN. It has **not** been run across the
@@ -129,6 +151,26 @@ player Y; a token for shard S will not admit to shard T; a redirect from a
 superseded migration is refused by the same epoch fence that governs handoff.
 Redirects are minted only after a verified commit-ack, so a failed or
 rolled-back migration never sends anyone anywhere.
+
+### What session-follow does not do
+
+Being plain about the edges, because each of these is a real limit:
+
+- **A redirect is a bearer credential.** Anyone who can read a player's redirect
+  before it is redeemed can redeem it in their place, once, within its ~30s
+  window. It is single-use, epoch-fenced and short-lived, which bounds the
+  damage — it does not eliminate it. Run players over `wss://`.
+- **The node-identity proof authenticates the key, not the channel.** A node
+  answering `ClientNet::Hello` proves it holds the secret half of its node key.
+  It does not bind that proof to the transport, so on plaintext `ws://` a relay
+  in the middle is not defeated by it. TLS is still doing real work.
+- **No NAT traversal.** Unchanged and unqualified: the redirect's address must be
+  directly reachable by the client, exactly as the handoff port must be
+  reachable by peer nodes.
+- **The `magnetite node` CLI does not enable it.** A standalone hosted node has
+  no cluster membership and no migration transport, so it passes `fleet: None`
+  and behaves exactly as before. Session-follow is opt-in for callers that build
+  a cluster in code today.
 
 ## Running one
 

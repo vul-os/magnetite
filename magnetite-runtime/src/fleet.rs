@@ -1116,6 +1116,21 @@ impl NetworkHandoffTransport {
         self
     }
 
+    /// Forget a player on `shard` — they disconnected, or they already followed
+    /// the shard elsewhere. A player we no longer serve must not be minted a
+    /// redirect: that would hand a live credential to a session that is gone.
+    pub fn untrack_player(&mut self, shard: ShardId, player: u64) -> &mut Self {
+        if let Some(v) = self.shard_players.get_mut(&shard.0) {
+            v.retain(|p| *p != player);
+        }
+        self
+    }
+
+    /// The players currently tracked on `shard`.
+    pub fn tracked_players(&self, shard: ShardId) -> Vec<u64> {
+        self.shard_players.get(&shard.0).cloned().unwrap_or_default()
+    }
+
     /// Take the redirects minted by committed migrations, clearing the queue.
     /// The caller ships each one down the affected player's existing (already
     /// authenticated) connection.

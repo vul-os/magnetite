@@ -32,6 +32,7 @@ pub async fn start_arena_server(cfg: MatchConfig) -> (String, watch::Sender<bool
         bind_addr: addr.clone(),
         match_config: cfg,
         anticheat: None,
+        fleet: None,
     };
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -131,6 +132,8 @@ pub async fn run_simulated_client(
                             reject_count += 1;
                         }
                         ServerNet::Welcome { .. } => {}
+                        // Fleet frames: not exercised by this harness.
+                        ServerNet::NodeIdentity { .. } | ServerNet::Redirect { .. } => {}
                     }
                 }
                 Ok(Some(Ok(Message::Close(_)))) => break,

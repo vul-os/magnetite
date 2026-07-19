@@ -94,6 +94,7 @@
 //!         bind_addr: "127.0.0.1:9000".to_string(),
 //!         match_config: cfg,
 //!         anticheat: None,
+//!         fleet: None,
 //!     };
 //!     GameServer::serve(executor, server_cfg).await.unwrap();
 //! }
@@ -113,6 +114,7 @@
 //!         bind_addr: "127.0.0.1:9000".to_string(),
 //!         match_config: cfg,
 //!         anticheat: None,
+//!         fleet: None,
 //!     };
 //!     GameServer::serve_wasm("game.wasm", LimitsConfig::default(), server_cfg)
 //!         .await
@@ -124,6 +126,7 @@ pub mod capacity;
 pub mod cluster;
 pub mod connection;
 pub mod fleet;
+pub mod follow;
 pub mod node;
 pub mod server;
 pub mod shard;

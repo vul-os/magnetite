@@ -417,6 +417,9 @@ pub async fn run_node<B: BlobStore, D: Discovery + Send + Sync + 'static>(
         bind_addr: cfg.bind_addr,
         match_config: prepared.match_config,
         anticheat: None,
+        // A standalone hosted node is not part of a cluster: no membership, no
+        // migration transport, so no session follow. See `crate::follow`.
+        fleet: None,
     };
 
     let result = GameServer::with_executor(Box::new(executor), server_cfg)
