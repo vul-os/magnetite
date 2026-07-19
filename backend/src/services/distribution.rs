@@ -266,6 +266,36 @@ pub async fn get_artifact(pool: &PgPool, artifact_id: Uuid) -> Result<GameArtifa
     .ok_or_else(|| AppError::NotFound("Artifact not found".to_string()))
 }
 
+/// Resolve an artifact purely by its **content address** (its `sha256_hash`).
+///
+/// This is the backend counterpart to the decentralized "a game IS the hash of
+/// its bytes" model (DECENTRALIZATION.md §3.3): a game/version row is no longer
+/// required to *identify* a module — any successfully-built artifact whose bytes
+/// hash to `content_hash` matches. Nodes fetch modules by hash and verify them
+/// (`magnetite_runtime::load_verified_game`) before running, so this resolver is
+/// the central mirror of that content-addressed lookup.
+///
+/// The hash is compared case-insensitively over its hex form.
+pub async fn get_artifact_by_hash(pool: &PgPool, content_hash: &str) -> Result<GameArtifact> {
+    let normalized = content_hash.trim().to_ascii_lowercase();
+    sqlx::query_as::<_, GameArtifact>(
+        "SELECT id, game_id, version_id, build_id, artifact_type, artifact_url,
+                file_size_bytes, sha256_hash, build_status, error_message, created_at, updated_at
+         FROM game_artifacts
+         WHERE LOWER(sha256_hash) = $1 AND build_status = 'success'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(normalized)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| {
+        AppError::NotFound(format!(
+            "No successful artifact with content hash {content_hash}"
+        ))
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Play manifest — frontend play flow
 // ---------------------------------------------------------------------------

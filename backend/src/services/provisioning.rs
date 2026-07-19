@@ -408,11 +408,86 @@ fn libc_kill(pid: i32) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// Discovery self-advertisement (demotes the central poll — §3.4)
+// ---------------------------------------------------------------------------
+//
+// The historic model is: nodes are recorded centrally in `runtime_instances`
+// and a runner polls `GET /provisioning/pending`. DECENTRALIZATION.md §3.4
+// replaces that with self-advertising nodes publishing a `SessionAd` to a
+// swappable `Discovery` phonebook (the `magnetite node` binary already does this
+// via `magnetite_runtime::prepare_game`). The helper below converts a central
+// `RuntimeInstance` into the *same* `SessionAd` shape, so the central path can
+// emit ads to the phonebook too and both models converge — the first concrete
+// step of the demotion rather than a hard cutover.
+
+/// Build a decentralized [`SessionAd`](magnetite_seams::discovery::SessionAd)
+/// for a running instance, so it can be published to a `Discovery` provider
+/// instead of being polled out of the `runtime_instances` table.
+///
+/// Returns `None` for an instance that is not yet reachable (no `ws_endpoint`).
+/// `game_hash` is the content address of the game module (§3.3); `capacity` is
+/// the node's self-measured hardware budget (§4).
+pub fn instance_session_ad(
+    instance: &RuntimeInstance,
+    game_hash: magnetite_seams::blobstore::Hash,
+    capacity: magnetite_seams::discovery::Capacity,
+) -> Option<magnetite_seams::discovery::SessionAd> {
+    let ws = instance.ws_endpoint.clone()?;
+    Some(magnetite_seams::discovery::SessionAd {
+        game: game_hash,
+        node: magnetite_seams::discovery::NodeAddr(ws),
+        capacity,
+        ping_hint: 0,
+        price: None,
+        chat_room: None,
+        voice_room: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn instance_session_ad_shape() {
+        use super::*;
+        use chrono::Utc;
+        let now = Utc::now();
+        let mut inst = RuntimeInstance {
+            id: uuid::Uuid::nil(),
+            game_id: uuid::Uuid::nil(),
+            version_id: None,
+            artifact_id: None,
+            status: "running".into(),
+            ws_endpoint: None,
+            topology: "Sharded".into(),
+            max_players: 512,
+            tick_hz: 20,
+            local_pid: None,
+            runner_note: None,
+            requested_by: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let hash = magnetite_seams::blobstore::Hash::of(b"game-module");
+        let cap = magnetite_seams::discovery::Capacity {
+            cpu_cores: 8,
+            ram_mb: 32768,
+            bandwidth_mbps: 1000,
+            free_slots: 512,
+            max_shards: 8,
+        };
+        // No endpoint yet ⇒ not advertisable.
+        assert!(instance_session_ad(&inst, hash, cap.clone()).is_none());
+        // Once reachable, it becomes a discoverable SessionAd.
+        inst.ws_endpoint = Some("ws://127.0.0.1:9000".into());
+        let ad = instance_session_ad(&inst, hash, cap).unwrap();
+        assert_eq!(ad.game, hash);
+        assert_eq!(ad.node.0, "ws://127.0.0.1:9000");
+    }
+
     #[test]
     fn provision_request_topology_validation() {
         let valid = ["SingleRoom", "Dedicated", "Sharded"];

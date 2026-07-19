@@ -8,9 +8,13 @@ keywords = ["game", "multiplayer", "authoritative", "server", "magnetite"]
 categories = ["game-engines", "network-programming"]
 
 [dependencies]
-magnetite-sdk = { path = "../backend/magnetite-sdk" }
+# `scaling` pulls in the Shardable + ShardScheduler + capacity primitives.
+magnetite-sdk = { path = "../backend/magnetite-sdk", features = ["scaling"] }
 magnetite-sandbox = { path = "../magnetite-sandbox" }
 magnetite-anticheat = { path = "../magnetite-anticheat" }
+# The platform seams: Discovery (self-advertise), BlobStore (content-addressed
+# games), Capacity. Runtime programs against these traits only.
+magnetite-seams = { path = "../magnetite-seams" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = [] }
 futures-util = "0.3"
@@ -21,3 +25,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+# Used only by unit tests that define a custom BlobStore (async-trait) provider.
+async-trait = "0.1"

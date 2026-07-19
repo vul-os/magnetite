@@ -95,6 +95,46 @@ enum Commands {
         max_players: u32,
     },
 
+    /// Run a capacity-elastic node hosting a content-addressed game.
+    ///
+    /// Unlike `dev` (a fixed SingleRoom convenience server), `node` boots the
+    /// full decentralized host described in DECENTRALIZATION.md §4:
+    ///
+    ///   1. Build (or load `--wasm`) the game module.
+    ///   2. Content-address it: game id = BLAKE3 hash of the module bytes.
+    ///   3. Measure THIS box's hardware → capacity (player cap is emergent, not
+    ///      a constant — more cores means more shards means more players).
+    ///   4. Self-advertise a `SessionAd` via a `Discovery` provider (LAN default)
+    ///      instead of polling a central provisioning table.
+    ///   5. Load the module by hash, VERIFY the hash, and serve it.
+    ///
+    /// Runs fully offline with the default providers — no tracker, no chain.
+    Node {
+        /// Path to the game crate (defaults to the current directory).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+
+        /// Serve an already-compiled `.wasm` module instead of building `path`.
+        #[arg(long)]
+        wasm: Option<PathBuf>,
+
+        /// Bind host.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Port to listen on (0 = OS-assigned).
+        #[arg(long, default_value_t = 9000u16)]
+        port: u16,
+
+        /// Shard cell size in world units (used when capacity implies sharding).
+        #[arg(long, default_value_t = 500.0f32)]
+        cell_size: f32,
+
+        /// Deterministic RNG seed for the match.
+        #[arg(long, default_value_t = 0xDEAD_BEEF_CAFE_1234u64)]
+        seed: u64,
+    },
+
     /// Deploy the game to a Magnetite runtime instance.
     ///
     /// Steps:
@@ -139,6 +179,14 @@ fn run(cli: Cli) -> Result<()> {
             port,
             max_players,
         } => cmd_dev(&path, port, max_players),
+        Commands::Node {
+            path,
+            wasm,
+            host,
+            port,
+            cell_size,
+            seed,
+        } => cmd_node(&path, wasm.as_deref(), &host, port, cell_size, seed),
         Commands::Deploy { path } => cmd_deploy(&path),
     }
 }
@@ -478,6 +526,100 @@ fn cmd_dev(crate_path: &Path, port: u16, max_players: u32) -> Result<()> {
         GameServer::serve_wasm(wasm_path, limits, server_cfg)
             .await
             .map_err(|e| anyhow::anyhow!("server error: {e}"))
+    })?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `magnetite node`
+// ---------------------------------------------------------------------------
+
+fn cmd_node(
+    crate_path: &Path,
+    wasm_override: Option<&Path>,
+    host: &str,
+    port: u16,
+    cell_size: f32,
+    seed: u64,
+) -> Result<()> {
+    use magnetite_runtime::{
+        content_address, BlobStore, Discovery, Filter, LanDiscovery, LocalBlobStore, NodeConfig,
+    };
+
+    // Step 1: obtain the module bytes — either a prebuilt --wasm or build the crate.
+    let wasm_path = match wasm_override {
+        Some(p) => p
+            .canonicalize()
+            .with_context(|| format!("resolving --wasm `{}`", p.display()))?,
+        None => {
+            let crate_path = crate_path
+                .canonicalize()
+                .with_context(|| format!("resolving path `{}`", crate_path.display()))?;
+            cmd_build(&crate_path)?;
+            locate_wasm(&crate_path)?
+        }
+    };
+    let wasm_bytes =
+        std::fs::read(&wasm_path).with_context(|| format!("reading `{}`", wasm_path.display()))?;
+
+    // Step 2: content-address the module (game id = BLAKE3 hash of the bytes).
+    let game = content_address(&wasm_bytes);
+    let bind_addr = format!("{host}:{port}");
+
+    // Step 3: build the tokio runtime and stand up the node.
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("creating tokio runtime")?;
+
+    rt.block_on(async move {
+        // Default, fully-offline providers: local content store + LAN phonebook.
+        let blobs = LocalBlobStore::new();
+        let stored = blobs.put(&wasm_bytes).await;
+        debug_assert_eq!(stored, game, "stored hash must equal computed content address");
+        let discovery = LanDiscovery::new();
+
+        let cfg = NodeConfig {
+            bind_addr: bind_addr.clone(),
+            cell_size,
+            seed,
+            ..Default::default()
+        };
+
+        // Prepare (measure capacity + verify hash + advertise) so we can print
+        // the emergent numbers before blocking in the serve loop.
+        let prepared = magnetite_runtime::prepare_game(&blobs, &discovery, &game, &cfg)
+            .await
+            .map_err(|e| anyhow::anyhow!("node bring-up failed: {e}"))?;
+
+        let cap = &prepared.ad.capacity;
+        println!();
+        println!("Magnetite node — capacity-elastic, self-advertising");
+        println!();
+        println!("  Game id (BLAKE3) : {}", game.to_hex());
+        println!("  Connect URL      : ws://{bind_addr}");
+        println!("  Topology         : {:?}", prepared.match_config.topology);
+        println!(
+            "  Measured HW      : {} cores, {} MB RAM",
+            cap.cpu_cores, cap.ram_mb
+        );
+        println!(
+            "  Emergent cap     : {} shards, {} player slots (derived from HW, not a constant)",
+            cap.max_shards, prepared.match_config.max_players
+        );
+
+        // Confirm the ad is discoverable by game hash (the phonebook now knows us).
+        let found = discovery.find(game, Filter::default()).await;
+        println!("  Advertised       : {} session(s) discoverable by hash", found.len());
+        println!();
+        println!("Press Ctrl-C to stop.");
+        println!();
+
+        // Serve the verified, content-addressed game.
+        magnetite_runtime::run_node(&blobs, &discovery, &game, cfg)
+            .await
+            .map_err(|e| anyhow::anyhow!("node error: {e}"))
     })?;
 
     Ok(())

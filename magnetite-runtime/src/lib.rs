@@ -120,16 +120,39 @@
 //! }
 //! ```
 
+pub mod capacity;
 pub mod connection;
+pub mod node;
 pub mod server;
 pub mod shard;
 pub mod tick;
 
+pub use capacity::{measure_capacity, with_occupancy};
+pub use node::{
+    announce, build_session_ad, content_address, load_verified_game, prepare_game, run_node,
+    NodeConfig, NodeError, PreparedGame,
+};
 pub use server::{GameServer, GameServerConfig, ServerError};
 pub use shard::{
-    ExecutorFactory, HandoffEvent, ShardId, ShardManager, ShardedRuntime, ShardedStepOutput,
+    ExecutorFactory, HandoffError, HandoffEvent, HandoffTransport, LoopbackTransport,
+    NetworkHandoffTransport, ShardId, ShardManager, ShardedRuntime, ShardedStepOutput,
 };
 pub use tick::ServerAnticheatConfig;
+
+// Re-export the seam types a node-hosting caller (e.g. `magnetite-cli`) needs,
+// so downstream binaries don't need a direct `magnetite-seams` dependency to
+// stand up a capacity-elastic, self-advertising, content-addressed node.
+pub use magnetite_seams::blobstore::{BlobStore, Hash, LocalBlobStore};
+pub use magnetite_seams::discovery::{
+    Capacity, Discovery, Filter, LanDiscovery, NodeAddr, Price, SessionAd,
+};
+
+// Re-export the SDK scaling primitives so callers can drive the scheduler and
+// emergent-capacity helpers through the runtime facade.
+pub use magnetite_sdk::scaling::{
+    player_capacity, shards_for_capacity, LocalScheduler, NodeCapacity, NodeId, Placement,
+    Shardable, ShardKey, ShardScheduler, SpreadScheduler,
+};
 
 // Re-export key sandbox types so callers get `serve_wasm` without a direct
 // `magnetite-sandbox` dep in their Cargo.toml.
