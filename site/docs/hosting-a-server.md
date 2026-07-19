@@ -55,6 +55,20 @@ contributed by whoever chooses to run a node.
 > results to one that never did. `SpreadScheduler` places shards across nodes
 > by capacity, so a bigger box takes more shards.
 >
+> **A cluster now configures itself.** Routes used to be hand-registered. A node
+> can now derive them from the *signed* ads already flowing through discovery:
+> `RouteDirectory::observe` turns "this key says it is at this address" into a
+> route with the key **pinned**. Discovery supplies addresses only — see
+> "Who is allowed to receive a shard" below.
+>
+> **A player's session now follows the shard.** When a shard commits a migration
+> from A to B, A hands each affected client a `SignedRedirect` — the target's
+> address *and* pinned node key, the shard, the new epoch, an expiry, and a
+> short-lived single-use `FollowToken` — signed by A's node key, which the client
+> has already authenticated. The client reconnects to B, aborts unless B presents
+> the pinned key, and presents the token. It is a **redirect, not a proxy**: the
+> source does not stay in the path, which is the whole point of moving the shard.
+>
 > **What is NOT proven:** all of this is tested over real sockets between
 > processes on one machine and on a LAN. It has **not** been run across the
 > public internet, and there is **no NAT traversal, no hole punching, and no
@@ -74,6 +88,47 @@ is a dumb, swappable HTTP tracker in the BitTorrent sense — anyone can run one
 and redundancy comes from running more than one, not from Magnetite operating
 a single blessed registry. `LanDiscovery` (mDNS) covers the local-network
 case with zero external dependency at all.
+
+## Who is allowed to receive a shard
+
+Discovery is an **open phonebook**: anyone can announce, and a well-formed,
+correctly-signed ad from a stranger is a perfectly normal thing to see. So an ad
+must never be treated as permission to hold your world's state — otherwise
+anyone who volunteers gets handed your shards.
+
+The rule Magnetite enforces:
+
+> Discovery may supply an **address**. Only the operator confers **membership**,
+> and membership is keyed on the node's **public key**.
+
+`ClusterMembership` is that operator-authorized key set. It is **deny by
+default** — an empty membership authorizes nobody, so a missing or half-applied
+config hands shards to *no one* rather than to *anyone*. It is enforced in three
+places, each of which fails closed:
+
+- `RouteDirectory::observe` refuses an ad whose signature does not verify, whose
+  lease has lapsed, or whose `node_key` is not a member — in that order — and
+  learns nothing at all from a rejected ad.
+- `NetworkHandoffTransport::with_membership` re-checks membership **at migration
+  time**, before a byte of state leaves the box. A hand-registered route to a
+  non-member is refused just the same.
+- The `FleetNode` inbound allowlist (`ClusterMembership::allowlist`) gates the
+  other direction, so the same operator decision guards both doors.
+
+Key pinning is unchanged and still load-bearing: the pinned key comes from the
+*signed ad*, never from the address, and the handshake aborts if the far side
+presents anything else. Announcing that you host a game therefore never makes
+you eligible to receive shards of a world you were not admitted to. Revocation
+takes effect on the next lookup — you do not wait for a lease to lapse.
+
+The same membership set gates session-follow: node B admits a redirected player
+only if the `FollowToken` was issued by a **member**, names B as its target,
+verifies, is unexpired and unredeemed, and matches the player, the shard, and
+the epoch B *actually owns right now*. A token for player X will not admit
+player Y; a token for shard S will not admit to shard T; a redirect from a
+superseded migration is refused by the same epoch fence that governs handoff.
+Redirects are minted only after a verified commit-ack, so a failed or
+rolled-back migration never sends anyone anywhere.
 
 ## Running one
 

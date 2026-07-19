@@ -150,6 +150,24 @@ Collapse `backend` + `magnetite-runtime` into one `magnetite` node binary.
     asserted across the migration boundary. `SpreadScheduler` places shards on ≥2 real nodes by capacity.
     Deliberately depends on **no** external protocol and **no** libp2p — cross-node handoff is core
     game functionality and must not rest on an optional dependency.
+  - **Built:** `magnetite_runtime::cluster` — the fleet now **configures itself** and **players follow
+    their shard**.
+    - *Discovery-driven routing, membership-gated.* `RouteDirectory` derives `PeerRoute`s from the
+      signed `SessionAd`s already in the phonebook, with the pinned key taken from the **signed ad**
+      (never from the address). Because discovery is an *open phonebook*, a derived route is not
+      permission to receive a shard: `ClusterMembership` is the operator-authorized set of node
+      **public keys**, deny-by-default (empty ⇒ nobody), and it is checked when an ad is observed,
+      again at migration time (so even a hand-registered route to a non-member is refused), and on the
+      inbound `FleetNode` allowlist. Announcing that you host a game never makes you eligible to
+      receive shards of a world you were not admitted to; expired/lapsed leases are not routed to;
+      revocation takes effect on the next lookup.
+    - *Session follow.* On a **committed** migration the source signs a `SignedRedirect` per affected
+      player carrying the target's `{addr, pubkey}`, shard, new epoch, expiry, and a single-use
+      `FollowToken`. The client verifies the redirect against the node key it already authenticated
+      (a forged redirect is inert), reconnects, and **pins** the target key. The target admits only a
+      member-issued, correctly-signed, unexpired, unredeemed token bound to that exact player, shard,
+      target node, and the epoch it actually owns. Redirect, not proxy — the source does not stay in
+      the path. Nothing is minted on a failed or rolled-back migration.
   - **Not proven:** tested over real sockets in-process and on a LAN only. **No NAT traversal, no relay,
     no WAN validation** — nodes must be directly reachable. Internet-scale fleets are not demonstrated.
 - The game declares only *how to partition state into shards* (`trait Shardable`). A pluggable

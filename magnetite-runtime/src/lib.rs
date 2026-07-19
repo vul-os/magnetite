@@ -121,6 +121,7 @@
 //! ```
 
 pub mod capacity;
+pub mod cluster;
 pub mod connection;
 pub mod fleet;
 pub mod node;
