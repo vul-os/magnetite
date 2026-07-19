@@ -1,0 +1,17 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Magnetite logo">
+  <defs>
+    <linearGradient id="mgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7b61ff"/>
+      <stop offset="100%" stop-color="#ff4d9d"/>
+    </linearGradient>
+  </defs>
+  <!-- field lines arcing between the poles -->
+  <path d="M62,66 Q100,34 138,66" fill="none" stroke="url(#mgrad)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+  <path d="M46,72 Q100,14 154,72" fill="none" stroke="url(#mgrad)" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+  <path d="M30,78 Q100,4 170,78" fill="none" stroke="url(#mgrad)" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <!-- horseshoe magnet body -->
+  <path d="M56,72 L56,148 A44,44 0 0 0 144,148 L144,72" fill="none" stroke="url(#mgrad)" stroke-width="24" stroke-linecap="round"/>
+  <!-- pole caps -->
+  <circle cx="56" cy="70" r="13" fill="#7b61ff"/>
+  <circle cx="144" cy="70" r="13" fill="#ff4d9d"/>
+</svg>

@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Magnetite — The decentralized, self-hostable Rust game platform.</title>
+<meta name="description" content="Bring any server. It scales to your hardware. Content-addressed games, deterministic WASM sandboxing, replay-verified anti-cheat, and non-custodial crypto payments — no cloud required.">
+<link rel="icon" href="./assets/magnetite-logo.svg">
+<style>*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#08090c; --bg-soft:#0c0d12; --panel:#111319; --panel-2:#15171f;
+  --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.12);
+  --text:#e7e9ee; --muted:#9aa1b1; --faint:#6b7280;
+  --radius:16px; --max:1120px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16px}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:
+  radial-gradient(1100px 600px at 80% -10%, color-mix(in srgb,var(--accent) 20%, transparent), transparent 60%),
+  radial-gradient(900px 500px at -10% 10%, color-mix(in srgb,var(--accent-2) 14%, transparent), transparent 55%),
+  var(--bg);}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+.accent{color:var(--accent)}
+
+/* Header */
+.site-header{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);background:color-mix(in srgb,var(--bg) 72%, transparent);border-bottom:1px solid var(--border)}
+.nav{display:flex;align-items:center;gap:18px;height:64px}
+.brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:18px;letter-spacing:-.02em}
+.brand .tile{width:34px;height:34px;border-radius:9px;background:#0c0d12;display:grid;place-items:center;padding:5px;box-shadow:0 1px 0 rgba(255,255,255,.08) inset, 0 4px 14px rgba(0,0,0,.5);border:1px solid var(--border-2)}
+.brand .tile img,.brand .tile svg{width:100%;height:100%;object-fit:contain}
+.nav-spacer{flex:1}
+.nav-links{display:flex;align-items:center;gap:22px}
+.nav-links a{color:var(--muted);font-size:14.5px;font-weight:500;transition:color .15s}
+.nav-links a:hover{color:var(--text)}
+.vulos-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border-2);border-radius:999px;font-size:13px;color:var(--muted);transition:border-color .15s,color .15s}
+.vulos-badge:hover{border-color:var(--accent);color:var(--text)}
+.vulos-badge img{width:16px;height:16px;border-radius:4px}
+@media(max-width:760px){.nav-links{display:none}}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:11px;font-weight:600;font-size:15px;border:1px solid transparent;cursor:pointer;transition:transform .12s,box-shadow .2s,background .2s,border-color .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#0a0715;box-shadow:0 8px 26px -8px color-mix(in srgb,var(--accent) 70%, transparent)}
+.btn-primary:hover{box-shadow:0 12px 34px -8px color-mix(in srgb,var(--accent) 80%, transparent)}
+.btn-ghost{background:var(--panel);border-color:var(--border-2);color:var(--text)}
+.btn-ghost:hover{border-color:var(--accent)}
+
+/* Hero */
+.hero{padding:84px 0 56px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%, transparent);border:1px solid color-mix(in srgb,var(--accent) 28%, transparent);padding:6px 13px;border-radius:999px}
+.hero h1{font-size:clamp(40px,7vw,68px);line-height:1.04;letter-spacing:-.035em;margin:22px 0 0;font-weight:800}
+.hero .tagline{font-size:clamp(18px,2.4vw,23px);color:var(--text);margin:18px 0 0;max-width:720px;font-weight:500}
+.hero .blurb{font-size:16.5px;color:var(--muted);margin:18px 0 0;max-width:680px}
+.cta-row{display:flex;flex-wrap:wrap;gap:13px;margin-top:30px}
+.hero-visual{margin-top:54px;border-radius:var(--radius);border:1px solid var(--border-2);overflow:hidden;box-shadow:0 40px 80px -30px rgba(0,0,0,.7);background:var(--panel)}
+.hero-visual img{width:100%;display:block}
+
+/* Stat row */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:44px}
+@media(max-width:760px){.stat-row{grid-template-columns:1fr 1fr}}
+.stat{border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--panel)}
+.stat b{display:block;font-size:22px;letter-spacing:-.02em}
+.stat span{color:var(--muted);font-size:13px}
+
+/* Sections */
+.section{padding:64px 0}
+.section h2{font-size:clamp(26px,4vw,36px);letter-spacing:-.03em;margin:0 0 8px;font-weight:800}
+.section .lead{color:var(--muted);margin:0 0 38px;font-size:17px;max-width:640px}
+
+/* Features */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.grid{grid-template-columns:1fr}}
+.card{background:linear-gradient(180deg,var(--panel),var(--bg-soft));border:1px solid var(--border);border-radius:var(--radius);padding:24px;transition:border-color .2s,transform .2s}
+.card:hover{border-color:color-mix(in srgb,var(--accent) 45%, var(--border));transform:translateY(-2px)}
+.card .dot{width:34px;height:34px;border-radius:9px;background:color-mix(in srgb,var(--accent) 16%, transparent);border:1px solid color-mix(in srgb,var(--accent) 35%, transparent);display:grid;place-items:center;margin-bottom:15px}
+.card .dot::after{content:"";width:11px;height:11px;border-radius:3px;background:var(--accent)}
+.card h3{margin:0 0 8px;font-size:17.5px;letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.card code{font-family:var(--mono);font-size:.86em;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px;color:var(--text)}
+
+/* Quickstart */
+.quick{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;align-items:center}
+@media(max-width:820px){.quick{grid-template-columns:1fr}}
+.codeblock{background:#0a0b10;border:1px solid var(--border-2);border-radius:var(--radius);overflow:hidden}
+.codeblock .bar{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.codeblock .bar i{width:11px;height:11px;border-radius:50%;background:#2a2e3a;display:inline-block}
+.codeblock pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13.5px;line-height:1.75;color:#cbd5e1}
+.codeblock .c{color:var(--faint)}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:16px}
+.steps li{display:flex;gap:14px;align-items:flex-start}
+.steps .num{flex:none;width:28px;height:28px;border-radius:8px;background:color-mix(in srgb,var(--accent) 16%, transparent);border:1px solid color-mix(in srgb,var(--accent) 35%, transparent);color:var(--accent);font-weight:700;display:grid;place-items:center;font-size:14px}
+.steps b{display:block;font-size:15.5px}
+.steps span{color:var(--muted);font-size:14px}
+
+/* Seams */
+.seams{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+@media(max-width:760px){.seams{grid-template-columns:1fr}}
+.seam{display:flex;gap:14px;border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--panel)}
+.seam .tag{flex:none;font-family:var(--mono);font-size:11px;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%, transparent);border:1px solid color-mix(in srgb,var(--accent) 30%, transparent);border-radius:7px;padding:4px 8px;height:fit-content}
+.seam h4{margin:0 0 4px;font-size:15px}
+.seam p{margin:0;color:var(--muted);font-size:13.5px}
+
+/* Vulos band */
+.vulos-band{margin:24px 0;background:linear-gradient(120deg,var(--panel),var(--bg-soft));border:1px solid var(--border);border-radius:var(--radius);padding:40px;display:flex;gap:26px;align-items:center}
+@media(max-width:680px){.vulos-band{flex-direction:column;text-align:center}}
+.vulos-band img{width:60px;height:60px;border-radius:14px;flex:none}
+.vulos-band h3{margin:0 0 6px;font-size:21px}
+.vulos-band p{margin:0;color:var(--muted);max-width:680px}
+.vulos-band .more{margin-top:14px;display:inline-flex;color:var(--accent);font-weight:600;font-size:15px}
+
+/* Footer */
+.site-footer{border-top:1px solid var(--border);margin-top:40px;padding:40px 0}
+.foot{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
+.foot .left{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
+.foot .left img{width:20px;height:20px;border-radius:5px}
+.foot .links{display:flex;gap:20px;flex-wrap:wrap}
+.foot .links a{color:var(--muted);font-size:14px}
+.foot .links a:hover{color:var(--text)}
+</style>
+<style>:root{--accent:#7b61ff;--accent-2:#ff4d9d}</style>
+</head>
+<body>
+<header class="site-header"><div class="wrap nav">
+    <a class="brand" href="./index.html"><span class="tile"><img src="./assets/magnetite-logo.svg" alt="Magnetite logo"></span>magnetite</a>
+    <div class="nav-spacer"></div>
+    <nav class="nav-links">
+      <a href="./index.html#features">Features</a>
+      <a href="./index.html#quickstart">Quick start</a>
+      <a href="./docs.html">Docs</a>
+      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <a class="vulos-badge" href="https://vulos.org" target="_blank" rel="noopener" title="Part of Vulos">
+      <img src="./assets/vulos-logo.png" alt="Vulos">Part of Vulos
+    </a>
+  </div></header>
+<main>
+  <section class="hero"><div class="wrap">
+    <span class="eyebrow"><img src="./assets/vulos-logo.png" alt="" style="width:15px;height:15px;border-radius:4px">Part of the Vulos OS suite</span>
+    <h1>Magnetite</h1>
+    <p class="tagline">The decentralized, self-hostable Rust game platform. Bring any server — it scales to your hardware. No cloud required.</p>
+    <p class="blurb"><strong>Magnetite (Fe₃O₄)</strong> — magnetic, grounded, the foundation games are built on. A game is a content-addressed portable object. A node is generic compute that fills its own hardware. The chain is the wallet. Discovery is a phonebook, not an authority. Everything social — chat, voice, video, streaming — is a pluggable integration, not something we build. Anyone runs the single <code>magnetite</code> node binary; identity is a keypair; payments are non-custodial crypto.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#quickstart">Get started</a>
+      <a class="btn btn-ghost" href="./docs.html">Read the docs</a>
+      <a class="btn btn-ghost" href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+    <div class="hero-visual"><img src="./screenshots/architecture-dark.png" alt="Magnetite architecture — node, discovery, payment, and comms seams" loading="lazy" onerror="this.closest('.hero-visual').style.display='none'"></div>
+    <div class="stat-row">
+      <div class="stat"><b>1 → ∞</b><span>players, same game code</span></div>
+      <div class="stat"><b>0</b><span>fiat, custody, or cloud dependency</span></div>
+      <div class="stat"><b>203k</b><span>ticks/sec, SingleRoom (4p, debug build)</span></div>
+      <div class="stat"><b>9</b><span>passing e2e tests, wasm ≡ native state hash</span></div>
+    </div>
+  </div></section>
+
+  <section class="section" id="features"><div class="wrap">
+    <h2>Grounded in six differentiators</h2>
+    <p class="lead">One Rust game, one node binary, decentralized by construction — not bolted on.</p>
+    <div class="grid">
+      <div class="card"><div class="dot"></div><h3>Capacity-elastic hosting</h3><p>A node measures its own hardware — cores, RAM, bandwidth — and advertises what it can hold. Player cap is emergent from the box, never a config constant. More cores, more shards; bring more boxes and the cluster grows into a federated mesh with other operators' nodes.</p></div>
+      <div class="card"><div class="dot"></div><h3>Content-addressed games</h3><p>A game's id is the hash of its wasm module and manifest — <code>BlobStore</code> serves it by hash, with no central registry row required to identify it. Iroh/BitTorrent-style distribution is the natural next step; today it's already sha256-addressable.</p></div>
+      <div class="card"><div class="dot"></div><h3>Deterministic WASM sandbox</h3><p>Untrusted game logic compiles to <code>wasm32-wasip1</code> and runs under Wasmtime with a fuel budget, a memory cap, and an epoch-interrupt wall clock. No OS randomness, no wall clock inside the guest — same <code>(state, ordered commands, tick, seed)</code> always produces the same result, on any host.</p></div>
+      <div class="card"><div class="dot"></div><h3>Replay-verified anti-cheat</h3><p>Clients send inputs, never state; the server validates and steps authoritatively. Every tick's inputs and state hash land in a <code>ReplayLog</code> — anyone can re-simulate from scratch with <code>verify_replay</code> and prove tampering, no trust required.</p></div>
+      <div class="card"><div class="dot"></div><h3>Non-custodial crypto payments</h3><p>Wallet-to-wallet checkout with atomic developer/operator splits, signed-receipt entitlements, payment channels for per-seat hosting fees, and optional wager escrow settled by replay verification. No balances, no payouts, no custody — the chain is the wallet.</p></div>
+      <div class="card"><div class="dot"></div><h3>Pluggable decentralized comms</h3><p>Chat, voice, video, and streaming are adapters, not a product we build: Matrix/Element for text and presence, Jitsi or LiveKit for voice/video, Owncast/PeerTube for live and VOD. The node mints scoped credentials from your keypair — one login, SSO into every room.</p></div>
+    </div>
+  </div></section>
+
+  <section class="section"><div class="wrap">
+    <h2>The seams</h2>
+    <p class="lead">Everything provider-specific plugs in behind six traits. The game runtime, scheduler, and payment path never name a provider type — only the seam.</p>
+    <div class="seams">
+      <div class="seam"><span class="tag">Identity</span><div><h4>Keypair auth</h4><p>Ed25519 challenge/response by default; optional DMTAP-Auth for decentralized login and key rotation behind a feature flag.</p></div></div>
+      <div class="seam"><span class="tag">Naming</span><div><h4>Phonebook, not authority</h4><p>Raw pubkeys and short-hash addresses by default; human <code>name@domain</code> is a display layer over the same raw key.</p></div></div>
+      <div class="seam"><span class="tag">BlobStore</span><div><h4>Content-addressed assets</h4><p>Hash-in, hash-out. Local + HTTP by default; Iroh/BitTorrent and MOTE/DMTAP-PUB adapters slot in without touching the game runtime.</p></div></div>
+      <div class="seam"><span class="tag">Discovery</span><div><h4>The phonebook</h4><p>A dumb, swappable HTTP tracker anyone can run, plus LAN mDNS — never a central server-registry authority.</p></div></div>
+      <div class="seam"><span class="tag">CommsProvider</span><div><h4>Chat, voice, video, streaming</h4><p>Matrix, Jitsi, LiveKit, Owncast/PeerTube — the node mints scoped join credentials from your keypair, optionally gated behind a payment receipt.</p></div></div>
+      <div class="seam"><span class="tag">PaymentRail</span><div><h4>Non-custodial crypto</h4><p>Atomic checkout splits, per-seat hosting channels, wager escrow settled by replay verification. A deterministic mock rail keeps CI fully offline.</p></div></div>
+    </div>
+  </div></section>
+
+  <section class="section" id="quickstart"><div class="wrap">
+    <h2>Quick start</h2>
+    <p class="lead">One binary. Bring a server — it scales to whatever hardware you give it.</p>
+    <div class="quick">
+      <div class="codeblock">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <pre><span class="c"># install once</span>
+cargo install magnetite-cli
+
+<span class="c"># scaffold a crate implementing AuthoritativeGame</span>
+magnetite new my-game
+cd my-game
+
+<span class="c"># cargo build --release --target wasm32-wasip1 → game.wasm</span>
+magnetite build
+
+<span class="c"># build → WasmExecutor → server, ZERO backend</span>
+magnetite dev
+<span class="c"># ws://127.0.0.1:&lt;port&gt; — play it right now</span>
+
+<span class="c"># bring your own box: measures its hardware,</span>
+<span class="c"># advertises capacity, joins the mesh</span>
+magnetite serve --advertise tracker.example.org</pre>
+      </div>
+      <ol class="steps">
+        <li><span class="num">1</span><div><b>Write the game once</b><span>Implement <code>AuthoritativeGame</code> against the SDK — <code>validate</code>/<code>step</code>, deterministic by construction.</span></div></li>
+        <li><span class="num">2</span><div><b>Run it with zero backend</b><span><code>magnetite dev</code> builds to wasm, boots a sandboxed executor, and serves a live match locally.</span></div></li>
+        <li><span class="num">3</span><div><b>Bring any server</b><span>Point <code>magnetite serve</code> at hardware you own — a laptop, a rented box, a rack — and it measures capacity and joins the discovery mesh. No cloud, no provisioning API.</span></div></li>
+      </ol>
+    </div>
+  </div></section>
+
+  <section class="section"><div class="wrap">
+    <div class="vulos-band">
+      <img src="./assets/vulos-logo.png" alt="Vulos logo">
+      <div>
+        <h3>Part of Vulos</h3>
+        <p><a href="https://vulos.org" target="_blank" rel="noopener" style="color:var(--text);font-weight:600">Vulos</a> is an open, self-hostable web OS and its owned apps. Magnetite runs perfectly standalone on hardware you control — no Vulos account required — and shares the same open-by-design philosophy as Ofisi, wede, Board, Files, and Relay.</p>
+        <a class="more" href="https://vulos.org" target="_blank" rel="noopener">Explore Vulos →</a>
+      </div>
+    </div>
+  </div></section>
+</main>
+<footer class="site-footer"><div class="wrap foot">
+    <div class="left"><img src="./assets/vulos-logo.png" alt="Vulos"> <span>Part of <a href="https://vulos.org" target="_blank" rel="noopener" style="color:var(--text)">Vulos</a> — the open, self-hostable web OS &amp; app suite.</span></div>
+    <div class="links">
+      <a href="./docs.html">Docs</a>
+      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener">GitHub</a>
+      <a href="./LICENSE.txt">License</a>
+      <a href="https://vulos.org" target="_blank" rel="noopener">vulos.org</a>
+    </div>
+  </div></footer>
+</body>
+</html>
