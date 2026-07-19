@@ -151,7 +151,6 @@ magnetite/
     ├── content-rating.md
     ├── refunds.md
     ├── search.md
-    ├── wise-iban.md
     └── requirements.md
 ```
 
