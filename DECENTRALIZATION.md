@@ -142,6 +142,17 @@ Collapse `backend` + `magnetite-runtime` into one `magnetite` node binary.
   hardware, never a config constant.** More cores → more shards.
 - **Cluster** (operator brings many boxes) → shard mesh with cross-node handoff. **Past the cluster,
   other operators' nodes join the mesh** (federated compute, paid via §3.6). This is real "Bucket D".
+  - **Built:** `magnetite_runtime::fleet` — an Ed25519 mutually-authenticated TCP channel keyed on the
+    node keypair (peer key is *pinned*, so the right address is not proof of the right node), carrying a
+    **two-phase, epoch-fenced shard migration**: offer state → target validates/stages + acks → commit →
+    commit-ack → *only then* does the source release authority. Every partial failure (ack timeout,
+    rejection, dropped connection, target crash) resolves to **source retains authority** with state
+    intact; a monotonic per-shard epoch fences duplicates, replays, and stale owners. Determinism is
+    asserted across the migration boundary. `SpreadScheduler` places shards on ≥2 real nodes by capacity.
+    Deliberately depends on **no** DMTAP and **no** libp2p — cross-node handoff is core game
+    functionality and must not rest on an optional protocol.
+  - **Not proven:** tested over real sockets in-process and on a LAN only. **No NAT traversal, no relay,
+    no WAN validation** — nodes must be directly reachable. Internet-scale fleets are not demonstrated.
 - The game declares only *how to partition state into shards* (`trait Shardable`). A pluggable
   `ShardScheduler` places shards onto whatever capacity exists. Generic by construction.
 

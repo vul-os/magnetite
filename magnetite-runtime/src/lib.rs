@@ -122,6 +122,7 @@
 
 pub mod capacity;
 pub mod connection;
+pub mod fleet;
 pub mod node;
 pub mod server;
 pub mod shard;
@@ -134,9 +135,12 @@ pub use node::{
     NodeConfig, NodeError, PreparedGame,
 };
 pub use server::{GameServer, GameServerConfig, ServerError};
+pub use fleet::{
+    FleetNode, NetworkHandoffTransport, OwnedShard, PeerRoute, ShardAuthority, DEFAULT_TIMEOUT,
+};
 pub use shard::{
-    ExecutorFactory, HandoffError, HandoffEvent, HandoffTransport, LoopbackTransport,
-    NetworkHandoffTransport, ShardId, ShardManager, ShardedRuntime, ShardedStepOutput,
+    ExecutorFactory, HandoffError, HandoffEvent, HandoffTransport, LoopbackTransport, ShardId,
+    ShardManager, ShardedRuntime, ShardedStepOutput,
 };
 pub use tick::ServerAnticheatConfig;
 

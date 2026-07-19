@@ -39,11 +39,32 @@ compute, paid per-seat or per-hour through the non-custodial `PaymentRail`
 (see [Payments](payments.md)). Capacity isn't rented from Magnetite; it's
 contributed by whoever chooses to run a node.
 
-> **Status — not done.** Multi-shard hosting on a *single* box is real,
-> tested, and deterministic, and the `HandoffTransport` seam plus its loopback
-> implementation are real. **Cross-node handoff over the network is not
-> built:** `NetworkHandoffTransport` fails closed with a documented TODO. A
-> cluster of boxes does not yet hand players between machines.
+> **Status — built, proven on a LAN, unproven on the internet.**
+> Multi-shard hosting on a *single* box is real, tested, and deterministic.
+> **Cross-node handoff over the network is now built and tested:**
+> `NetworkHandoffTransport` opens an Ed25519-authenticated TCP channel to the
+> node that should own the target shard (both sides prove control of their node
+> keypair; the caller pins the key it expects, so reaching the right *address*
+> is not enough) and runs a **two-phase, epoch-fenced migration** — the target
+> validates and stages the state and acks it, and only after a verified
+> commit-ack does the source release authority. Every partial failure — ack
+> timeout, rejection, dropped connection, target crash — resolves to *the
+> source still owns the shard*, with its state intact; duplicate and replayed
+> handoffs are refused by a monotonic per-shard epoch. Determinism is asserted
+> across the migration boundary: a shard that moved produces byte-identical
+> results to one that never did. `SpreadScheduler` places shards across nodes
+> by capacity, so a bigger box takes more shards.
+>
+> **What is NOT proven:** all of this is tested over real sockets between
+> processes on one machine and on a LAN. It has **not** been run across the
+> public internet, and there is **no NAT traversal, no hole punching, and no
+> relay** — nodes must be able to reach each other directly (same LAN, a VPN, or
+> public IPs with the handoff port open). WAN latency, packet loss, asymmetric
+> partitions, and clock skew at internet scale are untested. Treat fleets as a
+> single-datacenter / single-network capability today. (A NAT-traversing
+> transport could later be offered behind the same `HandoffTransport` seam;
+> none is implemented, and cross-node handoff will not be made to depend on an
+> optional protocol.)
 
 ## Discovery is a phonebook, not a gatekeeper
 
