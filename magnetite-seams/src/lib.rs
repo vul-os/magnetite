@@ -5,7 +5,7 @@
 //! scheduler, or payment path may name a provider-specific type — everyone sees
 //! only these traits:
 //!
-//! | § | Seam | Trait(s) | Non-DMTAP default |
+//! | § | Seam | Trait(s) | Offline default |
 //! |---|------|----------|-------------------|
 //! | 3.1 | Identity / Auth | [`Identity`], [`AuthProvider`] | [`RawKeypairAuth`] |
 //! | 3.2 | Naming | [`Naming`] | [`HashNaming`] |
@@ -15,14 +15,14 @@
 //! | 3.6 | PaymentRail | [`PaymentRail`] | [`MockPaymentRail`] |
 //!
 //! **Every default works with zero external services** — no network, no chain,
-//! no homeserver — so CI runs fully offline. Provider-specific and DMTAP
-//! adapters live behind their own feature-gated modules and are never referenced
-//! by non-provider code.
+//! no homeserver — so CI runs fully offline. Provider-specific adapters live
+//! behind their own feature-gated modules and are never referenced by
+//! non-provider code.
 //!
 //! The one optional provider that exists today is [`keyname::KeyNameNaming`]
-//! (`--features dmtap`), a second `Naming` implementation using word-based
-//! key-names. **DMTAP itself is not integrated** — the `dmtap-core` crate is not
-//! available — see `docs/dmtap.md` for exactly what is and is not real.
+//! (`--features keyname`), a second `Naming` implementation using word-based
+//! key-names. It adds no dependencies and exists to prove the `Naming` seam is
+//! genuinely swappable rather than hardwired to its default.
 //!
 //! The [`defaults`] module wires one working provider set for `magnetite dev`.
 
@@ -31,7 +31,7 @@ pub mod comms;
 pub mod discovery;
 mod error;
 pub mod identity;
-#[cfg(feature = "dmtap")]
+#[cfg(feature = "keyname")]
 pub mod keyname;
 pub mod naming;
 pub mod payment;
@@ -46,9 +46,8 @@ pub use identity::{
 
 // Seam §3.2 — Naming
 pub use naming::{HashNaming, Naming};
-/// Optional second Naming provider (`--features dmtap`). Not a DMTAP
-/// integration — see [`keyname`] and `docs/dmtap.md`.
-#[cfg(feature = "dmtap")]
+/// Optional second Naming provider (`--features keyname`) — see [`keyname`].
+#[cfg(feature = "keyname")]
 pub use keyname::KeyNameNaming;
 
 // Seam §3.3 — BlobStore

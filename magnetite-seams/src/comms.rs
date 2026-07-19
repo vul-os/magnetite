@@ -8,7 +8,6 @@
 //! - `JitsiProvider`   — voice + video SFU.
 //! - `LiveKitProvider` — voice + video at scale.
 //! - `OwncastProvider` / `PeerTubeProvider` — live + VOD streaming.
-//! - `DmtapCommsProvider` — MOTE messaging (behind `--features dmtap`).
 //!
 //! The one default here, [`BuiltinProvider`], is the demoted old in-house stack:
 //! it returns local room addresses and mints join credentials via the node's

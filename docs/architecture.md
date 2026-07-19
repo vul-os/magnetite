@@ -27,14 +27,14 @@ scheduler, or payment path may name a provider-specific type.
 
 | Seam | Purpose | Default | Optional |
 |------|---------|---------|----------|
-| `Identity` / `AuthProvider` | keypair identity, sign-a-challenge login, scoped token minting for comms | `RawKeypairAuth` (Ed25519) | `DmtapAuth` (decentralized login, key transparency) |
-| `Naming` | human name ↔ raw key, display layer only | `HashNaming` (raw pubkey / short hash) | `DmtapNaming` (`name@domain` ladder, 8-word zero-authority floor) |
-| `BlobStore` | content-addressed games and assets | `LocalBlobStore` + `HttpBlobStore` | `DmtapPubBlobStore` (MOTE over DMTAP-PUB); Iroh/BitTorrent later |
+| `Identity` / `AuthProvider` | keypair identity, sign-a-challenge login, scoped token minting for comms | `RawKeypairAuth` (Ed25519) | any external IdP (e.g. an OIDC bridge) — none ships today |
+| `Naming` | human name ↔ raw key, display layer only | `HashNaming` (raw pubkey / short hash) | `KeyNameNaming` (word-based key-names, `--features keyname`) |
+| `BlobStore` | content-addressed games and assets | `LocalBlobStore` + `HttpBlobStore` | Iroh/BitTorrent adapter later |
 | `Discovery` | the phonebook — never an authority | `TrackerDiscovery` (dumb, swappable HTTP tracker) + `LanDiscovery` (mDNS) | DHT adapter |
-| `CommsProvider` | chat / voice / video / streaming | `BuiltinProvider` (fallback shim) | `MatrixProvider`, `JitsiProvider`, `LiveKitProvider`, `OwncastProvider`/`PeerTubeProvider`, `DmtapCommsProvider` |
+| `CommsProvider` | chat / voice / video / streaming | `BuiltinProvider` (fallback shim) | `MatrixProvider`, `JitsiProvider`, `LiveKitProvider`, `OwncastProvider`/`PeerTubeProvider` |
 | `PaymentRail` | non-custodial crypto checkout, hosting fees, wagers | `MockPaymentRail` (deterministic signed receipts, CI-safe) | on-chain rail (USDC on an L2, or Solana) |
 
-Every seam ships a working non-DMTAP, non-chain default, so CI and local
+Every seam ships a working non-chain default, so CI and local
 development never require an external service.
 
 ## How the planes fit together

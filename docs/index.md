@@ -27,7 +27,6 @@ database, no payment provider.
 | [Hosting a server](./hosting-a-server.md) | Capacity-elastic nodes, shards, discovery |
 | [Payments](./payments.md) | Non-custodial checkout, signed receipts, hosting fees |
 | [Comms](./comms.md) | Pluggable chat/voice/video/streaming providers |
-| [DMTAP surface](./dmtap.md) | Which seams DMTAP *would* plug into — **not integrated today** |
 | [Screenshots](./screenshots.md) | Landing, docs, and app gallery |
 
 ## Reference
@@ -79,7 +78,6 @@ There is no fiat on-ramp and nothing for the platform to hold or pay out. See
 - **Cross-node shard handoff over the network.** The `HandoffTransport` seam and the loopback transport are real and tested; `NetworkHandoffTransport` fails closed with a documented TODO.
 - **Multi-tracker gossip.** A client queries the trackers it is configured with; there is no discovery-of-trackers.
 - **A persisted node keypair.** `MAGNETITE_NODE_SEED` (or a bind-address derivation) is a stopgap.
-- **DMTAP.** Nothing depends on DMTAP; the `dmtap` feature adds no DMTAP dependency. See [DMTAP surface](./dmtap.md).
 
 ---
 

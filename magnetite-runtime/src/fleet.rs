@@ -3,11 +3,11 @@
 //! This is the transport that turns "many shards on one box" into "one world
 //! across many boxes". It is deliberately **self-contained**: plain blocking TCP
 //! plus an Ed25519 mutual handshake built on the node keypair
-//! ([`magnetite_seams::identity`]). It does **not** depend on DMTAP, libp2p, or
-//! any external service — cross-node handoff is core game functionality, so it
-//! must never sit on top of an optional protocol. (A `dmtap-p2p` or QUIC
-//! transport could one day be offered as an *optional* NAT-traversal
-//! alternative behind the same [`HandoffTransport`] seam; none is implemented.)
+//! ([`magnetite_seams::identity`]). It does **not** depend on libp2p or any
+//! external service — cross-node handoff is core game functionality, so it must
+//! never sit on top of an optional dependency. (A QUIC or NAT-traversing
+//! transport could one day be offered as an *optional* alternative behind the
+//! same [`HandoffTransport`] seam; none is implemented.)
 //!
 //! ## Peer authentication
 //!

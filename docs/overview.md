@@ -44,8 +44,8 @@ authority (a database row, a JWT secret, a central registry) and put behind
 default so the platform never hard-depends on any external network or
 service:
 
-- **Identity / Auth** — raw Ed25519 keypair by default; decentralized login
-  (DMTAP-Auth) optional.
+- **Identity / Auth** — raw Ed25519 keypair by default; any external identity
+  provider plugs in behind the trait.
 - **Naming** — a display layer over raw keys; never the substrate itself.
 - **BlobStore** — games and assets are content-addressed; the hash *is* the id.
 - **Discovery** — a dumb, swappable tracker (anyone runs one) plus LAN

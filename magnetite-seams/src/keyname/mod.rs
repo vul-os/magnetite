@@ -1,8 +1,8 @@
 //! Seam §3.2 — a **second** `Naming` provider: word-based key-names.
 //!
 //! This module exists to prove the [`Naming`](crate::naming::Naming) seam is
-//! genuinely pluggable, and to be the slot a real DMTAP naming provider drops
-//! into later.
+//! genuinely pluggable — that consuming code is written against the trait and is
+//! not accidentally hardwired to the default implementation.
 //!
 //! # What this is
 //!
@@ -14,17 +14,17 @@
 //! never authoritative, exactly like [`HashNaming`](crate::naming::HashNaming)'s
 //! alias table.
 //!
-//! # Relationship to DMTAP — read this before assuming anything
+//! # Compatibility — claims nothing
 //!
-//! DMTAP/Envoir uses the same *concept*: an 8-word key-name as the
-//! "zero-authority floor" of a naming ladder that also has `name@domain` rungs.
-//! **This is not DMTAP's encoding.** The `dmtap-core` crate is not available on
-//! this machine and is not published, so its exact wordlist, bit packing,
-//! checksum, and separator could not be read and are therefore not claimed to
-//! be reproduced. Names produced here will almost certainly **not** match names
-//! produced by DMTAP for the same key. The type is named for what it is
-//! (`KeyNameNaming`), not `DmtapNaming`, for that reason. When `dmtap-core`
-//! becomes available, a real provider implements the same
+//! Word-based key-names are a common idea (BIP-39 and various "zero-authority"
+//! naming ladders use the same shape), but this encoding is **its own**: the
+//! wordlist, bit packing, checksum, and separator here are not claimed to match
+//! any other scheme, so names produced here will not match names another system
+//! produces for the same key. The type is named for what it is
+//! (`KeyNameNaming`) rather than after any protocol, precisely so no
+//! unverifiable compatibility claim is smuggled into a type name.
+//!
+//! Any other naming provider implements the same
 //! [`Naming`](crate::naming::Naming) trait alongside this one and nothing else
 //! in the tree changes — that is the whole point of the seam.
 //!

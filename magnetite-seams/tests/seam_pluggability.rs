@@ -16,7 +16,7 @@
 //!   test double on purpose: no honest *shipped* second auth provider exists
 //!   without an external service, so none is claimed.
 
-#![cfg(feature = "dmtap")]
+#![cfg(feature = "keyname")]
 
 use magnetite_seams::keyname::{full_name_of, short_name_of, KeyNameNaming};
 use magnetite_seams::{HashNaming, Naming, PubKey};
@@ -116,7 +116,7 @@ async fn a_provider_set_can_swap_its_naming_provider() {
 ///
 /// It is deliberately a **test double**, not a shipped provider: it issues
 /// non-expiring challenges from a counter and mints tokens signed by its own
-/// key. Real alternatives (DMTAP-Auth, an OIDC bridge) need code or services
+/// key. Real alternatives (e.g. an OIDC bridge) need code or services
 /// that are not present, and inventing one would be fiction.
 mod foreign_auth {
     use magnetite_seams::{
