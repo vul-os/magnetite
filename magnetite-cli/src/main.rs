@@ -133,6 +133,38 @@ enum Commands {
         /// Deterministic RNG seed for the match.
         #[arg(long, default_value_t = 0xDEAD_BEEF_CAFE_1234u64)]
         seed: u64,
+
+        /// Authorize a peer node's public key (64 hex chars). Repeatable.
+        ///
+        /// This is the cluster membership list and it is DENY-BY-DEFAULT: with
+        /// no peers configured this node hands shards to nobody and admits
+        /// follows from nobody (ordinary single-box behaviour). A malformed key
+        /// is a hard error, never a silently dropped entry.
+        ///
+        /// Also readable from `MAGNETITE_CLUSTER_PEERS` (comma/whitespace
+        /// separated).
+        #[arg(long = "cluster-peer", value_name = "HEX")]
+        cluster_peer: Vec<String>,
+
+        /// File of authorized peer public keys, one 64-hex key per line.
+        /// `#` starts a comment. Env: `MAGNETITE_CLUSTER_PEERS_FILE`.
+        #[arg(long, value_name = "PATH")]
+        cluster_peers_file: Option<PathBuf>,
+
+        /// Bind address for the cluster handoff listener — the authenticated
+        /// node-to-node port, SEPARATE from the player-facing game port.
+        /// Defaults to `<host>:<port + 1>` when peers are configured.
+        /// Env: `MAGNETITE_HANDOFF_ADDR`.
+        #[arg(long, value_name = "ADDR")]
+        handoff_addr: Option<String>,
+
+        /// Path to this node's persisted Ed25519 keypair. Generated on first
+        /// run with owner-only permissions; reused afterwards so the node's
+        /// identity is stable across restarts AND across bind-address changes.
+        /// Default: `$MAGNETITE_HOME/node.key`, else `~/.magnetite/node.key`.
+        /// Env: `MAGNETITE_NODE_KEY_FILE`.
+        #[arg(long, value_name = "PATH")]
+        node_key_file: Option<PathBuf>,
     },
 
     /// Deploy the game to a Magnetite runtime instance.
@@ -186,7 +218,24 @@ fn run(cli: Cli) -> Result<()> {
             port,
             cell_size,
             seed,
-        } => cmd_node(&path, wasm.as_deref(), &host, port, cell_size, seed),
+            cluster_peer,
+            cluster_peers_file,
+            handoff_addr,
+            node_key_file,
+        } => cmd_node(
+            &path,
+            wasm.as_deref(),
+            &host,
+            port,
+            cell_size,
+            seed,
+            NodeClusterOpts {
+                cluster_peer,
+                cluster_peers_file,
+                handoff_addr,
+                node_key_file,
+            },
+        ),
         Commands::Deploy { path } => cmd_deploy(&path),
     }
 }
@@ -536,31 +585,297 @@ fn cmd_dev(crate_path: &Path, port: u16, max_players: u32) -> Result<()> {
 // `magnetite node`
 // ---------------------------------------------------------------------------
 
-/// This node's signing identity for tracker announcements.
-///
-/// A tracker refuses unsigned ads and binds a `(game, node)` slot to the key
-/// that first claimed it, so the key must be STABLE across restarts or the node
-/// loses its own listing. `MAGNETITE_NODE_SEED` (32-byte hex) sets it
-/// explicitly; otherwise it is derived deterministically from the bind address.
-///
-/// TODO(node-key): persist a generated keypair under the node's data dir so an
-/// operator's identity survives a change of bind address, and expose it to
-/// `magnetite node --print-key`.
-fn node_identity(bind_addr: &str) -> magnetite_seams::identity::RawKeypairAuth {
-    use magnetite_seams::identity::RawKeypairAuth;
-    if let Ok(hex_seed) = std::env::var("MAGNETITE_NODE_SEED") {
-        if let Ok(raw) = hex::decode(hex_seed.trim()) {
-            if let Ok(seed) = <[u8; 32]>::try_from(raw.as_slice()) {
-                return RawKeypairAuth::from_seed(seed);
-            }
-        }
-        eprintln!("warning: MAGNETITE_NODE_SEED is not 32 bytes of hex — deriving instead");
-    }
-    let mut seed = [0u8; 32];
-    seed.copy_from_slice(magnetite_seams::blobstore::Hash::of(bind_addr.as_bytes()).0.as_slice());
-    RawKeypairAuth::from_seed(seed)
+/// Cluster-related options for `magnetite node`, grouped so the command
+/// signature stays readable.
+struct NodeClusterOpts {
+    cluster_peer: Vec<String>,
+    cluster_peers_file: Option<PathBuf>,
+    handoff_addr: Option<String>,
+    node_key_file: Option<PathBuf>,
 }
 
+/// Where this node's persisted keypair lives when no path was given.
+fn default_node_key_path() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("MAGNETITE_HOME") {
+        if !home.trim().is_empty() {
+            return Some(PathBuf::from(home).join("node.key"));
+        }
+    }
+    let home = std::env::var("HOME").ok().filter(|h| !h.trim().is_empty())?;
+    Some(PathBuf::from(home).join(".magnetite").join("node.key"))
+}
+
+/// Parse a 32-byte hex seed, rejecting anything that is not exactly 32 bytes.
+fn parse_seed_hex(s: &str) -> Result<[u8; 32]> {
+    let s = s.trim();
+    let s = s.strip_prefix("0x").unwrap_or(s);
+    let raw = hex::decode(s).map_err(|e| anyhow::anyhow!("not valid hex: {e}"))?;
+    <[u8; 32]>::try_from(raw.as_slice())
+        .map_err(|_| anyhow::anyhow!("expected 32 bytes (64 hex chars), got {}", raw.len()))
+}
+
+/// Restrict a key file to owner read/write.
+#[cfg(unix)]
+fn secure_key_file(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("setting 0600 on `{}`", path.display()))
+}
+
+#[cfg(not(unix))]
+fn secure_key_file(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+/// Warn (loudly, but do not refuse) if a key file is readable by anyone else.
+#[cfg(unix)]
+fn warn_if_key_file_is_loose(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(md) = std::fs::metadata(path) {
+        let mode = md.permissions().mode() & 0o077;
+        if mode != 0 {
+            eprintln!(
+                "warning: node key `{}` is readable beyond its owner (mode {:o}) — \
+                 anyone who reads it can impersonate this node; run `chmod 600` on it",
+                path.display(),
+                md.permissions().mode() & 0o777
+            );
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn warn_if_key_file_is_loose(_path: &Path) {}
+
+/// How this node's identity was obtained (printed at startup so an operator
+/// knows whether the key will survive a restart).
+enum KeySource {
+    /// `MAGNETITE_NODE_SEED` — explicit, stable, operator-managed.
+    Env,
+    /// Loaded from an existing key file.
+    File(PathBuf),
+    /// Generated and written to a key file on first run.
+    Generated(PathBuf),
+    /// STOPGAP: derived from the bind address because no key file location
+    /// could be determined (no `HOME`, no `--node-key-file`). Identity changes
+    /// if the bind address changes.
+    DerivedFromAddr,
+}
+
+/// This node's signing identity: tracker announcements, the handoff handshake,
+/// and every redirect it mints are signed with this key.
+///
+/// A tracker refuses unsigned ads and binds a `(game, node)` slot to the key
+/// that first claimed it, and peers pin this key in their membership lists, so
+/// the key MUST be stable across restarts. Precedence:
+///
+/// 1. `MAGNETITE_NODE_SEED` (32-byte hex) — explicit override.
+/// 2. `--node-key-file` / `MAGNETITE_NODE_KEY_FILE`, else
+///    `$MAGNETITE_HOME/node.key`, else `~/.magnetite/node.key` — loaded if
+///    present, generated (0600) on first run if not.
+/// 3. Last-resort derivation from the bind address, only when no key file path
+///    can be determined at all. This is the old stopgap: identity moves with
+///    the address.
+fn node_identity(
+    bind_addr: &str,
+    key_file: Option<&Path>,
+) -> Result<(magnetite_seams::identity::RawKeypairAuth, KeySource)> {
+    use magnetite_seams::identity::RawKeypairAuth;
+
+    if let Ok(hex_seed) = std::env::var("MAGNETITE_NODE_SEED") {
+        match parse_seed_hex(&hex_seed) {
+            Ok(seed) => return Ok((RawKeypairAuth::from_seed(seed), KeySource::Env)),
+            Err(e) => bail!(
+                "MAGNETITE_NODE_SEED is malformed ({e}).\n\
+                 Refusing to fall back to a different identity — a silently \n\
+                 changed node key orphans this node's tracker slot and invalidates\n\
+                 every membership list that pinned it. Unset it or fix the value."
+            ),
+        }
+    }
+
+    let path = key_file
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("MAGNETITE_NODE_KEY_FILE")
+                .ok()
+                .filter(|p| !p.trim().is_empty())
+                .map(PathBuf::from)
+        })
+        .or_else(default_node_key_path);
+
+    let Some(path) = path else {
+        // No explicit path and no home directory: keep the historical stopgap
+        // rather than refusing to boot, but say so at startup.
+        let mut seed = [0u8; 32];
+        seed.copy_from_slice(
+            magnetite_seams::blobstore::Hash::of(bind_addr.as_bytes())
+                .0
+                .as_slice(),
+        );
+        return Ok((RawKeypairAuth::from_seed(seed), KeySource::DerivedFromAddr));
+    };
+
+    if path.exists() {
+        warn_if_key_file_is_loose(&path);
+        let contents = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading node key `{}`", path.display()))?;
+        let seed = parse_seed_hex(&contents)
+            .with_context(|| format!("node key `{}` is malformed", path.display()))?;
+        return Ok((RawKeypairAuth::from_seed(seed), KeySource::File(path)));
+    }
+
+    // First run: generate from the OS CSPRNG and persist owner-only.
+    let identity = RawKeypairAuth::generate();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating `{}`", parent.display()))?;
+    }
+    std::fs::write(&path, format!("{}\n", hex::encode(identity.seed())))
+        .with_context(|| format!("writing node key `{}`", path.display()))?;
+    secure_key_file(&path)?;
+    Ok((identity, KeySource::Generated(path)))
+}
+
+/// Parse one authorized peer public key: exactly 32 bytes of hex.
+fn parse_peer_pubkey(s: &str) -> Result<magnetite_seams::identity::PubKey> {
+    let t = s.trim();
+    let t = t.strip_prefix("0x").unwrap_or(t);
+    let raw = hex::decode(t)
+        .map_err(|e| anyhow::anyhow!("`{s}` is not a hex-encoded public key: {e}"))?;
+    let bytes = <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| {
+        anyhow::anyhow!(
+            "`{s}` is {} bytes; an Ed25519 public key is 32 bytes (64 hex chars)",
+            raw.len()
+        )
+    })?;
+    Ok(magnetite_seams::identity::PubKey(bytes))
+}
+
+/// Collect the cluster membership list from flags, env, and an optional file.
+///
+/// **Fail loudly, never drop.** A single malformed entry aborts the whole list:
+/// silently skipping one would produce a membership an operator did not write,
+/// and a peer they believed authorized would be refused at handoff time with no
+/// hint why. An EMPTY result is a legitimate answer and means "no cluster".
+fn collect_cluster_peers(
+    flags: &[String],
+    file: Option<&Path>,
+) -> Result<Vec<magnetite_seams::identity::PubKey>> {
+    let env_list = std::env::var("MAGNETITE_CLUSTER_PEERS").ok();
+    let file = file.map(PathBuf::from).or_else(|| {
+        std::env::var("MAGNETITE_CLUSTER_PEERS_FILE")
+            .ok()
+            .filter(|p| !p.trim().is_empty())
+            .map(PathBuf::from)
+    });
+    collect_cluster_peers_from(flags, env_list.as_deref(), file.as_deref())
+}
+
+/// Pure core of [`collect_cluster_peers`] — no environment access, so the
+/// deny-by-default and fail-loudly contracts are directly testable.
+fn collect_cluster_peers_from(
+    flags: &[String],
+    env_list: Option<&str>,
+    file: Option<&Path>,
+) -> Result<Vec<magnetite_seams::identity::PubKey>> {
+    let mut out: Vec<magnetite_seams::identity::PubKey> = Vec::new();
+    let mut push = |k: magnetite_seams::identity::PubKey| {
+        if !out.iter().any(|e| e.0 == k.0) {
+            out.push(k);
+        }
+    };
+
+    for raw in flags {
+        push(parse_peer_pubkey(raw).context("--cluster-peer")?);
+    }
+
+    if let Some(list) = env_list {
+        for tok in list
+            .split([',', ' ', '\t', '\n'])
+            .filter(|t| !t.trim().is_empty())
+        {
+            push(parse_peer_pubkey(tok).context("MAGNETITE_CLUSTER_PEERS")?);
+        }
+    }
+
+    if let Some(path) = file {
+        let contents = std::fs::read_to_string(path)
+            .with_context(|| format!("reading peer file `{}`", path.display()))?;
+        for (i, line) in contents.lines().enumerate() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            push(parse_peer_pubkey(line).with_context(|| {
+                format!("{}:{}: invalid peer key", path.display(), i + 1)
+            })?);
+        }
+    }
+
+    Ok(out)
+}
+
+/// Default handoff bind address for a given game bind: the next port up.
+fn default_handoff_addr(host: &str, port: u16) -> Result<String> {
+    let next = port
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("--port {port} leaves no room for a handoff port; pass --handoff-addr"))?;
+    Ok(format!("{host}:{next}"))
+}
+
+/// The live cluster wiring for a node that has authorized peers.
+struct FleetWiring {
+    /// The authenticated node-to-node listener. Held for its lifetime: dropping
+    /// it shuts the handoff door.
+    node: magnetite_runtime::fleet::FleetNode,
+    /// Attached to the game server so player sessions follow migrated shards.
+    session: magnetite_runtime::follow::FleetSession,
+    /// The resolved listen address (`:0` resolved to a real port).
+    addr: String,
+}
+
+/// Bind the handoff listener and build the fleet session for `peers`.
+///
+/// Both the inbound door ([`FleetNode::bind`]'s allowlist) and the outbound
+/// transport ([`NetworkHandoffTransport::with_membership`]) are given the SAME
+/// explicit key set. There is no code path here that passes `None`/empty as
+/// "allow anyone": this function is only ever called with a non-empty `peers`,
+/// and a node with no peers gets no fleet wiring at all.
+fn build_fleet(
+    handoff_addr: &str,
+    identity: std::sync::Arc<magnetite_seams::identity::RawKeypairAuth>,
+    peers: &[magnetite_seams::identity::PubKey],
+) -> Result<FleetWiring> {
+    use magnetite_runtime::cluster::ClusterMembership;
+    use magnetite_runtime::fleet::FleetNode;
+    use magnetite_runtime::follow::FleetSession;
+    use std::collections::HashSet;
+    use std::sync::{Arc, Mutex};
+
+    debug_assert!(!peers.is_empty(), "fleet wiring requires explicit peers");
+
+    let membership = ClusterMembership::from_keys(peers.iter().copied());
+    let allowed: HashSet<_> = peers.iter().copied().collect();
+
+    let node = FleetNode::bind(handoff_addr, Arc::clone(&identity), Some(allowed))
+        .map_err(|e| anyhow::anyhow!("binding handoff listener on `{handoff_addr}`: {e}"))?;
+    let addr = node.addr().to_string();
+
+    let transport = Arc::new(Mutex::new(
+        node.transport().with_membership(membership.clone()),
+    ));
+    let session =
+        FleetSession::new(identity, node.authority(), membership).with_transport(transport);
+
+    Ok(FleetWiring {
+        node,
+        session,
+        addr,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 fn cmd_node(
     crate_path: &Path,
     wasm_override: Option<&Path>,
@@ -568,6 +883,7 @@ fn cmd_node(
     port: u16,
     cell_size: f32,
     seed: u64,
+    cluster: NodeClusterOpts,
 ) -> Result<()> {
     use magnetite_runtime::{
         content_address, BlobStore, Discovery, FanoutDiscovery, Filter, LanDiscovery,
@@ -595,13 +911,64 @@ fn cmd_node(
     let game = content_address(&wasm_bytes);
     let bind_addr = format!("{host}:{port}");
 
-    // Step 3: build the tokio runtime and stand up the node.
+    // Step 3: resolve this node's identity. Stable across restarts (and across
+    // bind-address changes) once a key file exists, because peers pin this key
+    // in their membership lists and a tracker binds our slot to it.
+    let (identity, key_source) = node_identity(&bind_addr, cluster.node_key_file.as_deref())?;
+    let node_seed = identity.seed();
+    let node_pubkey = {
+        use magnetite_seams::identity::Identity as _;
+        identity.pubkey()
+    };
+    let identity = Arc::new(identity);
+
+    // Step 4: cluster membership — DENY-BY-DEFAULT. An empty list is not "allow
+    // anyone", it is "this node is not in a cluster": no handoff listener, no
+    // migration transport, no session follow. Exactly today's single-box node.
+    let peers = collect_cluster_peers(
+        &cluster.cluster_peer,
+        cluster.cluster_peers_file.as_deref(),
+    )?;
+    if peers.iter().any(|k| k.0 == node_pubkey.0) {
+        eprintln!(
+            "warning: this node's own key is in the membership list — harmless, \
+             but a node never hands a shard to itself"
+        );
+    }
+
+    let fleet_wiring = if peers.is_empty() {
+        None
+    } else {
+        let handoff_addr = match cluster.handoff_addr.clone().or_else(|| {
+            std::env::var("MAGNETITE_HANDOFF_ADDR")
+                .ok()
+                .filter(|a| !a.trim().is_empty())
+        }) {
+            Some(a) => a,
+            None => default_handoff_addr(host, port)?,
+        };
+        if handoff_addr == bind_addr {
+            bail!(
+                "--handoff-addr ({handoff_addr}) must differ from the player-facing \
+                 game address ({bind_addr}) — they are separate listeners"
+            );
+        }
+        Some(build_fleet(&handoff_addr, Arc::clone(&identity), &peers)?)
+    };
+
+    // Step 5: build the tokio runtime and stand up the node.
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .context("creating tokio runtime")?;
 
-    rt.block_on(async move {
+    let (fleet_session, fleet_addr, _handoff_node) = match fleet_wiring {
+        Some(w) => (Some(w.session), Some(w.addr), Some(w.node)),
+        None => (None, None, None),
+    };
+    let peer_count = peers.len();
+
+    let result = rt.block_on(async move {
         // Default, fully-offline providers: local content store + LAN phonebook.
         let blobs = LocalBlobStore::new();
         let stored = blobs.put(&wasm_bytes).await;
@@ -611,7 +978,9 @@ fn cmd_node(
         // the SAME discovery handle is announced to, renewed on, and retracted
         // from — so the background heartbeat keeps us listed everywhere, not
         // just on the LAN.
-        let tracker = magnetite_runtime::tracker::from_env(node_identity(&bind_addr));
+        let tracker = magnetite_runtime::tracker::from_env(
+            magnetite_seams::identity::RawKeypairAuth::from_seed(node_seed),
+        );
         let tracker_configured = tracker.is_some();
         let mut backends: Vec<Box<dyn Discovery + Send + Sync>> = vec![Box::new(LanDiscovery::new())];
         if let Some(t) = tracker {
@@ -623,6 +992,7 @@ fn cmd_node(
             bind_addr: bind_addr.clone(),
             cell_size,
             seed,
+            fleet: fleet_session,
             ..Default::default()
         };
 
@@ -638,6 +1008,21 @@ fn cmd_node(
         println!();
         println!("  Game id (BLAKE3) : {}", game.to_hex());
         println!("  Connect URL      : ws://{bind_addr}");
+        println!("  Node pubkey      : {}", hex::encode(node_pubkey.0));
+        match &key_source {
+            KeySource::Env => println!("  Node key         : MAGNETITE_NODE_SEED (stable)"),
+            KeySource::File(p) => {
+                println!("  Node key         : {} (stable)", p.display())
+            }
+            KeySource::Generated(p) => println!(
+                "  Node key         : generated → {} (stable from now on)",
+                p.display()
+            ),
+            KeySource::DerivedFromAddr => println!(
+                "  Node key         : NOT STABLE — derived from the bind address \
+                 (no key file location; pass --node-key-file)"
+            ),
+        }
         println!("  Topology         : {:?}", prepared.match_config.topology);
         println!(
             "  Measured HW      : {} cores, {} MB RAM",
@@ -672,6 +1057,25 @@ fn cmd_node(
             "  Lease            : renewed every {}s while serving; retracted on shutdown",
             cfg.lease.as_secs() / 2
         );
+        // Cluster wiring — deny-by-default. No authorized peers means no
+        // handoff listener at all, so there is nothing to hand a shard to.
+        match &fleet_addr {
+            Some(addr) => {
+                println!("  Cluster          : {peer_count} authorized peer key(s)");
+                println!("  Handoff listener : {addr} (node-to-node only, mutually authenticated)");
+                println!(
+                    "  Session follow   : ON — players are redirected when a shard migrates"
+                );
+                println!(
+                    "  Reachability     : peers must reach {addr} DIRECTLY — no NAT traversal, \n\
+                     \x20                    no hole punching, no relay (same LAN / VPN / public IP)"
+                );
+            }
+            None => println!(
+                "  Cluster          : none configured — this node hands shards to nobody \
+                 (pass --cluster-peer <hex> to join a cluster)"
+            ),
+        }
         println!();
         println!("Press Ctrl-C to stop.");
         println!();
@@ -680,9 +1084,12 @@ fn cmd_node(
         magnetite_runtime::run_node(&blobs, Arc::clone(&discovery), &game, cfg)
             .await
             .map_err(|e| anyhow::anyhow!("node error: {e}"))
-    })?;
+    });
 
-    Ok(())
+    // The handoff listener lives exactly as long as the serve loop: dropping it
+    // here shuts the node-to-node door before the process exits.
+    drop(_handoff_node);
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,6 +1511,205 @@ mod tests {
         }
 
         assert!(missing, "should report missing env vars");
+    }
+
+    // ------------------------------------------------------------------ //
+    // cluster membership — deny-by-default, fail-loudly                    //
+    // ------------------------------------------------------------------ //
+
+    /// 32 bytes of `0xaa`, hex-encoded (64 chars).
+    const KEY_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    /// 32 bytes of `0xbb`, hex-encoded (64 chars).
+    const KEY_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    #[test]
+    fn no_config_means_no_cluster_not_open_door() {
+        // THE contract: absent configuration is "hand shards to nobody", and it
+        // is expressed as an EMPTY membership, which `cmd_node` turns into no
+        // handoff listener at all.
+        let peers = collect_cluster_peers_from(&[], None, None).unwrap();
+        assert!(peers.is_empty(), "no config must yield no authorized peers");
+
+        // An explicitly empty env var is equally not an open door.
+        let peers = collect_cluster_peers_from(&[], Some("   "), None).unwrap();
+        assert!(peers.is_empty());
+    }
+
+    #[test]
+    fn peer_flag_parses_hex_key() {
+        let peers =
+            collect_cluster_peers_from(&[KEY_A.to_string()], None, None).unwrap();
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].0, [0xaa; 32]);
+    }
+
+    #[test]
+    fn peer_key_accepts_0x_prefix() {
+        let k = parse_peer_pubkey(&format!("0x{KEY_B}")).unwrap();
+        assert_eq!(k.0, [0xbb; 32]);
+    }
+
+    #[test]
+    fn malformed_peer_key_is_an_error_not_a_dropped_entry() {
+        // Wrong length.
+        assert!(parse_peer_pubkey("aabb").is_err());
+        // Not hex.
+        assert!(parse_peer_pubkey(&"z".repeat(64)).is_err());
+        // And one bad entry poisons the whole list rather than shrinking it.
+        let flags = vec![KEY_A.to_string(), "nonsense".to_string()];
+        assert!(collect_cluster_peers_from(&flags, None, None).is_err());
+    }
+
+    #[test]
+    fn env_and_flags_merge_and_dedupe() {
+        let peers =
+            collect_cluster_peers_from(&[KEY_A.to_string()], Some(&format!("{KEY_A},{KEY_B}")), None)
+                .unwrap();
+        assert_eq!(peers.len(), 2, "duplicates collapse, distinct keys accumulate");
+    }
+
+    #[test]
+    fn peers_file_parses_comments_and_blank_lines() {
+        let tmp = std::env::temp_dir().join(format!(
+            "mag_peers_{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &tmp,
+            format!("# node A\n{KEY_A}\n\n{KEY_B}  # node B\n"),
+        )
+        .unwrap();
+        let peers = collect_cluster_peers_from(&[], None, Some(&tmp)).unwrap();
+        let _ = std::fs::remove_file(&tmp);
+        assert_eq!(peers.len(), 2);
+    }
+
+    #[test]
+    fn peers_file_reports_the_offending_line() {
+        let tmp = std::env::temp_dir().join(format!(
+            "mag_peers_bad_{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::write(&tmp, format!("{KEY_A}\nnot-a-key\n")).unwrap();
+        let err = collect_cluster_peers_from(&[], None, Some(&tmp)).unwrap_err();
+        let _ = std::fs::remove_file(&tmp);
+        assert!(
+            format!("{err:#}").contains(":2"),
+            "error must point at the bad line, got: {err:#}"
+        );
+    }
+
+    #[test]
+    fn missing_peers_file_is_an_error_not_an_empty_allowlist() {
+        // Silently treating an unreadable membership file as "no peers" would
+        // be a downgrade an operator did not ask for.
+        let missing = std::env::temp_dir().join("mag_peers_definitely_missing.txt");
+        let _ = std::fs::remove_file(&missing);
+        assert!(collect_cluster_peers_from(&[], None, Some(&missing)).is_err());
+    }
+
+    #[test]
+    fn fleet_wiring_pins_exactly_the_configured_peers() {
+        use magnetite_seams::identity::RawKeypairAuth;
+        use std::sync::Arc;
+
+        let id = Arc::new(RawKeypairAuth::from_seed([7u8; 32]));
+        let peer = parse_peer_pubkey(KEY_A).unwrap();
+        let stranger = parse_peer_pubkey(KEY_B).unwrap();
+
+        let w = build_fleet("127.0.0.1:0", id, &[peer]).unwrap();
+        let allowed = w
+            .node
+            .allowed()
+            .expect("handoff listener must always carry an explicit allowlist");
+        assert!(allowed.contains(&peer));
+        assert!(
+            !allowed.contains(&stranger),
+            "a key the operator did not authorize must not be admitted"
+        );
+        assert_eq!(allowed.len(), 1);
+    }
+
+    #[test]
+    fn handoff_port_defaults_next_to_the_game_port() {
+        assert_eq!(default_handoff_addr("127.0.0.1", 9000).unwrap(), "127.0.0.1:9001");
+        assert!(default_handoff_addr("127.0.0.1", u16::MAX).is_err());
+    }
+
+    // ------------------------------------------------------------------ //
+    // node identity — persisted keypair                                    //
+    // ------------------------------------------------------------------ //
+
+    #[test]
+    fn seed_hex_round_trips_and_rejects_short_input() {
+        let seed = parse_seed_hex(&format!("0x{KEY_A}\n")).unwrap();
+        assert_eq!(seed, [0xaa; 32]);
+        assert!(parse_seed_hex("aabb").is_err());
+        assert!(parse_seed_hex("nothex").is_err());
+    }
+
+    #[test]
+    fn node_key_file_is_generated_once_then_reused() {
+        use magnetite_seams::identity::Identity as _;
+        let dir = std::env::temp_dir().join(format!(
+            "mag_nodekey_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let path = dir.join("node.key");
+
+        // MAGNETITE_NODE_SEED must not be set for this test's precedence path.
+        if std::env::var("MAGNETITE_NODE_SEED").is_ok() {
+            return;
+        }
+
+        let (id1, src1) = node_identity("127.0.0.1:9000", Some(&path)).unwrap();
+        assert!(matches!(src1, KeySource::Generated(_)));
+        assert!(path.exists(), "key file must be written on first run");
+
+        // Same file, DIFFERENT bind address → same identity. That is the whole
+        // point: identity no longer moves with the address.
+        let (id2, src2) = node_identity("10.0.0.5:7777", Some(&path)).unwrap();
+        assert!(matches!(src2, KeySource::File(_)));
+        assert_eq!(id1.pubkey().0, id2.pubkey().0);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "generated key must be owner-only");
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn malformed_node_key_file_is_refused() {
+        let dir = std::env::temp_dir().join(format!(
+            "mag_badkey_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("node.key");
+        std::fs::write(&path, "garbage").unwrap();
+        if std::env::var("MAGNETITE_NODE_SEED").is_ok() {
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        // Refuse rather than quietly booting under a different identity.
+        assert!(node_identity("127.0.0.1:9000", Some(&path)).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // ------------------------------------------------------------------ //

@@ -167,10 +167,11 @@ Being plain about the edges, because each of these is a real limit:
 - **No NAT traversal.** Unchanged and unqualified: the redirect's address must be
   directly reachable by the client, exactly as the handoff port must be
   reachable by peer nodes.
-- **The `magnetite node` CLI does not enable it.** A standalone hosted node has
-  no cluster membership and no migration transport, so it passes `fleet: None`
-  and behaves exactly as before. Session-follow is opt-in for callers that build
-  a cluster in code today.
+- **A node with no configured peers does not enable it.** That is not an
+  omission, it is the deny-by-default rule: no membership means no handoff
+  listener, no migration transport, and `fleet: None` — a plain single-box node,
+  exactly as before. Session-follow turns on only when an operator names the
+  peer keys they trust (see "Running a two-node cluster" below).
 
 ## Running one
 
@@ -197,3 +198,119 @@ on a heartbeat and retracts its ad on exit.
 
 There is no cloud account to create and no capacity to request — the box you
 run it on *is* the capacity.
+
+## Node identity is a key file, not an address
+
+On first run a node generates an Ed25519 keypair and writes the seed to
+`~/.magnetite/node.key` (or `$MAGNETITE_HOME/node.key`, or `--node-key-file`),
+owner-readable only (`0600`). Every restart reuses it, so **a node's identity is
+stable across restarts and across a change of bind address** — which matters
+because peers pin that key in their membership lists and a tracker binds your
+listing slot to it. The public key is printed at startup:
+
+```text
+  Node pubkey      : ceba6d97cabf9324052d87ff4281c39d3f12db49f76b26aaf1ef7ab81f4636d3
+  Node key         : /home/you/.magnetite/node.key (stable)
+```
+
+That hex string is what you paste into another node's membership list. Back the
+key file up and keep it secret: whoever holds it *is* this node. `MAGNETITE_NODE_SEED`
+(32-byte hex) still overrides the file for ephemeral/containerised setups; if it
+is set but malformed the node **refuses to start** rather than quietly booting
+under a different identity. Only if no key file location can be determined at all
+(no `HOME`, no flag) does the node fall back to deriving a key from its bind
+address — it says so at startup, and in that mode the identity is *not* stable.
+
+## Running a two-node cluster
+
+Two boxes, `10.0.0.11` and `10.0.0.12`, on the same LAN or VPN. Both must be able
+to reach each other's **handoff port** directly.
+
+**1. Start each node once to mint and print its key.**
+
+```bash
+# on 10.0.0.11
+magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000
+#   Node pubkey      : ceba6d97…36d3      ← key of node A
+# Ctrl-C
+
+# on 10.0.0.12
+magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000
+#   Node pubkey      : fff965a4…e584      ← key of node B
+# Ctrl-C
+```
+
+**2. Put each node's key in the other's membership list, and start both.**
+
+```bash
+# on 10.0.0.11 — authorize B
+magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000 \
+  --handoff-addr 0.0.0.0:9001 \
+  --cluster-peer fff965a4de11f1869c9ac096d9d3bae02b8aa75614c05ed8c9fa1210f95ae584
+
+# on 10.0.0.12 — authorize A
+magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000 \
+  --handoff-addr 0.0.0.0:9001 \
+  --cluster-peer ceba6d97cabf9324052d87ff4281c39d3f12db49f76b26aaf1ef7ab81f4636d3
+```
+
+Both must serve the **same game.wasm**: the game id is the BLAKE3 hash of the
+module, so a mismatched binary is a different game and the nodes will not find
+each other in discovery.
+
+Each prints its cluster state:
+
+```text
+  Cluster          : 1 authorized peer key(s)
+  Handoff listener : 0.0.0.0:9001 (node-to-node only, mutually authenticated)
+  Session follow   : ON — players are redirected when a shard migrates
+  Reachability     : peers must reach 0.0.0.0:9001 DIRECTLY — no NAT traversal,
+                     no hole punching, no relay (same LAN / VPN / public IP)
+```
+
+**3. Watch capacity drive placement.** Each node advertises its measured
+hardware, and `SpreadScheduler` gives the bigger box more shards — the
+`Emergent cap` line in each node's banner is the input to that decision, not a
+number you set.
+
+**4. Watch a player follow a migration.** Connect a client to A
+(`ws://10.0.0.11:9000`). When the shard that player is on migrates to B, A hands
+the client a `SignedRedirect` on its live socket and closes it; the client
+reconnects to B, requires B to prove the pinned key, presents its single-use
+`FollowToken`, and is re-attached **under the same player id** — one continuous
+session, no re-join.
+
+### Flags and environment
+
+| Flag | Env | Meaning |
+|---|---|---|
+| `--cluster-peer <HEX>` (repeatable) | `MAGNETITE_CLUSTER_PEERS` (comma/space separated) | Authorized peer node public key, 64 hex chars |
+| `--cluster-peers-file <PATH>` | `MAGNETITE_CLUSTER_PEERS_FILE` | One key per line, `#` comments — for lists longer than a couple of nodes |
+| `--handoff-addr <ADDR>` | `MAGNETITE_HANDOFF_ADDR` | Node-to-node listener, separate from the game port. Defaults to `<host>:<port+1>` |
+| `--node-key-file <PATH>` | `MAGNETITE_NODE_KEY_FILE` | Persisted node keypair. Default `$MAGNETITE_HOME/node.key`, else `~/.magnetite/node.key` |
+| — | `MAGNETITE_NODE_SEED` | 32-byte hex seed; overrides the key file |
+
+Sources merge and de-duplicate. A malformed key is a **hard error naming the
+offending entry** (and, for a file, its line number) — never a silently dropped
+peer, because a membership list you cannot trust to be complete is worse than
+one that fails to load. An unreadable peers file is an error too, not an empty
+allowlist.
+
+### What this walkthrough does and does not prove
+
+- **No peers configured means no cluster.** Not "trust anyone" — the handoff
+  listener is not even bound, so there is nothing for a stranger to talk to.
+  Membership is deny-by-default all the way down, and the same explicit key set
+  is given to the inbound allowlist and the outbound transport.
+- **Still no NAT traversal, no hole punching, no relay.** Nodes must be directly
+  reachable: same LAN, a VPN, or a public IP with the handoff port open.
+  Operation across the public internet is **untested** — treat a fleet as a
+  single-network capability today.
+- **A redirect is a bearer credential** within its ~30s window: whoever reads it
+  before it is redeemed can redeem it once. Run players over `wss://`.
+- **The node-identity proof authenticates the key, not the channel.** It does not
+  bind to the transport, so TLS is still doing real work.
+- **Nothing here places shards for you automatically yet.** The CLI binds the
+  cluster door and wires session-follow; driving migrations still means calling
+  the scheduler/transport from code. TODO: a CLI-level autoscaler that observes
+  discovery ads through `RouteDirectory` and rebalances shards on its own.
