@@ -28,9 +28,7 @@ its service is unconfigured, it falls back to `builtin`.
 | `livekit` | `LiveKitAdapter` | Voice + video at scale |
 | `owncast` | `OwncastAdapter` | Live streaming + VOD |
 
-A PeerTube adapter and a DMTAP comms provider are named in the design spec but
-are **not implemented**. Neither is a DMTAP dependency of any kind — see
-[DMTAP surface](dmtap.md).
+A PeerTube adapter is named in the design spec but is **not implemented**.
 
 Matrix, Jitsi, and LiveKit are the lead external providers precisely because they
 already exist, are already decentralized (or self-hostable), and already have

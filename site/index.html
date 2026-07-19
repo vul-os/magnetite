@@ -175,9 +175,9 @@ img{max-width:100%;display:block}
     <h2>The seams</h2>
     <p class="lead">Everything provider-specific plugs in behind six traits. The game runtime, scheduler, and payment path never name a provider type — only the seam.</p>
     <div class="seams">
-      <div class="seam"><span class="tag">Identity</span><div><h4>Keypair auth</h4><p>Ed25519 challenge/response by default; optional DMTAP-Auth for decentralized login and key rotation behind a feature flag.</p></div></div>
+      <div class="seam"><span class="tag">Identity</span><div><h4>Keypair auth</h4><p>Ed25519 challenge/response by default; any external identity provider plugs in behind the trait, never referenced by non-provider code.</p></div></div>
       <div class="seam"><span class="tag">Naming</span><div><h4>Phonebook, not authority</h4><p>Raw pubkeys and short-hash addresses by default; human <code>name@domain</code> is a display layer over the same raw key.</p></div></div>
-      <div class="seam"><span class="tag">BlobStore</span><div><h4>Content-addressed assets</h4><p>Hash-in, hash-out. Local + HTTP by default; Iroh/BitTorrent and MOTE/DMTAP-PUB adapters slot in without touching the game runtime.</p></div></div>
+      <div class="seam"><span class="tag">BlobStore</span><div><h4>Content-addressed assets</h4><p>Hash-in, hash-out. Local + HTTP by default; an Iroh/BitTorrent adapter slots in without touching the game runtime.</p></div></div>
       <div class="seam"><span class="tag">Discovery</span><div><h4>The phonebook</h4><p>A dumb, swappable HTTP tracker anyone can run, plus LAN mDNS — never a central server-registry authority.</p></div></div>
       <div class="seam"><span class="tag">CommsProvider</span><div><h4>Chat, voice, video, streaming</h4><p>Matrix, Jitsi, LiveKit, Owncast/PeerTube — the node mints scoped join credentials from your keypair, optionally gated behind a payment receipt.</p></div></div>
       <div class="seam"><span class="tag">PaymentRail</span><div><h4>Non-custodial crypto</h4><p>Atomic checkout splits, per-seat hosting channels, wager escrow settled by replay verification. A deterministic mock rail keeps CI fully offline.</p></div></div>

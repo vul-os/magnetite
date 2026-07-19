@@ -41,7 +41,7 @@ WASM sandbox, deterministic replay/anti-cheat) is the one thing we own and is al
 
 All seams live in a new crate `magnetite-seams` (traits + default impls). Nothing in the game
 runtime, scheduler, or payment path may name a provider-specific type — they see only these traits.
-**Every seam ships a non-DMTAP default so we never hard-depend on any external project.**
+**Every seam ships a working offline default so we never hard-depend on any external project.**
 
 ### 3.1 `Identity` / `Auth`
 ```rust
@@ -58,8 +58,8 @@ trait AuthProvider {                                  // sign-a-challenge login
 }
 ```
 - **Default provider:** `RawKeypairAuth` — raw Ed25519 challenge/response. No external deps.
-- **Optional provider:** `DmtapAuth` — DMTAP-Auth (decentralized login, key transparency, rotation).
-  Behind `--features dmtap`. Never referenced by non-provider code.
+- Any external identity provider (OIDC bridge, a decentralized-login protocol) plugs in behind this
+  trait as a feature-gated module, never referenced by non-provider code. None ships today.
 
 ### 3.2 `Naming`
 ```rust
@@ -69,8 +69,9 @@ trait Naming {
 }
 ```
 - **Default:** `HashNaming` — raw pubkey / short-hash addresses.
-- **Optional:** `DmtapNaming` — `name@domain` ladder, 8-word zero-authority floor.
-- **Rule:** DMTAP names are a *display layer* over raw keys. Substrate is always raw keys.
+- **Optional:** `KeyNameNaming` (`--features keyname`) — word-based, zero-authority key-names.
+  Zero dependencies; exists to prove this seam is genuinely swappable, not hardwired.
+- **Rule:** human names are a *display layer* over raw keys. Substrate is always raw keys.
 
 ### 3.3 `BlobStore` (content-addressed games + assets)
 ```rust
@@ -81,7 +82,6 @@ trait BlobStore {
 }
 ```
 - **Default:** `LocalBlobStore` + `HttpBlobStore` (serve by hash over HTTP). Iroh/BitTorrent adapter later.
-- **Optional:** `DmtapPubBlobStore` — MOTE content-addressed objects over DMTAP-PUB substrate.
 - Game id = hash of (wasm module + manifest). No central registry row required to identify a game.
 
 ### 3.4 `Discovery` (the phonebook — never an authority)
@@ -107,8 +107,7 @@ trait CommsProvider {
 ```
 - Providers: `MatrixProvider` (text/DMs/presence/spaces via Element homeservers),
   `JitsiProvider` (voice+video SFU), `LiveKitProvider` (voice+video at scale),
-  `OwncastProvider`/`PeerTubeProvider` (live + VOD), `BuiltinProvider` (the demoted old stack),
-  and optionally `DmtapCommsProvider` (MOTE messaging).
+  `OwncastProvider`/`PeerTubeProvider` (live + VOD), `BuiltinProvider` (the demoted old stack).
 - **Identity bridge:** the node mints scoped creds via `AuthProvider::mint_scoped_token`
   (Matrix OpenID/SSO, Jitsi JWT, LiveKit token) from the player's keypair. One login → SSO into comms.
 - Join credential may be gated behind a payment receipt (§3.6) — paid room → token only after pay.
@@ -142,6 +141,17 @@ Collapse `backend` + `magnetite-runtime` into one `magnetite` node binary.
   hardware, never a config constant.** More cores → more shards.
 - **Cluster** (operator brings many boxes) → shard mesh with cross-node handoff. **Past the cluster,
   other operators' nodes join the mesh** (federated compute, paid via §3.6). This is real "Bucket D".
+  - **Built:** `magnetite_runtime::fleet` — an Ed25519 mutually-authenticated TCP channel keyed on the
+    node keypair (peer key is *pinned*, so the right address is not proof of the right node), carrying a
+    **two-phase, epoch-fenced shard migration**: offer state → target validates/stages + acks → commit →
+    commit-ack → *only then* does the source release authority. Every partial failure (ack timeout,
+    rejection, dropped connection, target crash) resolves to **source retains authority** with state
+    intact; a monotonic per-shard epoch fences duplicates, replays, and stale owners. Determinism is
+    asserted across the migration boundary. `SpreadScheduler` places shards on ≥2 real nodes by capacity.
+    Deliberately depends on **no** external protocol and **no** libp2p — cross-node handoff is core
+    game functionality and must not rest on an optional dependency.
+  - **Not proven:** tested over real sockets in-process and on a LAN only. **No NAT traversal, no relay,
+    no WAN validation** — nodes must be directly reachable. Internet-scale fleets are not demonstrated.
 - The game declares only *how to partition state into shards* (`trait Shardable`). A pluggable
   `ShardScheduler` places shards onto whatever capacity exists. Generic by construction.
 
@@ -176,8 +186,11 @@ Legend: **[O]** = Opus-class agent, **[S]** = Sonnet-class agent. One writer per
   landing + docs + app routes → images referenced by landing/docs/README.
 
 ### Wave 3 — Integration & optional providers
-- **I1 [O]** Wire DMTAP optional providers (`DmtapAuth`/`DmtapNaming`/`DmtapPubBlobStore`/
-  `DmtapCommsProvider`) behind `--features dmtap`, non-DMTAP defaults stay green in CI.
+- **I1 [O]** ~~Wire DMTAP optional providers~~ — **DROPPED 2026-07-19 (founder call).** DMTAP was
+  optional by design (every seam has a working default), so integrating it bought nothing and would
+  have added a dependency on a private sibling repo. Nothing in Magnetite depends on DMTAP.
+  Superseded by `KeyNameNaming` (`--features keyname`), which proves the `Naming` seam is swappable
+  with zero dependencies.
 - **I2 [O]** End-to-end: `magnetite dev` + tracker + content-addressed game + mock crypto purchase +
   Matrix/Jitsi room, all offline-runnable. Integration test.
 - **I3 [S]** Generate real screenshots, embed everywhere, final README/docs/landing polish.
@@ -186,12 +199,12 @@ Legend: **[O]** = Opus-class agent, **[S]** = Sonnet-class agent. One writer per
 
 ### Loop / Definition of done
 Waves repeat until: workspace builds + clippy clean + tests green; fiat fully removed; seams + defaults
-in place with DMTAP optional and non-load-bearing; landing + docs + README shipped with screenshots via
+in place with every seam defaulting to a working offline provider; landing + docs + README shipped with screenshots via
 `npm run screenshotter`; GH description/topics set (done); `magnetite dev` runs the full offline demo.
 
 ## 6. Guardrails for all agents
 - One writer per file set per wave. Do not touch files outside your claimed set.
 - Program against §3 traits only; never leak a provider type into runtime/scheduler/payment code.
-- Every seam keeps a working non-DMTAP, non-chain default; CI must pass with zero external services.
+- Every seam keeps a working non-chain default; CI must pass with zero external services.
 - Keep the game core (authority/sandbox/replay) intact — that's the moat.
 - Record progress in `DECENTRALIZATION_PROGRESS.md` (append-only log: task id, files touched, status).

@@ -535,7 +535,8 @@ impl ShardedRuntime {
         inputs: &[(PlayerId, Input)],
         transport: &mut dyn HandoffTransport,
     ) -> ShardedStepOutput {
-        let out = self.step(tick, inputs);
+        let mut out = self.step(tick, inputs);
+        let mut reverted: Vec<PlayerId> = Vec::new();
         for event in &out.handoffs {
             // The source shard's snapshot is the player-state blob to move.
             let blob = self
@@ -544,8 +545,23 @@ impl ShardedRuntime {
                 .map(|e| e.snapshot())
                 .unwrap_or_default();
             if let Err(e) = transport.transfer(event, &blob) {
-                warn!(player = %event.player, error = %e, "handoff transport failed");
+                // Fail closed: a handoff the transport could not complete must
+                // NOT leave the player routed to a shard nobody accepted. Roll
+                // the routing table back so the SOURCE shard keeps authority —
+                // the same invariant the cross-node protocol enforces on the
+                // wire (see `fleet`).
+                warn!(
+                    player = %event.player,
+                    error = %e,
+                    from = %event.from_shard,
+                    "handoff transport failed — reverting routing, source retains the player"
+                );
+                self.shard_mgr.handoff(event.player, event.from_shard);
+                reverted.push(event.player);
             }
+        }
+        if !reverted.is_empty() {
+            out.handoffs.retain(|h| !reverted.contains(&h.player));
         }
         out
     }
@@ -556,14 +572,25 @@ impl ShardedRuntime {
 // ---------------------------------------------------------------------------
 
 /// Why a cross-node handoff transfer failed.
+///
+/// **Every variant means the same thing for authority: the source still owns
+/// the shard.** A handoff only succeeds on `Ok`.
 #[derive(Debug)]
 pub enum HandoffError {
     /// The transport has no route to the target node.
     NoRoute(ShardId),
     /// The target node rejected or dropped the transfer.
     Rejected(String),
-    /// The transport is a not-yet-implemented network backend.
-    Unimplemented,
+    /// Peer authentication failed: unknown key, forged signature, or the far
+    /// side presented a different node key than the one we intended to reach.
+    Auth(String),
+    /// This node does not hold authority over the shard it was asked to hand
+    /// over — refusing rather than shipping state we do not own.
+    NotOwner(ShardId),
+    /// The peer did not answer in time (e.g. the phase-1 ack never arrived).
+    Timeout(String),
+    /// Socket / framing / encoding failure.
+    Transport(String),
 }
 
 impl std::fmt::Display for HandoffError {
@@ -571,7 +598,12 @@ impl std::fmt::Display for HandoffError {
         match self {
             HandoffError::NoRoute(s) => write!(f, "no route to shard {s}"),
             HandoffError::Rejected(m) => write!(f, "target rejected handoff: {m}"),
-            HandoffError::Unimplemented => write!(f, "network handoff transport not implemented"),
+            HandoffError::Auth(m) => write!(f, "peer authentication failed: {m}"),
+            HandoffError::NotOwner(s) => {
+                write!(f, "refusing to hand off {s}: this node is not its owner")
+            }
+            HandoffError::Timeout(m) => write!(f, "handoff timed out (authority retained): {m}"),
+            HandoffError::Transport(m) => write!(f, "handoff transport error: {m}"),
         }
     }
 }
@@ -630,32 +662,11 @@ impl HandoffTransport for LoopbackTransport {
     }
 }
 
-/// Network handoff transport — the real cross-node "Bucket D" backend.
-///
-/// TODO(N3, multi-node): implement the wire transfer:
-///   1. Resolve `event.to_shard` → the owning node's address (from the
-///      [`crate::node`] discovery layer / a cluster routing table).
-///   2. Open an authenticated channel to that node (reuse the node keypair from
-///      `magnetite_seams::identity`).
-///   3. POST the `player_state_blob` to the target's `restore` endpoint and wait
-///      for an ack before releasing the player locally (no double-authority).
-///   4. Forward the player's WS connection to the target node's URL.
-///
-/// Until then it fails closed with [`HandoffError::Unimplemented`] so nothing
-/// silently pretends a cross-node move succeeded.
-#[derive(Debug, Default)]
-pub struct NetworkHandoffTransport;
-
-impl HandoffTransport for NetworkHandoffTransport {
-    fn transfer(
-        &mut self,
-        _event: &HandoffEvent,
-        _player_state_blob: &[u8],
-    ) -> Result<(), HandoffError> {
-        // Real networking is deliberately unbuilt; the seam above is what's real.
-        Err(HandoffError::Unimplemented)
-    }
-}
+// The real cross-node backend lives in [`crate::fleet`]:
+// `fleet::NetworkHandoffTransport` opens an Ed25519-authenticated TCP channel to
+// the node that should own the target shard and runs a two-phase, epoch-fenced
+// migration. It is re-exported from the crate root, so `NetworkHandoffTransport`
+// still resolves for callers — it is simply no longer a stub.
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -1074,22 +1085,71 @@ mod tests {
             out.handoffs.len(),
             "every handoff must pass through the transport seam"
         );
-        assert!(out.handoffs.len() >= 1);
+        assert!(!out.handoffs.is_empty());
     }
 
     #[test]
-    fn network_transport_fails_closed() {
-        let mut t = NetworkHandoffTransport;
+    fn network_transport_without_a_route_fails_closed() {
+        use crate::fleet::{NetworkHandoffTransport, ShardAuthority};
+        use magnetite_seams::identity::RawKeypairAuth;
+        use std::sync::Arc;
+
+        let mut t = NetworkHandoffTransport::new(
+            Arc::new(RawKeypairAuth::from_seed([7u8; 32])),
+            ShardAuthority::new(),
+        );
         let ev = HandoffEvent {
             player: PlayerId::new(1),
             from_shard: ShardId::LOCAL,
             to_shard: ShardId(1),
-            target_addr: Some("ws://other-node:9000".into()),
+            target_addr: Some("127.0.0.1:9000".into()),
         };
-        // The unbuilt network backend must never pretend success.
+        // The network backend is real now, but an unrouted shard must never be
+        // reported as moved — no route, no handoff.
         assert!(matches!(
             t.transfer(&ev, b"blob"),
-            Err(HandoffError::Unimplemented)
+            Err(HandoffError::NoRoute(_))
         ));
+    }
+
+    /// A transport that always fails, to prove the runtime rolls routing back.
+    struct AlwaysFailingTransport;
+    impl HandoffTransport for AlwaysFailingTransport {
+        fn transfer(&mut self, _e: &HandoffEvent, _b: &[u8]) -> Result<(), HandoffError> {
+            Err(HandoffError::Rejected("target said no".into()))
+        }
+    }
+
+    #[test]
+    fn a_failed_transport_reverts_the_player_to_the_source_shard() {
+        let mut rt = ShardedRuntime::new(sharded_cfg(), move_factory());
+        let p = PlayerId::new(1);
+        rt.join(p);
+        let before = rt.shard_of(p).unwrap();
+
+        let out = rt.step_with_transport(
+            1,
+            &[(
+                p,
+                Input {
+                    mouse: MouseState {
+                        delta_x: 250.0,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )],
+            &mut AlwaysFailingTransport,
+        );
+
+        assert_eq!(
+            rt.shard_of(p),
+            Some(before),
+            "a handoff the transport could not complete must leave the player on the source shard"
+        );
+        assert!(
+            out.handoffs.is_empty(),
+            "a reverted handoff is not reported as having happened"
+        );
     }
 }
