@@ -1,4 +1,5 @@
 mod api;
+mod comms;
 mod config;
 mod db;
 mod error;
@@ -59,7 +60,7 @@ use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
 use crate::middleware::request_metrics::record_request_metrics;
 use crate::services::payment::SubscriptionService;
-use crate::ws::comms;
+use crate::ws::comms as ws_comms;
 use crate::ws::game as ws_game;
 use crate::ws::gauges::WsGauges;
 use crate::ws::voice;
@@ -134,6 +135,10 @@ async fn main() {
         // Stores namespace — mirrors /marketplace/stores/* so frontend client.stores.* calls resolve
         .nest("/stores", marketplace::stores_router(pool.clone()))
         // Wave 6: comms core — communities, channels, messages, DMs
+        // Comms seam (§3.5) — provider probe + room create/join/close. The
+        // routes below (communities/channels/messages/streams/voice) are the
+        // DEMOTED `builtin` provider, kept working as one adapter among many.
+        .nest("/comms", crate::comms::api::router(pool.clone()))
         .nest("/communities", communities::router(pool.clone()))
         .nest(
             "/communities/:community_id/channels",
@@ -219,7 +224,7 @@ async fn main() {
         .merge(health_metrics)
         .merge(notification_ws_handler.router())
         // Wave 6: real-time comms and voice signaling WebSocket endpoints
-        .merge(comms::router(pool.clone(), Arc::clone(&ws_gauges)))
+        .merge(ws_comms::router(pool.clone(), Arc::clone(&ws_gauges)))
         .merge(voice::router(pool.clone(), Arc::clone(&ws_gauges)))
         // Game WebSocket: mount the game loop router (was unmounted — now wired)
         .merge(game_ws_handler.router());

@@ -36,6 +36,37 @@ pub struct Config {
     pub chain_id: Option<String>,
     /// Placeholder stablecoin contract address — unused by the mock rail.
     pub stablecoin_address: Option<String>,
+    /// Comms provider selector (`COMMS_PROVIDER`, §3.5): `builtin` (default) |
+    /// `matrix` | `jitsi` | `livekit` | `owncast`. Anything unknown, or a
+    /// provider whose service is unconfigured, falls back to `builtin` — the
+    /// demoted in-house stack, which needs zero external services.
+    pub comms_provider: String,
+    /// Matrix homeserver base URL (`MATRIX_HOMESERVER`). Gates `MatrixProvider`.
+    pub matrix_homeserver: Option<String>,
+    /// Matrix server name used in room aliases (`MATRIX_SERVER_NAME`).
+    pub matrix_server_name: Option<String>,
+    /// Shared secret for minting Matrix login tokens (`MATRIX_SHARED_SECRET`).
+    /// Without it clients log in to the homeserver themselves.
+    pub matrix_shared_secret: Option<String>,
+    /// Jitsi Meet domain (`JITSI_DOMAIN`). Gates `JitsiProvider`.
+    pub jitsi_domain: Option<String>,
+    /// Jitsi JWT app id / secret (`JITSI_APP_ID` / `JITSI_JWT_SECRET`). Optional —
+    /// an open Jitsi deployment needs neither.
+    pub jitsi_app_id: Option<String>,
+    pub jitsi_jwt_secret: Option<String>,
+    /// LiveKit server URL (`LIVEKIT_URL`). Gates `LiveKitProvider`.
+    pub livekit_url: Option<String>,
+    pub livekit_api_key: Option<String>,
+    pub livekit_api_secret: Option<String>,
+    /// Owncast instance URL (`OWNCAST_URL`). Gates `OwncastProvider`.
+    pub owncast_url: Option<String>,
+    /// This node's OWN media server, when it runs one (`MEDIA_SERVER_BASE_URL`).
+    /// Per-node, not global: rooms and streams record their own host and that
+    /// value wins over this default.
+    pub media_server_base_url: Option<String>,
+    /// 32-byte hex seed for the node's comms IdP key (`NODE_SIGNING_SEED`).
+    /// Unset → an ephemeral key is generated at boot.
+    pub node_signing_seed: Option<String>,
     pub email_provider: String,
     pub resend_api_key: Option<String>,
     pub smtp_host: Option<String>,
@@ -104,6 +135,19 @@ impl Config {
             chain_rpc_url: env::var("CHAIN_RPC_URL").ok(),
             chain_id: env::var("CHAIN_ID").ok(),
             stablecoin_address: env::var("STABLECOIN_ADDRESS").ok(),
+            comms_provider: env::var("COMMS_PROVIDER").unwrap_or_else(|_| "builtin".to_string()),
+            matrix_homeserver: env::var("MATRIX_HOMESERVER").ok(),
+            matrix_server_name: env::var("MATRIX_SERVER_NAME").ok(),
+            matrix_shared_secret: env::var("MATRIX_SHARED_SECRET").ok(),
+            jitsi_domain: env::var("JITSI_DOMAIN").ok(),
+            jitsi_app_id: env::var("JITSI_APP_ID").ok(),
+            jitsi_jwt_secret: env::var("JITSI_JWT_SECRET").ok(),
+            livekit_url: env::var("LIVEKIT_URL").ok(),
+            livekit_api_key: env::var("LIVEKIT_API_KEY").ok(),
+            livekit_api_secret: env::var("LIVEKIT_API_SECRET").ok(),
+            owncast_url: env::var("OWNCAST_URL").ok(),
+            media_server_base_url: env::var("MEDIA_SERVER_BASE_URL").ok(),
+            node_signing_seed: env::var("NODE_SIGNING_SEED").ok(),
             email_provider: env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "resend".to_string()),
             resend_api_key: env::var("RESEND_API_KEY").ok(),
             smtp_host: env::var("SMTP_HOST").ok(),

@@ -67,9 +67,19 @@ pub struct VoiceRoomInfo {
 #[derive(Debug, Serialize)]
 pub struct VoiceJoinTokenResponse {
     /// The room_token the client should pass as ?room=<token> when connecting
-    /// to the /ws/voice WebSocket endpoint.
+    /// to the /ws/voice WebSocket endpoint. Meaningful only under the demoted
+    /// `builtin` provider — kept for backwards compatibility.
     pub room_token: String,
     pub room_id: Uuid,
+    /// Which comms provider actually serves this room (§3.5): `builtin` when
+    /// this node runs its own voice signalling, otherwise `jitsi` / `livekit` /
+    /// `matrix` / `owncast`.
+    pub provider: String,
+    /// Provider-agnostic join credential: node-signed, short-lived, and already
+    /// rendered into the target system's format. Clients should prefer this
+    /// over `room_token` — it is the only field that stays correct when the
+    /// operator switches providers.
+    pub credential: crate::comms::ClientCred,
 }
 
 // ---------------------------------------------------------------------------
@@ -251,8 +261,9 @@ pub async fn get_voice_join_token(
     Extension(_user_id): Extension<Uuid>,
     Path(room_id): Path<Uuid>,
 ) -> Result<Json<response::ApiResponse<VoiceJoinTokenResponse>>> {
-    let row = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, room_token FROM voice_rooms WHERE id = $1 AND is_active = true",
+    let row = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>)>(
+        "SELECT id, room_token, room_addr, media_host FROM voice_rooms \
+         WHERE id = $1 AND is_active = true",
     )
     .bind(room_id)
     .fetch_optional(&pool)
@@ -260,9 +271,19 @@ pub async fn get_voice_join_token(
     .map_err(|e| AppError::Database(e.to_string()))?
     .ok_or_else(|| AppError::NotFound("Voice room not found or inactive".to_string()))?;
 
+    let (id, room_token, room_addr, media_host) = row;
+    // Route the join through the comms seam. A room that predates the seam has
+    // no `room_addr`, so we address it as a builtin room keyed by its token —
+    // exactly what ws/voice.rs already expects.
+    let addr = room_addr.unwrap_or_else(|| format!("builtin://voice/{room_token}"));
+    let key = crate::comms::user_key(&pool, _user_id).await;
+    let credential = crate::comms::credential_for(&addr, media_host.as_deref(), key).await;
+
     Ok(response::success_response(VoiceJoinTokenResponse {
-        room_id: row.0,
-        room_token: row.1,
+        room_id: id,
+        room_token,
+        provider: credential.kind.clone(),
+        credential,
     }))
 }
 
