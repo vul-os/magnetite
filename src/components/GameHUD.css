@@ -36,7 +36,7 @@
   position: relative;
   width: 100%;
   aspect-ratio: 1;
-  background: linear-gradient(135deg, rgba(56, 225, 200, 0.06) 0%, rgba(91, 157, 255, 0.06) 100%);
+  background: linear-gradient(135deg, rgba(123, 97, 255, 0.06) 0%, rgba(91, 157, 255, 0.06) 100%);
   border-radius: var(--radius-xs);
 }
 
@@ -223,7 +223,7 @@
 
 .chat-toggle:hover {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.35);
+  border-color: rgba(123, 97, 255, 0.35);
   color: var(--color-accent);
 }
 

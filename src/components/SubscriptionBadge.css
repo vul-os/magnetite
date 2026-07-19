@@ -29,7 +29,7 @@
 .subscription-badge.tier-pro {
   background: var(--color-accent-soft);
   color: var(--color-accent);
-  border-color: rgba(56, 225, 200, 0.25);
+  border-color: rgba(123, 97, 255, 0.25);
 }
 
 .subscription-badge.tier-unlimited {

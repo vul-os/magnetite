@@ -239,7 +239,7 @@
 .template-card:hover,
 .template-card.selected {
   border-color: var(--color-border-strong);
-  box-shadow: 0 0 24px rgba(56, 225, 200, 0.12);
+  box-shadow: 0 0 24px rgba(123, 97, 255, 0.12);
   transform: translateY(-2px);
 }
 
@@ -250,7 +250,7 @@
 
 .template-card.selected {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent), 0 0 24px rgba(56, 225, 200, 0.18);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 0 24px rgba(123, 97, 255, 0.18);
 }
 
 .template-card-top {
@@ -737,7 +737,7 @@
 
 .btn-accent {
   background: var(--color-accent);
-  color: #07070b;
+  color: #08090c;
   border: none;
   font-weight: 700;
 }

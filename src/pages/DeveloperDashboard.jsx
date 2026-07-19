@@ -38,7 +38,7 @@ const MOCK_ACTIVITIES = [
 const CHART_AMBER = '#f5a524';
 const CHART_GRID  = '#23232e';
 const CHART_TEXT  = '#6b6b78';
-const CHART_BG    = '#14141d';
+const CHART_BG    = '#111319';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {

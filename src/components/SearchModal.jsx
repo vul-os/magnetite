@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSearch } from '../hooks/useSearch';
 import { useTranslation } from '../i18n/useTranslation';
 import Spinner from './common/Spinner';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './SearchModal.css';
 
 const CATEGORY_FILTERS = ['All', 'Games', 'Users'];
@@ -440,7 +441,7 @@ export function SearchModal({ isOpen, onClose }) {
             <span><kbd>esc</kbd> {t('search.shortcutClose')}</span>
           </div>
           <div className="search-modal-brand">
-            <span className="logo-icon" aria-hidden="true">M</span>
+            <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
             <span>Magnetite</span>
           </div>
         </div>

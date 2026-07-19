@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
 import { usePresence } from '../hooks/usePresence';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import {
   MenuIcon,
   CloseIcon,
@@ -181,7 +182,7 @@ export default function Navbar() {
           {/* Left: logo + nav links */}
           <div className="navbar-left">
             <Link to="/home" className="navbar-logo" aria-label={t('navbar.logoLabel')}>
-              <div className="logo-icon" aria-hidden="true">M</div>
+              <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
               <span className="logo-text">Magnetite</span>
             </Link>
 
@@ -387,7 +388,7 @@ export default function Navbar() {
       >
         <div className="mobile-menu-header">
           <Link to="/" className="navbar-logo" onClick={() => setIsMobileMenuOpen(false)}>
-            <div className="logo-icon" aria-hidden="true">M</div>
+            <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
             <span className="logo-text">Magnetite</span>
           </Link>
           <button

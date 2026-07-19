@@ -159,7 +159,7 @@
   text-transform: uppercase;
   color: var(--color-accent);
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.2);
+  border: 1px solid rgba(123, 97, 255, 0.2);
   border-radius: var(--radius-full);
   padding: 0px 6px;
   line-height: 18px;
@@ -223,7 +223,7 @@
 
 .reaction:hover {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
 }
 
 .reaction:focus-visible {
@@ -233,7 +233,7 @@
 
 .reaction--active {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.4);
+  border-color: rgba(123, 97, 255, 0.4);
 }
 
 .reaction-count {

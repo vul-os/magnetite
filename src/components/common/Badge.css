@@ -75,4 +75,4 @@
 /* ── Teal / accent (primary) ── */
 .badge-solid-teal   { background: var(--color-accent); color: #000; border: 1px solid var(--color-accent); box-shadow: var(--shadow-glow); }
 .badge-outline-teal { background: transparent; color: var(--color-accent); border: 1px solid var(--color-accent); box-shadow: 0 0 10px var(--color-accent-glow); }
-.badge-subtle-teal  { background: var(--color-accent-soft); color: var(--color-accent); border: 1px solid rgba(56, 225, 200, 0.2); }
+.badge-subtle-teal  { background: var(--color-accent-soft); color: var(--color-accent); border: 1px solid rgba(123, 97, 255, 0.2); }

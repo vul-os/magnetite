@@ -33,12 +33,12 @@
 .card-hoverable:hover,
 .card-clickable:hover {
   transform: translateY(-2px);
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
   box-shadow: var(--shadow-md), var(--shadow-glow);
 }
 
 .card-interactive:hover {
-  border-color: rgba(56, 225, 200, 0.35);
+  border-color: rgba(123, 97, 255, 0.35);
 }
 
 .card-glass:hover {

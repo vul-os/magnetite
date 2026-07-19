@@ -54,17 +54,15 @@
 }
 
 .btn-primary {
-  background: var(--color-accent);
-  color: #000;
-  border-color: var(--color-accent);
+  background: var(--gradient-primary);
+  color: #0a0715;
+  border-color: transparent;
 }
 
 .btn-primary:hover {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  filter: brightness(1.08);
   box-shadow: var(--shadow-glow);
   transform: translateY(-2px);
-  color: #000;
 }
 
 .btn-secondary {
@@ -116,7 +114,7 @@
   position: absolute;
   width: 1px;
   height: 300%;
-  background: linear-gradient(to bottom, transparent, rgba(56, 225, 200, 0.18), transparent);
+  background: linear-gradient(to bottom, transparent, rgba(123, 97, 255, 0.18), transparent);
 }
 
 .field-line-1 { left: 10%; top: -100%; animation: fieldFlow  8s linear infinite 0s; }
@@ -252,7 +250,7 @@
 
 .benefit-card:hover {
   transform: translateY(-5px);
-  border-color: rgba(56, 225, 200, 0.25);
+  border-color: rgba(123, 97, 255, 0.25);
   box-shadow: var(--shadow-md), var(--shadow-glow);
 }
 
@@ -308,7 +306,7 @@
 }
 
 .position-card:hover {
-  border-color: rgba(56, 225, 200, 0.25);
+  border-color: rgba(123, 97, 255, 0.25);
   box-shadow: var(--shadow-md), var(--shadow-glow);
 }
 
@@ -339,7 +337,7 @@
   padding: 3px 10px;
   background: var(--color-accent-soft);
   color: var(--color-accent);
-  border: 1px solid rgba(56, 225, 200, 0.18);
+  border: 1px solid rgba(123, 97, 255, 0.18);
   border-radius: var(--radius-xs);
 }
 

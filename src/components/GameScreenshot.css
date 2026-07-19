@@ -25,7 +25,7 @@
 
 /* Magnetic lift on hover — card pattern from design system */
 .game-screenshot-thumbnail:hover {
-  border-color: rgba(56, 225, 200, 0.45);
+  border-color: rgba(123, 97, 255, 0.45);
   box-shadow: var(--shadow-md), 0 0 20px var(--color-accent-glow);
   transform: translateY(-3px);
 }
@@ -100,8 +100,8 @@
   /* dark scrim to make the icon legible on any image */
   background: linear-gradient(
     to bottom,
-    rgba(7, 7, 11, 0.0) 30%,
-    rgba(7, 7, 11, 0.55) 100%
+    rgba(8, 9, 12, 0.0) 30%,
+    rgba(8, 9, 12, 0.55) 100%
   );
   display: flex;
   align-items: center;

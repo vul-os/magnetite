@@ -44,7 +44,7 @@ const REASON_META = {
 const STATUS_META = {
   pending:   { label: 'Pending',   color: '#f5a524' },
   dismissed: { label: 'Dismissed', color: '#3ddc84' },
-  actioned:  { label: 'Actioned',  color: '#38e1c8' },
+  actioned:  { label: 'Actioned',  color: '#7b61ff' },
   resolved:  { label: 'Resolved',  color: '#3ddc84' },
 };
 

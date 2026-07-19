@@ -15,7 +15,7 @@
 }
 
 /* Connection state border tints */
-.voice-panel--connected  { border-color: rgba(56, 225, 200, 0.25); }
+.voice-panel--connected  { border-color: rgba(123, 97, 255, 0.25); }
 .voice-panel--connecting { border-color: rgba(91, 157, 255, 0.25); }
 .voice-panel--failed     { border-color: rgba(255, 84, 104, 0.35); }
 
@@ -147,7 +147,7 @@
 }
 
 .voice-panel__join-btn:hover {
-  background: rgba(56, 225, 200, 0.2);
+  background: rgba(123, 97, 255, 0.2);
   transform: translateY(-1px);
 }
 
@@ -203,7 +203,7 @@
 }
 
 .voice-participant--speaking {
-  background: rgba(56, 225, 200, 0.06);
+  background: rgba(123, 97, 255, 0.06);
 }
 
 /* Avatar wrap: positions speaking ring + dot relative to avatar */

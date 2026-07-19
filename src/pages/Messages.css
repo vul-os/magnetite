@@ -60,7 +60,7 @@
 
 .dm-new-btn:hover {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
   color: var(--color-accent);
 }
 
@@ -92,7 +92,7 @@
 .dm-search input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(56, 225, 200, 0.12);
+  box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.12);
 }
 
 .dm-search input::placeholder {
@@ -380,7 +380,7 @@
 }
 
 .dm-message:hover {
-  background: rgba(56, 225, 200, 0.025);
+  background: rgba(123, 97, 255, 0.025);
   margin: 0 -0.5rem;
   padding-left: 0.5rem;
   padding-right: 0.5rem;
@@ -460,7 +460,7 @@
 
 .dm-message.mine .dm-msg-bubble {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.25);
+  border-color: rgba(123, 97, 255, 0.25);
   color: var(--color-text-primary);
 }
 
@@ -566,7 +566,7 @@
 
 .dm-composer-inner:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(56, 225, 200, 0.12);
+  box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.12);
 }
 
 .dm-composer-input {
@@ -608,7 +608,7 @@
 .dm-send-btn:hover:not(:disabled) {
   background: var(--color-accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 0 14px rgba(56, 225, 200, 0.35);
+  box-shadow: 0 0 14px rgba(123, 97, 255, 0.35);
 }
 
 .dm-send-btn:disabled {

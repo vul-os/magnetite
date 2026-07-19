@@ -120,7 +120,7 @@
 
 .widget-toggle:hover {
   transform: scale(1.06);
-  box-shadow: var(--shadow-lg), 0 0 28px rgba(56, 225, 200, 0.35);
+  box-shadow: var(--shadow-lg), 0 0 28px rgba(123, 97, 255, 0.35);
 }
 
 .widget-toggle:focus-visible {
