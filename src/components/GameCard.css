@@ -30,7 +30,7 @@
 .game-card:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-md), var(--shadow-glow);
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
 }
 
 /* ── Image ─────────────────────────────────────────────────────────────────── */

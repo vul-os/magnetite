@@ -2,10 +2,10 @@ import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 
 const colors = {
   primary:    '#f5a524',   /* --color-amber */
-  secondary:  '#38e1c8',   /* --color-accent */
+  secondary:  '#7b61ff',   /* --color-accent */
   grid:       '#23232e',   /* --color-border */
   text:       '#6b6b78',   /* --color-text-muted */
-  background: '#14141d',   /* --color-bg-card */
+  background: '#111319',   /* --color-bg-card */
 };
 
 export default function BarChart({ data, xKey, yKey, title, horizontal = false }) {

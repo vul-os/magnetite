@@ -187,10 +187,10 @@
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(7, 7, 11, 0.25) 0%,
-    rgba(7, 7, 11, 0.05) 35%,
-    rgba(7, 7, 11, 0.55) 68%,
-    rgba(7, 7, 11, 0.97) 100%
+    rgba(8, 9, 12, 0.25) 0%,
+    rgba(8, 9, 12, 0.05) 35%,
+    rgba(8, 9, 12, 0.55) 68%,
+    rgba(8, 9, 12, 0.97) 100%
   );
 }
 
@@ -203,7 +203,7 @@
   background: linear-gradient(
     to top,
     var(--color-bg-primary) 0%,
-    rgba(7, 7, 11, 0.85) 45%,
+    rgba(8, 9, 12, 0.85) 45%,
     transparent 100%
   );
 }
@@ -232,7 +232,7 @@
   align-items: center;
   padding: 0.25rem 0.75rem;
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.25);
+  border: 1px solid rgba(123, 97, 255, 0.25);
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
@@ -631,7 +631,7 @@
 }
 
 .achievement-card:hover {
-  border-color: rgba(56, 225, 200, 0.28);
+  border-color: rgba(123, 97, 255, 0.28);
   transform: translateY(-2px);
   box-shadow: var(--shadow-sm), var(--shadow-glow);
 }
@@ -643,7 +643,7 @@
   align-items: center;
   justify-content: center;
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.2);
+  border: 1px solid rgba(123, 97, 255, 0.2);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   color: var(--color-accent);

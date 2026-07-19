@@ -75,7 +75,7 @@
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  background: var(--color-accent, #38e1c8);
+  background: var(--color-accent, #7b61ff);
   opacity: 0.18;
   animation: btPulse 1.8s ease-in-out infinite;
 }
@@ -117,10 +117,10 @@
 
 /* active */
 .bt-active .bt-node-inner {
-  background: var(--color-accent-soft, rgba(56, 225, 200, 0.1));
-  border-color: var(--color-accent, #38e1c8);
-  color: var(--color-accent, #38e1c8);
-  box-shadow: 0 0 8px rgba(56, 225, 200, 0.3);
+  background: var(--color-accent-soft, rgba(123, 97, 255, 0.1));
+  border-color: var(--color-accent, #7b61ff);
+  color: var(--color-accent, #7b61ff);
+  box-shadow: 0 0 8px rgba(123, 97, 255, 0.3);
 }
 
 /* failed */
@@ -152,7 +152,7 @@
 }
 
 .bt-done .bt-stage-label    { color: var(--color-success, #3ddc84); }
-.bt-active .bt-stage-label  { color: var(--color-accent, #38e1c8); }
+.bt-active .bt-stage-label  { color: var(--color-accent, #7b61ff); }
 .bt-failed .bt-stage-label  { color: var(--color-error, #ff5468); }
 
 .bt-stage-desc {
@@ -211,9 +211,9 @@
 }
 
 .bt-status-active {
-  background: rgba(56, 225, 200, 0.04);
-  color: var(--color-accent, #38e1c8);
-  border-top-color: rgba(56, 225, 200, 0.15);
+  background: rgba(123, 97, 255, 0.04);
+  color: var(--color-accent, #7b61ff);
+  border-top-color: rgba(123, 97, 255, 0.15);
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */

@@ -32,7 +32,6 @@ export { default as GameGallery } from './GameGallery';
 export { default as PlayerList } from './PlayerList';
 export { default as ReviewCard } from './ReviewCard';
 export { default as WishlistButton } from './WishlistButton';
-export { default as DepositForm } from './DepositForm';
 export { default as GameScreenshot } from './GameScreenshot';
 export { default as GameHUD } from './GameHUD';
 export { default as SearchModal } from './SearchModal';

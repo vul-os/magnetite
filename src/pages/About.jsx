@@ -1,5 +1,6 @@
 import './About.css';
 import { useTranslation } from '../i18n/useTranslation';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 
 const team = [
   { name: 'Alex Chen',       role: 'Founder & CEO',   initials: 'AC' },
@@ -11,7 +12,7 @@ const team = [
 const timeline = [
   { year: '2024 Q1',   event: 'Magnetite founded — vision: open-source Rust gaming at any scale.' },
   { year: '2024 Q3',   event: 'First Bevy game compiled to WASM and deployed on the platform.' },
-  { year: '2025 Q1',   event: 'Paystack fiat on-ramp launched for player deposits and subscriptions.' },
+  { year: '2025 Q1',   event: 'Non-custodial USDC checkout launched — buyers pay developer wallets directly, entitlements backed by signed receipts.' },
   { year: '2025 Q3',   event: '100+ Rust games live on the marketplace.' },
   { year: '2026 Q1',   event: 'Real-time multiplayer matchmaking & server-authoritative netcode released.' },
 ];
@@ -185,7 +186,7 @@ export default function About() {
           <div className="footer-content">
             <div className="footer-brand">
               <div className="logo">
-                <div className="logo-icon" aria-hidden="true">M</div>
+                <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
                 <span>Magnetite</span>
               </div>
               <p>{t('about.footerTagline')}</p>

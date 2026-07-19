@@ -52,7 +52,7 @@
   font-size: var(--text-sm);
   font-weight: 700;
   color: #000;
-  box-shadow: 0 0 10px rgba(56, 225, 200, 0.3);
+  box-shadow: 0 0 10px rgba(123, 97, 255, 0.3);
 }
 
 .admin-logo .logo-text {
@@ -340,7 +340,7 @@
 }
 
 /* Activity type color accents */
-.admin-activity-item.activity-new     .admin-activity-icon { background: rgba(56, 225, 200, 0.10); border-color: rgba(56, 225, 200, 0.2); }
+.admin-activity-item.activity-new     .admin-activity-icon { background: rgba(123, 97, 255, 0.10); border-color: rgba(123, 97, 255, 0.2); }
 .admin-activity-item.activity-game    .admin-activity-icon { background: rgba(91, 157, 255, 0.10); border-color: rgba(91, 157, 255, 0.2); }
 .admin-activity-item.activity-payout  .admin-activity-icon { background: var(--color-amber-soft); border-color: rgba(245, 165, 36, 0.25); }
 .admin-activity-item.activity-success .admin-activity-icon { background: rgba(61, 220, 132, 0.10); border-color: rgba(61, 220, 132, 0.2); }
@@ -402,7 +402,7 @@
 }
 
 .admin-action-card:hover {
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
   background: var(--color-bg-elevated);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
@@ -558,7 +558,7 @@
   height: 32px;
   border-radius: var(--radius-xs);
   background: var(--color-accent-soft);
-  border: 1px solid rgba(56, 225, 200, 0.2);
+  border: 1px solid rgba(123, 97, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -683,7 +683,7 @@
 .role-badge.developer {
   background: var(--color-accent-soft);
   color: var(--color-accent);
-  border: 1px solid rgba(56, 225, 200, 0.2);
+  border: 1px solid rgba(123, 97, 255, 0.2);
 }
 
 .role-badge.player {
@@ -706,7 +706,7 @@
 .type-badge.game_fee {
   background: var(--color-accent-soft);
   color: var(--color-accent);
-  border: 1px solid rgba(56, 225, 200, 0.2);
+  border: 1px solid rgba(123, 97, 255, 0.2);
 }
 
 .type-badge.payout {

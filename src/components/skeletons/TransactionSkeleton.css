@@ -23,7 +23,7 @@
   background: linear-gradient(
     90deg,
     var(--color-bg-elevated) 20%,
-    rgba(56, 225, 200, 0.07) 50%,
+    rgba(123, 97, 255, 0.07) 50%,
     var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
@@ -44,7 +44,7 @@
   background: linear-gradient(
     90deg,
     var(--color-bg-elevated) 20%,
-    rgba(56, 225, 200, 0.06) 50%,
+    rgba(123, 97, 255, 0.06) 50%,
     var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
@@ -58,7 +58,7 @@
   background: linear-gradient(
     90deg,
     var(--color-bg-elevated) 20%,
-    rgba(56, 225, 200, 0.04) 50%,
+    rgba(123, 97, 255, 0.04) 50%,
     var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;
@@ -72,7 +72,7 @@
   background: linear-gradient(
     90deg,
     var(--color-bg-elevated) 20%,
-    rgba(56, 225, 200, 0.06) 50%,
+    rgba(123, 97, 255, 0.06) 50%,
     var(--color-bg-elevated) 80%
   );
   background-size: 200% 100%;

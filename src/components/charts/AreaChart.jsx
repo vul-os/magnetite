@@ -3,11 +3,11 @@ import { AreaChart as RechartsAreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 const colors = {
   primary:    '#f5a524',   /* --color-amber */
   secondary:  '#5b9dff',   /* --color-info */
-  tertiary:   '#38e1c8',   /* --color-accent */
+  tertiary:   '#7b61ff',   /* --color-accent */
   quaternary: '#3ddc84',   /* --color-success */
   grid:       '#23232e',   /* --color-border */
   text:       '#6b6b78',   /* --color-text-muted */
-  background: '#14141d',   /* --color-bg-card */
+  background: '#111319',   /* --color-bg-card */
 };
 
 const SERIES_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, '#a78bfa', '#f472b6'];

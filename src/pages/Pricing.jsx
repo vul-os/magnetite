@@ -2,6 +2,13 @@ import PricingCard from '../components/PricingCard';
 import { useTranslation } from '../i18n/useTranslation';
 import './Pricing.css';
 
+/**
+ * Tiers are **receipt-backed feature flags**, not billing plans (§3.6 PaymentRail).
+ * You pay the operator's wallet in USDC from your own wallet; the checkout emits a
+ * signed receipt and the node reads that receipt to unlock the tier for its period.
+ * No card, no custody, no recurring mandate — when the receipt's period is over the
+ * tier simply lapses unless you perform another checkout.
+ */
 const SUBSCRIPTION_TIERS = [
   {
     id: 'free',
@@ -24,12 +31,12 @@ const SUBSCRIPTION_TIERS = [
     id: 'basic',
     name: 'Basic',
     price: 4.99,
-    priceDisplay: '$4.99',
+    priceDisplay: '4.99 USDC',
     features: [
       'Access to all games',
-      '10 hours playtime per month',
+      '10 hours playtime per 30-day receipt',
       'Standard matchmaking',
-      'Email support',
+      'Community support',
     ],
     limitations: [
       'No unlimited hours',
@@ -40,12 +47,12 @@ const SUBSCRIPTION_TIERS = [
     id: 'pro',
     name: 'Pro',
     price: 9.99,
-    priceDisplay: '$9.99',
+    priceDisplay: '9.99 USDC',
     features: [
       'Access to all games',
-      '50 hours playtime per month',
+      '50 hours playtime per 30-day receipt',
       'Priority matchmaking',
-      'Priority email support',
+      'Priority support',
       'Early access to new Rust games',
     ],
     limitations: [],
@@ -55,7 +62,7 @@ const SUBSCRIPTION_TIERS = [
     id: 'unlimited',
     name: 'Unlimited',
     price: 19.99,
-    priceDisplay: '$19.99',
+    priceDisplay: '19.99 USDC',
     features: [
       'Access to all games',
       'Unlimited playtime',
@@ -69,38 +76,43 @@ const SUBSCRIPTION_TIERS = [
 ];
 
 const COMPARISON_FEATURES = [
+  { feature: 'Price',         free: 'Free',            basic: '4.99 USDC',   pro: '9.99 USDC',   unlimited: '19.99 USDC' },
   { feature: 'Game Access',   free: 'Free games only', basic: 'All games',   pro: 'All games',   unlimited: 'All games' },
-  { feature: 'Monthly Hours', free: '0 hours',         basic: '10 hours',    pro: '50 hours',    unlimited: 'Unlimited' },
+  { feature: 'Hours / receipt', free: '0 hours',       basic: '10 hours',    pro: '50 hours',    unlimited: 'Unlimited' },
   { feature: 'Matchmaking',   free: 'Standard',        basic: 'Standard',    pro: 'Priority',    unlimited: 'Priority' },
-  { feature: 'Support',       free: 'Community',       basic: 'Email',       pro: 'Priority Email', unlimited: '24/7 Priority' },
+  { feature: 'Support',       free: 'Community',       basic: 'Community',   pro: 'Priority',    unlimited: '24/7 Priority' },
   { feature: 'Early Access',  free: 'No',              basic: 'No',          pro: 'Yes',         unlimited: 'Yes' },
   { feature: 'Tournaments',   free: 'No',              basic: 'No',          pro: 'No',          unlimited: 'Yes' },
 ];
 
 const faqs = [
   {
-    q: 'How do subscription hours work?',
-    a: 'Your monthly hours are consumed when playing premium games. Free games do not use your monthly allocation. Hours reset at the beginning of each billing cycle.',
+    q: 'How do tier hours work?',
+    a: 'Your hours are consumed when playing premium games. Free games do not use your allocation. Hours reset when you check out a new receipt for a fresh period.',
   },
   {
-    q: 'Can I upgrade or downgrade my plan?',
-    a: 'Yes, you can change your subscription tier at any time. Upgrades take effect immediately, while downgrades apply at the start of your next billing cycle.',
+    q: 'Can I change tier?',
+    a: 'Yes. A tier is just a signed receipt, so you can check out a different tier whenever you like. The new receipt takes effect as soon as the rail settles it — there is no proration to reconcile because nothing is billed in arrears.',
   },
   {
-    q: 'What happens if I exceed my monthly hours?',
-    a: 'If you exceed your monthly hours, you can purchase additional hour packs or upgrade to a higher tier.',
+    q: 'What happens if I run out of hours?',
+    a: 'Buy an hour pack or check out a higher tier. Both are ordinary wallet checkouts that produce their own receipt.',
   },
   {
     q: 'Do unused hours roll over?',
-    a: 'No, unused monthly hours do not roll over. Your hour allocation resets each billing cycle.',
+    a: 'No. Your allocation is scoped to the receipt that granted it and resets with the next one.',
   },
   {
-    q: 'Can I cancel my subscription anytime?',
-    a: 'Yes, cancel at any time. You will retain access until the end of your current billing period.',
+    q: 'How do I cancel?',
+    a: 'There is nothing to cancel. Nobody holds a mandate against your wallet, so if you do not perform another checkout the tier simply lapses at the end of its period and you drop back to Free.',
   },
   {
-    q: 'What payment methods are accepted?',
-    a: 'We accept credit and debit cards, and bank transfers via Paystack. All payments are in USD — no crypto required.',
+    q: 'How do payments work?',
+    a: 'Non-custodially, in USDC. You approve one transfer from your own wallet to the operator’s wallet and the rail returns a signed receipt; the node reads that receipt to unlock your tier. We never take custody of funds, never see a card, and store no bank details.',
+  },
+  {
+    q: 'What is the protocol fee?',
+    a: 'Checkout carries a protocol fee expressed in basis points, currently 0 bps by default — the developer or operator receives the full subtotal. Any fee is applied by the rail at settlement and is itemised on the receipt.',
   },
 ];
 
@@ -120,7 +132,9 @@ export default function Pricing() {
               {t('store.pricingTitle')}
             </h1>
             <p className="pricing-hero-subtitle reveal-3">
-              {t('store.pricingSubtitle')}
+              Choose the tier that fits your gaming style. Prices are in USDC and paid straight
+              from your own wallet — one transfer, one signed receipt, no custody and no
+              recurring mandate.
             </p>
           </div>
         </div>
@@ -143,7 +157,7 @@ export default function Pricing() {
                       ? t('store.currentPlan')
                       : tier.price === 0
                       ? t('store.getStarted')
-                      : t('store.subscribe'),
+                      : 'Pay with wallet',
                   href:
                     currentPlan === tier.id ? '#' : `/subscribe/${tier.id}`,
                 }}
@@ -153,6 +167,22 @@ export default function Pricing() {
               />
             ))}
           </div>
+          <p
+            className="pricing-rail-note"
+            style={{
+              maxWidth: '72ch',
+              margin: '2rem auto 0',
+              textAlign: 'center',
+              fontSize: 'var(--text-sm)',
+              lineHeight: 1.6,
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            Checkout is non-custodial: USDC moves from your wallet to the operator&rsquo;s wallet in
+            one atomic transfer and the rail hands back a signed receipt. That receipt is what
+            unlocks the tier — there is no card on file, no stored balance and nothing to cancel.
+            When a receipt&rsquo;s period ends the tier simply lapses.
+          </p>
         </div>
       </section>
 

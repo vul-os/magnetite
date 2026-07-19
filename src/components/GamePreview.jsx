@@ -36,7 +36,7 @@ function runMockRenderer(canvas) {
     const H = canvas.height;
     tick++;
 
-    cx.fillStyle = '#07070b';
+    cx.fillStyle = '#08090c';
     cx.fillRect(0, 0, W, H);
 
     // grid
@@ -56,13 +56,13 @@ function runMockRenderer(canvas) {
     const r = Math.min(W, H) * 0.32;
     cx.beginPath();
     cx.arc(cx2, cy2, r, 0, Math.PI * 2);
-    cx.strokeStyle = 'rgba(56,225,200,0.18)';
+    cx.strokeStyle = 'rgba(123, 97, 255,0.18)';
     cx.lineWidth = 1;
     cx.stroke();
 
     // Mock players
     const mockPlayers = [
-      { color: '#38e1c8', a: tick * 0.02 },
+      { color: '#7b61ff', a: tick * 0.02 },
       { color: '#f5a524', a: tick * 0.02 + Math.PI },
       { color: '#5b9dff', a: tick * 0.015 + Math.PI * 0.5 },
     ];
@@ -78,7 +78,7 @@ function runMockRenderer(canvas) {
 
     // Mock "DEMO" watermark
     cx.font = 'bold 11px monospace';
-    cx.fillStyle = 'rgba(56,225,200,0.25)';
+    cx.fillStyle = 'rgba(123, 97, 255,0.25)';
     cx.textAlign = 'center';
     cx.fillText('MOCK — connect a live server', cx2, H - 18);
 

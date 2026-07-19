@@ -15,18 +15,18 @@ const CodeEditor = lazy(() => import('../components/CodeEditor'));
 function ArenaShooterArt() {
   return (
     <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="60" cy="40" r="34" stroke="rgba(56,225,200,0.18)" strokeWidth="1" />
-      <circle cx="60" cy="40" r="24" stroke="rgba(56,225,200,0.28)" strokeWidth="1" />
-      <circle cx="60" cy="40" r="3" fill="rgba(56,225,200,0.6)" />
+      <circle cx="60" cy="40" r="34" stroke="rgba(123, 97, 255,0.18)" strokeWidth="1" />
+      <circle cx="60" cy="40" r="24" stroke="rgba(123, 97, 255,0.28)" strokeWidth="1" />
+      <circle cx="60" cy="40" r="3" fill="rgba(123, 97, 255,0.6)" />
       {/* Players at cardinal positions */}
-      <circle cx="60" cy="8"  r="4" fill="#38e1c8" opacity="0.85" />
+      <circle cx="60" cy="8"  r="4" fill="#7b61ff" opacity="0.85" />
       <circle cx="92" cy="40" r="4" fill="#f5a524" opacity="0.85" />
       <circle cx="28" cy="58" r="4" fill="#5b9dff" opacity="0.85" />
       {/* Crosshair lines */}
-      <line x1="56" y1="40" x2="64" y2="40" stroke="rgba(56,225,200,0.5)" strokeWidth="1" />
-      <line x1="60" y1="36" x2="60" y2="44" stroke="rgba(56,225,200,0.5)" strokeWidth="1" />
+      <line x1="56" y1="40" x2="64" y2="40" stroke="rgba(123, 97, 255,0.5)" strokeWidth="1" />
+      <line x1="60" y1="36" x2="60" y2="44" stroke="rgba(123, 97, 255,0.5)" strokeWidth="1" />
       {/* Bullet trail */}
-      <line x1="60" y1="43" x2="60" y2="8" stroke="rgba(56,225,200,0.25)" strokeWidth="0.75" strokeDasharray="3 2" />
+      <line x1="60" y1="43" x2="60" y2="8" stroke="rgba(123, 97, 255,0.25)" strokeWidth="0.75" strokeDasharray="3 2" />
     </svg>
   );
 }
@@ -35,19 +35,19 @@ function PlatformerArt() {
   return (
     <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       {/* Platforms */}
-      <rect x="8"  y="64" width="40" height="4" rx="2" fill="rgba(56,225,200,0.3)" />
-      <rect x="40" y="48" width="32" height="4" rx="2" fill="rgba(56,225,200,0.25)" />
-      <rect x="72" y="32" width="40" height="4" rx="2" fill="rgba(56,225,200,0.3)" />
-      <rect x="32" y="20" width="28" height="4" rx="2" fill="rgba(56,225,200,0.2)" />
+      <rect x="8"  y="64" width="40" height="4" rx="2" fill="rgba(123, 97, 255,0.3)" />
+      <rect x="40" y="48" width="32" height="4" rx="2" fill="rgba(123, 97, 255,0.25)" />
+      <rect x="72" y="32" width="40" height="4" rx="2" fill="rgba(123, 97, 255,0.3)" />
+      <rect x="32" y="20" width="28" height="4" rx="2" fill="rgba(123, 97, 255,0.2)" />
       {/* Character */}
-      <rect x="22" y="55" width="8" height="9" rx="1.5" fill="#38e1c8" opacity="0.9" />
-      <circle cx="26" cy="52" r="3.5" fill="#38e1c8" opacity="0.9" />
+      <rect x="22" y="55" width="8" height="9" rx="1.5" fill="#7b61ff" opacity="0.9" />
+      <circle cx="26" cy="52" r="3.5" fill="#7b61ff" opacity="0.9" />
       {/* Collectibles */}
       <circle cx="54" cy="43" r="2.5" fill="#f5a524" opacity="0.7" />
       <circle cx="86" cy="27" r="2.5" fill="#f5a524" opacity="0.7" />
       <circle cx="44" cy="15" r="2.5" fill="#f5a524" opacity="0.5" />
       {/* Jump arc */}
-      <path d="M26 55 Q44 28 54 43" stroke="rgba(56,225,200,0.2)" strokeWidth="1" fill="none" strokeDasharray="3 2" />
+      <path d="M26 55 Q44 28 54 43" stroke="rgba(123, 97, 255,0.2)" strokeWidth="1" fill="none" strokeDasharray="3 2" />
     </svg>
   );
 }
@@ -57,15 +57,15 @@ function FPSArt() {
     <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       {/* FPS viewpoint — gun + crosshair */}
       {/* Crosshair */}
-      <circle cx="60" cy="36" r="12" stroke="rgba(56,225,200,0.35)" strokeWidth="1" />
-      <line x1="60" y1="20" x2="60" y2="30" stroke="rgba(56,225,200,0.55)" strokeWidth="1.25" />
-      <line x1="60" y1="42" x2="60" y2="52" stroke="rgba(56,225,200,0.55)" strokeWidth="1.25" />
-      <line x1="44" y1="36" x2="54" y2="36" stroke="rgba(56,225,200,0.55)" strokeWidth="1.25" />
-      <line x1="66" y1="36" x2="76" y2="36" stroke="rgba(56,225,200,0.55)" strokeWidth="1.25" />
-      <circle cx="60" cy="36" r="2" fill="rgba(56,225,200,0.7)" />
+      <circle cx="60" cy="36" r="12" stroke="rgba(123, 97, 255,0.35)" strokeWidth="1" />
+      <line x1="60" y1="20" x2="60" y2="30" stroke="rgba(123, 97, 255,0.55)" strokeWidth="1.25" />
+      <line x1="60" y1="42" x2="60" y2="52" stroke="rgba(123, 97, 255,0.55)" strokeWidth="1.25" />
+      <line x1="44" y1="36" x2="54" y2="36" stroke="rgba(123, 97, 255,0.55)" strokeWidth="1.25" />
+      <line x1="66" y1="36" x2="76" y2="36" stroke="rgba(123, 97, 255,0.55)" strokeWidth="1.25" />
+      <circle cx="60" cy="36" r="2" fill="rgba(123, 97, 255,0.7)" />
       {/* Gun barrel at bottom */}
-      <rect x="48" y="62" width="24" height="10" rx="2" fill="rgba(56,225,200,0.15)" stroke="rgba(56,225,200,0.3)" strokeWidth="0.75" />
-      <rect x="55" y="55" width="10" height="10" rx="1" fill="rgba(56,225,200,0.2)" stroke="rgba(56,225,200,0.3)" strokeWidth="0.75" />
+      <rect x="48" y="62" width="24" height="10" rx="2" fill="rgba(123, 97, 255,0.15)" stroke="rgba(123, 97, 255,0.3)" strokeWidth="0.75" />
+      <rect x="55" y="55" width="10" height="10" rx="1" fill="rgba(123, 97, 255,0.2)" stroke="rgba(123, 97, 255,0.3)" strokeWidth="0.75" />
       {/* Enemy silhouette */}
       <ellipse cx="60" cy="30" rx="6" ry="8" fill="rgba(255,84,104,0.15)" stroke="rgba(255,84,104,0.4)" strokeWidth="0.75" />
     </svg>
@@ -87,10 +87,10 @@ function MotorsportArt() {
       <line x1="10" y1="14" x2="46" y2="14" stroke="rgba(245,165,36,0.3)" strokeWidth="1" strokeDasharray="4 2" />
       <line x1="8"  y1="19" x2="44" y2="19" stroke="rgba(245,165,36,0.2)" strokeWidth="0.75" strokeDasharray="3 3" />
       {/* Finish flag indicator */}
-      <rect x="100" y="8" width="12" height="10" rx="1" fill="none" stroke="rgba(56,225,200,0.4)" strokeWidth="0.75" />
-      <line x1="100" y1="8"  x2="106" y2="8"  stroke="rgba(56,225,200,0.4)" strokeWidth="0.75" />
-      <line x1="100" y1="11" x2="106" y2="11" stroke="rgba(56,225,200,0.4)" strokeWidth="0.75" />
-      <line x1="103" y1="8"  x2="103" y2="18" stroke="rgba(56,225,200,0.4)" strokeWidth="0.75" />
+      <rect x="100" y="8" width="12" height="10" rx="1" fill="none" stroke="rgba(123, 97, 255,0.4)" strokeWidth="0.75" />
+      <line x1="100" y1="8"  x2="106" y2="8"  stroke="rgba(123, 97, 255,0.4)" strokeWidth="0.75" />
+      <line x1="100" y1="11" x2="106" y2="11" stroke="rgba(123, 97, 255,0.4)" strokeWidth="0.75" />
+      <line x1="103" y1="8"  x2="103" y2="18" stroke="rgba(123, 97, 255,0.4)" strokeWidth="0.75" />
     </svg>
   );
 }
@@ -107,17 +107,17 @@ function StrategyArt() {
         <polygon
           key={i}
           points={`${cx},${cy-8} ${cx+7},${cy-4} ${cx+7},${cy+4} ${cx},${cy+8} ${cx-7},${cy+4} ${cx-7},${cy-4}`}
-          stroke="rgba(56,225,200,0.2)"
+          stroke="rgba(123, 97, 255,0.2)"
           strokeWidth="0.75"
-          fill={i === 4 ? 'rgba(56,225,200,0.12)' : i === 7 ? 'rgba(255,84,104,0.1)' : 'none'}
+          fill={i === 4 ? 'rgba(123, 97, 255,0.12)' : i === 7 ? 'rgba(255,84,104,0.1)' : 'none'}
         />
       ))}
       {/* Units */}
-      <circle cx="40" cy="36" r="4" fill="#38e1c8" opacity="0.8" />
-      <circle cx="60" cy="36" r="4" fill="#38e1c8" opacity="0.6" />
+      <circle cx="40" cy="36" r="4" fill="#7b61ff" opacity="0.8" />
+      <circle cx="60" cy="36" r="4" fill="#7b61ff" opacity="0.6" />
       <circle cx="80" cy="36" r="4" fill="rgba(255,84,104,0.8)" opacity="0.8" />
       {/* Move arrows */}
-      <path d="M44 36 L56 36" stroke="rgba(56,225,200,0.45)" strokeWidth="1" markerEnd="url(#arrowhead)" />
+      <path d="M44 36 L56 36" stroke="rgba(123, 97, 255,0.45)" strokeWidth="1" markerEnd="url(#arrowhead)" />
     </svg>
   );
 }
@@ -126,16 +126,16 @@ function BlankArt() {
   return (
     <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       {/* Empty canvas + cursor */}
-      <rect x="20" y="12" width="80" height="56" rx="4" stroke="rgba(56,225,200,0.18)" strokeWidth="1" strokeDasharray="4 3" />
+      <rect x="20" y="12" width="80" height="56" rx="4" stroke="rgba(123, 97, 255,0.18)" strokeWidth="1" strokeDasharray="4 3" />
       {/* Grid dots */}
       {[30,50,70,90].flatMap(x => [20,40,56].map(y => (
-        <circle key={`${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(56,225,200,0.2)" />
+        <circle key={`${x}-${y}`} cx={x} cy={y} r="1" fill="rgba(123, 97, 255,0.2)" />
       )))}
       {/* Cursor */}
-      <path d="M55 35 L55 55 L60 50 L64 57 L67 56 L63 49 L70 49 Z" fill="rgba(56,225,200,0.65)" />
+      <path d="M55 35 L55 55 L60 50 L64 57 L67 56 L63 49 L70 49 Z" fill="rgba(123, 97, 255,0.65)" />
       {/* Plus icon — "add your own" */}
-      <line x1="90" y1="22" x2="90" y2="30" stroke="rgba(56,225,200,0.4)" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="86" y1="26" x2="94" y2="26" stroke="rgba(56,225,200,0.4)" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="90" y1="22" x2="90" y2="30" stroke="rgba(123, 97, 255,0.4)" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="86" y1="26" x2="94" y2="26" stroke="rgba(123, 97, 255,0.4)" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }

@@ -18,13 +18,19 @@ const WalletIcon = () => (
   </svg>
 );
 
+/**
+ * Empty state for the receipt list (seam §3.6 `PaymentRail`).
+ *
+ * Kept under the `NoTransactions` name so existing imports keep working — but
+ * there is no custodial transaction ledger any more, only signed receipts.
+ */
 export default function NoTransactions({ action }) {
   return (
     <EmptyState
       icon={<WalletIcon />}
-      title="No transactions yet"
-      description="Make your first deposit to start playing and earning."
-      action={action || <Button>Make a Deposit</Button>}
+      title="No receipts yet"
+      description="Buying an item or paying a hosting fee mints a signed receipt. Nothing is held on your behalf — receipts are the record."
+      action={action || <Button>Browse Games</Button>}
     />
   );
 }

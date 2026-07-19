@@ -187,7 +187,7 @@
 
 .offline-contact:hover {
   background: var(--color-bg-elevated);
-  border-color: rgba(56, 225, 200, 0.3);
+  border-color: rgba(123, 97, 255, 0.3);
   color: var(--color-accent);
 }
 

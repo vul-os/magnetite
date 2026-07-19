@@ -109,7 +109,7 @@
 
 .chat-message.own .message-content {
   background: var(--color-accent-soft);
-  border-color: rgba(56, 225, 200, 0.2);
+  border-color: rgba(123, 97, 255, 0.2);
   border-top-left-radius: var(--radius-sm);
   border-top-right-radius: var(--radius-xs);
 }

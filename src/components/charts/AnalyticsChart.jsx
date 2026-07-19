@@ -16,10 +16,10 @@ import {
 /* ── Design tokens (match CSS custom properties) ─────────────────────────── */
 const C = {
   amber:   '#f5a524',
-  cyan:    '#38e1c8',
+  cyan:    '#7b61ff',
   grid:    '#23232e',
   text:    '#6b6b78',
-  bg:      '#14141d',
+  bg:      '#111319',
   border:  '#23232e',
 };
 

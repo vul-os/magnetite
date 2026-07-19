@@ -2,95 +2,76 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 import { useWallet } from '../hooks/useWallet';
 import { useTranslation } from '../i18n/useTranslation';
+import { formatReceiptAmount, formatProtocolFee, shortKey } from '../utils/currency';
 import './Wallet.css';
 
-const TIER_DISPLAY = {
-  free: { name: 'Free' },
-  basic: { name: 'Basic' },
-  pro: { name: 'Pro' },
-  unlimited: { name: 'Unlimited' },
+/**
+ * Wallet — NON-CUSTODIAL (seam §3.6 `PaymentRail`).
+ *
+ * There is no balance on this page because this node holds no funds. What a
+ * wallet *is* here: an address you control, plus the signed receipts that prove
+ * what you paid for. Entitlements are read off those receipts — the node grants
+ * access by verifying a signature, not by consulting a ledger it owns.
+ */
+
+const RECEIPT_KIND_LABEL = {
+  item_purchase: 'Item purchase',
+  hosting_fee: 'Hosting fee',
+  tier: 'Tier',
+  wager: 'Wager',
 };
 
 export default function Wallet() {
   const { t } = useTranslation();
-  const { balance, transactions, loading, error: walletError, deposit: hookDeposit } = useWallet();
-  const [selectedPreset, setSelectedPreset] = useState(null);
-  const [customAmount, setCustomAmount] = useState('');
-  const [depositError, setDepositError] = useState(null);
-  const [depositLoading, setDepositLoading] = useState(false);
-  const [subscription] = useState({
-    tier: 'pro',
-    renewalDate: '2026-06-17',
-    hoursUsed: 32,
-    hoursTotal: 50,
-  });
+  const { address, custodial, rail, receipts, link, loading, error } = useWallet();
 
-  const customAmountId = 'wallet-custom-amount';
+  const [draftAddress, setDraftAddress] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState(null);
+  const [copied, setCopied] = useState(false);
 
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
+  const linkInputId = 'wallet-link-address';
+
+  const formatDate = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const formatTime = (dateStr) => {
-    const date = new Date(dateStr);
+  const formatTime = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const handlePresetClick = (amount) => {
-    setSelectedPreset(amount);
-    setCustomAmount('');
-  };
-
-  const handleCustomChange = (e) => {
-    setCustomAmount(e.target.value);
-    setSelectedPreset(null);
-  };
-
-  const getAmount = () => {
-    return customAmount || (selectedPreset ? selectedPreset.toString() : '');
-  };
-
-  const handleDeposit = async (e) => {
+  const handleLink = async (e) => {
     e.preventDefault();
-    const amount = getAmount();
-    if (!amount) return;
-    setDepositError(null);
-    setDepositLoading(true);
+    if (!draftAddress.trim()) return;
+    setLinkError(null);
+    setLinking(true);
     try {
-      await hookDeposit(parseFloat(amount), 'paystack');
+      await link(draftAddress);
+      setDraftAddress('');
     } catch (err) {
-      setDepositError(err.message || t('walletPage.depositError'));
+      setLinkError(err.message || 'Could not link that wallet address.');
     } finally {
-      setDepositLoading(false);
+      setLinking(false);
     }
   };
 
-  const handleManageSubscription = () => {
-    window.location.href = '/subscription/manage';
-  };
-
-  const getTransactionIcon = (type) => {
-    switch (type) {
-      case 'deposit': return '+';
-      case 'withdraw': return '↓';
-      case 'subscription': return '⟳';
-      default: return '•';
+  const handleCopy = async () => {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard unavailable — the address is selectable in the DOM anyway */
     }
   };
 
-  const getStatusClass = (status) => {
-    switch (status) {
-      case 'completed': return 'status-success';
-      case 'pending': return 'status-pending';
-      case 'failed': return 'status-failed';
-      default: return '';
-    }
-  };
-
-  const tierInfo = TIER_DISPLAY[subscription.tier] || TIER_DISPLAY.free;
-  const hoursRemaining = subscription.hoursTotal - subscription.hoursUsed;
-  const hoursPercent = Math.round((subscription.hoursUsed / subscription.hoursTotal) * 100);
+  const settled = receipts.filter((r) => !r.voided);
+  const totalSettled = settled.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
 
   return (
     <Layout>
@@ -101,176 +82,176 @@ export default function Wallet() {
           <p className="wallet-subtitle">{t('walletPage.subtitle')}</p>
         </header>
 
-        {walletError && (
-          <div role="alert" style={{ padding: '0.75rem 1rem', marginBottom: '1.5rem', background: 'rgba(255,84,104,0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius)', color: 'var(--color-error)', fontSize: '0.875rem' }}>
-            {walletError}
+        {error && (
+          <div className="wallet-alert" role="alert">
+            {error}
           </div>
         )}
 
         <div className="wallet-grid">
           <div className="wallet-left">
-            {/* Subscription status */}
-            <section className="sub-status-card" aria-label={t('walletPage.subscriptionLabel')}>
-              <div className="sub-status-top">
-                <div className="sub-tier-badge">
-                  <span className="sub-tier-dot" aria-hidden="true" />
-                  <span className="sub-tier-name">{tierInfo.name} {t('walletPage.plan')}</span>
-                </div>
-                <span className="sub-active-label" aria-label={t('walletPage.activeLabel')}>{t('walletPage.active')}</span>
+            {/* ── Custody posture ─────────────────────────────────────────── */}
+            <section className="custody-card" aria-label={t('walletPage.custodyLabel')}>
+              <div className="custody-top">
+                <span className="custody-badge" data-custodial={String(custodial)}>
+                  <span className="custody-dot" aria-hidden="true" />
+                  {t('walletPage.nonCustodial')}
+                </span>
+                <span className="custody-rail">
+                  {t('walletPage.rail')}: <code>{rail || '—'}</code>
+                </span>
               </div>
-              <div className="sub-renewal">
-                <span className="sub-detail-label">{t('walletPage.renews')}</span>
-                <span className="sub-detail-value">{formatDate(subscription.renewalDate)}</span>
-              </div>
-              <div className="sub-hours">
-                <div className="sub-hours-header">
-                  <span className="sub-detail-label">{t('walletPage.hoursThisMonth')}</span>
-                  <span className="sub-detail-value">{subscription.hoursUsed} / {subscription.hoursTotal} {t('walletPage.hrs')}</span>
+              <p className="custody-explainer">{t('walletPage.custodyExplainer')}</p>
+              <dl className="custody-facts">
+                <div>
+                  <dt>{t('walletPage.custodyField')}</dt>
+                  <dd>
+                    <code>custodial: false</code>
+                  </dd>
                 </div>
-                <div className="sub-bar-track" aria-hidden="true">
-                  <div
-                    className="sub-bar-fill"
-                    style={{ width: `${hoursPercent}%` }}
-                    role="progressbar"
-                    aria-valuenow={subscription.hoursUsed}
-                    aria-valuemin={0}
-                    aria-valuemax={subscription.hoursTotal}
-                    aria-label={t('walletPage.hoursUsedLabel', { used: subscription.hoursUsed, total: subscription.hoursTotal })}
-                  />
+                <div>
+                  <dt>{t('walletPage.protocolFee')}</dt>
+                  <dd>{formatProtocolFee(0)}</dd>
                 </div>
-                <span className="sub-hours-remaining">{t('walletPage.hoursRemaining', { count: hoursRemaining })}</span>
-              </div>
-              <button
-                className="btn btn-primary btn-manage-sub"
-                onClick={handleManageSubscription}
-                aria-label={t('walletPage.manageSubLabel')}
-              >
-                {t('walletPage.manageSub')}
-              </button>
+              </dl>
             </section>
 
-            {/* Balance card */}
-            <section className="balance-card" aria-label={t('walletPage.balanceLabel')}>
-              <div className="balance-card-top">
-                <div className="usdc-badge">
-                  <span className="usdc-icon" aria-hidden="true">$</span>
-                  <span>USD</span>
-                </div>
-                <span className="balance-label-text">{t('walletPage.totalBalance')}</span>
-              </div>
-              <div className="balance-amount-row">
-                <span className="balance-currency" aria-hidden="true">$</span>
-                {loading
-                  ? <span className="balance-loading" aria-label={t('common.loading')}>—</span>
-                  : <span className="balance-value" aria-label={t('walletPage.balanceValue', { amount: balance != null ? Number(balance).toFixed(2) : '0.00' })}>{balance != null ? Number(balance).toFixed(2) : '—'}</span>
-                }
-              </div>
-              <div className="balance-actions">
-                <button className="btn btn-primary btn-add-funds" aria-label={t('walletPage.addFundsLabel')}>
-                  <span aria-hidden="true">+</span> {t('walletPage.addFunds')}
-                </button>
-                <a href="/earnings" className="btn btn-withdraw" aria-label={t('walletPage.payoutLabel')}>
-                  <span aria-hidden="true">↓</span> {t('walletPage.requestPayout')}
-                </a>
-              </div>
-            </section>
+            {/* ── Linked address ──────────────────────────────────────────── */}
+            <section className="address-card" aria-label={t('walletPage.addressLabel')}>
+              <span className="kicker">// {t('walletPage.addressKicker')}</span>
+              <h3>{t('walletPage.linkedWallet')}</h3>
 
-            {/* Add funds via Paystack */}
-            <section className="quick-deposit-card" aria-label={t('walletPage.addFundsSection')}>
-              <span className="kicker">// {t('walletPage.addFundsKicker')}</span>
-              <h3>{t('walletPage.addFundsViaPaystack')}</h3>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: '1rem', fontFamily: 'var(--font-sans)' }}>
-                {t('walletPage.paystackDesc')}
-              </p>
-              <div className="preset-amounts" role="group" aria-label={t('walletPage.presetAmounts')}>
-                {[5, 10, 25, 50].map((amt) => (
-                  <button
-                    key={amt}
-                    className={`preset-btn${selectedPreset === amt ? ' active' : ''}`}
-                    onClick={() => handlePresetClick(amt)}
-                    aria-pressed={selectedPreset === amt}
-                    aria-label={t('walletPage.presetLabel', { amount: amt })}
-                  >
-                    ${amt}
-                  </button>
-                ))}
-              </div>
-              <div className="custom-amount-row">
-                <div className="custom-amount-input">
-                  <span className="input-prefix" aria-hidden="true">$</span>
-                  <label htmlFor={customAmountId} className="sr-only">{t('walletPage.customAmountLabel')}</label>
-                  <input
-                    id={customAmountId}
-                    type="number"
-                    placeholder={t('walletPage.customAmountPlaceholder')}
-                    value={customAmount}
-                    onChange={handleCustomChange}
-                    min="1"
-                    step="1"
-                    aria-label={t('walletPage.customAmountLabel')}
-                  />
-                </div>
-              </div>
-              {depositError && (
-                <p style={{ color: 'var(--color-error)', fontSize: '0.875rem', marginTop: '0.5rem' }} role="alert">
-                  {depositError}
-                </p>
+              {loading ? (
+                <p className="wallet-muted">{t('common.loading')}</p>
+              ) : address ? (
+                <>
+                  <div className="address-row">
+                    <code className="address-value" title={address}>
+                      {address}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-copy"
+                      onClick={handleCopy}
+                      aria-label={t('walletPage.copyAddress')}
+                    >
+                      {copied ? t('walletPage.copied') : t('walletPage.copy')}
+                    </button>
+                  </div>
+                  <p className="wallet-muted address-note">{t('walletPage.addressNote')}</p>
+                </>
+              ) : (
+                <p className="wallet-muted address-note">{t('walletPage.noWallet')}</p>
               )}
-              <button
-                className="btn btn-primary btn-deposit-submit"
-                onClick={handleDeposit}
-                disabled={!getAmount() || depositLoading}
-                aria-label={depositLoading ? t('walletPage.processing') : t('walletPage.depositLabel', { amount: getAmount() || '' })}
-              >
-                {depositLoading
-                  ? t('walletPage.processing')
-                  : `${t('walletPage.addFunds')} ${getAmount() ? `$${getAmount()}` : ''} ${t('walletPage.viaPaystack')}`}
-              </button>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: '0.75rem', fontFamily: 'var(--font-sans)' }}>
-                {t('walletPage.paystackPowered')}
-              </p>
+
+              <form className="link-form" onSubmit={handleLink}>
+                <label htmlFor={linkInputId} className="link-label">
+                  {address ? t('walletPage.replaceWallet') : t('walletPage.linkWallet')}
+                </label>
+                <div className="link-row">
+                  <input
+                    id={linkInputId}
+                    className="link-input"
+                    type="text"
+                    inputMode="latin"
+                    spellCheck="false"
+                    autoComplete="off"
+                    placeholder={t('walletPage.addressPlaceholder')}
+                    value={draftAddress}
+                    onChange={(e) => setDraftAddress(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={!draftAddress.trim() || linking}
+                  >
+                    {linking ? t('walletPage.linking') : t('walletPage.link')}
+                  </button>
+                </div>
+                {linkError && (
+                  <p className="wallet-error" role="alert">
+                    {linkError}
+                  </p>
+                )}
+                <p className="wallet-muted link-hint">{t('walletPage.linkHint')}</p>
+              </form>
             </section>
           </div>
 
           <div className="wallet-right">
-            <section className="transactions-card" aria-label={t('walletPage.transactionsLabel')}>
-              <div className="transactions-header">
-                <h3>{t('walletPage.recentTransactions')}</h3>
-                <a href="/earnings" className="btn-text-link">{t('walletPage.viewAll')}</a>
+            <section className="receipts-card" aria-label={t('walletPage.receiptsLabel')}>
+              <div className="receipts-header">
+                <div>
+                  <h3>{t('walletPage.receipts')}</h3>
+                  <p className="wallet-muted receipts-sub">{t('walletPage.receiptsSub')}</p>
+                </div>
+                <div className="receipts-total">
+                  <span className="receipts-total-label">{t('walletPage.totalSettled')}</span>
+                  <span className="receipts-total-value">
+                    {formatReceiptAmount(totalSettled)}
+                  </span>
+                </div>
               </div>
+
               {loading ? (
                 <div className="loading-state">
                   <span className="spinner" aria-hidden="true" />
-                  <span>{t('walletPage.loadingTransactions')}</span>
+                  <span>{t('walletPage.loadingReceipts')}</span>
                 </div>
-              ) : transactions.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}>
-                  {t('walletPage.noTransactions')}
-                </div>
+              ) : receipts.length === 0 ? (
+                <div className="receipts-empty">{t('walletPage.noReceipts')}</div>
               ) : (
-                <div className="transactions-list">
-                  {transactions.map(tx => (
-                    <div key={tx.id} className="transaction-item">
-                      <div className={`tx-icon tx-icon-${tx.type}`} aria-hidden="true">
-                        {getTransactionIcon(tx.type)}
+                <ul className="receipts-list">
+                  {receipts.map((r) => (
+                    <li
+                      key={r.id}
+                      className={`receipt-item${r.voided ? ' receipt-voided' : ''}`}
+                    >
+                      <div className="receipt-main">
+                        <div className="receipt-headline">
+                          <span className="receipt-subject">
+                            {r.subject || RECEIPT_KIND_LABEL[r.kind] || r.kind}
+                          </span>
+                          <span className="receipt-kind">
+                            {RECEIPT_KIND_LABEL[r.kind] || r.kind}
+                          </span>
+                        </div>
+                        <div className="receipt-meta">
+                          {formatDate(r.created_at)} · {formatTime(r.created_at)}
+                          {r.counterparty && (
+                            <>
+                              {' '}
+                              · {t('walletPage.paidTo')}{' '}
+                              <code title={r.counterparty}>{shortKey(r.counterparty)}</code>
+                            </>
+                          )}
+                        </div>
+                        <div className="receipt-proof">
+                          <span className="receipt-proof-item">
+                            <span className="receipt-proof-key">{t('walletPage.receiptId')}</span>
+                            <code>{r.id}</code>
+                          </span>
+                          <span className="receipt-proof-item">
+                            <span className="receipt-proof-key">{t('walletPage.signedBy')}</span>
+                            <code title={r.rail_pubkey}>{shortKey(r.rail_pubkey)}</code>
+                          </span>
+                          <span className="receipt-proof-item">
+                            <span className="receipt-proof-key">{t('walletPage.fee')}</span>
+                            <code>{formatReceiptAmount(r.protocol_fee)}</code>
+                          </span>
+                        </div>
                       </div>
-                      <div className="tx-details">
-                        <span className="tx-description">{tx.description}</span>
-                        <span className="tx-meta">
-                          {formatDate(tx.date)} · {formatTime(tx.date)}
+                      <div className="receipt-right">
+                        <span className="receipt-amount">{formatReceiptAmount(r.total)}</span>
+                        <span
+                          className={`receipt-status ${r.voided ? 'status-voided' : 'status-settled'}`}
+                        >
+                          {r.voided ? t('walletPage.voided') : t('walletPage.settled')}
                         </span>
                       </div>
-                      <div className="tx-right">
-                        <span className={`tx-amount ${tx.amount > 0 ? 'positive' : 'negative'}`} aria-label={`${tx.amount > 0 ? '+' : ''}${Number(tx.amount).toFixed(2)} USD`}>
-                          {tx.amount > 0 ? '+' : ''}{Number(tx.amount).toFixed(2)}
-                        </span>
-                        <span className={`tx-status ${getStatusClass(tx.status)}`}>
-                          {tx.status}
-                        </span>
-                      </div>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </section>
           </div>

@@ -273,9 +273,9 @@
 }
 
 .chart-badge.cyan {
-  background: rgba(56, 225, 200, 0.12);
-  color: #38e1c8;
-  border: 1px solid rgba(56, 225, 200, 0.25);
+  background: rgba(123, 97, 255, 0.12);
+  color: #7b61ff;
+  border: 1px solid rgba(123, 97, 255, 0.25);
 }
 
 /* ── Breakdown section ────────────────────────────────────────────────────── */
@@ -377,7 +377,7 @@
 }
 
 .breakdown-link:hover {
-  background: rgba(56, 225, 200, 0.08);
+  background: rgba(123, 97, 255, 0.08);
   border-color: var(--color-accent);
   color: var(--color-accent-hover);
 }

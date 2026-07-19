@@ -6,14 +6,21 @@ import UsageMeter from '../components/UsageMeter';
 import { api } from '../api/client';
 import './Subscription.css';
 
+/**
+ * Tiers are receipt-backed feature flags (§3.6 PaymentRail), not billing plans.
+ * A checkout moves USDC from the subscriber's wallet to the operator's wallet in one
+ * atomic transfer and returns a signed receipt; the node reads that receipt to unlock
+ * the tier for its period. There is no card, no custodial balance and no recurring
+ * mandate — "renewal" is simply a new checkout, and doing nothing lets the tier lapse.
+ */
 const TIERS = [
   {
     id: 'free',
     name: 'Free',
-    price: '$0',
-    period: 'month',
+    price: 'Free',
+    period: null,
     features: [
-      '10 hours per month',
+      '10 hours per period',
       'Basic Rust game access',
       'Community support',
       'Standard matchmaking',
@@ -22,10 +29,10 @@ const TIERS = [
   {
     id: 'basic',
     name: 'Basic',
-    price: '$9.99',
-    period: 'month',
+    price: '9.99 USDC',
+    period: '30 days',
     features: [
-      '50 hours per month',
+      '50 hours per period',
       'Extended game library',
       'Priority support',
       'Faster matchmaking',
@@ -35,11 +42,11 @@ const TIERS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$24.99',
-    period: 'month',
+    price: '24.99 USDC',
+    period: '30 days',
     recommended: true,
     features: [
-      '100 hours per month',
+      '100 hours per period',
       'Full Rust game access',
       '24/7 priority support',
       'Instant matchmaking',
@@ -50,8 +57,8 @@ const TIERS = [
   {
     id: 'unlimited',
     name: 'Unlimited',
-    price: '$49.99',
-    period: 'month',
+    price: '49.99 USDC',
+    period: '30 days',
     features: [
       'Unlimited hours',
       'Full Rust game access',
@@ -66,53 +73,66 @@ const TIERS = [
 ];
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_PAYMENT_HISTORY = import.meta.env.VITE_USE_MOCKS
+const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS
   ? [
-      { id: 1, date: '2026-05-01', amount: 24.99, description: 'Pro Plan - Monthly', status: 'completed' },
-      { id: 2, date: '2026-04-01', amount: 24.99, description: 'Pro Plan - Monthly', status: 'completed' },
-      { id: 3, date: '2026-03-01', amount: 24.99, description: 'Pro Plan - Monthly', status: 'completed' },
+      { id: 'rcpt_01HZM6B2C8D4E1F7', date: '2026-05-01', total: 24.99, protocol_fee: 0, description: 'Pro tier — 30 days', rail_pubkey: 'ed25519:0c94ae6217fb3d80', status: 'settled' },
+      { id: 'rcpt_01HZ8P4K7T2R9WNX', date: '2026-04-01', total: 24.99, protocol_fee: 0, description: 'Pro tier — 30 days', rail_pubkey: 'ed25519:0c94ae6217fb3d80', status: 'settled' },
+      { id: 'rcpt_01HZ1D5J3M6V8QYB', date: '2026-03-01', total: 24.99, protocol_fee: 0, description: 'Pro tier — 30 days', rail_pubkey: 'ed25519:0c94ae6217fb3d80', status: 'settled' },
     ]
   : null;
 
 const MOCK_SUBSCRIPTION = import.meta.env.VITE_USE_MOCKS
-  ? { tier: 'pro', renewalDate: '2026-06-01', hoursUsed: 67, hoursTotal: 100, cancelAtPeriodEnd: false }
+  ? { tier: 'pro', lapsesAt: '2026-06-01', hoursUsed: 67, hoursTotal: 100, receiptId: 'rcpt_01HZM6B2C8D4E1F7' }
   : null;
+
+const shortKey = (v) => {
+  if (!v) return '—';
+  const raw = String(v).replace(/^[a-z0-9]+:/i, '');
+  return raw.length <= 14 ? raw : `${raw.slice(0, 8)}…${raw.slice(-4)}`;
+};
+
+const usdc = (amount) =>
+  `${Number(amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`;
 
 export default function Subscription() {
   const [currentSubscription, setCurrentSubscription] = useState(MOCK_SUBSCRIPTION);
-  const [paymentHistory, _setPaymentHistory]          = useState(MOCK_PAYMENT_HISTORY ?? []);
-  const [loading, setLoading]       = useState(!MOCK_SUBSCRIPTION);
-  const [error, setError]           = useState(null);
-  const [_subscribing, setSubscribing]  = useState(false);
-  const [cancelling, setCancelling]     = useState(false);
-  const [upgrading, setUpgrading]       = useState(false);
+  const [receipts, setReceipts]         = useState(MOCK_RECEIPTS ?? []);
+  const [loading, setLoading]           = useState(!MOCK_SUBSCRIPTION);
+  const [error, setError]               = useState(null);
+  const [checkingOut, setCheckingOut]   = useState(false);
   const [actionError, setActionError]   = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
-  // Upgrade flow: show payment ref input
-  const [upgradeTarget, setUpgradeTarget] = useState(null);
-  const [upgradePaymentRef, setUpgradePaymentRef] = useState('');
+  // Checkout flow: confirm the wallet transfer for a chosen tier
+  const [checkoutTarget, setCheckoutTarget] = useState(null);
+  const [receiptRef, setReceiptRef]         = useState('');
 
   const fetchSubscription = useCallback(async () => {
     if (import.meta.env.VITE_USE_MOCKS) return;
     setLoading(true);
     setError(null);
     try {
-      const [subData, usageData] = await Promise.allSettled([
+      const [subData, usageData, receiptData] = await Promise.allSettled([
         api.subscriptions.current(),
         api.subscriptions.usage(),
+        api.subscriptions.receipts?.() ?? Promise.reject(new Error('unavailable')),
       ]);
 
       if (subData.status === 'fulfilled' && subData.value) {
         const d = subData.value;
         const usage = usageData.status === 'fulfilled' ? usageData.value : null;
         setCurrentSubscription({
-          tier:               d.tier ?? d.plan_id ?? 'free',
-          renewalDate:        d.renewal_date ?? d.renews_at ?? null,
-          hoursUsed:          usage?.hours_used  ?? d.hours_used  ?? 0,
-          hoursTotal:         usage?.hours_total ?? d.hours_limit ?? 0,
-          cancelAtPeriodEnd:  d.cancel_at_period_end ?? false,
-          currentPeriodEnd:   d.current_period_end ?? d.renewal_date ?? null,
+          tier:       d.tier ?? d.plan_id ?? 'free',
+          lapsesAt:   d.lapses_at ?? d.current_period_end ?? d.renewal_date ?? null,
+          hoursUsed:  usage?.hours_used  ?? d.hours_used  ?? 0,
+          hoursTotal: usage?.hours_total ?? d.hours_limit ?? 0,
+          receiptId:  d.receipt_id ?? null,
+          railPubkey: d.rail_pubkey ?? null,
         });
+      }
+
+      if (receiptData.status === 'fulfilled') {
+        const r = receiptData.value?.data ?? receiptData.value;
+        setReceipts(Array.isArray(r?.receipts) ? r.receipts : Array.isArray(r) ? r : []);
       }
     } catch (err) {
       setError(err.message || 'Failed to load subscription');
@@ -125,67 +145,38 @@ export default function Subscription() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSubscription(); }, [fetchSubscription]);
 
-  const handleSubscribe = async (tier) => {
+  const openCheckout = (tier) => {
     if (tier.id === 'free') return;
-    setSubscribing(true);
-    setActionError(null);
-    setActionSuccess(null);
-    try {
-      await api.subscriptions.create({ plan_id: tier.id, tier: tier.id });
-      setActionSuccess(`Subscribed to ${tier.name}!`);
-      setTimeout(() => setActionSuccess(null), 3000);
-      await fetchSubscription();
-    } catch (err) {
-      setActionError(err.message || 'Failed to subscribe');
-    } finally {
-      setSubscribing(false);
-    }
-  };
-
-  const handleUpgrade = async (tier) => {
-    // If already on this tier, do nothing
     if (currentSubscription && tier.name.toLowerCase() === currentSubscription.tier) return;
-    // Show the payment reference input panel
-    setUpgradeTarget(tier);
-    setUpgradePaymentRef('');
+    setCheckoutTarget(tier);
+    setReceiptRef('');
     setActionError(null);
     setActionSuccess(null);
   };
 
-  const handleConfirmUpgrade = async () => {
-    if (!upgradeTarget) return;
-    setUpgrading(true);
+  const handleConfirmCheckout = async () => {
+    if (!checkoutTarget) return;
+    setCheckingOut(true);
     setActionError(null);
     try {
-      await api.subscriptions.upgrade(upgradeTarget.id, upgradePaymentRef || undefined);
-      setActionSuccess(`Plan changed to ${upgradeTarget.name}!`);
-      setUpgradeTarget(null);
-      setUpgradePaymentRef('');
-      setTimeout(() => setActionSuccess(null), 4000);
+      const res = currentSubscription
+        ? await api.subscriptions.upgrade(checkoutTarget.id, receiptRef || undefined)
+        : await api.subscriptions.create({ plan_id: checkoutTarget.id, tier: checkoutTarget.id, currency: 'usdc', receipt_id: receiptRef || undefined });
+      const receipt = res?.receipt ?? res ?? {};
+      const rid = receipt.receipt_id ?? receipt.id ?? receiptRef;
+      setActionSuccess(
+        rid
+          ? `${checkoutTarget.name} unlocked — receipt ${shortKey(rid)}`
+          : `${checkoutTarget.name} unlocked.`
+      );
+      setCheckoutTarget(null);
+      setReceiptRef('');
+      setTimeout(() => setActionSuccess(null), 5000);
       await fetchSubscription();
     } catch (err) {
-      setActionError(err.message || 'Failed to change plan. If a payment is required, enter your Paystack reference above.');
+      setActionError(err.message || 'Checkout failed. If you already paid, paste the receipt ID above and try again.');
     } finally {
-      setUpgrading(false);
-    }
-  };
-
-  const handleCancelSubscription = async () => {
-    if (!window.confirm('Cancel your subscription? You will keep access until the end of the current billing period.')) {
-      return;
-    }
-    setCancelling(true);
-    setActionError(null);
-    setActionSuccess(null);
-    try {
-      await api.subscriptions.cancel();
-      setActionSuccess('Subscription cancelled. Your plan remains active until the billing period ends.');
-      setCurrentSubscription(prev => prev ? { ...prev, cancelAtPeriodEnd: true } : prev);
-      setTimeout(() => setActionSuccess(null), 5000);
-    } catch (err) {
-      setActionError(err.message || 'Failed to cancel subscription');
-    } finally {
-      setCancelling(false);
+      setCheckingOut(false);
     }
   };
 
@@ -206,9 +197,12 @@ export default function Subscription() {
     <Layout>
       <div className="subscription-page">
         <header className="subscription-header">
-          <span className="kicker">// BILLING &amp; PLANS</span>
+          <span className="kicker">// TIERS &amp; RECEIPTS</span>
           <h1>Subscription</h1>
-          <p>Manage your subscription plan and billing for Rust game access</p>
+          <p>
+            Tiers are unlocked by a signed receipt from a wallet checkout in USDC.
+            No card, no stored balance, no recurring mandate.
+          </p>
         </header>
 
         {actionError && (
@@ -244,34 +238,28 @@ export default function Subscription() {
               </section>
             ) : currentSubscription ? (
               <section className="current-plan-section">
-                <h2>Current Plan</h2>
+                <h2>Current Tier</h2>
                 <div className="current-plan-card">
                   <div className="current-plan-header">
                     <SubscriptionBadge tier={currentSubscription.tier} size="lg" />
-                    {currentSubscription.cancelAtPeriodEnd ? (
-                      <span className="current-plan-label" style={{ color: 'var(--color-warning)' }}>Cancels at period end</span>
-                    ) : (
-                      <span className="current-plan-label">Active</span>
-                    )}
+                    <span className="current-plan-label">Active</span>
                   </div>
                   <div className="current-plan-details">
-                    {currentSubscription.renewalDate && !currentSubscription.cancelAtPeriodEnd && (
+                    {currentSubscription.lapsesAt && (
                       <div className="detail-row">
-                        <span className="detail-label">Renews on</span>
-                        <span className="detail-value">{formatDate(currentSubscription.renewalDate)}</span>
-                      </div>
-                    )}
-                    {currentSubscription.cancelAtPeriodEnd && currentSubscription.currentPeriodEnd && (
-                      <div className="detail-row">
-                        <span className="detail-label">Access until</span>
-                        <span className="detail-value" style={{ color: 'var(--color-warning)' }}>
-                          {formatDate(currentSubscription.currentPeriodEnd)}
-                        </span>
+                        <span className="detail-label">Lapses on</span>
+                        <span className="detail-value">{formatDate(currentSubscription.lapsesAt)}</span>
                       </div>
                     )}
                     <div className="detail-row">
-                      <span className="detail-label">Billing cycle</span>
-                      <span className="detail-value">Monthly</span>
+                      <span className="detail-label">Unlocked by receipt</span>
+                      <span className="detail-value" style={{ fontFamily: 'var(--font-mono)' }} title={currentSubscription.receiptId ?? ''}>
+                        {shortKey(currentSubscription.receiptId)}
+                      </span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Rail</span>
+                      <span className="detail-value" style={{ fontFamily: 'var(--font-mono)' }}>USDC · non-custodial</span>
                     </div>
                   </div>
                   {currentSubscription.hoursTotal > 0 && (
@@ -284,37 +272,39 @@ export default function Subscription() {
               </section>
             ) : null}
 
-            {/* Upgrade flow: payment reference panel */}
-            {upgradeTarget && (
+            {/* Checkout confirmation panel */}
+            {checkoutTarget && (
               <section style={{ marginBottom: '1.5rem' }}>
                 <div style={{ padding: '1.25rem', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius)', maxWidth: 520 }}>
                   <h3 style={{ margin: '0 0 0.75rem', fontSize: 'var(--text-base)' }}>
-                    Change plan to <strong>{upgradeTarget.name}</strong> ({upgradeTarget.price}/mo)
+                    Check out <strong>{checkoutTarget.name}</strong> — {checkoutTarget.price}
                   </h3>
-                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
-                    If upgrading to a paid tier, provide your Paystack payment reference for the prorated amount.
-                    Downgrading is free — leave this blank.
+                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem', lineHeight: 1.6 }}>
+                    Your wallet will transfer {checkoutTarget.price} to the operator&rsquo;s wallet in a
+                    single atomic payment. The rail returns a signed receipt and the tier unlocks the
+                    moment it settles. Nothing recurs — when the period ends the tier lapses unless
+                    you check out again. Protocol fee: 0 bps.
                   </p>
                   <input
                     className="input"
                     type="text"
-                    placeholder="Paystack payment reference (optional for downgrades)"
-                    value={upgradePaymentRef}
-                    onChange={e => setUpgradePaymentRef(e.target.value)}
-                    aria-label="Paystack payment reference"
+                    placeholder="Receipt ID (optional — only if you already paid)"
+                    value={receiptRef}
+                    onChange={e => setReceiptRef(e.target.value)}
+                    aria-label="Existing receipt ID"
                     style={{ marginBottom: '0.75rem', width: '100%' }}
                   />
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       className="btn btn-primary"
-                      onClick={handleConfirmUpgrade}
-                      disabled={upgrading}
+                      onClick={handleConfirmCheckout}
+                      disabled={checkingOut}
                     >
-                      {upgrading ? 'Changing plan…' : `Confirm — ${upgradeTarget.name}`}
+                      {checkingOut ? 'Settling…' : `Pay with wallet — ${checkoutTarget.price}`}
                     </button>
                     <button
                       className="btn btn-secondary"
-                      onClick={() => { setUpgradeTarget(null); setActionError(null); }}
+                      onClick={() => { setCheckoutTarget(null); setActionError(null); }}
                     >
                       Cancel
                     </button>
@@ -324,47 +314,41 @@ export default function Subscription() {
             )}
 
             <section className="plans-section">
-              <h2>Available Plans</h2>
+              <h2>Available Tiers</h2>
               <div className="plans-grid">
-                {TIERS.map((tier) => {
-                  const isCurrent = isCurrentTier(tier);
-                  return (
-                    <SubscriptionCard
-                      key={tier.id}
-                      tier={tier}
-                      isCurrent={isCurrent}
-                      onSubscribe={(t) => {
-                        if (currentSubscription && !isCurrent) {
-                          handleUpgrade(t);
-                        } else {
-                          handleSubscribe(t);
-                        }
-                      }}
-                    />
-                  );
-                })}
+                {TIERS.map((tier) => (
+                  <SubscriptionCard
+                    key={tier.id}
+                    tier={tier}
+                    isCurrent={isCurrentTier(tier)}
+                    onSubscribe={openCheckout}
+                  />
+                ))}
               </div>
             </section>
           </div>
 
           <aside className="subscription-sidebar">
             <section className="payment-history-section">
-              <h3>Payment History</h3>
-              {paymentHistory.length === 0 ? (
+              <h3>Receipts</h3>
+              {receipts.length === 0 ? (
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)' }}>
-                  No payment history
+                  No receipts yet
                 </p>
               ) : (
                 <div className="payment-list">
-                  {paymentHistory.map((payment) => (
-                    <div key={payment.id} className="payment-item">
+                  {receipts.map((r) => (
+                    <div key={r.id} className="payment-item">
                       <div className="payment-info">
-                        <span className="payment-description">{payment.description}</span>
-                        <span className="payment-date">{formatDate(payment.date)}</span>
+                        <span className="payment-description">{r.description ?? 'Tier checkout'}</span>
+                        <span className="payment-date">{formatDate(r.date ?? r.settled_at)}</span>
+                        <span className="payment-date" style={{ fontFamily: 'var(--font-mono)' }} title={r.id}>
+                          {shortKey(r.id)} · rail {shortKey(r.rail_pubkey)}
+                        </span>
                       </div>
                       <div className="payment-right">
-                        <span className="payment-amount">${payment.amount.toFixed(2)}</span>
-                        <span className={`payment-status ${payment.status}`}>{payment.status}</span>
+                        <span className="payment-amount">{usdc(r.total ?? r.amount)}</span>
+                        <span className={`payment-status ${r.status ?? 'settled'}`}>{r.status ?? 'settled'}</span>
                       </div>
                     </div>
                   ))}
@@ -372,35 +356,14 @@ export default function Subscription() {
               )}
             </section>
 
-            {currentSubscription && currentSubscription.tier !== 'free' && !currentSubscription.cancelAtPeriodEnd && (
-              <section className="danger-zone-section">
-                <h3>Danger Zone</h3>
-                <div className="danger-card">
-                  <div className="danger-info">
-                    <span className="danger-title">Cancel Subscription</span>
-                    <span className="danger-desc">
-                      Your plan stays active until the end of the billing period, then reverts to Free.
-                    </span>
-                  </div>
-                  <button
-                    className="btn btn-danger"
-                    onClick={handleCancelSubscription}
-                    disabled={cancelling}
-                  >
-                    {cancelling ? 'Cancelling…' : 'Cancel at Period End'}
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {currentSubscription?.cancelAtPeriodEnd && (
-              <section style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(245,165,36,0.08)', border: '1px solid var(--color-warning)', borderRadius: 'var(--radius)' }}>
-                <p style={{ color: 'var(--color-warning)', fontSize: 'var(--text-sm)', margin: 0, fontFamily: 'var(--font-sans)' }}>
-                  Your subscription is set to cancel at the end of the billing period.
-                  Re-subscribe below to keep access.
-                </p>
-              </section>
-            )}
+            <section style={{ marginTop: '1rem', padding: '1rem', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)' }}>
+              <h3 style={{ margin: '0 0 0.5rem', fontSize: 'var(--text-sm)' }}>Nothing to cancel</h3>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', margin: 0, fontFamily: 'var(--font-sans)', lineHeight: 1.6 }}>
+                No one holds a mandate against your wallet. Your tier is valid for the period its
+                receipt paid for and then lapses back to Free on its own. To keep it, perform a new
+                checkout before it expires.
+              </p>
+            </section>
           </aside>
         </div>
       </div>

@@ -81,7 +81,7 @@
   background: var(--server-color, var(--color-accent));
   color: #000;
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(56, 225, 200, 0.24), 0 2px 6px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(123, 97, 255, 0.24), 0 2px 6px rgba(0,0,0,0.4);
 }
 
 .server-icon:focus-visible {
@@ -93,7 +93,7 @@
   border-radius: var(--radius);
   background: var(--server-color, var(--color-accent));
   color: #000;
-  box-shadow: 0 4px 16px rgba(56, 225, 200, 0.22);
+  box-shadow: 0 4px 16px rgba(123, 97, 255, 0.22);
 }
 
 .server-icon--home {

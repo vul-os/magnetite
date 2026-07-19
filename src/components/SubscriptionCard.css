@@ -18,8 +18,8 @@
 }
 
 .subscription-card.current {
-  border-color: rgba(56, 225, 200, 0.35);
-  background: linear-gradient(135deg, var(--color-bg-card) 0%, rgba(56, 225, 200, 0.04) 100%);
+  border-color: rgba(123, 97, 255, 0.35);
+  background: linear-gradient(135deg, var(--color-bg-card) 0%, rgba(123, 97, 255, 0.04) 100%);
 }
 
 .subscription-card.recommended {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './Contact.css';
 
 const socialLinks = [
@@ -253,7 +254,7 @@ export default function Contact() {
           <div className="footer-content">
             <div className="footer-brand">
               <div className="logo">
-                <div className="logo-icon" aria-hidden="true">M</div>
+                <img src={magnetiteLogo} className="logo-icon" aria-hidden="true" alt="" />
                 <span>Magnetite</span>
               </div>
               <p>Open-source Rust gaming. No middlemen.</p>
