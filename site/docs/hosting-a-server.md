@@ -91,6 +91,25 @@ contributed by whoever chooses to run a node.
 > blindly followed a redirect could be walked onto an attacker's node, which is
 > the entire threat this protocol exists to stop.
 >
+> **A configured cluster now balances itself.** The pieces above could move a
+> shard safely and say who was allowed to receive one, but nothing ever *decided*
+> to move anything — three configured nodes would sit there with every shard on
+> whichever one created it. `rebalance::Rebalancer` closes that: every pass it
+> asks its member peers what they hold and how big they are, runs
+> `SpreadScheduler` over the visible cluster, and sheds whatever it is holding
+> beyond its own capacity share — through the same two-phase handoff, unchanged.
+> It ships with four brakes on by default (deadband, per-shard cooldown, a cap on
+> concurrent migrations, and exponential per-peer backoff), because a reconciler
+> that reacts to every measurement thrashes. **A converged cluster issues zero
+> migrations**, and `convergence_then_zero_migrations` asserts exactly that over
+> real sockets. See "Running a self-balancing cluster" below.
+>
+> **A node that dies loses its shards' state — permanently.** There is no state
+> replication. The rebalancer detects the loss, stops routing work to the dead
+> node, and reports what was lost **as a loss**; it does not quietly start empty
+> replacement shards, which would look like recovery in every log line while the
+> players in them lost their sessions.
+>
 > **What is NOT proven:** all of this is tested over real sockets between
 > processes on one machine and on a LAN. It has **not** been run across the
 > public internet, and there is **no NAT traversal, no hole punching, and no
@@ -221,7 +240,7 @@ under a different identity. Only if no key file location can be determined at al
 (no `HOME`, no flag) does the node fall back to deriving a key from its bind
 address — it says so at startup, and in that mode the identity is *not* stable.
 
-## Running a two-node cluster
+## Running a self-balancing cluster
 
 Two boxes, `10.0.0.11` and `10.0.0.12`, on the same LAN or VPN. Both must be able
 to reach each other's **handoff port** directly.
@@ -240,19 +259,27 @@ magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000
 # Ctrl-C
 ```
 
-**2. Put each node's key in the other's membership list, and start both.**
+**2. Put each node's key *and address* in the other's membership list.**
 
 ```bash
-# on 10.0.0.11 — authorize B
+# on 10.0.0.11 — authorize B, and say where B answers
 magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000 \
   --handoff-addr 0.0.0.0:9001 \
-  --cluster-peer fff965a4de11f1869c9ac096d9d3bae02b8aa75614c05ed8c9fa1210f95ae584
+  --cluster-peer fff965a4de11f1869c9ac096d9d3bae02b8aa75614c05ed8c9fa1210f95ae584@10.0.0.12:9001
 
 # on 10.0.0.12 — authorize A
 magnetite node --wasm game.wasm --host 0.0.0.0 --port 9000 \
   --handoff-addr 0.0.0.0:9001 \
-  --cluster-peer ceba6d97cabf9324052d87ff4281c39d3f12db49f76b26aaf1ef7ab81f4636d3
+  --cluster-peer ceba6d97cabf9324052d87ff4281c39d3f12db49f76b26aaf1ef7ab81f4636d3@10.0.0.11:9001
 ```
+
+The `@host:port` suffix is new and it is what makes the cluster *self-balancing*.
+A bare key still works and still fully authorizes the peer — but without an
+address there is nowhere to send work, so nothing will be placed there.
+
+**The key is the authorization; the address is only a location.** If the address
+is wrong, or someone else has taken it, the handoff handshake aborts because the
+far side cannot prove control of the pinned key. A stolen address gets nothing.
 
 Both must serve the **same game.wasm**: the game id is the BLAKE3 hash of the
 module, so a mismatched binary is a different game and the nodes will not find
@@ -266,51 +293,160 @@ Each prints its cluster state:
   Session follow   : ON — players are redirected when a shard migrates
   Reachability     : peers must reach 0.0.0.0:9001 DIRECTLY — no NAT traversal,
                      no hole punching, no relay (same LAN / VPN / public IP)
+  Routable peers   : 1 of 1 have an address
+  Rebalancer       : ON — every 30s, capacity-aware, deadband 1 shard(s),
+                     at most 2 migration(s) per pass
+  Node death       : LOSES that node's shard state — there is NO state
+                     replication; losses are reported, never 'recovered'
 ```
 
-**3. Watch capacity drive placement.** Each node advertises its measured
-hardware, and `SpreadScheduler` gives the bigger box more shards — the
-`Emergent cap` line in each node's banner is the input to that decision, not a
-number you set.
+**3. Watch shards distribute by capacity.** Every 30 seconds each node asks its
+peers what they hold and how big they are, runs `SpreadScheduler` over the whole
+visible cluster, and hands over anything it is holding beyond its own share:
 
-**4. Watch a player follow a migration.** Connect a client to A
+```text
+  rebalance: shard 3 -> fff965a4…e584 (epoch 1)
+  rebalance: shard 4 -> fff965a4…e584 (epoch 2)
+```
+
+The share tracks the `Emergent cap` line in each node's banner — measured
+hardware, not a number you set. An 8-core box and a 2-core box do not get four
+shards each.
+
+Then it goes quiet. **A converged cluster issues zero migrations**, forever, and
+that is asserted directly by the `convergence_then_zero_migrations` test: it
+drives a three-node cluster to a fixed point over real sockets and then requires
+twenty further passes to move nothing at all.
+
+**4. Add a third node and watch it take share.** Start `10.0.0.13`, add its
+`key@addr` to A and B (and theirs to it), and within a pass or two the existing
+nodes shed toward it. Nothing else changes; the cluster re-converges and goes
+quiet again.
+
+**5. Watch a player follow a migration.** Connect a client to A
 (`ws://10.0.0.11:9000`). When the shard that player is on migrates to B, A hands
 the client a `SignedRedirect` on its live socket and closes it; the client
 reconnects to B, requires B to prove the pinned key, presents its single-use
 `FollowToken`, and is re-attached **under the same player id** — one continuous
 session, no re-join.
 
+### The brakes, and why they are not optional
+
+A rebalancer that reacts to every measurement is worse than none: shards
+ping-pong between nodes, every move costs the players in it a reconnect, and the
+cluster spends its capacity migrating instead of simulating. Four brakes ship on
+by default.
+
+| Brake | Default | What it prevents |
+|---|---|---|
+| **Deadband** | 1 shard | Moving for an imbalance smaller than a greedy bin-pack's own tie-breaking noise. |
+| **Cooldown** | 120s per shard | A shard that just moved being sent straight back by the next, slightly staler, view. |
+| **Concurrency cap** | 2 per pass | Draining a node all at once, and the reconnect storm that follows. |
+| **Peer backoff** | 5s, doubling to 300s | Hammering a node that is down. A backed-off peer is not contacted at all. |
+
+Two design choices do most of the work:
+
+- **Placement ignores current ownership.** The desired layout is a pure function
+  of *which shards exist* and *which nodes exist*, so moving a shard never
+  changes where anything is supposed to be. Each move strictly reduces total
+  imbalance, which is a non-negative integer — so the loop must terminate.
+- **We balance counts, not identities.** If a node holds three shards and the
+  scheduler wants it to hold three *different* ones, that is a swap with no
+  measurable benefit and two migrations' worth of cost. Nothing moves.
+
+### When a node dies
+
+**Its shards' state dies with it. This is not recoverable and nothing in
+Magnetite pretends otherwise.** There is no state replication: a shard's world
+lives in one node's memory, and if that node is gone, so is it.
+
+What actually happens:
+
+- The surviving nodes' probes fail, the peer enters exponential backoff, and it
+  stops receiving new work immediately.
+- Shards it was last seen holding, which no surviving node now reports, are
+  reported as **losses**, once, in full:
+
+  ```text
+    rebalance: shard 6 STATE LOST: node fff965a4…e584 held it and it stopped
+    answering: connect to 10.0.0.12:9001: Connection refused. There is no state
+    replication in Magnetite, so this shard's in-memory world is gone — a
+    replacement shard would be a NEW world, not a recovered one
+    rebalance: shard 6 will NOT be restarted automatically; starting one would
+    create a NEW world, not restore the old one
+  ```
+
+- The remaining capacity re-balances across the surviving nodes. That is
+  **re-placement of capacity, not recovery of state**.
+
+Nothing restarts those shards for you, deliberately. An empty shard with the same
+id would look like a successful recovery in every log line and metric while every
+player who was in it silently lost their session. If you want a fresh shard, ask
+for one knowing it is fresh.
+
+Players on a dead node also do not get a redirect — redirects are minted only by
+a *successful* migration, and a node that died did not perform one. They see a
+dropped connection and must re-join.
+
+> **TODO (not attempted here): state replication.** The honest fix is replicating
+> shard state to a warm standby, or checkpointing it to the blob-store seam, so a
+> node's death costs a rollback rather than the whole shard. That needs quorum
+> rules, a story for split-brain against the epoch fence, and a checkpoint
+> cadence — a much larger design than this loop.
+
 ### Flags and environment
 
 | Flag | Env | Meaning |
 |---|---|---|
-| `--cluster-peer <HEX>` (repeatable) | `MAGNETITE_CLUSTER_PEERS` (comma/space separated) | Authorized peer node public key, 64 hex chars |
-| `--cluster-peers-file <PATH>` | `MAGNETITE_CLUSTER_PEERS_FILE` | One key per line, `#` comments — for lists longer than a couple of nodes |
+| `--cluster-peer <HEX[@ADDR]>` (repeatable) | `MAGNETITE_CLUSTER_PEERS` (comma/space separated) | Authorized peer node public key, 64 hex chars, optionally `@host:port` for its handoff listener |
+| `--cluster-peers-file <PATH>` | `MAGNETITE_CLUSTER_PEERS_FILE` | One entry per line, `#` comments — for lists longer than a couple of nodes |
 | `--handoff-addr <ADDR>` | `MAGNETITE_HANDOFF_ADDR` | Node-to-node listener, separate from the game port. Defaults to `<host>:<port+1>` |
 | `--node-key-file <PATH>` | `MAGNETITE_NODE_KEY_FILE` | Persisted node keypair. Default `$MAGNETITE_HOME/node.key`, else `~/.magnetite/node.key` |
+| `--no-rebalance` | — | Turn the reconciler off; placement becomes entirely manual |
+| `--rebalance-interval <SECS>` | — | Seconds between passes (default 30) |
+| `--rebalance-deadband <N>` | — | Shards of slack before anything moves (default 1) |
+| `--rebalance-max-in-flight <N>` | — | Migrations per pass (default 2) |
 | — | `MAGNETITE_NODE_SEED` | 32-byte hex seed; overrides the key file |
 
-Sources merge and de-duplicate. A malformed key is a **hard error naming the
-offending entry** (and, for a file, its line number) — never a silently dropped
-peer, because a membership list you cannot trust to be complete is worse than
-one that fails to load. An unreadable peers file is an error too, not an empty
-allowlist.
+The rebalancer is **on by default whenever at least one peer has an address**,
+because a cluster that has been told who its members are and how to reach them,
+and then refuses to distribute work, is the bug this loop exists to fix. It is
+off when no peer is routable — which is exactly the deny-by-default case — and
+`--no-rebalance` turns it off explicitly.
+
+Sources merge and de-duplicate on the **key**. A malformed entry is a **hard
+error naming the offending entry** (and, for a file, its line number) — never a
+silently dropped peer, because a membership list you cannot trust to be complete
+is worse than one that fails to load. An unreadable peers file is an error too,
+not an empty allowlist. `key@` with an empty address is an error as well: it is
+almost always a truncated config line, and treating it as "member with no
+address" would quietly remove that node from every placement decision.
 
 ### What this walkthrough does and does not prove
 
 - **No peers configured means no cluster.** Not "trust anyone" — the handoff
   listener is not even bound, so there is nothing for a stranger to talk to.
   Membership is deny-by-default all the way down, and the same explicit key set
-  is given to the inbound allowlist and the outbound transport.
+  gates the inbound allowlist, the outbound transport, the route directory, and
+  every placement the rebalancer proposes. An address in a config file authorizes
+  nothing on its own.
+- **A failed migration always leaves the source owning the shard**, with its
+  state intact — including a migration the rebalancer started. There is no
+  partial handoff and no window in which nobody owns a shard.
 - **Still no NAT traversal, no hole punching, no relay.** Nodes must be directly
   reachable: same LAN, a VPN, or a public IP with the handoff port open.
   Operation across the public internet is **untested** — treat a fleet as a
-  single-network capability today.
+  single-network capability today. The rebalancer does not change this; it cannot
+  route around an unroutable node, it can only back off from it and place work
+  elsewhere.
+- **Node death loses that node's shard state.** No replication, no resurrection,
+  and losses are reported as losses. See above.
 - **A redirect is a bearer credential** within its ~30s window: whoever reads it
   before it is redeemed can redeem it once. Run players over `wss://`.
 - **The node-identity proof authenticates the key, not the channel.** It does not
   bind to the transport, so TLS is still doing real work.
-- **Nothing here places shards for you automatically yet.** The CLI binds the
-  cluster door and wires session-follow; driving migrations still means calling
-  the scheduler/transport from code. TODO: a CLI-level autoscaler that observes
-  discovery ads through `RouteDirectory` and rebalances shards on its own.
+- **Peer capacity is self-reported.** A node's status answer is its own claim,
+  made over an authenticated channel. A member that lies about its size can only
+  attract or repel shards it was already authorized to hold — every actual
+  handoff to it is still membership-checked, key-pinned, two-phase and
+  epoch-fenced — but placement is not defence against a dishonest *member*.

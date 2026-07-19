@@ -302,6 +302,47 @@ impl RouteDirectory {
         Ok(route)
     }
 
+    /// Record a route the **operator configured by hand**, rather than one
+    /// learned from the phonebook.
+    ///
+    /// This is not a hole in the discovery rules, because the rules were never
+    /// about addresses — they were about who may hold authority, and that is
+    /// still [`ClusterMembership`]: a non-member address is refused here exactly
+    /// as it is in [`Self::observe`]. What changes is only the *source* of the
+    /// address, and an operator's own config file is a strictly better source
+    /// than an open phonebook, not a worse one.
+    ///
+    /// The pinned key is the one the operator wrote down, and the `fleet`
+    /// handshake still aborts unless the far side proves control of exactly that
+    /// key — so a wrong or hijacked address yields a failed connection, never a
+    /// misdirected shard.
+    ///
+    /// Operator routes carry **no lease**: they are as current as the file they
+    /// came from, and they stop being usable the moment the key is revoked from
+    /// membership (which is re-checked on every lookup). Liveness is therefore
+    /// established by actually reaching the node, not by an ad's expiry — see
+    /// [`crate::rebalance`], which treats an unanswered peer as a place not to
+    /// put work.
+    pub fn admit_operator_route(
+        &mut self,
+        route: PeerRoute,
+    ) -> Result<PeerRoute, RouteRejection> {
+        if !self.membership.contains(&route.pubkey) {
+            return Err(RouteRejection::NotAMember(route.pubkey.to_hex()));
+        }
+        if route.addr.trim().is_empty() {
+            return Err(RouteRejection::BadAddress("empty".into()));
+        }
+        self.routes.insert(
+            route.pubkey,
+            DerivedRoute {
+                route: route.clone(),
+                expires_at: u64::MAX,
+            },
+        );
+        Ok(route)
+    }
+
     /// Ingest many ads, returning the routes that were accepted. Rejections are
     /// silently skipped — an open phonebook is expected to contain entries that
     /// are not ours.

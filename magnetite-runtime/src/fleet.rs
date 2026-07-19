@@ -76,6 +76,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use magnetite_seams::blobstore::Hash;
+use magnetite_seams::discovery::Capacity;
 use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth, Sig};
 
 use crate::cluster::{ClusterMembership, RouteDirectory, RouteRejection, Redirector, SignedRedirect};
@@ -186,6 +187,34 @@ pub enum Frame {
         epoch: u64,
         /// Target signature binding `(transcript, shard, epoch)`.
         sig: Sig,
+    },
+    /// **Read-only** query: "what do you own, and how much can you hold?"
+    ///
+    /// Answered only on an already mutually-authenticated channel, and only to a
+    /// peer that passed the inbound allowlist — i.e. to a cluster member. It
+    /// changes no authority, stages nothing, and can never be a step in a
+    /// handoff: it exists so [`crate::rebalance`] can see the real cluster
+    /// instead of guessing.
+    StatusRequest,
+    /// The answer to [`Frame::StatusRequest`].
+    ///
+    /// Deliberately **unsigned**: the whole frame already travels inside the
+    /// authenticated channel, so its authorship is exactly as proven as every
+    /// other post-handshake frame. It is also advisory — a peer that lies about
+    /// its capacity can only attract or repel shards it is already authorized to
+    /// hold, and every actual handoff to it is still epoch-fenced, two-phase and
+    /// membership-checked.
+    Status {
+        /// Shard ids this node is authoritative for right now.
+        shards: Vec<u32>,
+        /// Self-declared logical cores.
+        cpu_cores: u32,
+        /// Self-declared RAM in megabytes.
+        ram_mb: u64,
+        /// Self-declared shard ceiling (`0` ⇒ derive from hardware).
+        max_shards: u32,
+        /// Self-declared free player slots.
+        free_slots: u32,
     },
 }
 
@@ -718,7 +747,55 @@ fn frame_name(f: &Frame) -> &'static str {
         Frame::Reject { .. } => "Reject",
         Frame::Commit { .. } => "Commit",
         Frame::CommitAck { .. } => "CommitAck",
+        Frame::StatusRequest => "StatusRequest",
+        Frame::Status { .. } => "Status",
     }
+}
+
+/// A capacity that claims nothing. Used before a host publishes real numbers.
+pub(crate) fn unmeasured_capacity() -> Capacity {
+    Capacity {
+        cpu_cores: 0,
+        ram_mb: 0,
+        bandwidth_mbps: 0,
+        free_slots: 0,
+        max_shards: 0,
+    }
+}
+
+/// A cloneable handle that updates what a [`FleetNode`] reports to peers.
+///
+/// Purely advisory data — it cannot grant, revoke or move authority.
+#[derive(Debug, Clone)]
+pub struct CapacityPublisher {
+    inner: Arc<Mutex<Capacity>>,
+}
+
+impl CapacityPublisher {
+    /// Replace the advertised capacity. Takes effect on the next status query.
+    pub fn publish(&self, capacity: Capacity) {
+        match self.inner.lock() {
+            Ok(mut c) => *c = capacity,
+            Err(p) => *p.into_inner() = capacity,
+        }
+    }
+}
+
+/// What a peer answered to a [`Frame::StatusRequest`].
+///
+/// Everything in here is the peer's **own claim**, made over an authenticated
+/// channel. It is used for placement arithmetic only; it is never a substitute
+/// for membership, and acting on it still goes through the ordinary two-phase,
+/// epoch-fenced, membership-checked handoff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerStatus {
+    /// The peer's node key, as proven by the handshake (not as claimed in the
+    /// frame — the frame carries no key at all).
+    pub node: PubKey,
+    /// Shards the peer says it is authoritative for.
+    pub shards: Vec<ShardId>,
+    /// The peer's self-declared capacity.
+    pub capacity: Capacity,
 }
 
 // ---------------------------------------------------------------------------
@@ -737,6 +814,9 @@ pub struct FleetNode {
     addr: std::net::SocketAddr,
     shutdown: Arc<AtomicBool>,
     timeout: Duration,
+    /// What this node reports to peers that ask for its status. Shared with the
+    /// listener threads so [`Self::publish_capacity`] takes effect live.
+    capacity: Arc<Mutex<Capacity>>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -758,7 +838,13 @@ impl FleetNode {
             .map_err(|e| HandoffError::Transport(format!("local_addr failed: {e}")))?;
         let authority = ShardAuthority::new();
         let shutdown = Arc::new(AtomicBool::new(false));
+        // Until the host publishes its measured capacity, this node advertises
+        // ZERO headroom. That is the conservative direction: a node that has not
+        // said how big it is attracts no shards, rather than attracting a share
+        // it may not be able to hold.
+        let capacity = Arc::new(Mutex::new(unmeasured_capacity()));
 
+        let t_capacity = Arc::clone(&capacity);
         let t_identity = Arc::clone(&identity);
         let t_authority = authority.clone();
         let t_allowed = allowed.clone();
@@ -782,9 +868,15 @@ impl FleetNode {
                 let c_identity = Arc::clone(&t_identity);
                 let c_authority = t_authority.clone();
                 let c_allowed = t_allowed.clone();
+                let c_capacity = Arc::clone(&t_capacity);
                 std::thread::spawn(move || {
-                    if let Err(e) = serve_conn(&mut sock, &c_identity, &c_authority, c_allowed.as_ref())
-                    {
+                    if let Err(e) = serve_conn(
+                        &mut sock,
+                        &c_identity,
+                        &c_authority,
+                        c_allowed.as_ref(),
+                        &c_capacity,
+                    ) {
                         // Refusals are expected traffic (that is the point of a
                         // fail-closed door); log and drop the connection.
                         debug!("handoff connection ended: {e}");
@@ -800,8 +892,38 @@ impl FleetNode {
             addr: local,
             shutdown,
             timeout,
+            capacity,
             handle: Some(handle),
         })
+    }
+
+    /// Set what this node reports to peers that send a [`Frame::StatusRequest`].
+    ///
+    /// Advisory only, in both directions: nothing here grants or withholds
+    /// authority, it just lets the cluster's rebalancers size this box. Takes
+    /// effect on the next status query.
+    pub fn publish_capacity(&self, capacity: Capacity) {
+        match self.capacity.lock() {
+            Ok(mut c) => *c = capacity,
+            Err(p) => *p.into_inner() = capacity,
+        }
+    }
+
+    /// A detachable handle for [`Self::publish_capacity`], so a host that
+    /// measures its hardware somewhere else (or later) can update what peers see
+    /// without holding the node itself.
+    pub fn capacity_publisher(&self) -> CapacityPublisher {
+        CapacityPublisher {
+            inner: Arc::clone(&self.capacity),
+        }
+    }
+
+    /// The capacity currently advertised to peers.
+    pub fn published_capacity(&self) -> Capacity {
+        self.capacity
+            .lock()
+            .map(|c| c.clone())
+            .unwrap_or_else(|p| p.into_inner().clone())
     }
 
     /// The address this node is listening on (resolved, so `:0` is usable).
@@ -868,6 +990,7 @@ fn serve_conn(
     identity: &RawKeypairAuth,
     authority: &ShardAuthority,
     allowed: Option<&HashSet<PubKey>>,
+    capacity: &Arc<Mutex<Capacity>>,
 ) -> Result<(), HandoffError> {
     let chan = server_handshake(sock, identity, allowed)?;
     debug!(peer = %chan.peer.to_hex(), "handoff peer authenticated");
@@ -967,6 +1090,28 @@ fn serve_conn(
                         write_frame(sock, &Frame::Reject { reason })?;
                     }
                 }
+            }
+            // Read-only cluster status. No authority is read out that a peer
+            // could not already infer by trying a handoff, and nothing is
+            // mutated. Only reachable past `server_handshake`, which has
+            // already enforced the inbound allowlist.
+            Frame::StatusRequest => {
+                let cap = capacity
+                    .lock()
+                    .map(|c| c.clone())
+                    .unwrap_or_else(|p| p.into_inner().clone());
+                let mut shards: Vec<u32> = authority.owned_shards().iter().map(|s| s.0).collect();
+                shards.sort_unstable();
+                write_frame(
+                    sock,
+                    &Frame::Status {
+                        shards,
+                        cpu_cores: cap.cpu_cores,
+                        ram_mb: cap.ram_mb,
+                        max_shards: cap.max_shards,
+                        free_slots: cap.free_slots,
+                    },
+                )?;
             }
             other => {
                 write_frame(
@@ -1157,6 +1302,64 @@ impl NetworkHandoffTransport {
     /// The route registered for a shard, if any.
     pub fn route(&self, shard: ShardId) -> Option<&PeerRoute> {
         self.routes.get(&shard.0)
+    }
+
+    /// Ask a member peer what it owns and how big it is.
+    ///
+    /// Fails closed exactly like a migration would: membership is checked before
+    /// a socket is opened, the peer's key is **pinned** by the handshake, and any
+    /// error yields `Err` rather than a half-known peer. A probe never moves a
+    /// shard and never touches authority, so a failed probe costs only a stale
+    /// view — the caller ([`crate::rebalance`]) treats that as "do not place
+    /// work there".
+    pub fn probe_peer(&self, route: &PeerRoute) -> Result<PeerStatus, HandoffError> {
+        if let Some(m) = &self.membership {
+            if !m.contains(&route.pubkey) {
+                return Err(HandoffError::Auth(format!(
+                    "node {} is not an authorized member of this cluster",
+                    route.pubkey.to_hex()
+                )));
+            }
+        }
+        let addr = route
+            .addr
+            .to_socket_addrs()
+            .map_err(|e| HandoffError::Transport(format!("bad peer address: {e}")))?
+            .next()
+            .ok_or_else(|| HandoffError::Transport("peer address resolved to nothing".into()))?;
+        let mut sock = TcpStream::connect_timeout(&addr, self.timeout)
+            .map_err(|e| HandoffError::Transport(format!("connect to {addr}: {e}")))?;
+        sock.set_read_timeout(Some(self.timeout)).map_err(io_err)?;
+        sock.set_write_timeout(Some(self.timeout)).map_err(io_err)?;
+        sock.set_nodelay(true).ok();
+
+        // Same mutual handshake as a handoff: the peer must prove the PINNED key.
+        let _chan = client_handshake(&mut sock, &self.identity, &route.pubkey)?;
+        write_frame(&mut sock, &Frame::StatusRequest)?;
+        match read_frame(&mut sock)? {
+            Frame::Status {
+                shards,
+                cpu_cores,
+                ram_mb,
+                max_shards,
+                free_slots,
+            } => Ok(PeerStatus {
+                node: route.pubkey,
+                shards: shards.into_iter().map(ShardId).collect(),
+                capacity: Capacity {
+                    cpu_cores,
+                    ram_mb,
+                    bandwidth_mbps: 0,
+                    free_slots,
+                    max_shards,
+                },
+            }),
+            Frame::Reject { reason } => Err(HandoffError::Rejected(reason)),
+            other => Err(HandoffError::Rejected(format!(
+                "expected Status, got {}",
+                frame_name(&other)
+            ))),
+        }
     }
 
     /// Migrate a shard this node owns to the node registered for it.

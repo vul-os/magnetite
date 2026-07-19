@@ -128,6 +128,7 @@ pub mod connection;
 pub mod fleet;
 pub mod follow;
 pub mod node;
+pub mod rebalance;
 pub mod server;
 pub mod shard;
 pub mod tick;

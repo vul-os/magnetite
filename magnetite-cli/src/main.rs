@@ -134,16 +134,21 @@ enum Commands {
         #[arg(long, default_value_t = 0xDEAD_BEEF_CAFE_1234u64)]
         seed: u64,
 
-        /// Authorize a peer node's public key (64 hex chars). Repeatable.
+        /// Authorize a peer node: `<hex>` or `<hex>@<host:port>`. Repeatable.
         ///
         /// This is the cluster membership list and it is DENY-BY-DEFAULT: with
         /// no peers configured this node hands shards to nobody and admits
-        /// follows from nobody (ordinary single-box behaviour). A malformed key
-        /// is a hard error, never a silently dropped entry.
+        /// follows from nobody (ordinary single-box behaviour). A malformed
+        /// entry is a hard error, never a silently dropped one.
+        ///
+        /// The optional `@host:port` is the peer's HANDOFF address. It is a
+        /// location hint only — the key is what authorizes, and the handshake
+        /// still aborts unless the far side proves control of exactly that key.
+        /// Peers given an address are the ones the rebalancer can place work on.
         ///
         /// Also readable from `MAGNETITE_CLUSTER_PEERS` (comma/whitespace
         /// separated).
-        #[arg(long = "cluster-peer", value_name = "HEX")]
+        #[arg(long = "cluster-peer", value_name = "HEX[@ADDR]")]
         cluster_peer: Vec<String>,
 
         /// File of authorized peer public keys, one 64-hex key per line.
@@ -165,6 +170,32 @@ enum Commands {
         /// Env: `MAGNETITE_NODE_KEY_FILE`.
         #[arg(long, value_name = "PATH")]
         node_key_file: Option<PathBuf>,
+
+        /// Turn the automatic cluster rebalancer OFF.
+        ///
+        /// It is ON by default whenever at least one peer was given an address
+        /// (`--cluster-peer <hex>@<addr>`), because a cluster that knows its
+        /// members and cannot reach a balanced state is the failure this loop
+        /// exists to prevent. Turning it off leaves placement entirely manual;
+        /// nothing will migrate on its own.
+        #[arg(long, default_value_t = false)]
+        no_rebalance: bool,
+
+        /// Seconds between rebalance passes. Longer is calmer: every pass that
+        /// decides to move something costs a client reconnect.
+        #[arg(long, value_name = "SECS", default_value_t = 30)]
+        rebalance_interval: u64,
+
+        /// How many shards this node may be over its fair share before anything
+        /// moves. `0` disables hysteresis and is not recommended — a greedy
+        /// bin-pack routinely differs by one shard for pure tie-breaking
+        /// reasons, and reacting to that is how a rebalancer starts thrashing.
+        #[arg(long, value_name = "N", default_value_t = 1)]
+        rebalance_deadband: u32,
+
+        /// Most migrations one rebalance pass may start.
+        #[arg(long, value_name = "N", default_value_t = 2)]
+        rebalance_max_in_flight: usize,
     },
 
     /// Deploy the game to a Magnetite runtime instance.
@@ -222,6 +253,10 @@ fn run(cli: Cli) -> Result<()> {
             cluster_peers_file,
             handoff_addr,
             node_key_file,
+            no_rebalance,
+            rebalance_interval,
+            rebalance_deadband,
+            rebalance_max_in_flight,
         } => cmd_node(
             &path,
             wasm.as_deref(),
@@ -234,6 +269,10 @@ fn run(cli: Cli) -> Result<()> {
                 cluster_peers_file,
                 handoff_addr,
                 node_key_file,
+                no_rebalance,
+                rebalance_interval,
+                rebalance_deadband,
+                rebalance_max_in_flight,
             },
         ),
         Commands::Deploy { path } => cmd_deploy(&path),
@@ -592,6 +631,10 @@ struct NodeClusterOpts {
     cluster_peers_file: Option<PathBuf>,
     handoff_addr: Option<String>,
     node_key_file: Option<PathBuf>,
+    no_rebalance: bool,
+    rebalance_interval: u64,
+    rebalance_deadband: u32,
+    rebalance_max_in_flight: usize,
 }
 
 /// Where this node's persisted keypair lives when no path was given.
@@ -752,6 +795,43 @@ fn parse_peer_pubkey(s: &str) -> Result<magnetite_seams::identity::PubKey> {
     Ok(magnetite_seams::identity::PubKey(bytes))
 }
 
+/// One authorized cluster member: a key, and optionally where to reach it.
+///
+/// The key is the authorization. The address is only a hint about where that key
+/// answers, and it confers nothing on its own — the handoff handshake still
+/// aborts unless the far side proves control of exactly `key`, so a wrong or
+/// stolen address yields a failed connection rather than a misdirected shard.
+///
+/// A peer with no address is still a full member (it may hand shards to us, and
+/// its follows are admitted); we simply have nowhere to send work, so the
+/// rebalancer never places anything on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ClusterPeer {
+    key: magnetite_seams::identity::PubKey,
+    addr: Option<String>,
+}
+
+/// Parse one membership entry: `<hex>` or `<hex>@<host:port>`.
+fn parse_cluster_peer(s: &str) -> Result<ClusterPeer> {
+    let t = s.trim();
+    match t.split_once('@') {
+        None => Ok(ClusterPeer {
+            key: parse_peer_pubkey(t)?,
+            addr: None,
+        }),
+        Some((k, addr)) => {
+            let addr = addr.trim();
+            if addr.is_empty() {
+                bail!("`{s}` has an empty address after `@`; write `<hex>@<host:port>`");
+            }
+            Ok(ClusterPeer {
+                key: parse_peer_pubkey(k)?,
+                addr: Some(addr.to_string()),
+            })
+        }
+    }
+}
+
 /// Collect the cluster membership list from flags, env, and an optional file.
 ///
 /// **Fail loudly, never drop.** A single malformed entry aborts the whole list:
@@ -761,7 +841,7 @@ fn parse_peer_pubkey(s: &str) -> Result<magnetite_seams::identity::PubKey> {
 fn collect_cluster_peers(
     flags: &[String],
     file: Option<&Path>,
-) -> Result<Vec<magnetite_seams::identity::PubKey>> {
+) -> Result<Vec<ClusterPeer>> {
     let env_list = std::env::var("MAGNETITE_CLUSTER_PEERS").ok();
     let file = file.map(PathBuf::from).or_else(|| {
         std::env::var("MAGNETITE_CLUSTER_PEERS_FILE")
@@ -778,16 +858,24 @@ fn collect_cluster_peers_from(
     flags: &[String],
     env_list: Option<&str>,
     file: Option<&Path>,
-) -> Result<Vec<magnetite_seams::identity::PubKey>> {
-    let mut out: Vec<magnetite_seams::identity::PubKey> = Vec::new();
-    let mut push = |k: magnetite_seams::identity::PubKey| {
-        if !out.iter().any(|e| e.0 == k.0) {
-            out.push(k);
+) -> Result<Vec<ClusterPeer>> {
+    let mut out: Vec<ClusterPeer> = Vec::new();
+    // De-dup on the KEY. A repeated key that carries an address upgrades the
+    // entry: the operator naming a location is strictly more information than
+    // the operator naming only a key, and it never widens who is authorized.
+    let mut push = |p: ClusterPeer| {
+        match out.iter_mut().find(|e| e.key.0 == p.key.0) {
+            Some(existing) => {
+                if existing.addr.is_none() {
+                    existing.addr = p.addr;
+                }
+            }
+            None => out.push(p),
         }
     };
 
     for raw in flags {
-        push(parse_peer_pubkey(raw).context("--cluster-peer")?);
+        push(parse_cluster_peer(raw).context("--cluster-peer")?);
     }
 
     if let Some(list) = env_list {
@@ -795,7 +883,7 @@ fn collect_cluster_peers_from(
             .split([',', ' ', '\t', '\n'])
             .filter(|t| !t.trim().is_empty())
         {
-            push(parse_peer_pubkey(tok).context("MAGNETITE_CLUSTER_PEERS")?);
+            push(parse_cluster_peer(tok).context("MAGNETITE_CLUSTER_PEERS")?);
         }
     }
 
@@ -807,7 +895,7 @@ fn collect_cluster_peers_from(
             if line.is_empty() {
                 continue;
             }
-            push(parse_peer_pubkey(line).with_context(|| {
+            push(parse_cluster_peer(line).with_context(|| {
                 format!("{}:{}: invalid peer key", path.display(), i + 1)
             })?);
         }
@@ -833,6 +921,12 @@ struct FleetWiring {
     session: magnetite_runtime::follow::FleetSession,
     /// The resolved listen address (`:0` resolved to a real port).
     addr: String,
+    /// The outbound transport, shared with the rebalance loop.
+    transport: std::sync::Arc<std::sync::Mutex<magnetite_runtime::fleet::NetworkHandoffTransport>>,
+    /// Membership-gated routes to peers the operator gave an address for.
+    directory: magnetite_runtime::cluster::RouteDirectory,
+    /// How many members we actually know how to reach.
+    routable: usize,
 }
 
 /// Bind the handoff listener and build the fleet session for `peers`.
@@ -845,33 +939,126 @@ struct FleetWiring {
 fn build_fleet(
     handoff_addr: &str,
     identity: std::sync::Arc<magnetite_seams::identity::RawKeypairAuth>,
-    peers: &[magnetite_seams::identity::PubKey],
+    peers: &[ClusterPeer],
 ) -> Result<FleetWiring> {
-    use magnetite_runtime::cluster::ClusterMembership;
-    use magnetite_runtime::fleet::FleetNode;
+    use magnetite_runtime::cluster::{ClusterMembership, RouteDirectory};
+    use magnetite_runtime::fleet::{FleetNode, PeerRoute};
     use magnetite_runtime::follow::FleetSession;
     use std::collections::HashSet;
     use std::sync::{Arc, Mutex};
 
     debug_assert!(!peers.is_empty(), "fleet wiring requires explicit peers");
 
-    let membership = ClusterMembership::from_keys(peers.iter().copied());
-    let allowed: HashSet<_> = peers.iter().copied().collect();
+    let keys: Vec<_> = peers.iter().map(|p| p.key).collect();
+    let membership = ClusterMembership::from_keys(keys.iter().copied());
+    let allowed: HashSet<_> = keys.iter().copied().collect();
 
     let node = FleetNode::bind(handoff_addr, Arc::clone(&identity), Some(allowed))
         .map_err(|e| anyhow::anyhow!("binding handoff listener on `{handoff_addr}`: {e}"))?;
     let addr = node.addr().to_string();
 
+    // Routes for the peers the operator located. The directory is gated by the
+    // SAME membership, so an address for a key that is not a member is refused
+    // here rather than becoming a quietly-usable route.
+    let mut directory = RouteDirectory::new(membership.clone());
+    let mut routable = 0usize;
+    for p in peers {
+        if let Some(a) = &p.addr {
+            directory
+                .admit_operator_route(PeerRoute::new(a.clone(), p.key))
+                .map_err(|e| {
+                    anyhow::anyhow!("route `{a}` for peer {}: {e}", hex::encode(p.key.0))
+                })?;
+            routable += 1;
+        }
+    }
+
     let transport = Arc::new(Mutex::new(
         node.transport().with_membership(membership.clone()),
     ));
-    let session =
-        FleetSession::new(identity, node.authority(), membership).with_transport(transport);
+    let session = FleetSession::new(identity, node.authority(), membership)
+        .with_transport(Arc::clone(&transport));
 
     Ok(FleetWiring {
         node,
         session,
         addr,
+        transport,
+        directory,
+        routable,
+    })
+}
+
+/// The background reconciler.
+///
+/// **On by default whenever the cluster is actually routable**, i.e. at least
+/// one peer was given an address. The reasoning: a cluster that has been told
+/// who its members are and how to reach them, and then does not distribute work,
+/// is the bug this loop exists to fix — leaving it opt-in would ship the broken
+/// default. It stays off when there is nowhere to send work, which is exactly
+/// the deny-by-default case, and `--no-rebalance` turns it off explicitly.
+///
+/// It never widens authorization. Every tick reads the same membership-gated
+/// directory and every move goes through the same two-phase, key-pinned,
+/// membership-checked handoff.
+fn spawn_rebalance_loop(
+    local: magnetite_seams::identity::PubKey,
+    transport: std::sync::Arc<std::sync::Mutex<magnetite_runtime::fleet::NetworkHandoffTransport>>,
+    directory: magnetite_runtime::cluster::RouteDirectory,
+    capacity: magnetite_seams::discovery::Capacity,
+    policy: magnetite_runtime::rebalance::RebalancePolicy,
+) -> std::thread::JoinHandle<()> {
+    use magnetite_runtime::rebalance::Rebalancer;
+    use magnetite_runtime::rebalance::SpreadScheduler;
+
+    std::thread::spawn(move || {
+        let interval = policy.interval;
+        let mut rebalancer = Rebalancer::new(local, policy, Box::new(SpreadScheduler));
+        loop {
+            std::thread::sleep(interval);
+            let now_unix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let report = {
+                let Ok(mut t) = transport.lock() else {
+                    // A poisoned transport means a migration thread panicked.
+                    // Stop reconciling rather than act on unknown state.
+                    eprintln!("rebalancer: transport lock poisoned — loop stopping");
+                    return;
+                };
+                rebalancer.tick(
+                    &mut t,
+                    &directory,
+                    &capacity,
+                    now_unix,
+                    std::time::Instant::now(),
+                )
+            };
+            for (shard, target, epoch) in &report.migrated {
+                println!(
+                    "  rebalance: shard {shard} -> {} (epoch {epoch})",
+                    hex::encode(target.0)
+                );
+            }
+            for (shard, target, err) in &report.failed {
+                eprintln!(
+                    "  rebalance: shard {shard} -> {} FAILED: {err} \
+                     (this node still owns the shard and its state)",
+                    hex::encode(target.0)
+                );
+            }
+            // Losses are printed one per line, in full, and never summarised
+            // into something that could read as a recovery.
+            for loss in &report.lost {
+                eprintln!("  rebalance: {loss}");
+                eprintln!(
+                    "  rebalance: shard {} will NOT be restarted automatically; \
+                     starting one would create a NEW world, not restore the old one",
+                    loss.shard
+                );
+            }
+        }
     })
 }
 
@@ -929,7 +1116,7 @@ fn cmd_node(
         &cluster.cluster_peer,
         cluster.cluster_peers_file.as_deref(),
     )?;
-    if peers.iter().any(|k| k.0 == node_pubkey.0) {
+    if peers.iter().any(|k| k.key.0 == node_pubkey.0) {
         eprintln!(
             "warning: this node's own key is in the membership list — harmless, \
              but a node never hands a shard to itself"
@@ -962,11 +1149,31 @@ fn cmd_node(
         .build()
         .context("creating tokio runtime")?;
 
-    let (fleet_session, fleet_addr, _handoff_node) = match fleet_wiring {
-        Some(w) => (Some(w.session), Some(w.addr), Some(w.node)),
-        None => (None, None, None),
-    };
+    let (fleet_session, fleet_addr, _handoff_node, fleet_transport, fleet_dir, routable) =
+        match fleet_wiring {
+            Some(w) => (
+                Some(w.session),
+                Some(w.addr),
+                Some(w.node),
+                Some(w.transport),
+                Some(w.directory),
+                w.routable,
+            ),
+            None => (None, None, None, None, None, 0),
+        };
+    let capacity_publisher = _handoff_node.as_ref().map(|n| n.capacity_publisher());
     let peer_count = peers.len();
+
+    // The rebalancer runs only when there is somewhere to send work: at least
+    // one member with an address. With none, the cluster is configured but not
+    // routable, and a loop would do nothing but log.
+    let rebalance_on = !cluster.no_rebalance && routable > 0;
+    let rebalance_policy = magnetite_runtime::rebalance::RebalancePolicy {
+        deadband_shards: cluster.rebalance_deadband,
+        max_in_flight: cluster.rebalance_max_in_flight.max(1),
+        interval: std::time::Duration::from_secs(cluster.rebalance_interval.max(1)),
+        ..Default::default()
+    };
 
     let result = rt.block_on(async move {
         // Default, fully-offline providers: local content store + LAN phonebook.
@@ -1070,6 +1277,27 @@ fn cmd_node(
                     "  Reachability     : peers must reach {addr} DIRECTLY — no NAT traversal, \n\
                      \x20                    no hole punching, no relay (same LAN / VPN / public IP)"
                 );
+                println!("  Routable peers   : {routable} of {peer_count} have an address");
+                if rebalance_on {
+                    println!(
+                        "  Rebalancer       : ON — every {}s, capacity-aware, deadband {} shard(s), \n\
+                         \x20                    at most {} migration(s) per pass",
+                        rebalance_policy.interval.as_secs(),
+                        rebalance_policy.deadband_shards,
+                        rebalance_policy.max_in_flight
+                    );
+                    println!(
+                        "  Node death       : LOSES that node's shard state — there is NO state \n\
+                         \x20                    replication; losses are reported, never 'recovered'"
+                    );
+                } else if cluster.no_rebalance {
+                    println!("  Rebalancer       : OFF (--no-rebalance) — placement is manual");
+                } else {
+                    println!(
+                        "  Rebalancer       : OFF — no peer has an address; pass \n\
+                         \x20                    --cluster-peer <hex>@<host:port> to make one routable"
+                    );
+                }
             }
             None => println!(
                 "  Cluster          : none configured — this node hands shards to nobody \
@@ -1079,6 +1307,24 @@ fn cmd_node(
         println!();
         println!("Press Ctrl-C to stop.");
         println!();
+
+        // Tell peers how big this box is, so their rebalancers can size it, and
+        // start our own reconciler. Both use the SAME measured capacity that
+        // was advertised to the phonebook — one number, one source.
+        if let Some(pubr) = &capacity_publisher {
+            pubr.publish(prepared.ad.capacity.clone());
+        }
+        if rebalance_on {
+            if let (Some(t), Some(d)) = (fleet_transport.clone(), fleet_dir.clone()) {
+                let _rebalancer = spawn_rebalance_loop(
+                    node_pubkey,
+                    t,
+                    d,
+                    prepared.ad.capacity.clone(),
+                    rebalance_policy.clone(),
+                );
+            }
+        }
 
         // Serve the verified, content-addressed game.
         magnetite_runtime::run_node(&blobs, Arc::clone(&discovery), &game, cfg)
@@ -1540,7 +1786,111 @@ mod tests {
         let peers =
             collect_cluster_peers_from(&[KEY_A.to_string()], None, None).unwrap();
         assert_eq!(peers.len(), 1);
-        assert_eq!(peers[0].0, [0xaa; 32]);
+        assert_eq!(peers[0].key.0, [0xaa; 32]);
+        assert_eq!(peers[0].addr, None, "a bare key carries no address");
+    }
+
+    #[test]
+    fn peer_entry_accepts_an_optional_address() {
+        let p = parse_cluster_peer(&format!("{KEY_A}@10.0.0.5:9101")).unwrap();
+        assert_eq!(p.key.0, [0xaa; 32]);
+        assert_eq!(p.addr.as_deref(), Some("10.0.0.5:9101"));
+    }
+
+    #[test]
+    fn an_empty_address_is_an_error_not_a_keyless_peer() {
+        // `key@` almost certainly means a truncated config line. Accepting it as
+        // "member with no address" would silently drop the node out of every
+        // placement decision, which is very hard to notice.
+        assert!(parse_cluster_peer(&format!("{KEY_A}@")).is_err());
+        assert!(parse_cluster_peer(&format!("{KEY_A}@   ")).is_err());
+    }
+
+    #[test]
+    fn an_address_never_substitutes_for_a_valid_key() {
+        assert!(parse_cluster_peer("not-a-key@10.0.0.5:9101").is_err());
+    }
+
+    #[test]
+    fn the_same_key_twice_keeps_the_address_that_was_given() {
+        // Bare key first, then located: the location must win, because an
+        // operator who wrote an address meant it.
+        let peers = collect_cluster_peers_from(
+            &[KEY_A.to_string(), format!("{KEY_A}@10.0.0.5:9101")],
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(peers.len(), 1, "the same key must not be authorized twice");
+        assert_eq!(peers[0].addr.as_deref(), Some("10.0.0.5:9101"));
+    }
+
+    #[test]
+    fn an_address_for_a_non_member_is_refused_by_the_route_directory() {
+        // The address plumbing must not become a way around membership.
+        use magnetite_runtime::cluster::{ClusterMembership, RouteDirectory};
+        use magnetite_runtime::fleet::PeerRoute;
+
+        let member = parse_peer_pubkey(KEY_A).unwrap();
+        let stranger = parse_peer_pubkey(KEY_B).unwrap();
+        let mut dir = RouteDirectory::new(ClusterMembership::from_keys([member]));
+
+        assert!(dir
+            .admit_operator_route(PeerRoute::new("10.0.0.5:9101", member))
+            .is_ok());
+        assert!(
+            dir.admit_operator_route(PeerRoute::new("10.0.0.6:9101", stranger))
+                .is_err(),
+            "an operator-supplied address must not confer membership"
+        );
+    }
+
+    #[test]
+    fn build_fleet_refuses_to_start_with_an_unusable_peer_address() {
+        use magnetite_seams::identity::RawKeypairAuth;
+        use std::sync::Arc;
+
+        let id = Arc::new(RawKeypairAuth::from_seed([11u8; 32]));
+        let peers = vec![ClusterPeer {
+            key: parse_peer_pubkey(KEY_A).unwrap(),
+            addr: Some("   ".to_string()),
+        }];
+        assert!(
+            build_fleet("127.0.0.1:0", id, &peers).is_err(),
+            "a blank peer address must abort start-up, not silently disable placement"
+        );
+    }
+
+    #[test]
+    fn a_located_peer_becomes_a_routable_placement_target() {
+        use magnetite_seams::identity::RawKeypairAuth;
+        use std::sync::Arc;
+
+        let id = Arc::new(RawKeypairAuth::from_seed([12u8; 32]));
+        let key = parse_peer_pubkey(KEY_A).unwrap();
+        let w = build_fleet(
+            "127.0.0.1:0",
+            id,
+            &[
+                ClusterPeer {
+                    key,
+                    addr: Some("10.0.0.5:9101".into()),
+                },
+                ClusterPeer {
+                    key: parse_peer_pubkey(KEY_B).unwrap(),
+                    addr: None,
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(w.routable, 1, "only located peers are placement targets");
+        // Both are still full MEMBERS — an address is not what authorizes.
+        assert_eq!(w.node.allowed().unwrap().len(), 2);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert!(w.directory.route_for(&key, now).is_ok());
     }
 
     #[test]
@@ -1623,7 +1973,15 @@ mod tests {
         let peer = parse_peer_pubkey(KEY_A).unwrap();
         let stranger = parse_peer_pubkey(KEY_B).unwrap();
 
-        let w = build_fleet("127.0.0.1:0", id, &[peer]).unwrap();
+        let w = build_fleet(
+            "127.0.0.1:0",
+            id,
+            &[ClusterPeer {
+                key: peer,
+                addr: None,
+            }],
+        )
+        .unwrap();
         let allowed = w
             .node
             .allowed()
