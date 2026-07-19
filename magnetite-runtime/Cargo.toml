@@ -22,8 +22,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# `tracker` module only: the HTTP transport behind the Discovery seam's
+# TrackerDiscovery. Opt-in at runtime (TRACKER_URL); the zero-config default is
+# LanDiscovery, so nothing here is required for a node to run offline.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+async-trait = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"
-# Used only by unit tests that define a custom BlobStore (async-trait) provider.
-async-trait = "0.1"

@@ -535,6 +535,31 @@ fn cmd_dev(crate_path: &Path, port: u16, max_players: u32) -> Result<()> {
 // `magnetite node`
 // ---------------------------------------------------------------------------
 
+/// This node's signing identity for tracker announcements.
+///
+/// A tracker refuses unsigned ads and binds a `(game, node)` slot to the key
+/// that first claimed it, so the key must be STABLE across restarts or the node
+/// loses its own listing. `MAGNETITE_NODE_SEED` (32-byte hex) sets it
+/// explicitly; otherwise it is derived deterministically from the bind address.
+///
+/// TODO(node-key): persist a generated keypair under the node's data dir so an
+/// operator's identity survives a change of bind address, and expose it to
+/// `magnetite node --print-key`.
+fn node_identity(bind_addr: &str) -> magnetite_seams::identity::RawKeypairAuth {
+    use magnetite_seams::identity::RawKeypairAuth;
+    if let Ok(hex_seed) = std::env::var("MAGNETITE_NODE_SEED") {
+        if let Ok(raw) = hex::decode(hex_seed.trim()) {
+            if let Ok(seed) = <[u8; 32]>::try_from(raw.as_slice()) {
+                return RawKeypairAuth::from_seed(seed);
+            }
+        }
+        eprintln!("warning: MAGNETITE_NODE_SEED is not 32 bytes of hex — deriving instead");
+    }
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(magnetite_seams::blobstore::Hash::of(bind_addr.as_bytes()).0.as_slice());
+    RawKeypairAuth::from_seed(seed)
+}
+
 fn cmd_node(
     crate_path: &Path,
     wasm_override: Option<&Path>,
@@ -611,7 +636,30 @@ fn cmd_node(
 
         // Confirm the ad is discoverable by game hash (the phonebook now knows us).
         let found = discovery.find(game, Filter::default()).await;
-        println!("  Advertised       : {} session(s) discoverable by hash", found.len());
+        println!("  Advertised       : {} session(s) discoverable by hash (LAN)", found.len());
+
+        // OPT-IN: also list on an HTTP tracker. LAN discovery above is the
+        // zero-config default and needs no service at all; a tracker is a
+        // redundant, swappable phonebook you point at with TRACKER_URL. Failing
+        // to reach one is a lost hint, never a failure to host — so this is
+        // best-effort and the node serves regardless.
+        match magnetite_runtime::tracker::from_env(node_identity(&bind_addr)) {
+            Some(tracker) => {
+                use magnetite_seams::discovery::Discovery as _;
+                match tracker.announce(prepared.ad.clone()).await {
+                    Ok(()) => println!(
+                        "  Tracker          : announced (signed by this node's key) to {}",
+                        std::env::var(magnetite_runtime::tracker::TRACKER_URL_ENV)
+                            .unwrap_or_default()
+                    ),
+                    Err(e) => println!("  Tracker          : announce failed ({e}) — LAN only"),
+                }
+            }
+            None => println!(
+                "  Tracker          : none configured (set {} to opt in)",
+                magnetite_runtime::tracker::TRACKER_URL_ENV
+            ),
+        }
         println!();
         println!("Press Ctrl-C to stop.");
         println!();

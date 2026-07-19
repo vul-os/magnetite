@@ -24,6 +24,7 @@ use crate::api::categories;
 use crate::api::channels;
 use crate::api::communities;
 use crate::api::developer;
+use crate::api::discovery;
 use crate::api::distribution;
 use crate::api::games;
 use crate::api::github;
@@ -112,6 +113,10 @@ async fn main() {
             "/contact",
             axum::routing::post(reviews::submit_contact).with_state(pool.clone()),
         )
+        // Discovery seam (§3.4) — a dumb, signature-checked tracker. A
+        // phonebook, not an authority: nodes self-advertise leased `SessionAd`s
+        // and clients query them. Demotes the central provisioning poll below.
+        .nest("/discovery", discovery::router(pool.clone()))
         .nest("/distribution", distribution::router(pool.clone()))
         .nest("/provisioning", provisioning::router(pool.clone()))
         .nest("/categories", categories::router(pool.clone()))

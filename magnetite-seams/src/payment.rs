@@ -259,6 +259,33 @@ impl PaymentRail for MockPaymentRail {
     }
 }
 
+/// The **pure** half of the paid-access gate: does this receipt admit `buyer`
+/// to something costing `min_units`?
+///
+/// Callers that own a database (the backend's comms/session gates) still have to
+/// bind the receipt to a specific item, check it is not voided, and refuse a
+/// merely *derived* account key — those facts live in their storage, not in the
+/// receipt. Everything that can be decided from the receipt alone is decided
+/// here, once, so no caller re-implements it and drifts:
+///
+/// 1. the receipt is bound to this buyer,
+/// 2. it covers at least `min_units`,
+/// 3. its arithmetic and rail signature verify.
+///
+/// **Fails closed.** `min_units == 0` means "free" and short-circuits to `true`
+/// before any receipt is consulted.
+pub fn receipt_admits<R: PaymentRail + ?Sized>(
+    rail: &R,
+    receipt: &Receipt,
+    buyer: &PubKey,
+    min_units: u64,
+) -> bool {
+    if min_units == 0 {
+        return true;
+    }
+    receipt.buyer == *buyer && receipt.total >= min_units && rail.verify_receipt(receipt)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,6 +360,35 @@ mod tests {
         // Inflate a payout -> both arithmetic and signature break.
         r.payouts[0].amount = 9999;
         assert!(!rail.verify_receipt(&r));
+    }
+
+    #[tokio::test]
+    async fn receipt_admits_is_fail_closed() {
+        let rail = MockPaymentRail::new();
+        let buyer = PubKey([0xB4; 32]);
+        let stranger = PubKey([0xB5; 32]);
+        let r = rail.checkout(&buyer, split(500, None, 0)).await;
+
+        assert!(receipt_admits(&rail, &r, &buyer, 500), "exact price admits");
+        assert!(receipt_admits(&rail, &r, &buyer, 100), "overpay admits");
+        assert!(receipt_admits(&rail, &r, &stranger, 0), "free needs nothing");
+
+        assert!(
+            !receipt_admits(&rail, &r, &buyer, 501),
+            "underpaying must never admit"
+        );
+        assert!(
+            !receipt_admits(&rail, &r, &stranger, 500),
+            "another buyer's receipt must never admit"
+        );
+
+        let mut forged = r.clone();
+        forged.total = 100_000;
+        forged.payouts[0].amount = 100_000;
+        assert!(
+            !receipt_admits(&rail, &forged, &buyer, 100_000),
+            "a re-signed-by-nobody receipt must never admit"
+        );
     }
 
     #[tokio::test]

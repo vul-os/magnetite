@@ -877,7 +877,13 @@ pub async fn has_verified_receipt(
                 );
                 return false;
             }
-            r.total >= min_units && verify_receipt(&r)
+            // The receipt-only half of the gate lives in the seam
+            // (`receipt_admits`: buyer binding, amount cover, rail signature)
+            // so this backend and the offline node path cannot drift apart.
+            // The DB-only facts — item binding, not-voided, proven key — are
+            // checked here and in `load_receipt`, which is where they live.
+            let buyer = r.buyer;
+            magnetite_seams::payment::receipt_admits(rail(), &r, &buyer, min_units)
         }
         Ok(None) => false,
         Err(e) => {

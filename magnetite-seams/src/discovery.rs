@@ -14,7 +14,8 @@ use std::sync::Mutex;
 
 use crate::blobstore::Hash;
 use crate::comms::RoomAddr;
-use crate::error::Result;
+use crate::error::{Result, SeamError};
+use crate::identity::{Identity, PubKey, Sig};
 
 /// How to reach a node hosting a session (opaque address; e.g. `ip:port`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +66,212 @@ pub struct SessionAd {
     pub voice_room: Option<RoomAddr>,
 }
 
+// ---------------------------------------------------------------------------
+// Signed announcements
+// ---------------------------------------------------------------------------
+
+/// Domain-separation tag for announce signatures (`v1`).
+pub const AD_DOMAIN: &[u8] = b"magnetite/discovery/announce/v1";
+/// Domain-separation tag for withdrawal (deregister) signatures (`v1`).
+pub const WITHDRAW_DOMAIN: &[u8] = b"magnetite/discovery/withdraw/v1";
+/// Longest TTL a tracker will honour for a single announce (10 minutes).
+///
+/// A tracker holds *soft* state: an ad is a lease a node must keep renewing by
+/// heartbeat. Capping the TTL means a node that dies cannot leave a stale entry
+/// in the phonebook for longer than this.
+pub const MAX_AD_TTL_SECS: u64 = 600;
+
+fn push_bytes(buf: &mut Vec<u8>, b: &[u8]) {
+    buf.extend_from_slice(&(b.len() as u32).to_le_bytes());
+    buf.extend_from_slice(b);
+}
+
+impl SessionAd {
+    /// Canonical, serialization-independent bytes for this ad.
+    ///
+    /// Built field-by-field (never from JSON) so two peers on different serde
+    /// versions still agree byte-for-byte on what was signed.
+    pub fn signing_bytes(&self) -> Vec<u8> {
+        let mut b = Vec::with_capacity(192);
+        b.extend_from_slice(&self.game.0);
+        push_bytes(&mut b, self.node.0.as_bytes());
+        b.extend_from_slice(&self.capacity.cpu_cores.to_le_bytes());
+        b.extend_from_slice(&self.capacity.ram_mb.to_le_bytes());
+        b.extend_from_slice(&self.capacity.bandwidth_mbps.to_le_bytes());
+        b.extend_from_slice(&self.capacity.free_slots.to_le_bytes());
+        b.extend_from_slice(&self.capacity.max_shards.to_le_bytes());
+        b.extend_from_slice(&self.ping_hint.to_le_bytes());
+        match &self.price {
+            Some(p) => {
+                b.push(1);
+                b.extend_from_slice(&p.amount.to_le_bytes());
+                push_bytes(&mut b, p.currency.as_bytes());
+                push_bytes(&mut b, p.unit.as_bytes());
+            }
+            None => b.push(0),
+        }
+        match &self.chat_room {
+            Some(r) => {
+                b.push(1);
+                push_bytes(&mut b, r.0.as_bytes());
+            }
+            None => b.push(0),
+        }
+        match &self.voice_room {
+            Some(r) => {
+                b.push(1);
+                push_bytes(&mut b, r.0.as_bytes());
+            }
+            None => b.push(0),
+        }
+        b
+    }
+}
+
+/// A [`SessionAd`] signed by the key of the node that hosts it, with a lease.
+///
+/// A tracker is a phonebook, not an authority — but a phonebook that accepts
+/// unsigned entries lets anyone list someone else's number. Every announce
+/// carries the hosting node's key and a signature over the ad plus its lease
+/// window, so a tracker can refuse forged entries **without** gaining any say
+/// over who may host what.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SignedAd {
+    /// The advertisement itself.
+    pub ad: SessionAd,
+    /// The hosting node's public key (the claimed author).
+    pub node_key: PubKey,
+    /// Unix seconds when this announce was minted.
+    pub issued_at: u64,
+    /// Unix seconds when the lease lapses; the tracker drops the ad after this.
+    pub expires_at: u64,
+    /// `node_key`'s signature over [`SignedAd::signing_bytes`].
+    pub sig: Sig,
+}
+
+impl SignedAd {
+    /// Canonical bytes covered by [`SignedAd::sig`].
+    pub fn signing_bytes(&self) -> Vec<u8> {
+        Self::payload(&self.ad, &self.node_key, self.issued_at, self.expires_at)
+    }
+
+    fn payload(ad: &SessionAd, node_key: &PubKey, issued_at: u64, expires_at: u64) -> Vec<u8> {
+        let mut b = Vec::with_capacity(256);
+        b.extend_from_slice(AD_DOMAIN);
+        b.extend_from_slice(&ad.signing_bytes());
+        b.extend_from_slice(&node_key.0);
+        b.extend_from_slice(&issued_at.to_le_bytes());
+        b.extend_from_slice(&expires_at.to_le_bytes());
+        b
+    }
+
+    /// Sign an ad with the hosting node's identity, leasing it for `ttl_secs`.
+    pub fn sign<I: Identity>(id: &I, ad: SessionAd, now: u64, ttl_secs: u64) -> Self {
+        let node_key = id.pubkey();
+        let expires_at = now.saturating_add(ttl_secs);
+        let sig = id.sign(&Self::payload(&ad, &node_key, now, expires_at));
+        Self {
+            ad,
+            node_key,
+            issued_at: now,
+            expires_at,
+            sig,
+        }
+    }
+
+    /// Verify authorship and the lease window. **Fails closed**: an unsigned,
+    /// forged, expired, or absurdly long-lived ad is refused outright.
+    ///
+    /// `skew_secs` tolerates modest clock drift on `issued_at`.
+    pub fn verify<I: Identity>(&self, now: u64, skew_secs: u64) -> Result<()> {
+        if self.expires_at <= self.issued_at {
+            return Err(SeamError::Invalid("ad lease window is empty".into()));
+        }
+        if self.expires_at.saturating_sub(self.issued_at) > MAX_AD_TTL_SECS {
+            return Err(SeamError::Invalid(format!(
+                "ad TTL exceeds the {MAX_AD_TTL_SECS}s maximum"
+            )));
+        }
+        if self.expires_at <= now {
+            return Err(SeamError::Invalid("ad lease already expired".into()));
+        }
+        if self.issued_at > now.saturating_add(skew_secs) {
+            return Err(SeamError::Invalid("ad issued in the future".into()));
+        }
+        if !I::verify(&self.node_key, &self.signing_bytes(), &self.sig) {
+            return Err(SeamError::InvalidSignature);
+        }
+        Ok(())
+    }
+
+    /// Whether this lease is still live at `now`.
+    pub fn is_live_at(&self, now: u64) -> bool {
+        self.expires_at > now
+    }
+}
+
+/// A signed request to remove one's own ad from a tracker (clean shutdown).
+///
+/// Bound to `(game, node, node_key, issued_at)` so it cannot be replayed against
+/// a *later* announce from the same node, and cannot retract anyone else's ad.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SignedWithdraw {
+    /// Game content address of the ad being withdrawn.
+    pub game: Hash,
+    /// Node address of the ad being withdrawn.
+    pub node: NodeAddr,
+    /// The withdrawing node's key — must match the ad's `node_key`.
+    pub node_key: PubKey,
+    /// Unix seconds when the withdrawal was minted.
+    pub issued_at: u64,
+    /// Signature over [`SignedWithdraw::signing_bytes`].
+    pub sig: Sig,
+}
+
+impl SignedWithdraw {
+    /// Canonical bytes covered by [`SignedWithdraw::sig`].
+    pub fn signing_bytes(&self) -> Vec<u8> {
+        Self::payload(&self.game, &self.node, &self.node_key, self.issued_at)
+    }
+
+    fn payload(game: &Hash, node: &NodeAddr, node_key: &PubKey, issued_at: u64) -> Vec<u8> {
+        let mut b = Vec::with_capacity(128);
+        b.extend_from_slice(WITHDRAW_DOMAIN);
+        b.extend_from_slice(&game.0);
+        push_bytes(&mut b, node.0.as_bytes());
+        b.extend_from_slice(&node_key.0);
+        b.extend_from_slice(&issued_at.to_le_bytes());
+        b
+    }
+
+    /// Sign a withdrawal for `(game, node)` with the hosting node's identity.
+    pub fn sign<I: Identity>(id: &I, game: Hash, node: NodeAddr, now: u64) -> Self {
+        let node_key = id.pubkey();
+        let sig = id.sign(&Self::payload(&game, &node, &node_key, now));
+        Self {
+            game,
+            node,
+            node_key,
+            issued_at: now,
+            sig,
+        }
+    }
+
+    /// Verify authorship and freshness. Fails closed.
+    pub fn verify<I: Identity>(&self, now: u64, max_age_secs: u64) -> Result<()> {
+        if self.issued_at > now.saturating_add(60) {
+            return Err(SeamError::Invalid("withdrawal issued in the future".into()));
+        }
+        if now.saturating_sub(self.issued_at) > max_age_secs {
+            return Err(SeamError::Invalid("withdrawal is stale".into()));
+        }
+        if !I::verify(&self.node_key, &self.signing_bytes(), &self.sig) {
+            return Err(SeamError::InvalidSignature);
+        }
+        Ok(())
+    }
+}
+
 /// Client-side filter applied over discovered ads.
 #[derive(Clone, Debug, Default)]
 pub struct Filter {
@@ -77,7 +284,10 @@ pub struct Filter {
 }
 
 impl Filter {
-    fn accepts(&self, ad: &SessionAd) -> bool {
+    /// Whether `ad` survives this filter. Public so a tracker can apply the
+    /// *same* predicate server-side as a bandwidth saver without the two sides
+    /// ever disagreeing on what e.g. "has a free slot" means.
+    pub fn accepts(&self, ad: &SessionAd) -> bool {
         if let Some(mp) = self.max_ping {
             if ad.ping_hint > mp {
                 return false;
@@ -256,6 +466,79 @@ mod tests {
         let found = d.find(g, Filter::default()).await;
         assert_eq!(found.len(), 1, "same (game,node) de-duped");
         assert_eq!(found[0].capacity.free_slots, 1, "latest wins");
+    }
+
+    // ── Signed announce / withdraw ──────────────────────────────────────────
+
+    use crate::identity::RawKeypairAuth;
+
+    #[test]
+    fn signed_ad_roundtrips_and_verifies() {
+        let node = RawKeypairAuth::from_seed([9u8; 32]);
+        let s = SignedAd::sign(&node, ad(b"snake", "n1", 4, 20, None), 1_000, 60);
+        assert_eq!(s.expires_at, 1_060);
+        s.verify::<RawKeypairAuth>(1_000, 30).unwrap();
+        // Survives a JSON round-trip (this is the wire form the tracker sees).
+        let json = serde_json::to_string(&s).unwrap();
+        let back: SignedAd = serde_json::from_str(&json).unwrap();
+        back.verify::<RawKeypairAuth>(1_050, 30).unwrap();
+    }
+
+    #[test]
+    fn tampered_ad_body_fails_verification() {
+        let node = RawKeypairAuth::from_seed([9u8; 32]);
+        let mut s = SignedAd::sign(&node, ad(b"snake", "n1", 4, 20, None), 1_000, 60);
+        // Re-point the ad at a different node address, keeping the signature.
+        s.ad.node = NodeAddr("attacker.example:1".into());
+        assert!(matches!(
+            s.verify::<RawKeypairAuth>(1_000, 30),
+            Err(SeamError::InvalidSignature)
+        ));
+    }
+
+    #[test]
+    fn ad_signed_by_one_key_cannot_be_claimed_by_another() {
+        let honest = RawKeypairAuth::from_seed([1u8; 32]);
+        let attacker = RawKeypairAuth::from_seed([2u8; 32]);
+        let mut s = SignedAd::sign(&honest, ad(b"snake", "n1", 4, 20, None), 1_000, 60);
+        s.node_key = attacker.pubkey();
+        assert!(s.verify::<RawKeypairAuth>(1_000, 30).is_err());
+    }
+
+    #[test]
+    fn expired_and_overlong_leases_are_refused() {
+        let node = RawKeypairAuth::from_seed([9u8; 32]);
+        let s = SignedAd::sign(&node, ad(b"snake", "n1", 4, 20, None), 1_000, 60);
+        assert!(s.verify::<RawKeypairAuth>(1_061, 30).is_err(), "expired");
+        assert!(!s.is_live_at(1_061));
+
+        let long = SignedAd::sign(
+            &node,
+            ad(b"snake", "n1", 4, 20, None),
+            1_000,
+            MAX_AD_TTL_SECS + 1,
+        );
+        assert!(
+            long.verify::<RawKeypairAuth>(1_000, 30).is_err(),
+            "a node must not be able to squat the phonebook forever"
+        );
+    }
+
+    #[test]
+    fn withdrawal_is_authored_and_fresh() {
+        let node = RawKeypairAuth::from_seed([9u8; 32]);
+        let other = RawKeypairAuth::from_seed([8u8; 32]);
+        let g = Hash::of(b"snake");
+        let w = SignedWithdraw::sign(&node, g, NodeAddr("n1".into()), 1_000);
+        w.verify::<RawKeypairAuth>(1_010, 300).unwrap();
+        assert!(w.verify::<RawKeypairAuth>(9_000, 300).is_err(), "stale");
+
+        let mut forged = SignedWithdraw::sign(&other, g, NodeAddr("n1".into()), 1_000);
+        forged.node_key = node.pubkey();
+        assert!(
+            forged.verify::<RawKeypairAuth>(1_010, 300).is_err(),
+            "nobody may retract another node's ad"
+        );
     }
 
     /// In-memory tracker backing store, keyed by game hex.

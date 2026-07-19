@@ -10,10 +10,14 @@ magnetite-runtime = { path = "../magnetite-runtime" }
 magnetite-anticheat = { path = "../magnetite-anticheat" }
 magnetite-sandbox = { path = "../magnetite-sandbox" }
 magnetite-sdk = { path = "../backend/magnetite-sdk" }
+# The six seams — the offline decentralized-loop proof programs against these
+# traits only, never a provider type.
+magnetite-seams = { path = "../magnetite-seams" }
 game-template-authoritative = { path = "../game-template-authoritative" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24" }
 futures-util = "0.3"
+async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -24,9 +28,11 @@ magnetite-runtime = { path = "../magnetite-runtime" }
 magnetite-anticheat = { path = "../magnetite-anticheat" }
 magnetite-sandbox = { path = "../magnetite-sandbox" }
 magnetite-sdk = { path = "../backend/magnetite-sdk" }
+magnetite-seams = { path = "../magnetite-seams" }
 game-template-authoritative = { path = "../game-template-authoritative" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24" }
 futures-util = "0.3"
+async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
