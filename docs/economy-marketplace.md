@@ -5,6 +5,13 @@ Magnetite ships two interlinked economic systems as platform services:
 1. **Points economy** — a platform-wide XP / score ledger usable by all games
 2. **Developer marketplace** — per-game stores where developers sell items to players
 
+> **Non-custodial.** Real-money purchases go wallet-to-wallet through the
+> `PaymentRail` seam and the developer receives the whole subtotal. There are
+> no balances, deposits, withdrawals, payouts, or platform revenue share. The
+> default rail (`MockPaymentRail`) signs receipts locally and runs offline; a
+> real chain rail is `TODO(chain)` and is **not built**. Points are *not*
+> money — they stay off-chain in a plain ledger.
+
 ---
 
 ## Points economy
@@ -53,10 +60,16 @@ and creates an `entitlements` row. No real-money transfer occurs.
 ### Design principles
 
 - **One store per game.** A developer creates exactly one store per game via
-  `POST /api/marketplace/stores`. Multiple item SKUs can be sold from a single store.
-- **Shared checkout.** The platform handles payment processing (fiat USD via Paystack) and
-  point deduction — developers don't build their own checkout.
-- **Idempotent purchases.** Every `POST /api/marketplace/items/:item_id/purchase`
+  `POST /api/v1/marketplace/games/:game_id/store`. Multiple item SKUs can be sold from a single store.
+- **Non-custodial checkout.** A USD purchase is an atomic wallet→wallet
+  `PaymentRail::checkout` from the buyer to the developer. The platform holds
+  no funds and is not in the payment path. Points purchases are pure ledger
+  moves.
+- **The receipt is the entitlement.** Checkout returns a signed `Receipt`,
+  persisted in `payment_receipts` and linked from `entitlements.receipt_id`.
+  Entitlement checks re-verify the rail signature, so a database row alone
+  never grants access.
+- **Idempotent purchases.** Every `POST /api/v1/marketplace/items/:item_id/purchase`
   requires a client-generated `idempotency_key` to prevent duplicate charges on retries.
 - **Entitlements survive deactivation.** Items can be deactivated; entitlement records
   are never deleted.
@@ -78,23 +91,44 @@ store_purchases               active, metadata
   item_id                     id
   store_id, game_id           user_id, item_id
   price_paid, currency        purchase_id
-  developer_share             granted_at, expires_at
-  platform_fee                revoked
-  status (completed|refunded)
-  idempotency_key
-  metadata
+  developer_share             receipt_id  ──┐
+  platform_fee                granted_at    │
+  status (completed|refunded) expires_at    │
+  idempotency_key             revoked       │
+  refunded_at/by/reason                     │
+  metadata                                  │
+                            payment_receipts │
+                              id  ◄──────────┘
+                              kind (item_purchase|subscription|hosting)
+                              buyer_id, buyer_pubkey
+                              purchase_id, item_id, game_id
+                              total, protocol_fee   (smallest unit)
+                              payouts (JSONB: [{wallet, amount}, …])
+                              nonce, rail, rail_pubkey, sig
+                              voided, voided_at
 ```
+
+`entitlements.receipt_id` points at the signed receipt. Verification
+re-computes the rail signature over the receipt and refuses voided receipts, so
+the entitlement row is bookkeeping — the *signature* is the authority.
 
 ### Revenue split — USD
 
 | Party | Share |
 |-------|-------|
-| Developer | **70 %** of `price_paid` |
-| Platform | **30 %** of `price_paid` |
+| Developer | **the entire subtotal** |
+| Protocol | `PROTOCOL_FEE_BPS` basis points, **default 0**, added *on top of* the subtotal |
 
-The `developer_share` and `platform_fee` columns in `store_purchases` record the
-exact amounts at purchase time. Developers request payouts via `POST /api/developer/payouts`;
-the platform processes disbursements through **Wise** (TransferWise).
+The 70/30 platform cut is gone. The developer is paid at the instant of sale by
+the buyer's wallet — there is no platform balance to debit, no developer
+balance to credit, and **no payout to request**. The legacy
+`store_purchases.developer_share` column now records the full subtotal and
+`platform_fee` records the protocol fee (0 by default).
+
+`POST /api/developer/payouts` and the Wise disbursement pipeline were deleted.
+Developers see settlement through `GET /api/v1/developer/earnings`, which sums
+non-voided receipts; its `pending_payout` field is always zero because nothing
+is ever held on a developer's behalf.
 
 ---
 
@@ -104,28 +138,35 @@ the platform processes disbursements through **Wise** (TransferWise).
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| `GET` | `/api/points/balance` | User | Authenticated user's balance |
-| `GET` | `/api/points/balance/:user_id` | Public | Any user's balance |
-| `POST` | `/api/points/award` | Admin/Game | Award points; body: `{user_id, points, reason, game_id?, metadata?}` |
-| `POST` | `/api/points/spend` | User | Spend caller's points; body: `{points, reason, game_id?, metadata?}` |
-| `GET` | `/api/points/history` | User | Paginated ledger; `?limit=&offset=` |
-| `GET` | `/api/points/leaderboard` | Public | Top balances; `?limit=&offset=` |
-| `POST` | `/api/points/season-reset` | Admin | Close season; body: `{new_season_name}` |
+| `GET` | `/api/v1/points/balance` | User | Authenticated user's balance |
+| `GET` | `/api/v1/points/balance/:user_id` | Public | Any user's balance |
+| `POST` | `/api/v1/points/award` | Admin/Game | Award points; body: `{user_id, points, reason, game_id?, metadata?}` |
+| `POST` | `/api/v1/points/spend` | User | Spend caller's points; body: `{points, reason, game_id?, metadata?}` |
+| `GET` | `/api/v1/points/history` | User | Paginated ledger; `?limit=&offset=` |
+| `GET` | `/api/v1/points/history/:user_id` | User | Another user's ledger |
+| `GET` | `/api/v1/points/leaderboard` | Public | Top balances; `?limit=&offset=` |
+| `GET` | `/api/v1/points/season` | Public | Active season |
+| `POST` | `/api/v1/points/season/reset` | Admin | Close season; body: `{new_season_name}` |
 
 ### Marketplace
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| `GET` | `/api/marketplace/stores/:game_id` | Public | Store details |
-| `GET` | `/api/marketplace/stores/:id/items` | Public | Active items; `?kind=` filter |
-| `POST` | `/api/marketplace/stores` | Developer | Create store; body: `{game_id, name, description?}` |
-| `PUT` | `/api/marketplace/stores/:id` | Developer | Update store |
-| `POST` | `/api/marketplace/stores/:id/items` | Developer | Add item; body: `{sku, name, price, currency, kind, metadata?}` |
-| `PUT` | `/api/marketplace/stores/:id/items/:item_id` | Developer | Update item |
-| `POST` | `/api/marketplace/items/:item_id/purchase` | User | Purchase; body: `{idempotency_key}` |
-| `GET` | `/api/marketplace/entitlements` | User | All owned items |
-| `GET` | `/api/marketplace/entitlements/:game_id` | User | Owned items for a game |
-| `GET` | `/api/marketplace/stores/:game_id/revenue` | Developer | Revenue breakdown |
+| `GET` | `/api/v1/marketplace/stores/:game_id` | Public | Store details |
+| `GET` | `/api/v1/marketplace/stores/:store_id/items` | Public | Active items; `?kind=` filter |
+| `GET` | `/api/v1/marketplace/items/:item_id` | Public | Single item |
+| `POST` | `/api/v1/marketplace/games/:game_id/store` | Developer | Create the game's store |
+| `PUT` | `/api/v1/marketplace/stores/:store_id` | Developer | Update store |
+| `GET` | `/api/v1/marketplace/my-stores` | Developer | Own stores |
+| `POST` | `/api/v1/marketplace/stores/:store_id/items` | Developer | Add item; body: `{sku, name, price, currency, kind, metadata?}` |
+| `PUT` | `/api/v1/marketplace/items/:item_id` | Developer | Update item |
+| `GET` | `/api/v1/marketplace/stores/:store_id/revenue` | Developer | Revenue breakdown |
+| `POST` | `/api/v1/marketplace/items/:item_id/purchase` | User | Purchase; body: `{idempotency_key}` |
+| `GET` | `/api/v1/marketplace/purchases` | User | Purchase history |
+| `GET` | `/api/v1/marketplace/purchases/:purchase_id` | User | Purchase receipt |
+| `POST` | `/api/v1/marketplace/purchases/:purchase_id/refund` | Store owner / admin | Void the receipt, revoke the entitlement |
+| `GET` | `/api/v1/marketplace/entitlements` | User | All owned items |
+| `GET` | `/api/v1/marketplace/entitlements/:item_id/check` | User | Check one entitlement |
 
 ---
 

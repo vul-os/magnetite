@@ -14,10 +14,12 @@ Build Rust games on Magnetite — from a weekend jam to a COD-scale AAA title.
 | [Controllers & Gamepad Input](./controllers.md) | `InputMap`, `GameAction`, `GamepadAxis`, binding editor |
 | [Graphics Tiers](./graphics-tiers.md) | `Lite2D` / `Standard3D` / `Advanced3D` — declare your engine tier |
 | [Points & Score Economy](./points-economy.md) | Ledger, seasons, award/spend, SDK integration |
-| [Developer Marketplace](./marketplace.md) | In-game stores, items, purchase, entitlements, revenue split |
+| [Developer Marketplace](./marketplace.md) | In-game stores, items, non-custodial purchase, entitlements |
 | [FPS Starter Template](./fps-starter.md) | `game-template-fps` — Bevy + rapier3d FPS, hitscan, gamepad |
 | [Motorsport Starter Template](./motorsport-starter.md) | `game-template-motorsport` — vehicle physics, lap → points |
 | [API Reference](../api-reference/index.md) | All REST endpoints |
+| [Hosting a server](../hosting-a-server.md) | `magnetite node`, capacity-elastic hosting, discovery |
+| [Payments](../payments.md) | Non-custodial checkout and signed receipts |
 
 ---
 
@@ -35,8 +37,14 @@ Build Rust games on Magnetite — from a weekend jam to a COD-scale AAA title.
 5. **Publish** by submitting for review via the Developer Portal; after approval your game
    appears in the marketplace.
 
-The platform handles hosting, matchmaking, netcode, leaderboards, comms (chat + voice),
-points economy, marketplace, payments, and payouts. You only write game logic.
+The platform handles the game runtime (server-authoritative sim, WASM sandbox,
+deterministic replay), hosting on capacity-elastic nodes, discovery,
+matchmaking, netcode, leaderboards, the points economy, and non-custodial
+checkout. Comms is a pluggable provider seam, not something Magnetite operates.
+You only write game logic.
+
+You can also skip the platform entirely: `magnetite dev` runs your game with no
+backend, and `magnetite node` hosts it on your own hardware.
 
 ---
 
@@ -69,8 +77,8 @@ See the [SDK Reference](./sdk.md) for all types.
 
 | Service | SDK module | Description |
 |---------|-----------|-------------|
-| Chat + voice | `platform::comms` | Real-time text chat and WebRTC voice in any lobby or community |
-| Streaming | `platform::streaming` | Go live, manage stream sessions, RTMP egress config |
+| Chat + voice | `platform::comms` | Rooms via the `CommsProvider` seam — `builtin` by default, or Matrix / Jitsi / LiveKit if the operator configures one |
+| Streaming | `platform::streaming` | Go live and manage stream sessions. Media hosting is per-node and optional (Owncast provider, or an opt-in MediaMTX profile) |
 | Points / XP | `platform::points` | Award, spend, and query the platform-wide points ledger |
 | Marketplace | `platform::marketplace` | Check entitlements, initiate server-side purchases |
 | Cloud saves | `platform::cloud_save` | Per-user, per-game save slots with conflict resolution |
@@ -79,7 +87,18 @@ See the [SDK Reference](./sdk.md) for all types.
 
 ## Developer earnings
 
-- Platform fee: **15%** on subscription revenue.
-- Developer earnings: **85%**, paid out on request via `POST /api/v1/developer/payouts`.
-- In-game store USDC purchases: **70 % developer / 30 % platform**.
-- Track earnings in your developer dashboard: `GET /api/v1/developer/dashboard`.
+**You keep the whole subtotal and there is nothing to withdraw.**
+
+- A store purchase is an atomic wallet→wallet checkout: the buyer's wallet pays
+  yours in the same transaction that mints the signed receipt. Magnetite is not
+  in the path.
+- Protocol fee: `PROTOCOL_FEE_BPS`, **default 0**, charged on top of the
+  subtotal — never deducted from your share.
+- Link a wallet with `POST /api/v1/wallet/link` so checkout has a payee.
+- Track settlement: `GET /api/v1/developer/earnings` (sums non-voided
+  receipts; `pending_payout` is always `0` because nothing is held) and
+  `GET /api/v1/developer/dashboard`.
+
+The 15/85 subscription split, the 70/30 store split, and
+`POST /api/v1/developer/payouts` were **deleted**. See
+[Payments](../payments.md).

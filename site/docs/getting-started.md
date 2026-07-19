@@ -52,13 +52,15 @@ Postgres, no Redis, no cloud account. Connect with
 ## Bring a server
 
 ```bash
-magnetite serve --advertise tracker.example.org
+magnetite node                                   # LAN discovery, zero config
+TRACKER_URL=https://tracker.example.org magnetite node   # also announce to a tracker
 ```
 
 Point the node at hardware you actually own. It measures its own cores, RAM,
-and bandwidth, and advertises what it can hold to a
-[discovery tracker](hosting-a-server.md). Player capacity is emergent from the
-box — not a config constant you have to guess at. See
+and bandwidth, content-addresses the game (BLAKE3), verifies the hash before
+executing it, and advertises what it can hold. With no `TRACKER_URL` set it
+uses `LanDiscovery` (mDNS) and needs nothing external at all. Player capacity
+is emergent from the box — not a config constant you have to guess at. See
 [Hosting a server](hosting-a-server.md) for the full capacity-elastic model.
 
 ## Next

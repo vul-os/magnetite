@@ -4,7 +4,7 @@ Procedures for updating Magnetite with minimal downtime and safe rollbacks.
 
 ## Pre-Update Checklist
 
-- [ ] Read the [CHANGELOG](../CHANGELOG.md)
+- [ ] Read the [CHANGELOG](../../CHANGELOG.md)
 - [ ] Review breaking changes
 - [ ] Backup database
 - [ ] Test in staging environment

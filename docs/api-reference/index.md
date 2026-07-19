@@ -1,22 +1,36 @@
 # API Reference
 
 The Magnetite REST API is served at `/api/v1/` on port 8080.
+
+> **This is the *node's* API, not a cloud API.** Anyone runs the node binary.
+> Nothing here is a central authority: the discovery tracker is a phonebook,
+> and payments are non-custodial — no balances, deposits, withdrawals, or
+> payouts exist. Endpoints removed with the fiat on-ramp are called out
+> explicitly below so stale client code fails loudly rather than silently.
+
 All endpoints return JSON in one of two envelopes:
 
 **Success:**
 ```json
-{ "status": "success", "data": { … } }
+{ "success": true, "data": { … }, "error": null }
 ```
 
 **Paginated success:**
 ```json
-{ "status": "success", "data": [ … ], "page": 1, "per_page": 20, "total": 142 }
+{
+  "success": true,
+  "data": [ … ],
+  "pagination": { "page": 1, "per_page": 20, "total": 142, "total_pages": 8 }
+}
 ```
 
 **Error:**
 ```json
-{ "status": "error", "message": "…", "code": 404 }
+{ "success": false, "data": null, "error": { "code": "…", "message": "…", "details": null } }
 ```
+
+(A few older handlers return their payload unwrapped; the envelope above is
+`backend/src/api/response.rs`, which the majority use.)
 
 ### Authentication
 
@@ -127,14 +141,78 @@ Manages versioned WASM artifacts and provides the play manifest consumed by the 
 
 ---
 
-## Wallet — `/api/v1/wallet`
+## Discovery — `/api/v1/discovery`
+
+The tracker: a **phonebook, not an authority**. It stores signed, leased
+self-advertisements from nodes and serves them back. It verifies signatures and
+leases; it certifies nothing about what a node claims.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/balance` | required | USDC balance |
-| `POST` | `/deposit` | required | Deposit funds |
-| `POST` | `/withdraw` | required | Withdraw funds |
-| `GET` | `/transactions` | required | Transaction history |
+| `POST` | `/announce` | Ed25519 signature | Publish or renew a `SignedAd`. Heartbeat by re-announcing |
+| `DELETE` | `/announce` | Ed25519 signature | Deregister via a `SignedWithdraw` |
+| `GET` | `/sessions` | — | Query live sessions |
+
+`GET /sessions` filters: `game` (plain BLAKE3 hex), `max_ping`,
+`free_slots_only`, `free_only`, `max_price`, `limit`. Only unexpired leases are
+ever served.
+
+**Announce body** — the seam's `SessionAd` shape, flattened, plus the
+signature envelope:
+
+```json
+{
+  "game": "<blake3 hex>",
+  "node": "<node address>",
+  "capacity": { "cpu_cores": 8, "ram_mb": 16384, "bandwidth_mbps": 1000,
+                "free_slots": 120, "max_shards": 8 },
+  "ping_hint": 24,
+  "price": { "amount": 0, "currency": "USDC", "unit": "per_hour" },
+  "chat_room": null,
+  "voice_room": null,
+  "operator": "self-declared, optional",
+  "region": "self-declared, optional"
+}
+```
+
+Rejected fail-closed (before any DB query, so these return 4xx without
+touching storage): unsigned ads, forged or price-tampered signatures,
+relabelled node keys, relabelled operator/region labels, expired,
+future-dated, or over-long leases (`MAX_AD_TTL_SECS = 600`), non-hex game
+filters, and forged withdrawals. An upsert is bound to the announcing key, so
+one node cannot take over another's `(game, node)` slot — that returns 403.
+
+Responses additionally carry tracker bookkeeping (`id`, `node_key`, `players`,
+`max_players`, `expires_at`) and best-effort catalog resolution
+(`game_title`, `game_version`), which are **null for any hash this tracker has
+never indexed** — the normal case in a decentralized network, not an error.
+
+> **Not done:** there is no multi-tracker gossip. A client queries the trackers
+> it is statically configured with (`FanoutDiscovery`); trackers do not
+> discover each other.
+
+---
+
+## Wallet — `/api/v1/wallet`
+
+**Address-only. No balances, no deposits, no withdrawals, no payouts** — the
+platform holds no funds. See [Payments](../payments.md).
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/` | required | Linked wallet address + custody posture (`custodial: false`) + rail |
+| `POST` | `/link` | required | Link an Ed25519 wallet address (32-byte hex) to the account |
+| `GET` | `/receipts` | required | Signed `payment_receipts` for this user |
+| `POST` | `/hosting/pay` | required | Open a hosting-fee payment channel (`PaymentRail::open_channel`) |
+| `GET` | `/hosting/:server_id` | required | Join-gate check for a paid server |
+
+The removed endpoints — `GET /balance`, `POST /deposit`, `POST /withdraw`,
+`GET /transactions` — no longer exist.
+
+> **Not done:** `POST /wallet/link` does not yet demand a signed challenge
+> proving key ownership, and hosting channels are a scaffold — the mock rail
+> returns a deterministic channel id and there are no off-chain signed channel
+> updates per join.
 
 ---
 
@@ -147,10 +225,19 @@ Manages versioned WASM artifacts and provides the play manifest consumed by the 
 | `GET` | `/games` | required | Developer's own games |
 | `PUT` | `/games/:id/status` | required | Update game status (e.g. submit for review) |
 | `DELETE` | `/games/:id` | required | Delete a game |
-| `GET` | `/earnings` | required | Earnings summary |
-| `GET` | `/payouts` | required | Payout history |
-| `POST` | `/payouts` | required | Request a payout |
-| `GET` | `/games/:id/players` | required | Per-game player analytics |
+| `GET` | `/earnings` | required | Receipt-backed earnings summary (`pending_payout` is always `0`) |
+| `GET` | `/wallet` | required | The developer's linked payee address |
+| `GET` | `/games/:id/players` | required | Per-game analytics |
+| `GET` | `/games/:id/analytics` | required | Alias of the above |
+| `POST` | `/games/scaffold` | required | Scaffold a game from a template |
+| `POST` | `/games/:id/build` | required | Trigger a build |
+| `GET` | `/games/:id/build-status` | required | Build status |
+| `GET` | `/games/:id/versions` | required | List versions |
+| `PUT` | `/games/:game_id/versions/:version_id/promote` | required | Promote a version |
+| `PUT` | `/games/:game_id/versions/:version_id/rollback` | required | Roll a version back |
+
+`GET /payouts` and `POST /payouts` were **deleted** — nothing is held on a
+developer's behalf, so there is nothing to request.
 
 ---
 
@@ -197,12 +284,22 @@ Manages versioned WASM artifacts and provides the play manifest consumed by the 
 
 ## Subscriptions — `/api/v1/subscriptions`
 
+Tiers are **receipt-backed feature flags**, not a recurring charge — see
+[Subscription Lifecycle](../subscriptions-lifecycle.md).
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/` | — | List subscription tiers |
-| `POST` | `/subscribe` | required | Subscribe to a tier |
-| `POST` | `/cancel` | required | Cancel subscription |
-| `GET` | `/status` | required | Current subscription status |
+| `GET` | `/` | — | List active tiers |
+| `GET` | `/plans` | — | Alias of `/` |
+| `GET` | `/me` | required | Current subscription |
+| `GET` | `/current` | required | Alias of `/me` |
+| `POST` | `/` | required | Subscribe. Paid tiers require `payment_id` = a `payment_receipts` id owned by the caller |
+| `DELETE` | `/` | required | Cancel at period end |
+| `POST` | `/cancel` | required | Alias of `DELETE /` |
+| `POST` | `/upgrade` | required | Move to a higher tier (prorated delta must be receipt-covered) |
+| `POST` | `/downgrade` | required | Move to a lower tier |
+| `GET` | `/hours` | required | Included compute hours |
+| `GET` | `/usage` | required | Game-slot usage this period |
 
 ---
 
@@ -240,12 +337,14 @@ The webhook signature is verified against `GITHUB_WEBHOOK_SECRET` using `X-Hub-S
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/paystack` | HMAC | Paystack payment event |
-| `POST` | `/circle` | HMAC | Circle USDC event |
 | `POST` | `/game` | secret | Game-server event (session end, score) |
 | `GET` | `/endpoints` | admin | List registered webhook endpoints |
 | `POST` | `/endpoints` | admin | Register a webhook endpoint |
 | `DELETE` | `/endpoints/:id` | admin | Remove a webhook endpoint |
+
+**There are no payment webhooks.** `POST /paystack` and `POST /circle` were
+deleted with the fiat on-ramp. Payment truth arrives as a signed `Receipt`, not
+as a provider callback.
 
 ---
 
@@ -271,14 +370,26 @@ All admin routes require an authenticated user with the `admin` role.
 | `PUT` | `/games/:id/approve` | Approve game for marketplace |
 | `PUT` | `/games/:id/feature` | Feature / unfeature game |
 
-**Finance**
+**Settlement** (read-only — there is no money-moving admin action)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/revenue` | Platform revenue dashboard |
-| `GET` | `/transactions` | All transactions |
-| `POST` | `/payouts/process` | Process pending payouts |
-| `POST` | `/payouts/:id/cancel` | Cancel a payout |
+| `GET` | `/revenue` | Settlement dashboard: `total_settled_units`, `settled_receipts`, `voided_receipts` |
+| `GET` | `/transactions` | Transaction log |
+
+`POST /payouts/process` and `POST /payouts/:id/cancel` were **deleted**, along
+with the custodial `POST /admin/transactions/:id/refund`. Refunds now go
+through `POST /api/v1/marketplace/purchases/:purchase_id/refund`, which voids
+the signed receipt and revokes the entitlement — see [Refunds](../refunds.md).
+
+**Moderation**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/review-reports` | Flagged reviews |
+| `POST` | `/review-reports/:id/action` | Act on a review report |
+| `GET` | `/chat-flags` | Flagged chat messages |
+| `POST` | `/chat-flags/:id/action` | Act on a chat flag |
 
 **Analytics**
 
@@ -316,6 +427,30 @@ All admin routes require an authenticated user with the `admin` role.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/` | — | List game categories |
+
+---
+
+## Marketplace — `/api/v1/marketplace`
+
+Stores, items, non-custodial purchase, receipts, entitlements, and refunds.
+Documented in full in [Developer Marketplace](../for-developers/marketplace.md)
+and [Economy & Marketplace](../economy-marketplace.md).
+
+---
+
+## Points — `/api/v1/points`
+
+Off-chain XP/score ledger. **Points are not money and are not tokenized.**
+See [Economy & Marketplace](../economy-marketplace.md).
+
+---
+
+## Comms — `/api/v1/comms`
+
+Room creation and join-credential minting through the `CommsProvider` seam
+(`builtin` by default; Matrix / Jitsi / LiveKit / Owncast if configured). A
+paid room only issues a credential after the payment receipt re-verifies.
+See [Comms](../comms.md).
 
 ---
 

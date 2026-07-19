@@ -17,19 +17,32 @@ trait CommsProvider {
 
 ## Providers
 
-| Provider | Covers |
-|----------|--------|
-| `MatrixProvider` | Text, DMs, presence, and spaces via Element homeservers |
-| `JitsiProvider` | Voice + video SFU |
-| `LiveKitProvider` | Voice + video at scale |
-| `OwncastProvider` / `PeerTubeProvider` | Live streaming + VOD |
-| `BuiltinProvider` | The demoted fallback shim — always available, never the primary path |
-| `DmtapCommsProvider` (optional) | MOTE messaging over the DMTAP substrate |
+Select one with `COMMS_PROVIDER`. Every external adapter is config-gated: if
+its service is unconfigured, it falls back to `builtin`.
 
-Matrix, Jitsi, and LiveKit are the lead providers precisely because they
+| `COMMS_PROVIDER` | Adapter | Covers |
+|---|---|---|
+| `builtin` (default) | `BuiltinAdapter` | The demoted in-house stack — text/presence/voice/streaming, zero external services, fully offline |
+| `matrix` | `MatrixAdapter` | Text, DMs, presence, and spaces via a Matrix homeserver |
+| `jitsi` | `JitsiAdapter` | Voice + video SFU |
+| `livekit` | `LiveKitAdapter` | Voice + video at scale |
+| `owncast` | `OwncastAdapter` | Live streaming + VOD |
+
+A PeerTube adapter and a DMTAP comms provider are named in the design spec but
+are **not implemented**. Neither is a DMTAP dependency of any kind — see
+[DMTAP surface](dmtap.md).
+
+Matrix, Jitsi, and LiveKit are the lead external providers precisely because they
 already exist, are already decentralized (or self-hostable), and already have
 communities maintaining them. Magnetite's job is the adapter, not the
 homeserver.
+
+> **Status.** `builtin` is the *default* so that a fresh checkout runs with no
+> external services at all — not because it is the recommended production
+> path. The external adapters are wired end to end (room addressing, scoped
+> credential minting, teardown), but a few provider-side calls are still
+> stubbed: Matrix `createRoom`/tombstone, LiveKit `RoomService` pre-create and
+> delete, and Owncast per-user chat tokens.
 
 ## One login, every room
 

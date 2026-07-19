@@ -1,5 +1,14 @@
 # System Requirements
 
+> **There is no capacity tier to buy.** A `magnetite` node measures its own
+> cores, RAM, and bandwidth on start and advertises what it can hold. Shard
+> count and player cap are **emergent from the hardware**, not config
+> constants — the numbers below are floors for running the software, not
+> quotas. See [Hosting a server](./hosting-a-server.md).
+>
+> The Postgres/Redis requirements apply to the full platform backend
+> (storefront, accounts, comms). `magnetite dev` needs neither.
+
 ## Server Requirements
 
 ### Minimum

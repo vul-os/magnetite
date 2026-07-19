@@ -1,63 +1,88 @@
-# Admin Refunds
+# Refunds
 
-Magnetite supports admin-initiated refunds for wallet transactions (deposits and payouts).  The refund pipeline is intentionally kept simple in v1: refunds are admin-only, best-effort at the payment-provider level, and always write an audit-trail record regardless of provider outcome.
+**A refund is the *void* of a signed receipt, not the reversal of a balance.**
+
+Magnetite holds no funds. There is no custodial wallet to credit, no developer
+balance to claw back, and no payment provider to call. A purchase produced a
+signed `Receipt` from the `PaymentRail` seam; that receipt is what granted the
+entitlement. Refunding therefore means: mark the receipt voided, revoke the
+entitlement it granted, and mark the purchase `refunded`.
+
+Because entitlement checks **re-verify the rail signature and the voided flag
+on every access**, voiding a receipt takes effect immediately and everywhere —
+a stale database row on its own never grants anything.
 
 ## Endpoint
 
 ```
-POST /api/v1/admin/transactions/:id/refund
-Authorization: Bearer <admin-jwt>
+POST /api/v1/marketplace/purchases/:purchase_id/refund
+Authorization: Bearer <jwt>
 Content-Type: application/json
 
-{
-  "reason": "Customer request — duplicate deposit"
-}
+{ "reason": "Customer request" }
 ```
 
-The `reason` field is optional.
+`reason` is optional.
 
-### Response
+The old admin endpoint `POST /api/v1/admin/transactions/:id/refund` and its
+custodial balance-reversal logic were **deleted**, along with the Paystack
+refund API call and the Wise provider routing. There is no provider-specific
+refund path any more, because there is no provider.
 
-```json
-{
-  "refund_id": "uuid",
-  "transaction_id": "uuid",
-  "user_id": "uuid",
-  "amount": "49.99",
-  "provider": "paystack",
-  "provider_ref": "ps_refund_abc123",
-  "status": "completed"
-}
-```
+## Authorization
 
-**Status values:**
+| Actor | Allowed |
+|-------|---------|
+| Platform admin | Any purchase |
+| The developer who owns the store | Purchases from their own store |
+| Anyone else | `403 Forbidden` |
 
-| Status | Meaning |
-|--------|---------|
-| `completed` | Provider refund succeeded; balance restored. |
-| `provider_unconfigured` | The required API key (`PAYSTACK_SECRET_KEY` or `WISE_API_TOKEN`) is not set in the environment.  The audit record is still written; the balance is still restored. |
-| `failed` | Provider API returned a non-success response.  The audit record is still written; the balance is still restored. |
+## Guards
 
-## Provider Routing
+Refunds fail closed:
 
-The refund handler determines the payment provider from the original transaction type:
+| Condition | Result |
+|-----------|--------|
+| Purchase not found | `404` |
+| Already refunded (`status = 'refunded'` or `refunded_at` set) | `400` — refunds are not repeatable |
+| Purchase status is not `completed` | `400` |
+| Caller is neither admin nor the store owner | `403` |
 
-| Transaction type | Provider |
-|-----------------|---------|
-| `deposit` | Paystack (`PAYSTACK_SECRET_KEY`) |
-| `withdrawal` | Wise (`WISE_API_TOKEN`) |
-| Any other | `none` — refund is recorded but no provider call is made. |
+The already-refunded guard is what makes the operation idempotent in effect:
+a second call is rejected rather than applied twice.
 
-## Side Effects
+## Effects
 
-1. The user's wallet balance is **credited** by the refund amount (regardless of provider outcome).
-2. A `refund` wallet transaction row is inserted.
-3. A `refund_records` row is inserted with the provider reference, status, and optional reason.
+**USD purchases** (one transaction):
 
-## Idempotency
+1. `payment_receipts.voided = true` for the receipt backing the purchase.
+2. The `entitlements` row granted by that receipt is revoked.
+3. `store_purchases.status = 'refunded'`, with `refunded_at`, `refunded_by`, and `refund_reason` recorded.
 
-The refund endpoint does **not** enforce idempotency in v1 — calling it twice on the same transaction ID will credit the wallet twice and create two audit rows.  Admins should verify the audit log before issuing a second refund.
+**Points purchases:** the points are re-awarded through `PointsService` (which
+manages its own transaction), then the same purchase/entitlement bookkeeping
+runs.
 
-## Legal Notes
+## Not done
 
-Many jurisdictions (EU, UK, US card networks) require refund capability.  The current implementation satisfies the technical requirement; legal compliance (14-day cooling-off, chargeback dispute handling) is a process concern outside the platform's current scope.  See `docs/requirements.md` for the roadmap item.
+A refund today **does not move money**. Voiding the receipt removes the
+buyer's access, but with the default `MockPaymentRail` there is nothing to
+transfer back. The code carries an explicit `TODO(chain)` in
+`backend/src/services/marketplace.rs`: with a real chain rail, a refund should
+issue a compensating wallet→wallet transfer from the developer back to the
+buyer (or settle it from an escrow/dispute window) and record that transfer's
+receipt. Until a real rail exists, treat a refund as *entitlement revocation*,
+not as a repayment.
+
+## Legal note
+
+Many jurisdictions require a refund capability. Revoking the entitlement is the
+technical half. Because the platform never takes custody of the payment, the
+commercial half (actually returning funds) is a settlement between buyer and
+developer on whatever rail they used — not something Magnetite can perform on
+their behalf.
+
+## See also
+
+- [Payments](./payments.md) — the non-custodial model
+- [Economy & Marketplace](./economy-marketplace.md) — stores, items, entitlements

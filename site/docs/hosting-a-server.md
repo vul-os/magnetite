@@ -33,13 +33,17 @@ the same game code walk the full topology ladder:
 
 ## Clusters and federated meshes
 
-An operator who brings many boxes gets a **shard mesh** with cross-node
-handoff — the cluster case. Past the cluster, **other operators' nodes can
-join the same mesh**: federated compute, paid per-seat or per-hour through the
-non-custodial `PaymentRail` (see [Payments](payments.md)). This is the real
-"bring any server, it scales to infinity" property — capacity isn't rented
-from Magnetite, it's contributed by whoever chooses to run a node, and paid
-for wallet-to-wallet between the player, the developer, and the operator.
+The design target is a **shard mesh** across an operator's many boxes, and past
+the cluster, **other operators' nodes joining the same mesh**: federated
+compute, paid per-seat or per-hour through the non-custodial `PaymentRail`
+(see [Payments](payments.md)). Capacity isn't rented from Magnetite; it's
+contributed by whoever chooses to run a node.
+
+> **Status — not done.** Multi-shard hosting on a *single* box is real,
+> tested, and deterministic, and the `HandoffTransport` seam plus its loopback
+> implementation are real. **Cross-node handoff over the network is not
+> built:** `NetworkHandoffTransport` fails closed with a documented TODO. A
+> cluster of boxes does not yet hand players between machines.
 
 ## Discovery is a phonebook, not a gatekeeper
 
@@ -59,9 +63,19 @@ magnetite build
 # run it locally with zero backend
 magnetite dev
 
-# put it on hardware you own and join the discovery mesh
-magnetite serve --wasm path/to/game.wasm --advertise tracker.example.org
+# put it on hardware you own — LAN discovery, nothing external required
+magnetite node --wasm path/to/game.wasm --host 0.0.0.0 --port 9000
+
+# ...and additionally announce to a tracker
+TRACKER_URL=https://tracker.example.org magnetite node --wasm path/to/game.wasm
 ```
+
+`magnetite node` builds (or loads) the module, content-addresses it with
+BLAKE3, **verifies the hash before executing it**, measures this box, and
+self-advertises. The tracker is opt-in: with no `TRACKER_URL`, `LanDiscovery`
+(mDNS) is the default and no external service is involved. An unreachable
+tracker is treated as a lost hint, not a failed boot; the node renews its lease
+on a heartbeat and retracts its ad on exit.
 
 There is no cloud account to create and no capacity to request — the box you
 run it on *is* the capacity.

@@ -40,9 +40,13 @@ Plaintext passwords are never stored or logged.
 
 | Role | Capabilities |
 |------|-------------|
-| `user` | Play games, manage own wallet/profile/social |
-| `developer` | All of `user` + manage own games, view earnings, request payouts |
-| `admin` | All routes including `admin::*`, user moderation, financial operations |
+| `user` | Play games, link a wallet address, view own receipts, manage profile/social |
+| `developer` | All of `user` + manage own games, view receipt-backed earnings, refund own store's purchases |
+| `admin` | All routes including `admin::*`, user moderation, refunds, settlement dashboards |
+
+There is no money-moving admin action. Admin financial routes are read-only
+dashboards plus receipt voiding; the payout-processing endpoints were deleted
+along with custody.
 
 Admin routes enforce `middleware::admin_middleware` (role check after JWT validation).
 
@@ -113,8 +117,60 @@ In production set this to your exact frontend domain — never `*`.
 **GitHub** webhooks are verified with `HMAC-SHA256` against `GITHUB_WEBHOOK_SECRET`
 using the `X-Hub-Signature-256` header.
 
-**Paystack / Circle** webhooks are verified with provider-specific HMAC signatures.
-Do not process webhook events without verifying the signature first.
+**There are no payment webhooks.** The Paystack and Circle webhook handlers were
+deleted with the fiat on-ramp; payment truth arrives as a signed `Receipt`, not
+as a provider callback. The only remaining webhook surfaces are GitHub CI,
+`POST /api/v1/webhooks/game` (shared-secret game-server events), and the
+admin-managed outbound endpoint registry.
+
+---
+
+## Signature verification (the fail-closed core)
+
+Three separate signature checks carry the security of the decentralized model.
+All three fail closed.
+
+### Payment receipts
+
+`PaymentRail::verify_receipt` re-verifies the rail's signature over a stored
+receipt on **every** entitlement check, paid-session start, and paid-room join.
+A `payment_receipts` or `entitlements` row on its own never grants access. The
+shared `receipt_admits` predicate checks buyer binding, amount cover, and the
+rail signature; the database-side checks (item binding, not voided, key
+provenance) live alongside it so the offline node path and the backend gate
+cannot drift.
+
+**Key provenance is a type distinction.** `AccountKey::for_addressing()` is
+infallible and used for routing/display; `for_authorization()` **fails closed
+on derived keys**. Paid rooms demand a *proven* (linked) key before the receipt
+is even looked up, and the receipt gate refuses any receipt bound to a derived
+key — which is what stops a forged or back-filled row from buying access.
+
+### Content-addressed game modules
+
+A game's identity is the BLAKE3 hash of its module. `load_verified_game`
+re-hashes the bytes it received and refuses to execute on mismatch, so a lying
+blob store cannot substitute a different module. This is verified by tests that
+assert both a lying store and a missing blob are rejected.
+
+### Discovery announcements
+
+Every `SessionAd` posted to a tracker is an Ed25519-signed `SignedAd` with a
+lease window, and every deregistration is a `SignedWithdraw`. Verification runs
+**before any database query**, and rejects forged signatures, relabelled node
+keys, relabelled operator/region labels, unsigned ads, empty/expired/
+future-dated leases, and leases longer than `MAX_AD_TTL_SECS` (600).
+
+Slot ownership is enforced in SQL: the upsert is bound by
+`WHERE discovery_ads.node_key = EXCLUDED.node_key`, so a validly-signed node
+cannot take over another node's `(game, node)` slot — the hijack affects zero
+rows and returns 403.
+
+**A tracker is a phonebook, not an authority.** Operator and region labels are
+*node-declared*: they are covered by the ad signature (so a relay cannot
+relabel someone else's box) but no tracker can verify them, and the UI renders
+them as self-declared. Leases lapse within 10 minutes without a heartbeat, so
+even a tracker restored from backup converges to whoever is actually up.
 
 ---
 
@@ -125,7 +181,8 @@ Do not process webhook events without verifying the signature first.
 - [ ] `JWT_SECRET` is at least 32 random bytes (`openssl rand -hex 32`)
 - [ ] `POSTGRES_PASSWORD` is unique and not the default
 - [ ] GitHub App private key is stored as an environment variable, not a file in the repo
-- [ ] Payment API keys are in environment variables only — never committed
+- [ ] **There are no payment secrets to manage.** The `PaymentRail` seam is non-custodial: no provider key, no payout credential, nothing to fund. `OPERATOR_WALLET_PUBKEY` is a *public* key, not a secret
+- [ ] `MAGNETITE_NODE_SEED` (if set) is treated as a secret — it is the node's announce-signing identity. Note this is a **stopgap**; a persisted node keypair is not implemented
 
 **Network**
 

@@ -143,15 +143,21 @@ Only `live` games appear in the public marketplace (`GET /api/v1/games`).
 
 ## Developer earnings
 
-When a player session ends the platform records play time and calculates earnings:
+Earnings are **receipt-backed and non-custodial**. Every sale is an atomic
+wallet→wallet checkout that pays the developer directly and mints a signed
+receipt; there is no accrual, no platform cut, and no payout step.
 
-- Revenue = session payment (entry fee or subscription share)
-- Platform fee = 15% of revenue
-- Developer earnings = 85% of revenue
+- `GET /api/v1/developer/earnings` — sums non-voided `payment_receipts`
+  (`total − protocol_fee`) for the developer's games. `pending_payout` is
+  always `0`: nothing is ever held on a developer's behalf.
+- `GET /api/v1/developer/dashboard` — headline stats.
+- `GET /api/v1/developer/games/:id/analytics` — per-game series.
 
-Developers see a breakdown in their dashboard (`GET /api/v1/developer/dashboard`) and
-can request payouts (`POST /api/v1/developer/payouts`) once earnings exceed the minimum
-threshold.
+A paid session additionally requires a **verified, non-voided receipt** before
+it starts; it fails closed if one is missing.
+
+`POST /api/v1/developer/payouts`, the 15/85 subscription split, and the minimum
+payout threshold were **deleted**. See [Payments](../payments.md).
 
 ---
 
