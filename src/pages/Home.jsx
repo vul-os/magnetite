@@ -1,4 +1,5 @@
 import './Home.css';
+import magnetiteLogo from '../assets/magnetite-logo.svg';
 
 const features = [
   {
@@ -360,7 +361,7 @@ export default function Home() {
           <div className="footer-main">
             <div className="footer-brand">
               <div className="footer-logo">
-                <div className="footer-logo-icon" aria-hidden="true">M</div>
+                <img src={magnetiteLogo} className="footer-logo-icon" aria-hidden="true" alt="" />
                 <span>Magnetite</span>
               </div>
               <p>Open-source Rust gaming at any scale. MIT forever.</p>

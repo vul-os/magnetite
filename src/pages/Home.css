@@ -864,14 +864,9 @@
 .footer-logo-icon {
   width: 40px;
   height: 40px;
-  background: var(--color-accent);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-lg);
-  font-weight: 800;
-  color: #000;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(123, 97, 255, 0.35));
 }
 
 .footer-logo span {
