@@ -1,240 +1,729 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-theme-pref="system">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Magnetite — The decentralized, self-hostable Rust game platform.</title>
-<meta name="description" content="Bring any server. It scales to your hardware. Content-addressed games, deterministic WASM sandboxing, replay-verified anti-cheat, and non-custodial crypto payments — no cloud required.">
-<link rel="icon" href="./assets/magnetite-logo.svg">
-<style>*,*::before,*::after{box-sizing:border-box}
-:root{
-  --bg:#08090c; --bg-soft:#0c0d12; --panel:#111319; --panel-2:#15171f;
-  --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.12);
-  --text:#e7e9ee; --muted:#9aa1b1; --faint:#6b7280;
-  --radius:16px; --max:1120px;
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-}
-html{scroll-behavior:smooth}
-body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16px}
-body::before{content:"";position:fixed;inset:0;z-index:-1;background:
-  radial-gradient(1100px 600px at 80% -10%, color-mix(in srgb,var(--accent) 20%, transparent), transparent 60%),
-  radial-gradient(900px 500px at -10% 10%, color-mix(in srgb,var(--accent-2) 14%, transparent), transparent 55%),
-  var(--bg);}
-a{color:inherit;text-decoration:none}
-img{max-width:100%;display:block}
-.wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
-.accent{color:var(--accent)}
+<meta charset="utf-8" />
+<title>magnetite — a game is a portable object, a node is generic compute</title>
+<meta name="description" content="magnetite is a Rust games platform built on deterministic authoritative simulation: clients send inputs, a WASM sandbox steps the world, and anyone can re-simulate the log to prove tampering. A node measures its own hardware and fills it. Mid-redesign toward no central cloud — this page separates what runs today from what is still specified." />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="./assets/magnetite-mark.svg" />
 
-/* Header */
-.site-header{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);background:color-mix(in srgb,var(--bg) 72%, transparent);border-bottom:1px solid var(--border)}
-.nav{display:flex;align-items:center;gap:18px;height:64px}
-.brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:18px;letter-spacing:-.02em}
-.brand .tile{width:34px;height:34px;border-radius:9px;background:#0c0d12;display:grid;place-items:center;padding:5px;box-shadow:0 1px 0 rgba(255,255,255,.08) inset, 0 4px 14px rgba(0,0,0,.5);border:1px solid var(--border-2)}
-.brand .tile img,.brand .tile svg{width:100%;height:100%;object-fit:contain}
-.nav-spacer{flex:1}
-.nav-links{display:flex;align-items:center;gap:22px}
-.nav-links a{color:var(--muted);font-size:14.5px;font-weight:500;transition:color .15s}
-.nav-links a:hover{color:var(--text)}
-.vulos-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border-2);border-radius:999px;font-size:13px;color:var(--muted);transition:border-color .15s,color .15s}
-.vulos-badge:hover{border-color:var(--accent);color:var(--text)}
-.vulos-badge img{width:16px;height:16px;border-radius:4px}
-@media(max-width:760px){.nav-links{display:none}}
+<!-- Resolve theme before paint to avoid a flash. Preference (light|dark|system)
+     lives in localStorage 'vulos-theme'; <html data-theme> holds the RESOLVED
+     light|dark value so CSS and theme-aware imagery switch together. -->
+<script>
+  (function () {
+    try {
+      var pref = localStorage.getItem('vulos-theme') || 'system';
+      var sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      var resolved = pref === 'system' ? sys : pref;
+      document.documentElement.setAttribute('data-theme', resolved);
+      document.documentElement.setAttribute('data-theme-pref', pref);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
 
-/* Buttons */
-.btn{display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:11px;font-weight:600;font-size:15px;border:1px solid transparent;cursor:pointer;transition:transform .12s,box-shadow .2s,background .2s,border-color .2s}
-.btn:hover{transform:translateY(-1px)}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#0a0715;box-shadow:0 8px 26px -8px color-mix(in srgb,var(--accent) 70%, transparent)}
-.btn-primary:hover{box-shadow:0 12px 34px -8px color-mix(in srgb,var(--accent) 80%, transparent)}
-.btn-ghost{background:var(--panel);border-color:var(--border-2);color:var(--text)}
-.btn-ghost:hover{border-color:var(--accent)}
+<style>
+  /* ─────────────────────────────────────────────────────────────────────────
+     magnetite mini-site — self-contained brand styles.
 
-/* Hero */
-.hero{padding:84px 0 56px}
-.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%, transparent);border:1px solid color-mix(in srgb,var(--accent) 28%, transparent);padding:6px 13px;border-radius:999px}
-.hero h1{font-size:clamp(40px,7vw,68px);line-height:1.04;letter-spacing:-.035em;margin:22px 0 0;font-weight:800}
-.hero .tagline{font-size:clamp(18px,2.4vw,23px);color:var(--text);margin:18px 0 0;max-width:720px;font-weight:500}
-.hero .blurb{font-size:16.5px;color:var(--muted);margin:18px 0 0;max-width:680px}
-.cta-row{display:flex;flex-wrap:wrap;gap:13px;margin-top:30px}
-.hero-visual{margin-top:54px;border-radius:var(--radius);border:1px solid var(--border-2);overflow:hidden;box-shadow:0 40px 80px -30px rgba(0,0,0,.7);background:var(--panel)}
-.hero-visual img{width:100%;display:block}
+     IDENTITY: "Lodestone" — magnetite is magnetic iron ore, and the page reads
+     as machined iron: graphite-blue neutrals, hard edges, a faint field-line
+     grid. Two accents with fixed meanings, never used decoratively:
+       · VIOLET  is the verifiable core — determinism, replay, proof.
+       · MAGENTA (--spark) marks the one boundary where verification stops:
+         client-attested sensor input, which no replay can check.
+     Amber is functional only: it means "specified, not built".
+       · fonts   Space Grotesk (display) · Inter (body) · JetBrains Mono (code)
+       · violet  #5B3FE0 light / #8B74FF dark
+       · spark   #C4006B light / #FF4D9D dark
+     All fonts are vendored under ./fonts — nothing is fetched
+     from a CDN at runtime, and the page makes no network request at all.
+     ───────────────────────────────────────────────────────────────────────── */
 
-/* Stat row */
-.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:44px}
-@media(max-width:760px){.stat-row{grid-template-columns:1fr 1fr}}
-.stat{border:1px solid var(--border);border-radius:12px;padding:16px 18px;background:var(--panel)}
-.stat b{display:block;font-size:22px;letter-spacing:-.02em}
-.stat span{color:var(--muted);font-size:13px}
+  @font-face {
+    font-family: 'Space Grotesk var';
+    src: url('./fonts/space-grotesk.woff2') format('woff2');
+    font-weight: 300 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Inter var';
+    src: url('./fonts/inter.woff2') format('woff2');
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono var';
+    src: url('./fonts/jetbrains-mono.woff2') format('woff2');
+    font-weight: 100 800; font-style: normal; font-display: swap;
+  }
 
-/* Sections */
-.section{padding:64px 0}
-.section h2{font-size:clamp(26px,4vw,36px);letter-spacing:-.03em;margin:0 0 8px;font-weight:800}
-.section .lead{color:var(--muted);margin:0 0 38px;font-size:17px;max-width:640px}
+  :root {
+    --display: 'Space Grotesk var', 'Inter var', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --sans: 'Inter var', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: 'JetBrains Mono var', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 
-/* Features */
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-@media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}
-@media(max-width:620px){.grid{grid-template-columns:1fr}}
-.card{background:linear-gradient(180deg,var(--panel),var(--bg-soft));border:1px solid var(--border);border-radius:var(--radius);padding:24px;transition:border-color .2s,transform .2s}
-.card:hover{border-color:color-mix(in srgb,var(--accent) 45%, var(--border));transform:translateY(-2px)}
-.card .dot{width:34px;height:34px;border-radius:9px;background:color-mix(in srgb,var(--accent) 16%, transparent);border:1px solid color-mix(in srgb,var(--accent) 35%, transparent);display:grid;place-items:center;margin-bottom:15px}
-.card .dot::after{content:"";width:11px;height:11px;border-radius:3px;background:var(--accent)}
-.card h3{margin:0 0 8px;font-size:17.5px;letter-spacing:-.01em}
-.card p{margin:0;color:var(--muted);font-size:14.5px}
-.card code{font-family:var(--mono);font-size:.86em;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px;color:var(--text)}
+    --maxw: 1120px;
+    --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 26px;
+    --ease: cubic-bezier(.22,.61,.36,1);
+  }
 
-/* Quickstart */
-.quick{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;align-items:center}
-@media(max-width:820px){.quick{grid-template-columns:1fr}}
-.codeblock{background:#0a0b10;border:1px solid var(--border-2);border-radius:var(--radius);overflow:hidden}
-.codeblock .bar{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid var(--border)}
-.codeblock .bar i{width:11px;height:11px;border-radius:50%;background:#2a2e3a;display:inline-block}
-.codeblock pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13.5px;line-height:1.75;color:#cbd5e1}
-.codeblock .c{color:var(--faint)}
-.steps{list-style:none;margin:0;padding:0;display:grid;gap:16px}
-.steps li{display:flex;gap:14px;align-items:flex-start}
-.steps .num{flex:none;width:28px;height:28px;border-radius:8px;background:color-mix(in srgb,var(--accent) 16%, transparent);border:1px solid color-mix(in srgb,var(--accent) 35%, transparent);color:var(--accent);font-weight:700;display:grid;place-items:center;font-size:14px}
-.steps b{display:block;font-size:15.5px}
-.steps span{color:var(--muted);font-size:14px}
+  /* ── Cold iron (dark) — the magnetite default canvas ── */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg-base: #0A0C11;
+    --bg-primary: #0F1218;
+    --bg-secondary: #14181F;
+    --bg-elevated: #191E27;
+    --bg-hover: #1E242F;
+    --border: #212734;
+    --border-strong: #364052;
+    --text: #E9ECF3;
+    --text-2: #98A1B3;
+    --text-3: #656D7E;
+    --accent: #8B74FF;
+    --accent-hover: #A794FF;
+    --accent-ink: #0A0616;
+    --accent-dim: rgba(139,116,255,.14);
+    --accent-glow: rgba(139,116,255,.24);
+    --spark: #FF4D9D;
+    --spark-dim: rgba(255,77,157,.13);
+    --planned: #FFB020;
+    --planned-dim: rgba(255,176,32,.13);
+    --shipped: #4ADE80;
+    --shipped-dim: rgba(74,222,128,.12);
+    --field-line: rgba(233,236,243,.055);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.5), 0 4px 14px rgba(0,0,0,.42);
+    --shadow-lg: 0 30px 80px -24px rgba(0,0,0,.86), 0 8px 30px rgba(0,0,0,.5);
+  }
 
-/* Seams */
-.seams{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-@media(max-width:760px){.seams{grid-template-columns:1fr}}
-.seam{display:flex;gap:14px;border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--panel)}
-.seam .tag{flex:none;font-family:var(--mono);font-size:11px;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%, transparent);border:1px solid color-mix(in srgb,var(--accent) 30%, transparent);border-radius:7px;padding:4px 8px;height:fit-content}
-.seam h4{margin:0 0 4px;font-size:15px}
-.seam p{margin:0;color:var(--muted);font-size:13.5px}
+  /* ── Milled steel (light) ── */
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --bg-base: #F1F2F7;
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F8F9FC;
+    --bg-elevated: #FFFFFF;
+    --bg-hover: #EBEDF4;
+    --border: #E0E3EC;
+    --border-strong: #C0C6D4;
+    --text: #11141B;
+    --text-2: #4D5464;
+    --text-3: #818899;
+    --accent: #5B3FE0;
+    --accent-hover: #4930C0;
+    --accent-ink: #FFFFFF;
+    --accent-dim: rgba(91,63,224,.08);
+    --accent-glow: rgba(91,63,224,.15);
+    --spark: #C4006B;
+    --spark-dim: rgba(196,0,107,.08);
+    --planned: #A45B00;
+    --planned-dim: rgba(164,91,0,.10);
+    --shipped: #17803D;
+    --shipped-dim: rgba(23,128,61,.10);
+    --field-line: rgba(17,20,27,.05);
+    --shadow-sm: 0 1px 2px rgba(20,25,40,.06), 0 6px 18px rgba(20,25,40,.07);
+    --shadow-lg: 0 34px 80px -30px rgba(25,30,60,.32), 0 10px 30px rgba(25,30,60,.10);
+  }
 
-/* Vulos band */
-.vulos-band{margin:24px 0;background:linear-gradient(120deg,var(--panel),var(--bg-soft));border:1px solid var(--border);border-radius:var(--radius);padding:40px;display:flex;gap:26px;align-items:center}
-@media(max-width:680px){.vulos-band{flex-direction:column;text-align:center}}
-.vulos-band img{width:60px;height:60px;border-radius:14px;flex:none}
-.vulos-band h3{margin:0 0 6px;font-size:21px}
-.vulos-band p{margin:0;color:var(--muted);max-width:680px}
-.vulos-band .more{margin-top:14px;display:inline-flex;color:var(--accent);font-weight:600;font-size:15px}
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
-/* Footer */
-.site-footer{border-top:1px solid var(--border);margin-top:40px;padding:40px 0}
-.foot{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
-.foot .left{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
-.foot .left img{width:20px;height:20px;border-radius:5px}
-.foot .links{display:flex;gap:20px;flex-wrap:wrap}
-.foot .links a{color:var(--muted);font-size:14px}
-.foot .links a:hover{color:var(--text)}
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg-base);
+    color: var(--text);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  a { color: inherit; text-decoration: none; }
+  img, svg { max-width: 100%; display: block; }
+  ::selection { background: var(--accent-glow); }
+
+  .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -.02em; line-height: 1.1; margin: 0; }
+  code, pre, .mono { font-family: var(--mono); }
+  .link { color: var(--accent); font-weight: 600; }
+  .link:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  /* ── Top bar ─────────────────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 60;
+    backdrop-filter: blur(14px);
+    background: color-mix(in srgb, var(--bg-base) 82%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-in {
+    max-width: var(--maxw); margin: 0 auto; padding: 0 24px;
+    height: 64px; display: flex; align-items: center; gap: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .plaque {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    display: grid; place-items: center; padding: 5px; box-shadow: var(--shadow-sm);
+  }
+  .brand-word { font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: -.03em; }
+  .grow { flex: 1; }
+  .nav-links { display: flex; align-items: center; gap: 20px; }
+  .nav-links a { color: var(--text-2); font-size: 14px; font-weight: 500; transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+  @media (max-width: 980px) { .nav-links { display: none; } }
+
+  .seg {
+    display: inline-flex; align-items: center; gap: 2px; padding: 3px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .seg button {
+    display: grid; place-items: center; width: 30px; height: 28px;
+    border: 0; background: transparent; color: var(--text-3); cursor: pointer;
+    border-radius: 999px; transition: color .15s, background .15s;
+  }
+  .seg button:hover { color: var(--text-2); }
+  .seg button svg { width: 16px; height: 16px; }
+  .seg button[aria-pressed='true'] {
+    background: var(--bg-elevated); color: var(--accent);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .vulos-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 13px 6px 7px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg-secondary);
+    color: var(--text-2); font-size: 13px; font-weight: 600;
+    transition: border-color .18s, color .18s;
+  }
+  .vulos-btn:hover { border-color: var(--accent); color: var(--text); }
+  .vulos-btn img { width: 20px; height: 20px; border-radius: 6px; }
+  @media (max-width: 620px) { .vulos-btn .lead { display: none; } }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: var(--r-md);
+    font-family: var(--sans); font-weight: 600; font-size: 14.5px;
+    border: 1px solid transparent; cursor: pointer;
+    transition: transform .16s var(--ease), background .18s, border-color .18s, color .18s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-ghost { background: var(--bg-primary); border-color: var(--border-strong); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Hero ────────────────────────────────────────────────────────────── */
+  .hero { position: relative; padding: 76px 0 52px; overflow: hidden; }
+  .hero::before {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      linear-gradient(var(--field-line) 1px, transparent 1px) 0 0 / 100% 78px,
+      linear-gradient(90deg, var(--field-line) 1px, transparent 1px) 0 0 / 78px 100%,
+      radial-gradient(700px 380px at 76% -10%, var(--accent-glow), transparent 68%);
+    mask-image: linear-gradient(180deg, #000 0%, transparent 88%);
+  }
+  .hero .wrap { position: relative; z-index: 1; }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+    letter-spacing: .07em; text-transform: uppercase;
+    color: var(--planned); background: var(--planned-dim);
+    border: 1px solid color-mix(in srgb, var(--planned) 32%, transparent);
+    padding: 6px 13px; border-radius: 999px;
+  }
+  .hero h1 {
+    font-size: clamp(38px, 6.2vw, 64px); letter-spacing: -.035em;
+    margin: 22px 0 0; font-weight: 700; max-width: 17ch;
+  }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero .tagline { font-size: clamp(17px, 2.1vw, 21px); color: var(--text); margin: 20px 0 0; max-width: 720px; font-weight: 500; }
+  .hero .blurb { font-size: 16px; color: var(--text-2); margin: 16px 0 0; max-width: 700px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+
+  .status-line {
+    margin: 24px 0 0; max-width: 740px;
+    font-size: 13.5px; line-height: 1.7; color: var(--text-2);
+    border-left: 3px solid var(--planned); background: var(--planned-dim);
+    padding: 12px 16px; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+  .status-line b { color: var(--planned); font-family: var(--mono); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+
+  /* ── Hero schematic (there is no product screenshot yet) ─────────────── */
+  .schematic {
+    margin-top: 46px; border-radius: var(--r-xl);
+    border: 1px solid var(--border); background: var(--bg-primary);
+    box-shadow: var(--shadow-lg); overflow: hidden;
+  }
+  .schematic-grid { display: grid; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 780px) { .schematic-grid { grid-template-columns: 1fr; } }
+  .schematic-pane { padding: 26px; min-width: 0; }
+  .schematic-pane + .schematic-pane { border-left: 1px solid var(--border); }
+  @media (max-width: 780px) {
+    .schematic-pane + .schematic-pane { border-left: 0; border-top: 1px solid var(--border); }
+  }
+  .pane-cap {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-3); margin-bottom: 16px;
+  }
+  .schematic pre { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.8; color: var(--text); overflow-x: auto; }
+  .schematic pre .k { color: var(--accent); }
+  .schematic pre .s { color: var(--text-2); }
+  .schematic pre .n { color: var(--planned); }
+  .schematic pre .c { color: var(--text-3); }
+  .schematic pre .x { color: var(--spark); }
+  .schematic-note {
+    border-top: 1px solid var(--border); background: var(--bg-secondary);
+    padding: 13px 26px; font-size: 12.5px; color: var(--text-3);
+  }
+
+  /* ── Sections ────────────────────────────────────────────────────────── */
+  .section { padding: 62px 0; }
+  .section > .wrap > h2 { font-size: clamp(25px, 3.6vw, 34px); letter-spacing: -.03em; margin: 0 0 10px; }
+  .lead { color: var(--text-2); margin: 0 0 34px; font-size: 16px; max-width: 700px; }
+
+  /* ── Status table ────────────────────────────────────────────────────── */
+  .table-scroll { overflow-x: auto; border-radius: var(--r-lg); border: 1px solid var(--border); }
+  .status-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--bg-primary); min-width: 620px; }
+  .status-table th, .status-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  .status-table th { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); font-weight: 600; background: var(--bg-secondary); }
+  .status-table tr:last-child td { border-bottom: none; }
+  .status-table td.state { white-space: nowrap; font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .state.done { color: var(--shipped); }
+  .state.plan { color: var(--planned); }
+  .state.no { color: var(--text-3); }
+  .status-table code { font-size: .87em; }
+
+  /* ── Seam cards ──────────────────────────────────────────────────────── */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 940px) { .cards { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--r-lg); padding: 22px;
+    transition: border-color .2s, transform .2s var(--ease);
+  }
+  .card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+  .card.flag { border-left: 3px solid var(--spark); }
+  .card .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+  .card h3 { margin: 8px 0 8px; font-size: 17.5px; }
+  .card p { margin: 0; color: var(--text-2); font-size: 14.5px; }
+  .card p + p { margin-top: 10px; }
+  .card code { font-size: .87em; background: var(--bg-secondary); border: 1px solid var(--border); padding: 1px 5px; border-radius: 5px; }
+
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 5px; vertical-align: 2px; margin-left: 7px;
+  }
+  .chip.now { color: var(--shipped); background: var(--shipped-dim); border: 1px solid color-mix(in srgb, var(--shipped) 30%, transparent); }
+  .chip.plan { color: var(--planned); background: var(--planned-dim); border: 1px solid color-mix(in srgb, var(--planned) 32%, transparent); }
+  .chip.spark { color: var(--spark); background: var(--spark-dim); border: 1px solid color-mix(in srgb, var(--spark) 32%, transparent); }
+
+  /* ── Not built ───────────────────────────────────────────────────────── */
+  .notbuilt { display: grid; gap: 13px; margin: 0; padding: 0; }
+  .notbuilt li {
+    list-style: none; background: var(--bg-primary); border: 1px solid var(--border);
+    border-left: 3px solid var(--planned); border-radius: var(--r-md); padding: 16px 18px;
+  }
+  .notbuilt li b { display: block; margin-bottom: 4px; font-size: 14.5px; }
+  .notbuilt li span { color: var(--text-2); font-size: 14px; }
+
+  /* ── Thesis panel ────────────────────────────────────────────────────── */
+  .thesis { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 38px; }
+  @media (max-width: 620px) { .thesis { padding: 26px; } }
+  .thesis h2 { font-size: clamp(23px, 3.2vw, 30px); letter-spacing: -.03em; }
+  .thesis > p { color: var(--text-2); margin: 12px 0 0; max-width: 760px; font-size: 15px; }
+  .thesis .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 28px; }
+  @media (max-width: 860px) { .thesis .cols { grid-template-columns: 1fr; } }
+  .thesis h4 { margin: 0 0 6px; font-family: var(--display); font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; }
+  .thesis h4::before { content: '/ '; color: var(--accent); }
+  .thesis .cols p { margin: 0; color: var(--text-2); font-size: 14.5px; }
+  .thesis .cols .spark-h::before { color: var(--spark); }
+
+  /* ── Quick start ─────────────────────────────────────────────────────── */
+  .quick { display: grid; grid-template-columns: 1.15fr 1fr; gap: 30px; align-items: center; }
+  @media (max-width: 860px) { .quick { grid-template-columns: 1fr; } }
+  .codeblock { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+  .codeblock .bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .codeblock .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); display: inline-block; }
+  .codeblock pre { margin: 0; padding: 18px 20px; overflow-x: auto; font-size: 12.8px; line-height: 1.85; color: var(--text); }
+  .codeblock .c { color: var(--text-3); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+  .steps li { display: flex; gap: 13px; align-items: flex-start; }
+  .steps .num {
+    flex: none; width: 27px; height: 27px; border-radius: 9px;
+    background: var(--accent-dim); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+    color: var(--accent); font-family: var(--mono); font-weight: 700;
+    display: grid; place-items: center; font-size: 13px;
+  }
+  .steps b { display: block; font-size: 15px; }
+  .steps span { color: var(--text-2); font-size: 13.5px; }
+
+  /* ── Vulos band ──────────────────────────────────────────────────────── */
+  .vulos-band {
+    margin: 24px 0; background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--r-xl); padding: 34px; display: flex; gap: 22px; align-items: center;
+  }
+  @media (max-width: 700px) { .vulos-band { flex-direction: column; text-align: center; } }
+  .vulos-band img { width: 54px; height: 54px; border-radius: 14px; flex: none; }
+  .vulos-band h3 { margin: 0 0 6px; font-size: 19px; }
+  .vulos-band p { margin: 0; color: var(--text-2); max-width: 700px; font-size: 14.5px; }
+  .vulos-band .more { margin-top: 12px; display: inline-flex; color: var(--accent); font-weight: 600; font-size: 14px; }
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
+  .site-footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 34px 0; }
+  .foot { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+  .foot .left { display: flex; align-items: center; gap: 9px; color: var(--text-2); font-size: 13.5px; }
+  .foot .left img { width: 18px; height: 18px; border-radius: 5px; }
+  .foot .links { display: flex; gap: 18px; flex-wrap: wrap; }
+  .foot .links a { color: var(--text-2); font-size: 13.5px; }
+  .foot .links a:hover { color: var(--text); }
 </style>
-<style>:root{--accent:#7b61ff;--accent-2:#ff4d9d}</style>
 </head>
 <body>
-<header class="site-header"><div class="wrap nav">
-    <a class="brand" href="./index.html"><span class="tile"><img src="./assets/magnetite-logo.svg" alt="Magnetite logo"></span>magnetite</a>
-    <div class="nav-spacer"></div>
-    <nav class="nav-links">
-      <a href="./index.html#features">Features</a>
-      <a href="./index.html#quickstart">Quick start</a>
-      <a href="./docs.html">Docs</a>
-      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener">GitHub</a>
-    </nav>
-    <a class="vulos-badge" href="https://vulos.org" target="_blank" rel="noopener" title="Part of Vulos">
-      <img src="./assets/vulos-logo.png" alt="Vulos">Part of Vulos
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="./index.html" aria-label="magnetite home">
+      <span class="plaque">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- lodestone: an octahedral crystal with a field arc through it -->
+          <path d="M100 20 L168 100 L100 180 L32 100 Z" fill="none" stroke="currentColor" stroke-width="13" stroke-linejoin="round" opacity=".5"/>
+          <path d="M100 20 L100 180 M32 100 L168 100" stroke="currentColor" stroke-width="9" opacity=".28"/>
+          <path d="M46 132 Q100 92 154 132" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round"/>
+          <circle cx="100" cy="100" r="17" fill="var(--accent)"/>
+        </svg>
+      </span>
+      <span class="brand-word">magnetite</span>
     </a>
-  </div></header>
+
+    <span class="grow"></span>
+
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#status">Status</a>
+      <a href="#seams">Seams</a>
+      <a href="#not-built">Not built yet</a>
+      <a href="#determinism">Determinism</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="./docs.html">Docs</a>
+      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </nav>
+
+    <!-- 3-way Light / Dark / System selector -->
+    <div class="seg" role="group" aria-label="Colour theme">
+      <button type="button" data-set="light" title="Light" aria-label="Light theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button type="button" data-set="dark" title="Dark" aria-label="Dark theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button type="button" data-set="system" title="System" aria-label="Match system theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+      </button>
+    </div>
+
+    <a class="vulos-btn" href="https://vulos.org" target="_blank" rel="noopener noreferrer" title="Back to the Vulos suite" aria-label="Back to Vulos">
+      <img src="./assets/vulos-logo.png" alt="" aria-hidden="true" width="20" height="20" />
+      <span><span class="lead">Part of&nbsp;</span>Vulos</span>
+    </a>
+  </div>
+</header>
+
 <main>
-  <section class="hero"><div class="wrap">
-    <span class="eyebrow"><img src="./assets/vulos-logo.png" alt="" style="width:15px;height:15px;border-radius:4px">Part of the Vulos OS suite</span>
-    <h1>Magnetite</h1>
-    <p class="tagline">The decentralized, self-hostable Rust game platform. Bring any server — it scales to your hardware. No cloud required.</p>
-    <p class="blurb"><strong>Magnetite (Fe₃O₄)</strong> — magnetic, grounded, the foundation games are built on. A game is a content-addressed portable object. A node is generic compute that fills its own hardware. The chain is the wallet. Discovery is a phonebook, not an authority. Everything social — chat, voice, video, streaming — is a pluggable integration, not something we build. Anyone runs the single <code>magnetite</code> node binary; identity is a keypair; payments are non-custodial crypto.</p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="#quickstart">Get started</a>
-      <a class="btn btn-ghost" href="./docs.html">Read the docs</a>
-      <a class="btn btn-ghost" href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener">View on GitHub</a>
-    </div>
-    <div class="hero-visual"><img src="./screenshots/architecture-dark.png" alt="Magnetite architecture — node, discovery, payment, and comms seams" loading="lazy" onerror="this.closest('.hero-visual').style.display='none'"></div>
-    <div class="stat-row">
-      <div class="stat"><b>1 → ∞</b><span>players, same game code</span></div>
-      <div class="stat"><b>0</b><span>fiat, custody, or cloud dependency</span></div>
-      <div class="stat"><b>203k</b><span>ticks/sec, SingleRoom (4p, debug build)</span></div>
-      <div class="stat"><b>9</b><span>passing e2e tests, wasm ≡ native state hash</span></div>
-    </div>
-  </div></section>
+  <!-- ── Hero ────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow">Mid-redesign · core is real · the network layer is LAN-only</span>
+      <h1>Anyone can <em>re-run the match</em> and check the result.</h1>
+      <p class="tagline">Clients send inputs, never state. A deterministic WASM sandbox steps the world. Every tick lands in a log that anybody can re-simulate from scratch.</p>
+      <p class="blurb">magnetite is a Rust games platform whose one real asset is that its simulation is reproducible. The same ordered commands, the same seed, the same tick produce the same state on any host — so cheating is not something you detect by heuristics, it is something you <em>prove</em> from the record. Around that core sits a set of seams the platform programs against, each with a working offline default, so no provider is welded in. The project is currently being rebuilt around a no-central-cloud design; this page keeps what runs today apart from what is written down.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#status">See what's actually built</a>
+        <a class="btn btn-ghost" href="./docs.html">Read the docs</a>
+        <a class="btn btn-ghost" href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      </div>
+      <p class="status-line"><b>Honest status</b><br />
+        The game core is genuine and tested: authoritative simulation, the Wasmtime sandbox, replay verification, the seam crate with offline defaults, and a node that measures its own hardware. The multi-node parts are real code proven only <b style="font-family:inherit;text-transform:none;letter-spacing:0;font-size:inherit">in-process and on a LAN</b> — there is no NAT traversal, no relay and no WAN validation, so internet-scale clusters are undemonstrated. There is no on-chain payment rail: the shipped rail is a deterministic offline mock. Some of the pre-redesign central backend is still in the tree.</p>
 
-  <section class="section" id="features"><div class="wrap">
-    <h2>Grounded in six differentiators</h2>
-    <p class="lead">One Rust game, one node binary, decentralized by construction — not bolted on.</p>
-    <div class="grid">
-      <div class="card"><div class="dot"></div><h3>Capacity-elastic hosting</h3><p>A node measures its own hardware — cores, RAM, bandwidth — and advertises what it can hold. Player cap is emergent from the box, never a config constant. More cores, more shards; bring more boxes and the cluster grows into a federated mesh with other operators' nodes.</p></div>
-      <div class="card"><div class="dot"></div><h3>Content-addressed games</h3><p>A game's id is the hash of its wasm module and manifest — <code>BlobStore</code> serves it by hash, with no central registry row required to identify it. Iroh/BitTorrent-style distribution is the natural next step; today it's already sha256-addressable.</p></div>
-      <div class="card"><div class="dot"></div><h3>Deterministic WASM sandbox</h3><p>Untrusted game logic compiles to <code>wasm32-wasip1</code> and runs under Wasmtime with a fuel budget, a memory cap, and an epoch-interrupt wall clock. No OS randomness, no wall clock inside the guest — same <code>(state, ordered commands, tick, seed)</code> always produces the same result, on any host.</p></div>
-      <div class="card"><div class="dot"></div><h3>Replay-verified anti-cheat</h3><p>Clients send inputs, never state; the server validates and steps authoritatively. Every tick's inputs and state hash land in a <code>ReplayLog</code> — anyone can re-simulate from scratch with <code>verify_replay</code> and prove tampering, no trust required.</p></div>
-      <div class="card"><div class="dot"></div><h3>Non-custodial crypto payments</h3><p>Wallet-to-wallet checkout with atomic developer/operator splits, signed-receipt entitlements, payment channels for per-seat hosting fees, and optional wager escrow settled by replay verification. No balances, no payouts, no custody — the chain is the wallet.</p></div>
-      <div class="card"><div class="dot"></div><h3>Pluggable decentralized comms</h3><p>Chat, voice, video, and streaming are adapters, not a product we build: Matrix/Element for text and presence, Jitsi or LiveKit for voice/video, Owncast/PeerTube for live and VOD. The node mints scoped credentials from your keypair — one login, SSO into every room.</p></div>
-    </div>
-  </div></section>
+      <div class="schematic">
+        <div class="schematic-grid">
+          <div class="schematic-pane">
+            <div class="pane-cap">Authority — the loop the whole platform rests on</div>
+            <svg viewBox="0 0 320 220" role="img" aria-label="Diagram: clients send inputs to an authoritative host, which steps a WASM sandbox and appends each tick to a replay log that a third party can re-simulate">
+              <rect x="3" y="3" width="314" height="214" rx="14" fill="var(--bg-secondary)" stroke="var(--border)"/>
+              <g font-family="ui-monospace,monospace" font-size="10">
+                <rect x="20" y="30" width="74" height="30" rx="7" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
+                <text x="57" y="49" fill="var(--text-2)" text-anchor="middle">client A</text>
+                <rect x="20" y="72" width="74" height="30" rx="7" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
+                <text x="57" y="91" fill="var(--text-2)" text-anchor="middle">client B</text>
+                <text x="57" y="122" fill="var(--text-3)" text-anchor="middle">inputs only</text>
 
-  <section class="section"><div class="wrap">
-    <h2>The seams</h2>
-    <p class="lead">Everything provider-specific plugs in behind six traits. The game runtime, scheduler, and payment path never name a provider type — only the seam.</p>
-    <div class="seams">
-      <div class="seam"><span class="tag">Identity</span><div><h4>Keypair auth</h4><p>Ed25519 challenge/response by default; any external identity provider plugs in behind the trait, never referenced by non-provider code.</p></div></div>
-      <div class="seam"><span class="tag">Naming</span><div><h4>Phonebook, not authority</h4><p>Raw pubkeys and short-hash addresses by default; human <code>name@domain</code> is a display layer over the same raw key.</p></div></div>
-      <div class="seam"><span class="tag">BlobStore</span><div><h4>Content-addressed assets</h4><p>Hash-in, hash-out. Local + HTTP by default; an Iroh/BitTorrent adapter slots in without touching the game runtime.</p></div></div>
-      <div class="seam"><span class="tag">Discovery</span><div><h4>The phonebook</h4><p>A dumb, swappable HTTP tracker anyone can run, plus LAN mDNS — never a central server-registry authority.</p></div></div>
-      <div class="seam"><span class="tag">CommsProvider</span><div><h4>Chat, voice, video, streaming</h4><p>Matrix, Jitsi, LiveKit, Owncast/PeerTube — the node mints scoped join credentials from your keypair, optionally gated behind a payment receipt.</p></div></div>
-      <div class="seam"><span class="tag">PaymentRail</span><div><h4>Non-custodial crypto</h4><p>Atomic checkout splits, per-seat hosting channels, wager escrow settled by replay verification. A deterministic mock rail keeps CI fully offline.</p></div></div>
-    </div>
-  </div></section>
+                <rect x="126" y="30" width="86" height="72" rx="9" fill="var(--bg-primary)" stroke="var(--accent)" stroke-width="1.6"/>
+                <text x="169" y="55" fill="var(--text)" text-anchor="middle">host</text>
+                <text x="169" y="70" fill="var(--text-3)" text-anchor="middle">validate</text>
+                <text x="169" y="84" fill="var(--text-3)" text-anchor="middle">step</text>
 
-  <section class="section" id="quickstart"><div class="wrap">
-    <h2>Quick start</h2>
-    <p class="lead">One binary. Bring a server — it scales to whatever hardware you give it.</p>
-    <div class="quick">
-      <div class="codeblock">
-        <div class="bar"><i></i><i></i><i></i></div>
-        <pre><span class="c"># install once</span>
-cargo install magnetite-cli
+                <rect x="126" y="126" width="86" height="34" rx="8" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
+                <text x="169" y="141" fill="var(--text-2)" text-anchor="middle">WASM sandbox</text>
+                <text x="169" y="153" fill="var(--text-3)" text-anchor="middle">fuel · no clock</text>
+
+                <rect x="238" y="30" width="62" height="72" rx="9" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
+                <text x="269" y="52" fill="var(--text-2)" text-anchor="middle">ReplayLog</text>
+                <text x="269" y="68" fill="var(--text-3)" text-anchor="middle">inputs +</text>
+                <text x="269" y="80" fill="var(--text-3)" text-anchor="middle">state hash</text>
+
+                <text x="269" y="132" fill="var(--accent)" text-anchor="middle">anyone</text>
+                <text x="269" y="146" fill="var(--text-3)" text-anchor="middle">re-simulates</text>
+                <text x="269" y="160" fill="var(--text-3)" text-anchor="middle">→ proof</text>
+              </g>
+              <g stroke="var(--text-3)" stroke-width="1.6" fill="none" marker-end="url(#a)">
+                <path d="M96 45 H122"/><path d="M96 87 H122"/>
+                <path d="M169 104 V122"/><path d="M212 66 H234"/>
+                <path d="M269 104 V122"/>
+              </g>
+              <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--text-3)"/></marker></defs>
+            </svg>
+          </div>
+          <div class="schematic-pane">
+            <div class="pane-cap">…and the one place that guarantee stops</div>
+<pre><span class="c">// deterministic: replay proves it</span>
+<span class="k">InputClass</span>::<span class="s">Deterministic</span>
+  <span class="c">// keyboard, gamepad, bot</span>
+  is_replay_verifiable() → <span class="n">true</span>
+
+<span class="c">// sensor input: it never can</span>
+<span class="x">InputClass</span>::<span class="x">Attested</span>
+  <span class="c">// camera gesture, IMU</span>
+  is_replay_verifiable() → <span class="n">false</span>
+
+<span class="c">// a host screens these for rate,</span>
+<span class="c">// cooldown and human-reachable</span>
+<span class="c">// speed — and that is the ceiling.</span>
+<span class="c">// A plausible fake still passes.</span></pre>
+          </div>
+        </div>
+        <div class="schematic-note">Diagrams, not screenshots — magnetite's own site has no captured product shots yet and none have been invented for this page. The <code>InputClass</code> split is real code in <code>magnetite-seams</code>; see <a class="link" href="#determinism">what determinism does and does not buy you</a>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Status ──────────────────────────────────────────────────────── -->
+  <section class="section" id="status">
+    <div class="wrap">
+      <h2>Status, component by component</h2>
+      <p class="lead">Audited against the tree, not against the pitch. The redesign spec (<code>DECENTRALIZATION.md</code>) is the authority on what is intended; this is what exists.</p>
+      <div class="table-scroll">
+        <table class="status-table">
+          <thead><tr><th>Capability</th><th>What it is</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td>Authoritative simulation</td><td><code>AuthoritativeGame</code> — deterministic <code>validate</code> / <code>step</code> in the SDK</td><td class="state done">Working</td></tr>
+            <tr><td>WASM sandbox</td><td>Wasmtime, <code>wasm32-wasip1</code>, fuel budget, memory cap, epoch interrupt; no OS randomness or wall clock in the guest</td><td class="state done">Working</td></tr>
+            <tr><td>Replay verification</td><td><code>ReplayLog</code> + <code>verify_replay</code> — re-simulate from scratch and prove tampering</td><td class="state done">Working</td></tr>
+            <tr><td>Anti-cheat validators</td><td>Composable validator chain, trust scoring, warn/kick/ban escalation</td><td class="state done">Working</td></tr>
+            <tr><td>Zero-backend dev loop</td><td><code>magnetite dev</code> — builds to wasm and serves a live match with no server</td><td class="state done">Working</td></tr>
+            <tr><td>Seam crate</td><td>Every seam a trait with a default that needs no external service; CI runs fully offline</td><td class="state done">Working</td></tr>
+            <tr><td>Content-addressed games</td><td>Game id = hash of wasm + manifest; loaded by hash with BLAKE3 verification, fail-closed</td><td class="state done">Working</td></tr>
+            <tr><td>Capacity-elastic node</td><td>Node measures cores/RAM, derives its own shard and player budget — no config constant</td><td class="state done">Working</td></tr>
+            <tr><td>Signed discovery</td><td>Self-advertised <code>SessionAd</code>s, signed, leased and TTL-capped; LAN + a dumb HTTP tracker</td><td class="state done">Working</td></tr>
+            <tr><td>Comms adapters</td><td>Matrix, Jitsi, LiveKit, Owncast and a builtin fallback behind one trait</td><td class="state done">Working</td></tr>
+            <tr><td>Shard migration</td><td>Two-phase, epoch-fenced handoff; every failure resolves to "source keeps authority"</td><td class="state done">Working — LAN only</td></tr>
+            <tr><td>Cluster membership + session follow</td><td>Deny-by-default operator allowlist; signed single-use redirects move players with their shard</td><td class="state done">Working — LAN only</td></tr>
+            <tr><td>WAN / internet-scale fleets</td><td>NAT traversal, relaying, real-world routing between operators</td><td class="state no">Not built</td></tr>
+            <tr><td>On-chain payment rail</td><td>Real USDC/L2 settlement behind <code>PaymentRail</code></td><td class="state no">Mock rail only</td></tr>
+            <tr><td>DHT discovery</td><td>Trackerless peer discovery</td><td class="state plan">Specified</td></tr>
+            <tr><td>Gesture / sensor input source</td><td>Anything that <em>produces</em> attested events (camera, pose model)</td><td class="state no">Seam only — no producer</td></tr>
+            <tr><td>Pre-redesign backend</td><td>The central API/database from before the redesign</td><td class="state plan">Partly removed</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Seams ───────────────────────────────────────────────────────── -->
+  <section class="section" id="seams">
+    <div class="wrap">
+      <h2>Seven seams, seven working defaults</h2>
+      <p class="lead">Nothing in the game runtime, scheduler or payment path may name a provider-specific type — they see only these traits. Every seam ships a default that works with no network, no chain and no account, so the test suite runs fully offline and no external project is a hard dependency.</p>
+      <div class="cards">
+        <div class="card">
+          <span class="kicker">Seam 01</span>
+          <h3><code>Identity</code><span class="chip now">Default ships</span></h3>
+          <p>Identity is a keypair. Sign-a-challenge login over raw Ed25519, with the node able to mint short-lived audience- and scope-bound tokens so one keypair login can enter external comms systems.</p>
+        </div>
+        <div class="card">
+          <span class="kicker">Seam 02</span>
+          <h3><code>Naming</code><span class="chip now">Default ships</span></h3>
+          <p>Human names are a display layer; the substrate is always raw keys. Short-hash addressing by default, with an optional word-based key-name provider that adds zero dependencies and exists to prove the seam really is swappable.</p>
+        </div>
+        <div class="card">
+          <span class="kicker">Seam 03</span>
+          <h3><code>BlobStore</code><span class="chip now">Default ships</span></h3>
+          <p>Content addressing: the hash is the id. A game needs no registry row to be identified. Local and HTTP stores today; peer-to-peer distribution is a later adapter behind the same trait.</p>
+        </div>
+        <div class="card">
+          <span class="kicker">Seam 04</span>
+          <h3><code>Discovery</code><span class="chip now">Default ships</span></h3>
+          <p>A phonebook, never an authority. Nodes sign and lease their own advertisements; a tracker can refuse forgeries without gaining any say over who may host what. LAN plus a dumb HTTP tracker anyone can run, fanned out redundantly.</p>
+        </div>
+        <div class="card">
+          <span class="kicker">Seam 05</span>
+          <h3><code>CommsProvider</code><span class="chip now">Adapters ship</span></h3>
+          <p>Chat, voice, video and streaming are adapters, not a product we build. Matrix, Jitsi, LiveKit and Owncast sit behind one trait, with the old in-house stack demoted to a fallback.</p>
+        </div>
+        <div class="card">
+          <span class="kicker">Seam 06</span>
+          <h3><code>PaymentRail</code><span class="chip plan">Mock only</span></h3>
+          <p>Non-custodial by design: no balances, no payout queue, no custody. An entitlement is a signed receipt; hosting fees ride a channel; wagers settle from escrow.</p>
+          <p><b>What ships is the deterministic offline mock.</b> No chain is wired up, so nothing here moves real money today.</p>
+        </div>
+        <div class="card flag">
+          <span class="kicker">Seam 07</span>
+          <h3><code>InputProvider</code><span class="chip spark">Read the caveat</span></h3>
+          <p>Input is split into two classes that the compiler will not let you confuse. Deterministic input is replay-verifiable. Attested input — anything sensor-derived — is not, and never will be.</p>
+          <p>The default is a deterministic keyboard/gamepad queue that <em>refuses</em> attested events at runtime. A host-side gate screens attested events for rate, cooldown and human-reachable speed. <b>No gesture producer exists in this repo</b> — the seam is the socket, and today only the socket.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Not built ───────────────────────────────────────────────────── -->
+  <section class="section" id="not-built">
+    <div class="wrap">
+      <h2>What's specified, not built</h2>
+      <p class="lead">The redesign spec is deliberately candid about its own gaps, and so is this page. These are the things a reader could reasonably assume work, and which do not.</p>
+      <ul class="notbuilt">
+        <li><b>Internet-scale clusters</b><span>Cross-node shard handoff, cluster membership and player-follow redirects are real, tested code — but tested in-process and over a LAN. There is no NAT traversal, no relay and no WAN validation, so nodes must already be directly reachable. Federated compute between strangers' machines over the open internet is not demonstrated.</span></li>
+        <li><b>Money</b><span>The payment seam models atomic wallet-to-wallet splits, signed-receipt entitlements, hosting channels and wager escrow. What is implemented is a deterministic mock that signs receipts offline so CI can run. There is no chain integration, so no real payment has ever settled through it.</span></li>
+        <li><b>Trackerless discovery</b><span>Discovery works over LAN and over ordinary HTTP trackers, fanned out so no single tracker is load-bearing. A DHT adapter is specified and unwritten.</span></li>
+        <li><b>Sensor input producers</b><span>The <code>InputProvider</code> seam accepts and screens attested events, but nothing in magnetite generates one. There is no camera capture, no pose model and no vendor SDK anywhere in the tree.</span></li>
+        <li><b>The redesign itself</b><span>magnetite is mid-conversion from a conventional central-backend game platform to the no-cloud model described in <code>DECENTRALIZATION.md</code>. Fiat billing and custody are gone; parts of the old central backend are still present. Treat the spec as the intent and the status table above as the state.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Determinism thesis ──────────────────────────────────────────── -->
+  <section class="section" id="determinism">
+    <div class="wrap">
+      <div class="thesis">
+        <h2>Determinism is a proof, not a promise — and it has an edge</h2>
+        <p>Most anti-cheat asks a server to guess whether a player is lying. Magnetite instead makes the match reproducible, so a third party can re-run it and compare. That is a much stronger claim, which is exactly why the places it does <em>not</em> apply have to be marked rather than glossed over.</p>
+        <div class="cols">
+          <div>
+            <h4>Inputs, never state</h4>
+            <p>A client can only ask. The host validates the request and steps the world itself, so a modified client cannot assert a position, a hit or a score — it can only send commands the host was always free to reject.</p>
+          </div>
+          <div>
+            <h4>The same result anywhere</h4>
+            <p>Game logic compiles to WASM and runs under a sandbox with a fuel budget, a memory cap and no access to the wall clock or OS randomness. Given the same state, ordered commands, tick and seed it produces the same output on any machine — which is what makes a log checkable at all.</p>
+          </div>
+          <div>
+            <h4 class="spark-h">Where it stops</h4>
+            <p>Sensor input — a camera gesture, an IMU reading — cannot be re-derived from a log, because the pixels are gone and were never authoritative. A host can screen those events for human-reachable rate, cooldown and velocity, and that is genuinely all: a careful fake passes. The type system marks this class so nobody downstream mistakes it for proof.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Quick start ─────────────────────────────────────────────────── -->
+  <section class="section" id="quickstart">
+    <div class="wrap">
+      <h2>Quick start</h2>
+      <p class="lead">A game is a crate that implements one trait. The dev loop needs no server, no account and no network.</p>
+      <div class="quick">
+        <div class="codeblock">
+          <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="c"># install the CLI from the repo</span>
+cargo install --path magnetite-cli
 
 <span class="c"># scaffold a crate implementing AuthoritativeGame</span>
 magnetite new my-game
 cd my-game
 
-<span class="c"># cargo build --release --target wasm32-wasip1 → game.wasm</span>
+<span class="c"># cargo build --release --target wasm32-wasip1</span>
 magnetite build
 
-<span class="c"># build → WasmExecutor → server, ZERO backend</span>
+<span class="c"># sandboxed executor + live match, ZERO backend</span>
 magnetite dev
-<span class="c"># ws://127.0.0.1:&lt;port&gt; — play it right now</span>
 
-<span class="c"># bring your own box: measures its hardware,</span>
-<span class="c"># advertises capacity, joins the mesh</span>
-magnetite serve --advertise tracker.example.org</pre>
-      </div>
-      <ol class="steps">
-        <li><span class="num">1</span><div><b>Write the game once</b><span>Implement <code>AuthoritativeGame</code> against the SDK — <code>validate</code>/<code>step</code>, deterministic by construction.</span></div></li>
-        <li><span class="num">2</span><div><b>Run it with zero backend</b><span><code>magnetite dev</code> builds to wasm, boots a sandboxed executor, and serves a live match locally.</span></div></li>
-        <li><span class="num">3</span><div><b>Bring any server</b><span>Point <code>magnetite serve</code> at hardware you own — a laptop, a rented box, a rack — and it measures capacity and joins the discovery mesh. No cloud, no provisioning API.</span></div></li>
-      </ol>
-    </div>
-  </div></section>
-
-  <section class="section"><div class="wrap">
-    <div class="vulos-band">
-      <img src="./assets/vulos-logo.png" alt="Vulos logo">
-      <div>
-        <h3>Part of Vulos</h3>
-        <p><a href="https://vulos.org" target="_blank" rel="noopener" style="color:var(--text);font-weight:600">Vulos</a> is an open, self-hostable web OS and its owned apps. Magnetite runs perfectly standalone on hardware you control — no Vulos account required — and shares the same open-by-design philosophy as Ofisi, wede, Board, Files, and Relay.</p>
-        <a class="more" href="https://vulos.org" target="_blank" rel="noopener">Explore Vulos →</a>
+<span class="c"># bring a box: it measures its own hardware,</span>
+<span class="c"># content-addresses the game and advertises itself</span>
+magnetite node --advertise lan</pre>
+        </div>
+        <ol class="steps">
+          <li><span class="num">1</span><div><b>Write the game once</b><span>Implement <code>AuthoritativeGame</code> — a <code>validate</code> and a <code>step</code>, deterministic by construction. The SDK will not hand you a clock or a random number generator, because those are what break replay.</span></div></li>
+          <li><span class="num">2</span><div><b>Run it with no backend</b><span><code>magnetite dev</code> compiles to wasm, boots the sandboxed executor and serves a playable match locally. No database, no account, no cloud — this path is the one most exercised.</span></div></li>
+          <li><span class="num">3</span><div><b>Bring your own box</b><span><code>magnetite node</code> measures cores and RAM, derives its own shard and player budget from them, and advertises what it can hold. Today that mesh is reachable over a LAN; see <a class="link" href="#not-built">what's not built</a> before planning an internet-wide fleet.</span></div></li>
+        </ol>
       </div>
     </div>
-  </div></section>
+  </section>
+
+  <!-- ── Vulos band ──────────────────────────────────────────────────── -->
+  <section class="section">
+    <div class="wrap">
+      <div class="vulos-band">
+        <img src="./assets/vulos-logo.png" alt="Vulos logo" />
+        <div>
+          <h3>Listed alongside the Vulos suite</h3>
+          <p><a href="https://vulos.org" target="_blank" rel="noopener noreferrer" style="color:var(--text);font-weight:600">Vulos</a> is a family of open, self-hostable software. magnetite is fully independent — it runs on hardware you control, needs no Vulos account and no Vulos infrastructure — and shares the suite's position that the software should work on your own machine first and reach for a network second.</p>
+          <a class="more" href="https://vulos.org" target="_blank" rel="noopener noreferrer">Explore Vulos →</a>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
-<footer class="site-footer"><div class="wrap foot">
-    <div class="left"><img src="./assets/vulos-logo.png" alt="Vulos"> <span>Part of <a href="https://vulos.org" target="_blank" rel="noopener" style="color:var(--text)">Vulos</a> — the open, self-hostable web OS &amp; app suite.</span></div>
+
+<footer class="site-footer">
+  <div class="wrap foot">
+    <div class="left">
+      <img src="./assets/vulos-logo.png" alt="Vulos" />
+      <span>Listed on <a href="https://vulos.org" target="_blank" rel="noopener noreferrer" style="color:var(--text)">Vulos</a> — open, self-hostable software. magnetite is standalone and mid-redesign.</span>
+    </div>
     <div class="links">
       <a href="./docs.html">Docs</a>
-      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener">GitHub</a>
-      <a href="./LICENSE.txt">License</a>
-      <a href="https://vulos.org" target="_blank" rel="noopener">vulos.org</a>
+      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://vulos.org" target="_blank" rel="noopener noreferrer">vulos.org</a>
     </div>
-  </div></footer>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var mql = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function resolve(pref) { return pref === 'system' ? (mql.matches ? 'dark' : 'light') : pref; }
+    function currentPref() { try { return localStorage.getItem('vulos-theme') || 'system'; } catch (e) { return 'system'; } }
+
+    function paintSeg(pref) {
+      document.querySelectorAll('.seg button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.set === pref));
+      });
+    }
+    function apply(pref) {
+      root.setAttribute('data-theme', resolve(pref));
+      root.setAttribute('data-theme-pref', pref);
+      paintSeg(pref);
+    }
+
+    document.querySelectorAll('.seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var pref = b.dataset.set;
+        try { localStorage.setItem('vulos-theme', pref); } catch (e) {}
+        apply(pref);
+      });
+    });
+    mql.addEventListener('change', function () { if (currentPref() === 'system') apply('system'); });
+    apply(currentPref());
+  })();
+</script>
 </body>
 </html>
