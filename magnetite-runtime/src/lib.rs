@@ -122,6 +122,7 @@
 //! }
 //! ```
 
+pub mod attested;
 pub mod capacity;
 pub mod cluster;
 pub mod connection;

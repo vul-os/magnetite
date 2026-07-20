@@ -223,6 +223,19 @@ fn handle_server_message(
                  it unverified"
             );
         }
+
+        // Attested-input answers (seam §3.7). This reference client is a
+        // keyboard/gamepad client: its input is `InputClass::Deterministic` and
+        // it never sends a `ClientNet::AttestedEvent`, so an answer to one is
+        // not addressed to it.
+        //
+        // Critically these must NOT be routed into `predictor.reconcile_ack`
+        // like `ServerNet::Ack`/`Reject` are. Those carry the client-local input
+        // sequence; an attested `seq` is an unrelated per-player counter, so
+        // feeding one to the `PredictionBuffer` would discard correct prediction
+        // frames. The class boundary that makes `verify_replay` meaningful is
+        // the same boundary here.
+        ServerNet::AttestedAck { .. } | ServerNet::AttestedReject { .. } => {}
     }
 }
 

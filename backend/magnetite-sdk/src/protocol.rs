@@ -279,6 +279,58 @@ pub enum ClientNet {
         /// Verbatim `SignedRedirect` JSON, including its embedded follow token.
         redirect: serde_json::Value,
     },
+
+    /// A **client-attested** sensor event (seam §3.7, [`magnetite_seams::input`]).
+    ///
+    /// This is the wire ingress for [`InputClass::Attested`] — a camera gesture,
+    /// an IMU reading, anything a client *asserts* rather than a command the
+    /// host can re-derive.
+    ///
+    /// # This frame is not, and can never be, replay-verifiable
+    ///
+    /// It exists on a strictly separate path from [`ClientNet::InputFrame`] and
+    /// the two must never merge. `InputFrame` carries deterministic commands
+    /// that land in a `ReplayLog`, so `verify_replay` can prove tampering from
+    /// the record alone. An attested event has no such property: the pixels
+    /// that produced it are gone and were never authoritative. Admitting one of
+    /// these down the deterministic path would leave `verify_replay` still
+    /// passing while no longer meaning anything — which is why the server route
+    /// feeds `AttestedEventInput` and nothing else.
+    ///
+    /// # What the signature buys
+    ///
+    /// `signed.sig` proves **authorship** — "this key sent this" — and stops a
+    /// player forging events in someone else's name or a relay editing them in
+    /// flight. It does not make the sensor reading true. A cheater synthesising
+    /// events signs them with their own genuine key and verifies every time;
+    /// `magnetite_seams::input`'s own test
+    /// `a_plausible_synthetic_event_is_indistinguishable_from_a_real_one` pins
+    /// that ceiling. This frame is **not anti-cheat and not security**.
+    ///
+    /// Unsigned attested events have no wire representation on purpose: `signed`
+    /// is required, so a frame without it fails to deserialize and is refused.
+    ///
+    /// # Wire shape
+    ///
+    /// ```json
+    /// {"type":"attested_event","signed":{
+    ///   "event":{"player":"<64 hex>","kind":"swing","confidence":0.725,
+    ///            "vector":[0.125,-0.0625,0.0],"speed_mps":6.5,
+    ///            "t_capture_ms":1763000000123,"seq":42},
+    ///   "player_key":"<64 hex>","sig":"<128 hex>"}}
+    /// ```
+    ///
+    /// `PubKey`/`Sig` use hand-written hex serializers, so those are strings and
+    /// not byte arrays. `vector` and `speed_mps` are `Option` with no
+    /// `serde(default)`: the keys must be present, `null` when absent.
+    ///
+    /// [`InputClass::Attested`]: magnetite_seams::input::InputClass::Attested
+    #[cfg(feature = "scaling")]
+    AttestedEvent {
+        /// The signed sensor claim. Deserializes directly as
+        /// [`magnetite_seams::input::SignedAttestedEvent`].
+        signed: Box<magnetite_seams::input::SignedAttestedEvent>,
+    },
 }
 
 /// Messages from the authoritative server to game clients.
@@ -379,6 +431,42 @@ pub enum ServerNet {
     Redirect {
         /// Verbatim `SignedRedirect` JSON, including its embedded follow token.
         redirect: serde_json::Value,
+    },
+
+    /// A [`ClientNet::AttestedEvent`] passed signature verification and
+    /// plausibility screening, and was queued for the sim.
+    ///
+    /// **Acceptance is not a verdict of honesty.** It means only "signed by the
+    /// key it names, and not physically impossible" — see
+    /// [`magnetite_seams::input::PlausibilityGate`]. Do not surface this to a
+    /// player as validation of anything.
+    AttestedAck {
+        /// The `event.seq` of the accepted event (per-player, `u64`).
+        seq: u64,
+    },
+
+    /// A [`ClientNet::AttestedEvent`] was dropped. The client is told rather
+    /// than left to infer it from silence.
+    ///
+    /// # Why this is not [`ServerNet::Reject`]
+    ///
+    /// `Reject` carries the client-local `u32` input sequence and instructs the
+    /// client to discard every `PredictionBuffer` frame at or below it. Attested
+    /// events number in a *different, unrelated* `u64` counter space, so
+    /// answering one on `Reject` would silently evict correct prediction state.
+    /// The counters are separate because the input classes are separate; the
+    /// response channel follows.
+    AttestedReject {
+        /// The `event.seq` this refers to, or `0` when the frame was too
+        /// malformed to recover one.
+        seq: u64,
+        /// Why it was dropped: a bad signature, a failed plausibility check, a
+        /// malformed frame, or connection-level rate limiting.
+        ///
+        /// Every reason means "refused", **never** "cheating proven". A host may
+        /// drop and rate-limit on these; it holds no proof and must not claim
+        /// one.
+        reason: String,
     },
 }
 

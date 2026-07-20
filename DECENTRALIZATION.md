@@ -169,10 +169,44 @@ trait InputProvider {
 - **Built:** the traits, both event classes, the signed-event wrapper, the plausibility gate, and
   two providers — `LocalDeviceInput` (the default) and `AttestedEventInput`, a transport-agnostic
   host-side ingress for attested events.
+- **Built (wire ingress).** The seam previously had no way to be reached from a network: `ClientNet`
+  had no attested variant and the server had no route, so a client emitting a correctly signed event
+  was talking to an open socket that dropped every frame *silently*. That gap is closed:
+  - `ClientNet::AttestedEvent { signed: Box<SignedAttestedEvent> }`, serde tag `attested_event`
+    (`magnetite-sdk`, behind the `scaling` feature that pulls in `magnetite-seams`). `PubKey`/`Sig`
+    are hex strings on the wire, matching their hand-written serializers.
+  - `magnetite_runtime::attested::AttestedIngress` — the route. **Per connection**, so one peer's
+    traffic cannot spend another's budget. Order is load-bearing: connection rate limit
+    (`MAX_ATTESTED_FRAMES_PER_SEC = 60`, applied *before* verification so a flood cannot be turned
+    into signature-verification CPU burn) → signature → `PlausibilityGate` → queue. Gate state still
+    advances **only on acceptance**, so a rejected flood cannot evict an honest player's rate budget.
+  - `ServerNet::AttestedAck { seq }` / `ServerNet::AttestedReject { seq, reason }` — the client is
+    told, rather than left inferring a drop from silence. Deliberately *not* `ServerNet::Ack`/
+    `Reject`: those carry the client-local `u32` input sequence and instruct the client to discard
+    `PredictionBuffer` frames at or below it, and attested events number in an unrelated `u64` space.
+    The counters are separate because the input classes are, so the response channel is too.
+  - **Fail-closed.** Unsigned attested frames have no wire representation at all (`signed` is
+    required, so wibbly's unsigned shape fails to deserialize); malformed, wrongly-signed,
+    implausible and flooding frames are each refused explicitly. An attested frame has no reachable
+    path to the deterministic `ConnectionManager` queue — pinned by tests over real sockets in
+    `magnetite-runtime/tests/attested_wire.rs`, because an attested event admitted down the
+    deterministic path would leave `verify_replay` still passing while no longer proving anything.
+  - Both ends are pinned to a **shared golden vector**: the exact frame JSON in
+    `magnetite-runtime/src/attested.rs` is the same fixture as in wibbly's
+    `packages/wibbly-magnetite/test/wire.test.ts`, signed by `RawKeypairAuth::from_seed([7u8; 32])`.
+- **This delivers attested input; it does not make it verifiable.** The route adds *delivery* and a
+  sanity screen and nothing else. A cheater who never touched a camera still hand-writes numbers
+  inside human bounds, signs them with their own genuine key, and passes every check — the route has
+  its own test (`a_plausible_synthetic_event_passes_the_whole_route`) restating at the wire edge what
+  `a_plausible_synthetic_event_is_indistinguishable_from_a_real_one` pins at the gate. **None of this
+  is anti-cheat, verification, or security**, and no future version of that file can make it so.
 - **Not built:** anything that *produces* a gesture event. `AttestedEventInput` contains no camera
-  capture, no pose model, and no vendor code; magnetite has no such code anywhere. Wibbly is not a
-  dependency of magnetite and no camera client is wired up in this repo. This seam is the socket
-  wibbly will plug into, and today it is only that.
+  capture, no pose model, and no vendor code; magnetite has no such code anywhere. Wibbly is still
+  not a dependency of magnetite. What changed is only that the socket wibbly plugs into is now
+  actually reachable over the network — the producer remains entirely on the client side.
+- **Not built:** any consumer. Accepted events sit in the per-connection `AttestedEventInput` queue;
+  no shipped game drains it, because no game in this repo has a gesture input to consume. Draining
+  it is a game's job, and `InputClass::is_replay_verifiable()` returns `false` for everything in it.
 
 ## 4. Generic capacity-elastic node (the "bring any server → scales to infinity" property)
 
@@ -246,8 +280,11 @@ Legend: **[O]** = Opus-class agent, **[S]** = Sonnet-class agent. One writer per
   landing + docs + app routes → images referenced by landing/docs/README.
 
 - **IN1 [O]** INPUT: `InputProvider` seam (§3.7) — `InputClass` boundary, `PlausibilityGate`,
-  `LocalDeviceInput` default + `AttestedEventInput` ingress. **Done** (seam only; no gesture
-  *producer* exists in this repo — see §3.7 "Not built"). Owns: `magnetite-seams/src/input.rs`.
+  `LocalDeviceInput` default + `AttestedEventInput` ingress. **Done**, now including the **wire
+  ingress**: `ClientNet::AttestedEvent` + `magnetite_runtime::attested::AttestedIngress` +
+  `ServerNet::AttestedAck`/`AttestedReject`, so a browser client's signed event is actually ingested
+  rather than silently dropped. Still no gesture *producer* and no consumer in this repo — see §3.7
+  "Not built". Owns: `magnetite-seams/src/input.rs`, `magnetite-runtime/src/attested.rs`.
 
 ### Wave 3 — Integration & optional providers
 - **I1 [O]** ~~Wire DMTAP optional providers~~ — **DROPPED 2026-07-19 (founder call).** DMTAP was

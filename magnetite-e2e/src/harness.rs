@@ -134,6 +134,13 @@ pub async fn run_simulated_client(
                         ServerNet::Welcome { .. } => {}
                         // Fleet frames: not exercised by this harness.
                         ServerNet::NodeIdentity { .. } | ServerNet::Redirect { .. } => {}
+                        // Attested-input frames (seam §3.7). Deliberately NOT
+                        // folded into `ack_count`/`reject_count`: those measure
+                        // the deterministic, replay-verifiable input path, and
+                        // counting a sensor claim there would quietly overstate
+                        // what this harness verified. Attested ingress has its
+                        // own coverage in `magnetite-runtime/tests/attested_wire.rs`.
+                        ServerNet::AttestedAck { .. } | ServerNet::AttestedReject { .. } => {}
                     }
                 }
                 Ok(Some(Ok(Message::Close(_)))) => break,

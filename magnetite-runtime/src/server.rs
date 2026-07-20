@@ -446,6 +446,13 @@ async fn handle_connection(
     }
     info!(%peer_addr, %player_id, "player connected");
 
+    // Per-connection ingress for attested sensor input (seam §3.7). Owned by
+    // this connection, not shared: one peer's flood must not spend another
+    // peer's budget. Its queue is `InputClass::Attested` — nothing drained from
+    // it is replay-verifiable, and it is deliberately kept apart from the
+    // deterministic input path that `ConnectionManager` feeds.
+    let attested = crate::attested::AttestedIngress::default();
+
     // Send Welcome.
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
     let welcome = ServerNet::Welcome {
@@ -476,6 +483,7 @@ async fn handle_connection(
                             text.as_bytes(),
                             &conn_mgr,
                             &fleet,
+                            &attested,
                         )
                         .await;
                         if !apply_inbound(
@@ -487,7 +495,8 @@ async fn handle_connection(
                     }
                     Some(Ok(Message::Binary(bytes))) => {
                         let action =
-                            handle_client_message(player_id, &bytes, &conn_mgr, &fleet).await;
+                            handle_client_message(player_id, &bytes, &conn_mgr, &fleet, &attested)
+                                .await;
                         if !apply_inbound(
                             action, &mut player_id, &mut shard, &mut outbound_rx,
                             &mut ws_tx, &conn_mgr, &shard_mgr, &fleet, &match_config,
@@ -593,10 +602,24 @@ async fn handle_client_message(
     bytes: &[u8],
     conn_mgr: &ConnectionManager,
     fleet: &Option<crate::follow::FleetSession>,
+    attested: &crate::attested::AttestedIngress,
 ) -> Inbound {
     let net_msg: ClientNet = match serde_json::from_slice(bytes) {
         Ok(m) => m,
         Err(e) => {
+            // An attested frame that failed to parse gets an explicit refusal
+            // rather than silence — most often because it was the *unsigned*
+            // shape, which carries no authorship binding and therefore has no
+            // wire representation at all. Telling the client beats leaving it to
+            // infer a drop from a missing ack.
+            if is_attested_frame(bytes) {
+                let refusal = attested.refuse_malformed(e.to_string(), crate::attested::now_ms());
+                warn!(%player_id, reason = %refusal, "refusing attested frame");
+                return Inbound::Reply(Box::new(ServerNet::AttestedReject {
+                    seq: 0,
+                    reason: refusal.to_string(),
+                }));
+            }
             warn!(%player_id, error = %e, "failed to parse ClientNet frame");
             return Inbound::Nothing;
         }
@@ -643,7 +666,43 @@ async fn handle_client_message(
                 Err(e) => Inbound::Refused(e.to_string()),
             }
         }
+
+        // Client-attested sensor input (seam §3.7). This arm is the *only* way
+        // an attested event enters the process, and it routes to
+        // `AttestedIngress` and nowhere else — in particular never to
+        // `conn_mgr.push_input`, which is the deterministic, replay-verifiable
+        // path. Mixing them would leave `verify_replay` passing while no longer
+        // proving anything.
+        //
+        // Admission here means "signed by the key it names, and not physically
+        // impossible". It is not verification and not anti-cheat; see
+        // `crate::attested`.
+        ClientNet::AttestedEvent { signed } => {
+            match attested.accept(&signed, crate::attested::now_ms()).await {
+                Ok(seq) => Inbound::Reply(Box::new(ServerNet::AttestedAck { seq })),
+                Err(refusal) => {
+                    warn!(%player_id, reason = %refusal, "refusing attested event");
+                    Inbound::Reply(Box::new(ServerNet::AttestedReject {
+                        seq: signed.event.seq,
+                        reason: refusal.to_string(),
+                    }))
+                }
+            }
+        }
     }
+}
+
+/// Cheap peek at an unparseable frame's `"type"` tag.
+///
+/// Used only to decide whether a parse failure deserves an explicit attested
+/// refusal. Deliberately does not attempt any recovery of the payload: a frame
+/// that did not deserialize is refused, and this just makes the refusal
+/// legible.
+fn is_attested_frame(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(bytes)
+        .ok()
+        .and_then(|v| v.get("type")?.as_str().map(|s| s == "attested_event"))
+        .unwrap_or(false)
 }
 
 /// Serialise and send a [`ServerNet`] frame as a JSON text WebSocket message.

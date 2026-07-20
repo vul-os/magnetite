@@ -196,6 +196,15 @@ async fn drive_client(ws_url: &str) -> ClientObservation {
                             ServerNet::Welcome { .. } => {}
                             // Fleet frames: not exercised by this harness.
                             ServerNet::NodeIdentity { .. } | ServerNet::Redirect { .. } => {}
+                            // Attested-input frames (seam §3.7). This harness
+                            // drives the deterministic path only and never sends
+                            // a `ClientNet::AttestedEvent`, so these cannot
+                            // arrive. Kept out of `ack_seqs`/`reject_seqs`
+                            // deliberately: those are the replay-verifiable
+                            // path's counters, and a sensor claim does not
+                            // belong in them.
+                            ServerNet::AttestedAck { .. }
+                            | ServerNet::AttestedReject { .. } => {}
                         }
                     }
                 }
