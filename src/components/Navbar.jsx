@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
 import { usePresence } from '../hooks/usePresence';
+import { useNotifications } from '../hooks/useNotifications';
 import { useTranslation } from '../i18n/useTranslation';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
 import {
@@ -83,12 +84,91 @@ const USER_MENU_ITEMS = [
   { path: '/developers/earnings', labelKey: 'developer.earnings', icon: WalletIcon },
 ];
 
-// Sample notifications — in production, these come from the notification API
-const SAMPLE_NOTIFICATIONS = [
-  { id: 1, type: 'achievement', title: 'Achievement Unlocked', message: 'You earned the "Top Developer" badge', time: '2h ago', unread: true },
-  { id: 2, type: 'payout',      title: 'Payout Received',      message: 'You received 50.00 USDC',             time: '5h ago', unread: true },
-  { id: 3, type: 'invite',      title: 'Game Invite',           message: 'PlayerX invited you to join a lobby', time: '1d ago', unread: false },
-];
+/**
+ * Relative-time formatter for a notification timestamp.
+ * Returns null when there is no usable date, so callers can omit the <time>.
+ */
+function notificationTimeAgo(dateString) {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return null;
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60)     return 'just now';
+  if (seconds < 3600)   return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400)  return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return date.toLocaleDateString();
+}
+
+/**
+ * Notifications bell + dropdown. Reads the REAL notification source
+ * (NotificationContext) — no fabricated sample data. Rendered only for
+ * authenticated users, which is also the only context in which the
+ * NotificationProvider is present.
+ */
+function NotificationsMenu({ isOpen, onToggle, containerRef, t }) {
+  const { notifications, unreadCount, markAllAsRead } = useNotifications();
+
+  return (
+    <div ref={containerRef} className="notifications-wrapper">
+      <button
+        className="notifications-btn"
+        onClick={onToggle}
+        aria-label={unreadCount > 0 ? t('navbar.notificationsUnread', { count: unreadCount }) : t('navbar.notificationsLabel')}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+      >
+        <BellIcon />
+        {unreadCount > 0 && (
+          <span className="notification-badge" aria-hidden="true">{unreadCount}</span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="notification-dropdown" role="dialog" aria-label={t('navbar.notificationsDialog')}>
+          <div className="dropdown-header">
+            <h3>{t('notifications.title')}</h3>
+            {unreadCount > 0 && (
+              <button className="mark-all-read" onClick={markAllAsRead}>{t('navbar.markAllRead')}</button>
+            )}
+          </div>
+          <div className="notification-list">
+            {notifications.length > 0 ? (
+              notifications.map(n => {
+                const isUnread = !n.read;
+                const message  = n.message ?? n.body ?? '';
+                const type     = n.notification_type ?? n.type ?? 'system';
+                const time     = notificationTimeAgo(n.createdAt ?? n.created_at);
+                return (
+                  <div
+                    key={n.id}
+                    className={`notification-item${isUnread ? ' unread' : ''}`}
+                    role="article"
+                  >
+                    <div className={`notification-icon ${type}`} aria-hidden="true">
+                      <BellIcon />
+                    </div>
+                    <div className="notification-content">
+                      <div className="notification-title">{n.title}</div>
+                      {message && <div className="notification-message">{message}</div>}
+                      {time && <time className="notification-time">{time}</time>}
+                    </div>
+                    {isUnread && <div className="unread-dot" aria-label="Unread" />}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="empty-state">
+                <BellIcon />
+                <p>{t('navbar.noNotificationsYet')}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Navbar() {
   const { t } = useTranslation();
@@ -171,8 +251,6 @@ export default function Navbar() {
     }
   };
 
-  const unreadCount = SAMPLE_NOTIFICATIONS.filter(n => n.unread).length;
-
   return (
     <>
       {/* ── Main bar ───────────────────────────────────────────────────────── */}
@@ -246,57 +324,12 @@ export default function Navbar() {
                 </Link>
 
                 {/* Notifications */}
-                <div ref={notificationsRef} className="notifications-wrapper">
-                  <button
-                    className="notifications-btn"
-                    onClick={() => setIsNotificationsOpen(v => !v)}
-                    aria-label={unreadCount > 0 ? t('navbar.notificationsUnread', { count: unreadCount }) : t('navbar.notificationsLabel')}
-                    aria-expanded={isNotificationsOpen}
-                    aria-haspopup="true"
-                  >
-                    <BellIcon />
-                    {unreadCount > 0 && (
-                      <span className="notification-badge" aria-hidden="true">{unreadCount}</span>
-                    )}
-                  </button>
-
-                  {isNotificationsOpen && (
-                    <div className="notification-dropdown" role="dialog" aria-label={t('navbar.notificationsDialog')}>
-                      <div className="dropdown-header">
-                        <h3>{t('notifications.title')}</h3>
-                        {unreadCount > 0 && (
-                          <button className="mark-all-read">{t('navbar.markAllRead')}</button>
-                        )}
-                      </div>
-                      <div className="notification-list">
-                        {SAMPLE_NOTIFICATIONS.length > 0 ? (
-                          SAMPLE_NOTIFICATIONS.map(n => (
-                            <div
-                              key={n.id}
-                              className={`notification-item${n.unread ? ' unread' : ''}`}
-                              role="article"
-                            >
-                              <div className={`notification-icon ${n.type}`} aria-hidden="true">
-                                <BellIcon />
-                              </div>
-                              <div className="notification-content">
-                                <div className="notification-title">{n.title}</div>
-                                <div className="notification-message">{n.message}</div>
-                                <time className="notification-time">{n.time}</time>
-                              </div>
-                              {n.unread && <div className="unread-dot" aria-label="Unread" />}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="empty-state">
-                            <BellIcon />
-                            <p>{t('navbar.noNotificationsYet')}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <NotificationsMenu
+                  isOpen={isNotificationsOpen}
+                  onToggle={() => setIsNotificationsOpen(v => !v)}
+                  containerRef={notificationsRef}
+                  t={t}
+                />
 
                 {/* User menu */}
                 <div ref={userMenuRef} className="user-menu-wrapper">

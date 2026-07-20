@@ -81,9 +81,9 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
   const isPopular = playersOnline > 100;
   const isNew = game.is_new || false;
 
-  const thumbnailSrc = imageError
-    ? null
-    : (game.thumbnail || `https://picsum.photos/seed/${game.id}/400/225`);
+  // Real thumbnail only — never a random stock photo. When a game has no
+  // artwork (or the image fails to load) the neutral ErrorState tile renders.
+  const thumbnailSrc = imageError ? null : (game.thumbnail || null);
 
   return (
     <article className="game-card" aria-label={game.title}>

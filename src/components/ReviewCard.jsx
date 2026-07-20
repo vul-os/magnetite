@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { initialsAvatar } from '../utils/initialsAvatar';
 
 const StarRatingDisplay = memo(function StarRatingDisplay({ rating, size = 'md' }) {
   const starSize = size === 'sm' ? 14 : size === 'lg' ? 24 : 18;
@@ -24,9 +25,9 @@ function ReviewCard({ review }) {
   return (
     <div className="review-card">
       <div className="review-header">
-        <img 
-          src={review.user?.avatar || `https://picsum.photos/seed/${review.user_id}/100/100`} 
-          alt={review.user?.username || 'User'} 
+        <img
+          src={review.user?.avatar || initialsAvatar(review.user?.username)}
+          alt={review.user?.username || 'User'}
           className="review-avatar"
         />
         <div className="review-info">
