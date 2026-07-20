@@ -6,7 +6,6 @@ import OAuthButtons from '../components/auth/OAuthButtons';
 import EmailInput from '../components/auth/EmailInput';
 import PasswordInput from '../components/auth/PasswordInput';
 import TermsCheckbox from '../components/auth/TermsCheckbox';
-import SocialProof from '../components/auth/SocialProof';
 import { useTranslation } from '../i18n/useTranslation';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
@@ -188,7 +187,6 @@ export default function Register() {
           </div>
 
           <div className="reveal reveal-6">
-            <SocialProof />
           </div>
         </div>
       </div>

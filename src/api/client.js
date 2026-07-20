@@ -227,8 +227,13 @@ export const api = {
   profile: {
     /** GET /api/v1/users/by-username/:username — look up profile by username string */
     get: (username) => request(`/api/v1/users/by-username/${encodeURIComponent(username)}`),
-    /** PUT /api/v1/profile — update the authenticated user's profile */
-    update: (data) => request('/api/v1/profile', { method: 'PUT', body: JSON.stringify(data) }),
+    /** GET /api/v1/profile/me — the authenticated user's own profile */
+    me: () => request('/api/v1/profile/me'),
+    /** PUT /api/v1/profile/me — update the authenticated user's profile.
+     *  The backend nests profile::router() under /api/v1/profile and the
+     *  authed handlers live at /me; calling /api/v1/profile bare 404s, which
+     *  is what silently broke every profile save. */
+    update: (data) => request('/api/v1/profile/me', { method: 'PUT', body: JSON.stringify(data) }),
   },
   social: {
     friends: () => request('/api/friends'),

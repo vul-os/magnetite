@@ -23,7 +23,6 @@ const MOCK_STATS = import.meta.env.VITE_USE_MOCKS === 'true'
       totalUsers: 12847,
       totalGames: 342,
       totalRevenue: 245890.5,
-      pendingPayouts: 12450.0,
       activeSessions: 1842,
       newUsersToday: 127,
     }
@@ -95,7 +94,6 @@ export default function AdminDashboard() {
             totalUsers:     data.total_users    ?? 0,
             totalGames:     data.total_games    ?? 0,
             totalRevenue:   parseFloat(data.total_revenue ?? 0),
-            pendingPayouts: parseFloat(data.pending_payouts_value ?? 0),
             activeSessions: data.active_sessions ?? 0,
             newUsersToday:  data.new_users_today ?? 0,
           });
@@ -119,7 +117,6 @@ export default function AdminDashboard() {
         { key: 'totalUsers',     label: 'Total Users',     icon: '👥', value: stats.totalUsers.toLocaleString(),                    warning: false },
         { key: 'totalGames',     label: 'Total Games',     icon: '⬡',  value: stats.totalGames,                                     warning: false },
         { key: 'totalRevenue',   label: 'Total Revenue',   icon: '$',  value: `$${stats.totalRevenue.toLocaleString()}`,             warning: false },
-        { key: 'pendingPayouts', label: 'Pending Payouts', icon: '⏳', value: `$${stats.pendingPayouts.toLocaleString()}`,           warning: true  },
         { key: 'activeSessions', label: 'Active Sessions', icon: '◉',  value: (metrics?.total_users ?? stats.activeSessions).toLocaleString(), warning: false },
         { key: 'newUsersToday',  label: 'New Today',       icon: '↑',  value: stats.newUsersToday,                                  warning: false },
       ]
