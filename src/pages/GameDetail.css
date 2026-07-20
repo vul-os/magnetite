@@ -331,18 +331,18 @@
 
 .gd-access { margin-left: var(--space-1); }
 
-.gd-upgrade {
+.gd-purchase {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
-  background: var(--spec-tint);
+  background: var(--boundary-tint);
   border-radius: var(--radius-sm);
 }
-.gd-upgrade p {
+.gd-purchase p {
   font-size: var(--text-sm);
-  color: var(--spec-text);
+  color: var(--boundary-text);
 }
 
 /* ─── Provenance dossier ──────────────────────────────────────────────────── */

@@ -62,7 +62,6 @@ const Contact = lazy(() => import('./pages/Contact'));
 const Careers = lazy(() => import('./pages/Careers'));
 const FAQ = lazy(() => import('./pages/FAQ'));
 const Playground = lazy(() => import('./pages/Playground'));
-const GameAccess = lazy(() => import('./pages/GameAccess'));
 const GameLobby = lazy(() => import('./pages/GameLobby'));
 const Spectator = lazy(() => import('./pages/Spectator'));
 const Friends = lazy(() => import('./pages/Friends'));
@@ -170,7 +169,6 @@ function App() {
                       <Route path="/servers" element={<ServerBrowser />} />
                       <Route path="/game/:id" element={<GameDetail />} />
                       <Route path="/play/:id" element={<Playground />} />
-                      <Route path="/game-access" element={<GameAccess />} />
                       <Route path="/matchmaking" element={<Matchmaking />} />
                       <Route path="/lobby/:id" element={<GameLobby />} />
                       <Route path="/spectate/:id" element={<Spectator />} />

@@ -5,6 +5,7 @@ import GameCard from '../components/GameCard';
 import GameGallery from '../components/GameGallery';
 import ReviewList from '../components/ReviewList';
 import { api } from '../api/client';
+import { formatUSDC } from '../utils/currency';
 import './GameDetail.css';
 
 /*
@@ -19,20 +20,6 @@ import './GameDetail.css';
  * "not reported" / empty state. There is no placeholder rating, no placeholder
  * player count, no sample leaderboard. If it is not attested, we say so.
  */
-
-const REQUIRED_TIER = {
-  free: ['free'],
-  basic: ['free', 'basic'],
-  pro: ['free', 'basic', 'pro'],
-  unlimited: ['free', 'basic', 'pro', 'unlimited'],
-};
-
-const TIER_NAMES = {
-  free: 'Free',
-  basic: 'Basic',
-  pro: 'Pro',
-  unlimited: 'Unlimited',
-};
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
@@ -50,8 +37,8 @@ const MOCK_GAME = {
   title: 'Cosmic Raiders',
   developer: 'StarForge Studios',
   developerId: 'starforge',
-  requiredTier: 'basic',
-  isFree: false,
+  fee_per_session: 0.5,
+  is_free: false,
   category: 'Action',
   description:
     'Embark on an interstellar adventure in Cosmic Raiders — a server-authoritative Rust game compiled to WebAssembly. Battle alien forces across 12 unique star systems, upgrade your spacecraft, and compete against players worldwide.',
@@ -179,7 +166,6 @@ export default function GameDetail() {
   const [wishlisted, setWishlisted]             = useState(false);
   const [showShareToast, setShowShareToast]     = useState(false);
   const [stickyBarVisible, setStickyBarVisible] = useState(false);
-  const [userTier] = useState('basic');
   const [ageGatePassed, setAgeGatePassed] = useState(false);
   const heroRef = useRef(null);
   const tabRefs = useRef({});
@@ -241,14 +227,17 @@ export default function GameDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
-  const userTierLevel     = Object.keys(REQUIRED_TIER).indexOf(userTier);
-  const requiredTierLevel = Object.keys(REQUIRED_TIER).indexOf(game?.requiredTier ?? game?.required_tier ?? 'free');
-  const hasAccess         = userTierLevel >= requiredTierLevel || game?.isFree || game?.is_free;
-  const needsUpgrade      = !hasAccess && !(game?.isFree || game?.is_free);
+  // Free vs paid is the ONLY access model. A game is free unless its developer
+  // has set a positive per-session fee. "Paid" means the developer sells it
+  // directly, wallet-to-wallet; the platform gates nothing and takes no cut.
+  // There are no platform subscription tiers here.
+  const feePerSession = Number(game?.fee_per_session ?? game?.feePerSession);
+  const isPaid        = Number.isFinite(feePerSession) && feePerSession > 0
+                        && !(game?.is_free ?? game?.isFree);
+  const priceLabel    = isPaid ? `${formatUSDC(feePerSession)} / session` : null;
 
   const handlePlayNow = () => {
     if (!walletConnected) { setWalletConnected(true); return; }
-    if (needsUpgrade)     { window.location.href = '/pricing'; return; }
     setInQueue(true);
     setTimeout(() => setInQueue(false), 3000);
   };
@@ -285,8 +274,6 @@ export default function GameDetail() {
     ? 'Connect & Launch'
     : inQueue
     ? 'Joining…'
-    : needsUpgrade
-    ? 'Upgrade to Launch'
     : 'Launch';
 
   // ─── Loading ──────────────────────────────────────────────────────────────
@@ -381,8 +368,6 @@ export default function GameDetail() {
   }
 
   // ─── Derived, never invented ──────────────────────────────────────────────
-  const tierName      = TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free'];
-  const isFree        = Boolean(game.isFree || game.is_free);
   const screenshots   = Array.isArray(game.screenshots) ? game.screenshots : [];
   const achievements  = Array.isArray(game.achievements) ? game.achievements : [];
   const sessions      = Array.isArray(game.sessions) ? game.sessions : [];
@@ -671,8 +656,8 @@ export default function GameDetail() {
               {game.developer && <span className="gd-sticky-dev font-mono">{game.developer}</span>}
             </div>
             <div className="gd-sticky-actions">
-              <span className={`st ${hasAccess ? 'st-field' : 'st-spec'} gd-sticky-access`}>
-                {hasAccess ? 'Included in plan' : `Requires ${tierName}`}
+              <span className={`st ${isPaid ? 'st-field' : 'st-live'} gd-sticky-access`}>
+                {isPaid ? priceLabel : 'Free to play'}
               </span>
               <button
                 className="btn btn-primary"
@@ -698,7 +683,7 @@ export default function GameDetail() {
             <div className="gd-identity">
               <div className="gd-eyebrow">
                 {game.category && <span className="m-sm gd-chip">{game.category}</span>}
-                <span className="m-sm gd-chip">{isFree ? 'Free to play' : `${tierName} tier`}</span>
+                <span className="m-sm gd-chip">{isPaid ? priceLabel : 'Free to play'}</span>
                 {(game.content_rating || game.contentRating) && (
                   <ContentRatingBadge rating={game.content_rating ?? game.contentRating} />
                 )}
@@ -742,7 +727,6 @@ export default function GameDetail() {
                   aria-label={
                     !walletConnected ? 'Connect wallet and launch game' :
                     inQueue ? 'Joining game queue' :
-                    needsUpgrade ? `Upgrade to ${tierName} to launch` :
                     'Launch game'
                   }
                 >
@@ -758,15 +742,20 @@ export default function GameDetail() {
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                   </svg>
                 </button>
-                <span className={`st ${isFree ? 'st-live' : hasAccess ? 'st-field' : 'st-spec'} gd-access`}>
-                  {isFree ? 'Free to play' : hasAccess ? 'Included in your plan' : `Requires ${tierName}`}
+                <span className={`st ${isPaid ? 'st-field' : 'st-live'} gd-access`}>
+                  {isPaid ? priceLabel : 'Free to play'}
                 </span>
               </div>
 
-              {needsUpgrade && (
-                <div className="gd-upgrade edge-spec" role="alert">
-                  <p>Your current plan does not include this build.</p>
-                  <a href="/pricing" className="btn btn-secondary btn-sm">View plans</a>
+              {isPaid && (
+                <div className="gd-purchase edge-boundary">
+                  <p>
+                    Sold by its developer for{' '}
+                    <span className="font-mono">{priceLabel}</span>. Payment settles
+                    wallet-to-wallet on the payment rail when you launch — the platform
+                    holds no funds and takes no cut. The rail itself is outside anything
+                    this node can verify for you.
+                  </p>
                 </div>
               )}
             </div>
