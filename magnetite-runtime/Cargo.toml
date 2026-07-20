@@ -27,6 +27,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # LanDiscovery, so nothing here is required for a node to run offline.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 async-trait = "0.1"
+# Already in the tree via magnetite-seams; named here because `checkpoint`
+# hex-encodes state bytes inside the checkpoint envelope. No new external code.
+hex = "0.4"
 
 [dev-dependencies]
 tokio-test = "0.4"

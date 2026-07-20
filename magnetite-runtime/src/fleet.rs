@@ -188,6 +188,34 @@ pub enum Frame {
         /// Target signature binding `(transcript, shard, epoch)`.
         sig: Sig,
     },
+    /// "I hold `shard` at `epoch`; if you hold it lower, you are stale."
+    ///
+    /// The active half of the epoch fence, used after a checkpoint restore to
+    /// evict a zombie owner that came back believing it still owns the shard.
+    /// It grants nothing and moves no state: the receiver either finds its own
+    /// high-water mark is already ≥ `epoch` and ignores it, or drops its stale
+    /// claim. Signed over the session transcript, so it cannot be replayed onto
+    /// another connection, and only ever accepted from an authenticated peer
+    /// that passed the inbound allowlist.
+    Fence {
+        /// Shard being fenced.
+        shard: u32,
+        /// The strictly-higher epoch the sender holds.
+        epoch: u64,
+        /// Sender signature binding `(transcript, shard, epoch)`.
+        sig: Sig,
+    },
+    /// The answer to [`Frame::Fence`].
+    FenceAck {
+        /// Shard.
+        shard: u32,
+        /// Epoch that was asserted.
+        epoch: u64,
+        /// Whether the receiver actually dropped a stale claim. `false` means
+        /// it was not stale (it holds an equal or higher epoch) — which is
+        /// itself informative: the *sender* is the one who should stand down.
+        dropped: bool,
+    },
     /// **Read-only** query: "what do you own, and how much can you hold?"
     ///
     /// Answered only on an already mutually-authenticated channel, and only to a
@@ -207,6 +235,23 @@ pub enum Frame {
     Status {
         /// Shard ids this node is authoritative for right now.
         shards: Vec<u32>,
+        /// `(shard, epoch)` for each owned shard — the authority claim made
+        /// explicit, so a peer can tell a *current* owner from a *stale* one
+        /// without attempting a handoff to find out.
+        ///
+        /// `#[serde(default)]`: a peer built before checkpointing existed simply
+        /// omits it, and is then treated as claiming no epochs — which disables
+        /// fencing against that peer rather than mis-fencing it.
+        #[serde(default)]
+        epochs: Vec<(u32, u64)>,
+        /// Newest durable checkpoint this node has written per shard.
+        ///
+        /// A **pointer**, not evidence: a survivor re-fetches and fully
+        /// re-verifies the content before restoring anything, so a peer that
+        /// lies here can only cause a failed fetch. `#[serde(default)]` for the
+        /// same forward/backward-compatibility reason as `epochs`.
+        #[serde(default)]
+        checkpoints: Vec<crate::checkpoint::CheckpointRef>,
         /// Self-declared logical cores.
         cpu_cores: u32,
         /// Self-declared RAM in megabytes.
@@ -384,6 +429,68 @@ impl ShardAuthority {
         let epoch = g.high_water.get(&shard.0).copied().unwrap_or(0) + 1;
         g.high_water.insert(shard.0, epoch);
         g.owned.insert(shard.0, OwnedShard { epoch, state });
+    }
+
+    /// Take authority over a shard at an epoch **strictly above** both this
+    /// node's high-water mark and `floor`, returning the epoch claimed.
+    ///
+    /// This is [`Self::claim`] with an externally-supplied floor, and it exists
+    /// for exactly one caller: [`crate::checkpoint::restore_shard`]. A survivor
+    /// rebuilding a dead node's shard has usually never seen that shard, so its
+    /// own high-water mark is 0 and a plain `claim` would take epoch 1 — which
+    /// the returning owner, sitting at epoch 7, would out-rank. Passing the
+    /// checkpoint's epoch as the floor is what makes the restore *win* the
+    /// existing fence instead of losing to it.
+    ///
+    /// It cannot be used to weaken the fence: the result is always strictly
+    /// greater than the current high-water mark, so it can only ever move
+    /// authority forward.
+    pub fn claim_at_least(&self, shard: ShardId, floor: u64, state: Vec<u8>) -> u64 {
+        let mut g = self.inner.lock().unwrap();
+        let hw = g.high_water.get(&shard.0).copied().unwrap_or(0);
+        let epoch = hw.max(floor).saturating_add(1);
+        g.high_water.insert(shard.0, epoch);
+        // A stage for an older epoch can never be committed now; drop it so it
+        // cannot sit around holding memory until its TTL.
+        g.staged.remove(&shard.0);
+        g.owned.insert(shard.0, OwnedShard { epoch, state });
+        epoch
+    }
+
+    /// Be told, by a peer that proved it holds `shard` at `epoch`, that our
+    /// claim is stale — and give it up if it is.
+    ///
+    /// Returns `true` if authority was actually dropped. This is the *active*
+    /// half of the epoch fence: normally a stale owner discovers it is stale by
+    /// trying to hand the shard on and being refused, but a zombie that returns
+    /// after a restore may never try anything, and meanwhile two nodes claim the
+    /// same shard. A fence resolves that immediately and deterministically.
+    ///
+    /// It is not a new authority path — it can only ever *reduce* what this node
+    /// claims, and only in favour of a strictly higher epoch. A peer that sends
+    /// a lower or equal epoch is ignored, so this cannot be used to strip a
+    /// current owner. The caller ([`serve_conn`]) has already verified the
+    /// sender is an authenticated cluster member and signed the frame.
+    pub fn fence(&self, shard: ShardId, epoch: u64) -> bool {
+        let mut g = self.inner.lock().unwrap();
+        let hw = g.high_water.get(&shard.0).copied().unwrap_or(0);
+        if epoch <= hw {
+            // We are at or ahead of the claimed epoch: not stale, nothing to do.
+            return false;
+        }
+        g.high_water.insert(shard.0, epoch);
+        g.staged.remove(&shard.0);
+        g.owned.remove(&shard.0).is_some()
+    }
+
+    /// Every shard this node owns, with the epoch it owns it at. Sorted by
+    /// shard id. Used to announce authority so a stale claim can be detected.
+    pub fn owned_epochs(&self) -> Vec<(ShardId, u64)> {
+        let g = self.inner.lock().unwrap();
+        let mut v: Vec<(ShardId, u64)> =
+            g.owned.iter().map(|(s, o)| (ShardId(*s), o.epoch)).collect();
+        v.sort_by_key(|(s, _)| s.0);
+        v
     }
 
     /// Update the stored state of a shard we already own (e.g. after ticking).
@@ -749,6 +856,8 @@ fn frame_name(f: &Frame) -> &'static str {
         Frame::CommitAck { .. } => "CommitAck",
         Frame::StatusRequest => "StatusRequest",
         Frame::Status { .. } => "Status",
+        Frame::Fence { .. } => "Fence",
+        Frame::FenceAck { .. } => "FenceAck",
     }
 }
 
@@ -796,6 +905,23 @@ pub struct PeerStatus {
     pub shards: Vec<ShardId>,
     /// The peer's self-declared capacity.
     pub capacity: Capacity,
+    /// `(shard, epoch)` the peer claims. Compared against local epochs to spot
+    /// a stale (zombie) claim; a shard missing from here is simply not fenced.
+    pub epochs: Vec<(ShardId, u64)>,
+    /// Checkpoints the peer says it has written. Cached by [`crate::rebalance`]
+    /// while the peer is alive, so that when it dies a survivor still knows
+    /// where the durable copy is. Always re-verified before use.
+    pub checkpoints: Vec<crate::checkpoint::CheckpointRef>,
+}
+
+impl PeerStatus {
+    /// The epoch this peer claims for `shard`, if it claims one.
+    pub fn epoch_of(&self, shard: ShardId) -> Option<u64> {
+        self.epochs
+            .iter()
+            .find(|(s, _)| *s == shard)
+            .map(|(_, e)| *e)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -817,6 +943,10 @@ pub struct FleetNode {
     /// What this node reports to peers that ask for its status. Shared with the
     /// listener threads so [`Self::publish_capacity`] takes effect live.
     capacity: Arc<Mutex<Capacity>>,
+    /// The checkpointer whose refs are announced in status replies. `None` (the
+    /// default) announces no checkpoints at all, so a node with durability
+    /// switched off tells peers exactly that and is never restored from.
+    checkpointer: Arc<Mutex<Option<crate::checkpoint::Checkpointer>>>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -843,7 +973,10 @@ impl FleetNode {
         // said how big it is attracts no shards, rather than attracting a share
         // it may not be able to hold.
         let capacity = Arc::new(Mutex::new(unmeasured_capacity()));
+        let checkpointer: Arc<Mutex<Option<crate::checkpoint::Checkpointer>>> =
+            Arc::new(Mutex::new(None));
 
+        let t_checkpointer = Arc::clone(&checkpointer);
         let t_capacity = Arc::clone(&capacity);
         let t_identity = Arc::clone(&identity);
         let t_authority = authority.clone();
@@ -869,6 +1002,7 @@ impl FleetNode {
                 let c_authority = t_authority.clone();
                 let c_allowed = t_allowed.clone();
                 let c_capacity = Arc::clone(&t_capacity);
+                let c_checkpointer = Arc::clone(&t_checkpointer);
                 std::thread::spawn(move || {
                     if let Err(e) = serve_conn(
                         &mut sock,
@@ -876,6 +1010,7 @@ impl FleetNode {
                         &c_authority,
                         c_allowed.as_ref(),
                         &c_capacity,
+                        &c_checkpointer,
                     ) {
                         // Refusals are expected traffic (that is the point of a
                         // fail-closed door); log and drop the connection.
@@ -893,8 +1028,23 @@ impl FleetNode {
             shutdown,
             timeout,
             capacity,
+            checkpointer,
             handle: Some(handle),
         })
+    }
+
+    /// Announce this node's durable checkpoints to peers that query its status.
+    ///
+    /// Advisory in the same sense as capacity: it tells the cluster *where the
+    /// durable copy is*, and nothing more. A survivor that acts on it still
+    /// fetches the content, re-hashes it, checks the shard binding, and claims a
+    /// strictly higher epoch. Until this is called the node announces nothing,
+    /// which means no peer will ever try to restore its shards.
+    pub fn attach_checkpointer(&self, checkpointer: crate::checkpoint::Checkpointer) {
+        match self.checkpointer.lock() {
+            Ok(mut c) => *c = Some(checkpointer),
+            Err(p) => *p.into_inner() = Some(checkpointer),
+        }
     }
 
     /// Set what this node reports to peers that send a [`Frame::StatusRequest`].
@@ -991,6 +1141,7 @@ fn serve_conn(
     authority: &ShardAuthority,
     allowed: Option<&HashSet<PubKey>>,
     capacity: &Arc<Mutex<Capacity>>,
+    checkpointer: &Arc<Mutex<Option<crate::checkpoint::Checkpointer>>>,
 ) -> Result<(), HandoffError> {
     let chan = server_handshake(sock, identity, allowed)?;
     debug!(peer = %chan.peer.to_hex(), "handoff peer authenticated");
@@ -1100,18 +1251,52 @@ fn serve_conn(
                     .lock()
                     .map(|c| c.clone())
                     .unwrap_or_else(|p| p.into_inner().clone());
-                let mut shards: Vec<u32> = authority.owned_shards().iter().map(|s| s.0).collect();
-                shards.sort_unstable();
+                let owned = authority.owned_epochs();
+                let shards: Vec<u32> = owned.iter().map(|(s, _)| s.0).collect();
+                let epochs: Vec<(u32, u64)> = owned.iter().map(|(s, e)| (s.0, *e)).collect();
+                let checkpoints = checkpointer
+                    .lock()
+                    .map(|c| c.as_ref().map(|c| c.refs()).unwrap_or_default())
+                    .unwrap_or_default();
                 write_frame(
                     sock,
                     &Frame::Status {
                         shards,
+                        epochs,
+                        checkpoints,
                         cpu_cores: cap.cpu_cores,
                         ram_mb: cap.ram_mb,
                         max_shards: cap.max_shards,
                         free_slots: cap.free_slots,
                     },
                 )?;
+            }
+            // The active epoch fence. Accepted only from an authenticated,
+            // allowlisted peer, and only with a signature over THIS session's
+            // transcript. It can never raise this node's authority — only drop
+            // a claim that a strictly higher epoch has already superseded.
+            Frame::Fence { shard, epoch, sig } => {
+                let signed = msg_bytes(b"mg-fence", &chan.transcript, shard, epoch, "");
+                if !verify(&chan.peer, &signed, &sig) {
+                    write_frame(
+                        sock,
+                        &Frame::Reject {
+                            reason: "fence signature does not verify".into(),
+                        },
+                    )?;
+                    continue;
+                }
+                let dropped = authority.fence(ShardId(shard), epoch);
+                if dropped {
+                    warn!(
+                        shard,
+                        epoch,
+                        peer = %chan.peer.to_hex(),
+                        "FENCED OUT: this node's claim on the shard was stale and has been \
+                         dropped — a higher epoch owns it elsewhere"
+                    );
+                }
+                write_frame(sock, &Frame::FenceAck { shard, epoch, dropped })?;
             }
             other => {
                 write_frame(
@@ -1339,13 +1524,24 @@ impl NetworkHandoffTransport {
         match read_frame(&mut sock)? {
             Frame::Status {
                 shards,
+                epochs,
+                checkpoints,
                 cpu_cores,
                 ram_mb,
                 max_shards,
                 free_slots,
             } => Ok(PeerStatus {
+                // Keep only refs the peer is entitled to speak about: a
+                // checkpoint ref for a shard it does not claim tells us nothing
+                // we should act on, and dropping it here stops a peer seeding a
+                // survivor's cache with pointers to arbitrary blobs.
+                checkpoints: checkpoints
+                    .into_iter()
+                    .filter(|c| shards.contains(&c.shard))
+                    .collect(),
                 node: route.pubkey,
-                shards: shards.into_iter().map(ShardId).collect(),
+                shards: shards.iter().copied().map(ShardId).collect(),
+                epochs: epochs.into_iter().map(|(s, e)| (ShardId(s), e)).collect(),
                 capacity: Capacity {
                     cpu_cores,
                     ram_mb,
@@ -1357,6 +1553,71 @@ impl NetworkHandoffTransport {
             Frame::Reject { reason } => Err(HandoffError::Rejected(reason)),
             other => Err(HandoffError::Rejected(format!(
                 "expected Status, got {}",
+                frame_name(&other)
+            ))),
+        }
+    }
+
+    /// Tell a peer that this node owns `shard` at a strictly higher epoch, so
+    /// it should drop a stale claim. Returns whether the peer actually did.
+    ///
+    /// Used after a checkpoint restore to evict a returning zombie owner. It is
+    /// refused before a socket opens unless we genuinely own the shard at an
+    /// epoch above the peer's — the fence is an assertion of fact, and a node
+    /// that cannot make it truthfully must not make it at all.
+    pub fn fence_peer(
+        &self,
+        route: &PeerRoute,
+        shard: ShardId,
+        peer_epoch: u64,
+    ) -> Result<bool, HandoffError> {
+        if let Some(m) = &self.membership {
+            if !m.contains(&route.pubkey) {
+                return Err(HandoffError::Auth(format!(
+                    "node {} is not an authorized member of this cluster",
+                    route.pubkey.to_hex()
+                )));
+            }
+        }
+        let epoch = self.authority.epoch_of(shard).ok_or(HandoffError::NotOwner(shard))?;
+        if epoch <= peer_epoch {
+            return Err(HandoffError::Rejected(format!(
+                "refusing to fence shard {shard}: we hold epoch {epoch}, peer holds {peer_epoch} \
+                 — we are the stale one"
+            )));
+        }
+
+        let addr = route
+            .addr
+            .to_socket_addrs()
+            .map_err(|e| HandoffError::Transport(format!("bad peer address: {e}")))?
+            .next()
+            .ok_or_else(|| HandoffError::Transport("peer address resolved to nothing".into()))?;
+        let mut sock = TcpStream::connect_timeout(&addr, self.timeout)
+            .map_err(|e| HandoffError::Transport(format!("connect to {addr}: {e}")))?;
+        sock.set_read_timeout(Some(self.timeout)).map_err(io_err)?;
+        sock.set_write_timeout(Some(self.timeout)).map_err(io_err)?;
+        sock.set_nodelay(true).ok();
+
+        let chan = client_handshake(&mut sock, &self.identity, &route.pubkey)?;
+        let signed = msg_bytes(b"mg-fence", &chan.transcript, shard.0, epoch, "");
+        write_frame(
+            &mut sock,
+            &Frame::Fence {
+                shard: shard.0,
+                epoch,
+                sig: self.identity.sign(&signed),
+            },
+        )?;
+        match read_frame(&mut sock)? {
+            Frame::FenceAck {
+                shard: s,
+                epoch: e,
+                dropped,
+            } if s == shard.0 && e == epoch => Ok(dropped),
+            Frame::Reject { reason } => Err(HandoffError::Rejected(reason)),
+            other => Err(HandoffError::Rejected(format!(
+                "expected FenceAck, got {}",
                 frame_name(&other)
             ))),
         }

@@ -47,26 +47,38 @@
 //!
 //! # What happens when a node dies — read this before trusting it
 //!
-//! **Magnetite has no state replication. A node that dies takes the in-memory
-//! state of every shard it owned with it, and that state is gone.**
+//! **Magnetite still has no live replication. A node that dies takes with it
+//! everything it simulated since its last checkpoint, and that is gone.**
 //!
-//! The rebalancer detects the loss (the peer stops answering, or its discovery
-//! lease lapses, and shards it last reported are now reported by nobody) and
-//! reports it as [`ShardLoss`] — a distinct, loud outcome. It does **not**
-//! silently start a replacement shard: an empty shard with the same id is a new
-//! world, not a recovered one, and quietly producing one would look like a
-//! successful recovery while every player in it lost their session. Callers that
-//! want a fresh shard must ask for one knowing it is fresh.
+//! What it now has is [`crate::checkpoint`]: shard state written to the
+//! [`magnetite_seams::blobstore`] seam on a cadence. When the rebalancer detects
+//! a death (the peer stops answering, or its discovery lease lapses, and shards
+//! it last reported are now reported by nobody), it takes one of exactly two
+//! outcomes per shard:
+//!
+//! - [`ShardRecovery`] — a survivor rebuilt the shard from the newest checkpoint
+//!   it cached while the owner was alive, at a **strictly higher epoch** so the
+//!   existing fence settles any race with a returning zombie. This is a
+//!   **rollback**: up to one cadence of simulation is gone, and
+//!   [`ShardRecovery::loss_window_secs`] reports how much.
+//! - [`ShardLoss`] — the honest fallback, unchanged, taken whenever a restore
+//!   cannot be made safe: no checkpoint known, blob missing, content hash or
+//!   shard binding mismatch, epoch that would not out-rank the old owner, or an
+//!   owner that is merely slow rather than dead ([`RecoveryPolicy`]).
+//!
+//! It still **never** silently starts an *empty* replacement shard: an empty
+//! shard with the same id is a new world, not a recovered one, and quietly
+//! producing one would look like a successful recovery while every player in it
+//! lost their session. Callers that want a fresh shard must ask for one knowing
+//! it is fresh.
 //!
 //! Surviving nodes do stop routing *new* work to a lapsed peer, because
 //! [`RouteDirectory`] filters on the lease and the peer drops out of the node
 //! set on the next tick. That is re-placement of capacity, not recovery of state.
 //!
-//! TODO(state-replication): the honest fix is replicating shard state to a warm
-//! standby (or checkpointing it to the [`magnetite_seams::blobstore`] seam) so a
-//! death costs a rollback rather than the whole shard. That is a much larger
-//! design — quorum, split-brain against the epoch fence, checkpoint cadence —
-//! and is deliberately not attempted here.
+//! TODO(warm-standby): checkpointing bounds the loss to one cadence; it does not
+//! remove it. Removing it needs a warm standby fed continuously (and the quorum
+//! question that comes with it). Not attempted here.
 //!
 //! # Still not solved here
 //!
@@ -88,6 +100,9 @@ use magnetite_sdk::scaling::{NodeCapacity, NodeId, Placement, ShardKey};
 /// SDK directly — the schedulers are part of this module's public interface.
 pub use magnetite_sdk::scaling::{LocalScheduler, ShardScheduler, SpreadScheduler};
 
+use crate::checkpoint::{
+    restore_shard, CheckpointRef, CheckpointStore, RecoveryPolicy, RestoreError, ShardRecovery,
+};
 use crate::cluster::RouteDirectory;
 use crate::fleet::{NetworkHandoffTransport, PeerRoute, PeerStatus};
 use crate::shard::ShardId;
@@ -260,8 +275,8 @@ pub enum SkipReason {
 
 /// A shard whose state is **gone**, because the node holding it disappeared.
 ///
-/// This is not a recoverable condition and this type does not pretend it is.
-/// See the module docs: there is no state replication, so the shard's world —
+/// This is what is reported when a restore from a checkpoint was **not
+/// possible or not safe** — see [`Self::restore_refused`]. The shard's world —
 /// entity positions, scores, whatever the game had in memory — died with the
 /// node. A caller may choose to start a *fresh* shard with the same id; that is
 /// a new world and should be described to players as one.
@@ -273,6 +288,11 @@ pub struct ShardLoss {
     pub last_owner: PubKey,
     /// Why we concluded it is gone.
     pub cause: LossCause,
+    /// Why a checkpoint restore did not happen: `None` when recovery is switched
+    /// off entirely, otherwise the [`RestoreError`] that made it unsafe. This is
+    /// the field to read before believing any story about durability — a
+    /// tampered or missing checkpoint lands here, not in a fake recovery.
+    pub restore_refused: Option<String>,
 }
 
 /// How a shard came to be lost.
@@ -290,11 +310,15 @@ impl std::fmt::Display for ShardLoss {
             LossCause::LeaseLapsed => "its lease lapsed".to_string(),
             LossCause::Unreachable(e) => format!("it stopped answering: {e}"),
         };
+        let why = match &self.restore_refused {
+            Some(e) => format!(" NO CHECKPOINT RESTORE WAS POSSIBLE: {e}."),
+            None => " Checkpoint recovery is not enabled on this node.".to_string(),
+        };
         write!(
             f,
-            "shard {} STATE LOST: node {} held it and {cause}. There is no state \
-             replication in Magnetite, so this shard's in-memory world is gone — \
-             a replacement shard would be a NEW world, not a recovered one",
+            "shard {} STATE LOST: node {} held it and {cause}.{why} This shard's \
+             in-memory world is gone — a replacement shard would be a NEW world, \
+             not a recovered one",
             self.shard,
             self.last_owner.to_hex()
         )
@@ -478,9 +502,18 @@ pub struct RebalanceReport {
     pub unreachable: Vec<(PubKey, String)>,
     /// Peers skipped without even probing, because they are backed off.
     pub backed_off: Vec<(PubKey, Duration)>,
-    /// **Unrecoverable**: shards whose owning node vanished. Never empty
-    /// silently — the caller is expected to surface these.
+    /// **Unrecoverable**: shards whose owning node vanished and which could not
+    /// be safely restored from a checkpoint. Never empty silently — the caller
+    /// is expected to surface these.
     pub lost: Vec<ShardLoss>,
+    /// Shards rebuilt on this node from a checkpoint after their owner died.
+    /// **Rollbacks, not resurrections** — each carries the seconds of simulation
+    /// that were lost and the tick it went back to.
+    pub recovered: Vec<ShardRecovery>,
+    /// Zombie claims actively fenced this tick: `(shard, peer, peer's stale
+    /// epoch, whether the peer confirmed it dropped the shard)`. A peer that
+    /// comes back believing it still owns a shard we restored is evicted here.
+    pub fenced: Vec<(ShardId, PubKey, u64, bool)>,
     /// Shards no visible node had headroom for.
     pub unplaced: Vec<ShardId>,
 }
@@ -500,6 +533,10 @@ impl RebalanceReport {
 struct PeerHealth {
     failures: u32,
     blocked_until: Option<Instant>,
+    /// When this peer's *current* run of failures started. Cleared on any
+    /// success. This is what makes [`RecoveryPolicy::grace`] a wall-clock
+    /// guarantee rather than a count of however many ticks fit in a second.
+    failing_since: Option<Instant>,
 }
 
 /// The periodic reconciler.
@@ -521,6 +558,16 @@ pub struct Rebalancer {
     last_seen: HashMap<String, (PubKey, Vec<ShardId>)>,
     /// Losses already reported, so a dead node is mourned once, not every tick.
     mourned: HashSet<(u32, String)>,
+    /// Where durable copies are, learned from peers' authenticated status
+    /// replies **while they were alive**. A dead peer cannot tell us where its
+    /// checkpoint is, so this cache is the only way a restore is ever possible.
+    /// Every entry is re-fetched, re-hashed and re-bound to its shard before it
+    /// is acted on — this map is a hint, never a credential.
+    known_checkpoints: HashMap<u32, CheckpointRef>,
+    /// Durability: the blob store to restore from, and when a restore is
+    /// allowed. `None` ⇒ the death path behaves exactly as it did before
+    /// [`crate::checkpoint`] existed: honest [`ShardLoss`], no replacement.
+    recovery: Option<(CheckpointStore, RecoveryPolicy)>,
 }
 
 impl std::fmt::Debug for Rebalancer {
@@ -549,6 +596,53 @@ impl Rebalancer {
             health: HashMap::new(),
             last_seen: HashMap::new(),
             mourned: HashSet::new(),
+            known_checkpoints: HashMap::new(),
+            recovery: None,
+        }
+    }
+
+    /// Enable **epoch-safe restore** on the death path, reading checkpoints from
+    /// `store`.
+    ///
+    /// Without this a dead node's shards are reported as [`ShardLoss`] and
+    /// nothing is started, which is the pre-durability behaviour and remains the
+    /// default. With it, a death becomes a restore *only* when every one of the
+    /// checks in [`crate::checkpoint`] passes; any doubt at all falls back to
+    /// [`ShardLoss`].
+    ///
+    /// The store must be one **this** node can read. A node-local store cannot
+    /// hold another node's checkpoints, so recovery across machines needs a
+    /// shared blob store; with a local one this degrades to the honest fallback
+    /// rather than to anything false.
+    pub fn with_recovery(mut self, store: CheckpointStore, policy: RecoveryPolicy) -> Self {
+        self.recovery = if policy.enabled {
+            Some((store, policy))
+        } else {
+            None
+        };
+        self
+    }
+
+    /// Whether the death path will attempt restores.
+    pub fn recovery_enabled(&self) -> bool {
+        self.recovery.is_some()
+    }
+
+    /// The newest checkpoint this node has heard announced for `shard`.
+    pub fn known_checkpoint(&self, shard: ShardId) -> Option<CheckpointRef> {
+        self.known_checkpoints.get(&shard.0).copied()
+    }
+
+    /// Record a checkpoint announcement. Newest wins, ordered on `(epoch, tick)`
+    /// so a peer replaying an old announcement cannot roll the cache backwards.
+    fn learn_checkpoints(&mut self, refs: &[CheckpointRef]) {
+        for r in refs {
+            match self.known_checkpoints.get(&r.shard) {
+                Some(cur) if (cur.epoch, cur.tick) >= (r.epoch, r.tick) => {}
+                _ => {
+                    self.known_checkpoints.insert(r.shard, *r);
+                }
+            }
         }
     }
 
@@ -582,8 +676,10 @@ impl Rebalancer {
         let h = self.health.entry(peer.to_hex()).or_insert(PeerHealth {
             failures: 0,
             blocked_until: None,
+            failing_since: None,
         });
         h.failures = h.failures.saturating_add(1);
+        h.failing_since.get_or_insert(now);
         let wait = self.policy.backoff_for(h.failures);
         h.blocked_until = Some(now + wait);
         wait
@@ -593,6 +689,20 @@ impl Rebalancer {
         if let Some(h) = self.health.get_mut(&peer.to_hex()) {
             h.failures = 0;
             h.blocked_until = None;
+            h.failing_since = None;
+        }
+    }
+
+    /// How long this peer has been continuously failing, and how many times.
+    fn failure_run(&self, peer_hex: &str, now: Instant) -> (u32, Duration) {
+        match self.health.get(peer_hex) {
+            Some(h) => (
+                h.failures,
+                h.failing_since
+                    .map(|t| now.saturating_duration_since(t))
+                    .unwrap_or_default(),
+            ),
+            None => (0, Duration::ZERO),
         }
     }
 
@@ -601,6 +711,56 @@ impl Rebalancer {
             .iter()
             .filter_map(|(k, h)| h.blocked_until.map(|u| (k.clone(), u)))
             .collect()
+    }
+
+    /// Attempt an epoch-safe restore of `shard` onto this node.
+    ///
+    /// `None` means recovery is switched off. `Some(Err(_))` means it was
+    /// attempted and **refused**; the caller must fall back to [`ShardLoss`].
+    ///
+    /// The liveness gate is deliberately the strict one:
+    ///
+    /// - a **lapsed lease** is a time-based, cluster-wide signal that the node
+    ///   stopped renewing its discovery record for a full TTL — that is dead;
+    /// - **unreachable** is only a local observation, so it additionally
+    ///   requires [`RecoveryPolicy::min_failures`] consecutive failures *and*
+    ///   [`RecoveryPolicy::grace`] of continuous failing. A peer in its first
+    ///   backoff is slow, not dead, and nothing is restored from under it.
+    #[allow(clippy::too_many_arguments)]
+    fn try_restore(
+        &self,
+        transport: &NetworkHandoffTransport,
+        shard: ShardId,
+        owner: PubKey,
+        owner_hex: &str,
+        lease_lapsed: bool,
+        now_unix: u64,
+        now: Instant,
+    ) -> Option<Result<ShardRecovery, RestoreError>> {
+        let (store, policy) = self.recovery.as_ref()?;
+
+        if !lease_lapsed {
+            let (failures, failing_for) = self.failure_run(owner_hex, now);
+            if failures < policy.min_failures || failing_for < policy.grace {
+                return Some(Err(RestoreError::OwnerNotDead {
+                    failures,
+                    grace_remaining: policy.grace.saturating_sub(failing_for),
+                }));
+            }
+        }
+
+        let cp_ref = match self.known_checkpoints.get(&shard.0) {
+            Some(r) => *r,
+            None => return Some(Err(RestoreError::NoCheckpoint(shard))),
+        };
+        Some(restore_shard(
+            &transport.authority(),
+            store,
+            &cp_ref,
+            shard,
+            owner,
+            now_unix,
+        ))
     }
 
     /// One reconciliation pass.
@@ -660,6 +820,8 @@ impl Rebalancer {
                     // A peer that answered is alive: nothing it holds is lost,
                     // so clear any mourning we recorded for it earlier.
                     self.mourned.retain(|(_, k)| k != &route.pubkey.to_hex());
+                    // Cache where its durable copies are, while we still can.
+                    self.learn_checkpoints(&status.checkpoints);
                     peers.push(status);
                 }
                 Err(e) => {
@@ -687,7 +849,15 @@ impl Rebalancer {
             .collect();
         let unreachable_hex: HashSet<String> = unreachable.iter().map(|k| k.to_hex()).collect();
         let mut losses: Vec<ShardLoss> = Vec::new();
-        for (hex, (key, shards)) in &self.last_seen {
+        let mut recovered: Vec<ShardRecovery> = Vec::new();
+        // Snapshot so the restore below can borrow `self` freely; a cluster's
+        // peer set is small and this runs once per rebalance interval.
+        let seen: Vec<(String, PubKey, Vec<ShardId>)> = self
+            .last_seen
+            .iter()
+            .map(|(hex, (k, s))| (hex.clone(), *k, s.clone()))
+            .collect();
+        for (hex, key, shards) in &seen {
             let lapsed = !live_keys.contains(hex);
             let dead = unreachable_hex.contains(hex);
             if !lapsed && !dead {
@@ -701,21 +871,39 @@ impl Rebalancer {
                 if !self.mourned.insert((shard.0, hex.clone())) {
                     continue;
                 }
+                let cause = if lapsed {
+                    LossCause::LeaseLapsed
+                } else {
+                    LossCause::Unreachable(
+                        report
+                            .unreachable
+                            .iter()
+                            .find(|(k, _)| &k.to_hex() == hex)
+                            .map(|(_, e)| e.clone())
+                            .unwrap_or_else(|| "peer stopped answering".into()),
+                    )
+                };
+
+                // 5b. Try to make this a bounded rollback instead of a total
+                //     loss. Every failure path below ends in ShardLoss; none of
+                //     them ever starts an empty shard under a real shard id.
+                let refused = match self.try_restore(
+                    transport, *shard, *key, hex, lapsed, now_unix, now,
+                ) {
+                    Some(Ok(rec)) => {
+                        // It is ours now, at a strictly higher epoch. Do not
+                        // mourn it, and do not let a later tick mourn it either.
+                        recovered.push(rec);
+                        continue;
+                    }
+                    Some(Err(e)) => Some(e.to_string()),
+                    None => None,
+                };
                 losses.push(ShardLoss {
                     shard: *shard,
                     last_owner: *key,
-                    cause: if lapsed {
-                        LossCause::LeaseLapsed
-                    } else {
-                        LossCause::Unreachable(
-                            report
-                                .unreachable
-                                .iter()
-                                .find(|(k, _)| &k.to_hex() == hex)
-                                .map(|(_, e)| e.clone())
-                                .unwrap_or_else(|| "peer stopped answering".into()),
-                        )
-                    },
+                    cause,
+                    restore_refused: refused,
                 });
             }
         }
@@ -727,6 +915,49 @@ impl Rebalancer {
             );
         }
         report.lost = losses;
+        report.recovered = recovered;
+
+        // 5c. The active half of the fence. Any peer that answered while
+        //     claiming a shard we own at a LOWER epoch is a zombie — typically
+        //     one that was restored out from under and has just come back. It is
+        //     told, over the authenticated channel, to drop it. `fence_peer`
+        //     refuses to send unless we genuinely out-rank it, so this is an
+        //     assertion of fact and the comparison is total-ordered: two nodes
+        //     can never both decide they win.
+        for status in &peers {
+            for (shard, peer_epoch) in &status.epochs {
+                let ours = match transport.authority().epoch_of(*shard) {
+                    Some(e) => e,
+                    None => continue,
+                };
+                if ours <= *peer_epoch {
+                    continue;
+                }
+                let route = match routes.iter().find(|r| r.pubkey == status.node) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                match transport.fence_peer(route, *shard, *peer_epoch) {
+                    Ok(dropped) => {
+                        warn!(
+                            shard = shard.0,
+                            peer = %status.node.to_hex(),
+                            peer_epoch = *peer_epoch,
+                            our_epoch = ours,
+                            dropped,
+                            "fenced a stale shard claim — no split-brain: the higher epoch wins"
+                        );
+                        report.fenced.push((*shard, status.node, *peer_epoch, dropped));
+                    }
+                    Err(e) => warn!(
+                        shard = shard.0,
+                        peer = %status.node.to_hex(),
+                        error = %e,
+                        "could not deliver a fence to a stale claimant"
+                    ),
+                }
+            }
+        }
         // Forget lapsed peers so we do not re-mourn them forever.
         self.last_seen
             .retain(|hex, _| live_keys.contains(hex) || !unreachable_hex.contains(hex));
@@ -836,6 +1067,8 @@ mod tests {
             node: k,
             shards: shards.iter().copied().map(ShardId).collect(),
             capacity: cap(ceiling),
+            epochs: Vec::new(),
+            checkpoints: Vec::new(),
         }
     }
 
@@ -1082,10 +1315,12 @@ mod tests {
             shard: ShardId(7),
             last_owner: key(3),
             cause: LossCause::LeaseLapsed,
+            restore_refused: Some("no checkpoint is known for shard 7".into()),
         };
         let msg = l.to_string();
         assert!(msg.contains("STATE LOST"));
-        assert!(msg.contains("no state replication"));
+        assert!(msg.contains("NO CHECKPOINT RESTORE WAS POSSIBLE"));
+        assert!(msg.contains("world is gone"));
         assert!(
             !msg.to_lowercase().contains("recovered from"),
             "loss must never read as a recovery"
