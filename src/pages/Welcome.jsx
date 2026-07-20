@@ -2,28 +2,6 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import './Welcome.css';
 
-const RELEASE_NOTES = [
-  {
-    version: 'v1.2.0',
-    date: 'May 2026',
-    changes: [
-      'Server-authoritative multiplayer matchmaking — zero config for small-scale games',
-      'Non-custodial checkout — buyers pay developer wallets directly in USDC, protocol fee defaults to 0 bps',
-      'Achievement system with server-side attestation',
-      'WASM compile time down 40% via incremental cargo builds',
-    ],
-  },
-  {
-    version: 'v1.1.0',
-    date: 'April 2026',
-    changes: [
-      'Developer Dashboard with real-time session analytics',
-      'Signed receipts — entitlements are proven by a verifiable receipt, not a balance we hold',
-      'Leaderboard rankings with server-side anti-cheat validation',
-    ],
-  },
-];
-
 const QUICK_ACTIONS = [
   { icon: '⬡', label: 'Marketplace',  link: '/',                  description: 'Browse Rust games' },
   { icon: '⌘', label: 'Dev Studio',   link: '/developers/studio', description: 'Ship your game' },
@@ -43,29 +21,6 @@ export default function Welcome() {
             Build, ship, and monetise Rust games — from game jam to AAA scale.
           </p>
         </header>
-
-        {/* ── What's New ─────────────────────────────────────── */}
-        <section className="whats-new reveal reveal-3">
-          <div className="section-heading">
-            <h2>What&apos;s New</h2>
-            <span className="section-heading-kicker">changelog</span>
-          </div>
-          <div className="release-notes">
-            {RELEASE_NOTES.map((release, index) => (
-              <div key={index} className="release-card">
-                <div className="release-header">
-                  <span className="release-version">{release.version}</span>
-                  <span className="release-date">{release.date}</span>
-                </div>
-                <ul className="release-changes">
-                  {release.changes.map((change, i) => (
-                    <li key={i}>{change}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
 
         {/* ── Quick Actions ───────────────────────────────────── */}
         <section className="quick-actions reveal reveal-4">

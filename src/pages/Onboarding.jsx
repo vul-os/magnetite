@@ -15,8 +15,11 @@ const ONBOARDING_STORAGE_KEY = 'magnetite_onboarding_completed';
 // pays the developer/operator wallet directly and mints a signed receipt.
 const STEPS = ['Welcome', 'Link Wallet', 'Browse Games'];
 
-// Placeholder featured games — replaced by real games if the API responds
-const FEATURED_GAMES_FALLBACK = [
+// Mock-only sample games. Gated on VITE_USE_MOCKS === 'true' (strict) so these
+// invented titles never reach a real first paint — production shows only games
+// the API actually returns. See DESIGN.md §7.
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+const FEATURED_GAMES_MOCK = [
   { id: 1, title: 'Cosmic Raiders',   developer: 'StarForge Studios', fee_per_session: 0.50, category: 'Action',  thumbnail: 'https://picsum.photos/seed/game1/400/225' },
   { id: 2, title: 'Puzzle Dimension', developer: 'MindBend Games',    fee_per_session: 0.25, category: 'Puzzle',  thumbnail: 'https://picsum.photos/seed/game2/400/225' },
   { id: 3, title: 'Speed Legends',    developer: 'Velocity Labs',     fee_per_session: 0.75, category: 'Racing',  thumbnail: 'https://picsum.photos/seed/game3/400/225' },
@@ -49,7 +52,7 @@ function WelcomeStep({ onNext }) {
         </div>
         <div className="welcome-feature">
           <span className="feature-icon" aria-hidden="true">◉</span>
-          <span>Developers are paid wallet-to-wallet, 0 bps protocol fee by default</span>
+          <span>Developers are paid wallet-to-wallet — the platform takes no cut</span>
         </div>
       </div>
       <Button size="lg" onClick={onNext}>
@@ -157,11 +160,20 @@ function BrowseGamesStep({ onComplete, featuredGames }) {
         Browse our marketplace of open-source Rust games. Start with these featured titles.
       </p>
 
-      <div className="featured-games-grid">
-        {featuredGames.map(game => (
-          <GameCard key={game.id} game={game} showPlayButton={false} />
-        ))}
-      </div>
+      {featuredGames.length > 0 ? (
+        <div className="featured-games-grid">
+          {featuredGames.map(game => (
+            <GameCard key={game.id} game={game} showPlayButton={false} />
+          ))}
+        </div>
+      ) : (
+        <div className="state state-empty">
+          <p className="state-body">
+            No games have been published yet. New titles will appear here as
+            developers ship them.
+          </p>
+        </div>
+      )}
 
       <div className="step-actions">
         <Button size="lg" onClick={onComplete}>
@@ -177,7 +189,7 @@ function BrowseGamesStep({ onComplete, featuredGames }) {
 
 export default function Onboarding() {
   const [currentStep, setCurrentStep]       = useState(0);
-  const [featuredGames, setFeaturedGames]   = useState(FEATURED_GAMES_FALLBACK);
+  const [featuredGames, setFeaturedGames]   = useState(USE_MOCKS ? FEATURED_GAMES_MOCK : []);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -187,7 +199,8 @@ export default function Onboarding() {
     }
   }, [navigate]);
 
-  // Pre-fetch featured games so the last step looks real
+  // Pre-fetch real featured games. On empty or failure we show an honest empty
+  // state rather than substituting invented data (DESIGN.md §7).
   useEffect(() => {
     api.games.list()
       .then(data => {
@@ -196,7 +209,7 @@ export default function Onboarding() {
           setFeaturedGames(list.slice(0, 3));
         }
       })
-      .catch(() => { /* keep fallback */ });
+      .catch(() => { /* keep whatever we have; no invented fallback */ });
   }, []);
 
   const completeOnboarding = () => {

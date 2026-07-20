@@ -23,7 +23,7 @@ const steps = [
     kicker: '// EARN',
     title: 'Get Paid Wallet-to-Wallet',
     description:
-      'Buyers pay your wallet directly in USDC and each sale mints a signed receipt you can verify. Nothing is held in escrow, the protocol fee defaults to 0 bps, and there is no payout queue to wait on.',
+      'Buyers pay your wallet directly in USDC and each sale mints a signed receipt you can verify. Nothing is held in escrow, the platform takes no cut, and there is no payout queue to wait on.',
     Icon: ChartIcon,
   },
 ];

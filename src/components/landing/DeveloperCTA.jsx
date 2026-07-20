@@ -3,8 +3,8 @@ import { Button } from '../common';
 import './Landing.css';
 
 const benefits = [
-  'You keep the full subtotal — 0 bps protocol fee by default',
-  'Zero upfront costs or hidden fees',
+  'You keep 100% of every sale — the platform takes no cut',
+  'No subscription, no platform fees — you run your own node',
   'Server-authoritative netcode included',
   'WASM + native builds from one codebase',
   'Real-time analytics dashboard',

@@ -73,8 +73,8 @@ export default function Register() {
                 <span className="auth-hero-stat-label">infra config</span>
               </div>
               <div className="auth-hero-stat">
-                <span className="auth-hero-stat-value">85%</span>
-                <span className="auth-hero-stat-label">dev revenue</span>
+                <span className="auth-hero-stat-value">100%</span>
+                <span className="auth-hero-stat-label">you keep</span>
               </div>
               <div className="auth-hero-stat">
                 <span className="auth-hero-stat-value">MIT</span>

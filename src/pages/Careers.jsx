@@ -83,21 +83,8 @@ export default function Careers() {
           <p className="hero-subtitle reveal-3">
             Help us build the platform for Rust games at any scale.
             We&apos;re looking for engineers who care deeply about developer experience and open source.
+            We&apos;re remote-first and asynchronous by default.
           </p>
-          <div className="hero-stats reveal-4">
-            <div className="stat">
-              <span className="stat-value">12+</span>
-              <span className="stat-label">Team Members</span>
-            </div>
-            <div className="stat">
-              <span className="stat-value">12</span>
-              <span className="stat-label">Countries</span>
-            </div>
-            <div className="stat">
-              <span className="stat-value">100%</span>
-              <span className="stat-label">Remote</span>
-            </div>
-          </div>
         </div>
       </section>
 

@@ -42,7 +42,7 @@ const features = [
     kicker: '// MONETIZATION',
     title: 'Paid Directly, Non-Custodially',
     description:
-      'Buyers pay your wallet in the same atomic transaction that mints a signed receipt. Nobody holds your money, so there is no payout to request and no processing delay — and the protocol fee defaults to 0 bps.',
+      'Buyers pay your wallet in the same atomic transaction that mints a signed receipt. Nobody holds your money, so there is no payout to request and no processing delay — and the platform takes no cut.',
   },
 ];
 

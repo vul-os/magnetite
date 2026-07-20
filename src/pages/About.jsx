@@ -2,18 +2,10 @@ import './About.css';
 import { useTranslation } from '../i18n/useTranslation';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
 
-const team = [
-  { name: 'Alex Chen',       role: 'Founder & CEO',   initials: 'AC' },
-  { name: 'Sarah Kim',       role: 'CTO',             initials: 'SK' },
-  { name: 'Marcus Johnson',  role: 'Lead Engineer',   initials: 'MJ' },
-  { name: 'Emily Rivera',    role: 'Game Designer',   initials: 'ER' },
-];
-
 const timeline = [
   { year: '2024 Q1',   event: 'Magnetite founded — vision: open-source Rust gaming at any scale.' },
   { year: '2024 Q3',   event: 'First Bevy game compiled to WASM and deployed on the platform.' },
   { year: '2025 Q1',   event: 'Non-custodial USDC checkout launched — buyers pay developer wallets directly, entitlements backed by signed receipts.' },
-  { year: '2025 Q3',   event: '100+ Rust games live on the marketplace.' },
   { year: '2026 Q1',   event: 'Real-time multiplayer matchmaking & server-authoritative netcode released.' },
 ];
 
@@ -49,24 +41,6 @@ export default function About() {
             <h2>{t('about.missionHeading')}</h2>
             <p>{t('about.missionP1')}</p>
             <p>{t('about.missionP2')}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Team ───────────────────────────────────────────────────────────── */}
-      <section className="team-section">
-        <div className="container">
-          <span className="kicker">{t('about.teamKicker')}</span>
-          <h2 className="section-title">{t('about.teamHeading')}</h2>
-          <p className="section-subtitle">{t('about.teamSubtitle')}</p>
-          <div className="team-grid">
-            {team.map((member, i) => (
-              <div className="team-card" key={i}>
-                <div className="team-avatar" aria-hidden="true">{member.initials}</div>
-                <h3>{member.name}</h3>
-                <p>{member.role}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>

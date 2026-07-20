@@ -11,21 +11,6 @@ const PARTICLES = Array.from({ length: 24 }, (_, i) => ({
   size: i % 3 === 0 ? '2px' : i % 3 === 1 ? '3px' : '1.5px',
 }));
 
-const STATS = [
-  { value: '2,847', label: 'Developers' },
-  { value: '156+',  label: 'Games Shipped' },
-  { value: '$2.4M', label: 'Paid to Developers' },
-];
-
-function StatItem({ value, label }) {
-  return (
-    <div className="hero-stat">
-      <span className="hero-stat-value">{value}</span>
-      <span className="hero-stat-label">{label}</span>
-    </div>
-  );
-}
-
 export default function HeroSection() {
   const particles = useMemo(() => PARTICLES, []);
 
@@ -114,20 +99,10 @@ export default function HeroSection() {
               <span className="trust-sep" aria-hidden="true" />
               <span className="trust-item">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                0 bps Protocol Fee
+                Self-Hosted
               </span>
             </div>
 
-            <div className="hero-stats reveal-6">
-              {STATS.map((s, i) => (
-                <>
-                  <StatItem key={s.label} value={s.value} label={s.label} />
-                  {i < STATS.length - 1 && (
-                    <div key={`sep-${i}`} className="hero-stat-divider" aria-hidden="true" />
-                  )}
-                </>
-              ))}
-            </div>
           </div>
 
           {/* Right: visual with staggered entrance */}

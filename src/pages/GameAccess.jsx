@@ -6,7 +6,9 @@ import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 import './GameAccess.css';
 
-// Fallback shown when the API is unavailable (VITE_USE_MOCKS=true or backend down)
+// Mock-only sample catalogue. Rendered ONLY when VITE_USE_MOCKS === 'true'
+// (strict). A failed or empty API response falls to an honest empty/error
+// state — never to these invented player counts (DESIGN.md §7).
 const PLACEHOLDER_GAMES = [
   { id: 1, title: 'Cosmic Drift',  category: 'Racing',        tier: 'free',      players: 1247, image: 'https://images.unsplash.com/photo-1511882150382-421056c89033?w=400' },
   { id: 2, title: 'Neon Strike',   category: 'Action',        tier: 'basic',     players: 892,  image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400' },
@@ -75,14 +77,18 @@ export default function GameAccess() {
 
         if (cancelled) return;
 
-        // Games
+        // Games — show exactly what the API returns; on failure record an error
+        // and render an empty state (no invented substitution).
         if (gamesData.status === 'fulfilled' && gamesData.value) {
           const list = Array.isArray(gamesData.value)
             ? gamesData.value
-            : (gamesData.value?.games ?? null);
-          setGames(list && list.length > 0 ? list : PLACEHOLDER_GAMES);
+            : (gamesData.value?.games ?? []);
+          setGames(Array.isArray(list) ? list : []);
         } else {
-          setGames(PLACEHOLDER_GAMES);
+          if (gamesData.status === 'rejected') {
+            setLoadError(gamesData.reason?.message ?? 'Could not load games.');
+          }
+          setGames([]);
         }
 
         // Subscription tier
@@ -95,7 +101,7 @@ export default function GameAccess() {
       } catch (err) {
         if (!cancelled) {
           setLoadError(err.message);
-          setGames(PLACEHOLDER_GAMES);
+          setGames([]);
           setCurrentTier('free');
         }
       }
@@ -169,6 +175,14 @@ export default function GameAccess() {
             <div className="loading-state" aria-live="polite" aria-busy="true">
               <span className="spinner" aria-hidden="true" />
               <span>{t('game.loadingGames')}</span>
+            </div>
+          ) : displayGames.length === 0 ? (
+            <div className={`state ${loadError ? 'state-error' : 'state-empty'}`}>
+              <p className="state-body">
+                {loadError
+                  ? t('game.gamesError')
+                  : t('game.noGamesYet')}
+              </p>
             </div>
           ) : (
             <div className="games-grid">
