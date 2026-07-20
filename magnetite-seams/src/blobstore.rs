@@ -5,6 +5,9 @@
 //!
 //! Defaults:
 //! - [`LocalBlobStore`] — in-memory, BLAKE3-addressed (works fully offline).
+//!   Dies with the process, so it is NOT a durability target.
+//! - [`FsBlobStore`] — on-disk, BLAKE3-addressed, atomic writes. Blobs outlive
+//!   the process; put it on a shared mount for them to outlive the machine.
 //! - [`HttpBlobStore`] — a thin read-through stub that fetches a blob by hash
 //!   over HTTP. The actual byte transfer is behind the [`BlobFetcher`] trait so
 //!   the crate pulls in **no HTTP dependency** and unit-tests without a network.
@@ -159,6 +162,94 @@ impl<F: BlobFetcher> BlobStore for HttpBlobStore<F> {
     }
 }
 
+/// On-disk, BLAKE3-addressed store: one file per blob, named by its hex hash.
+///
+/// # Why this exists
+///
+/// [`LocalBlobStore`] is in-memory, so anything written to it **dies with the
+/// process**. That is fine for tests and for content a node can re-fetch, but it
+/// makes it useless as a durability target: a shard checkpoint that vanishes
+/// with the node that wrote it cannot be restored by a survivor, which is the
+/// entire point of writing one.
+///
+/// This store writes blobs to a directory, so they outlive the process. What
+/// that buys you depends on *where the directory is*, and the distinction
+/// matters:
+///
+/// | Directory | Survives process restart | Survives losing the machine |
+/// |---|---|---|
+/// | node-local disk | yes | **no** |
+/// | shared mount / network filesystem | yes | yes |
+///
+/// Pointing this at node-local disk and expecting cross-machine recovery is the
+/// obvious way to be disappointed at the worst moment. For a survivor on
+/// another box to rebuild a dead node's shard, the directory must be reachable
+/// from both.
+///
+/// Writes are atomic: bytes go to a temporary file in the same directory and are
+/// renamed into place, so a crash mid-write cannot leave a truncated blob under
+/// a hash that claims to describe complete content. Reads re-verify the content
+/// address, so a corrupted or tampered file is reported missing rather than
+/// returned as if it were genuine.
+pub struct FsBlobStore {
+    root: std::path::PathBuf,
+}
+
+impl FsBlobStore {
+    /// Use `root` as the blob directory, creating it if absent.
+    pub fn new(root: impl Into<std::path::PathBuf>) -> Result<Self> {
+        let root = root.into();
+        std::fs::create_dir_all(&root)
+            .map_err(|e| SeamError::Invalid(format!("blob dir {}: {e}", root.display())))?;
+        Ok(Self { root })
+    }
+
+    /// The directory blobs are written to.
+    pub fn root(&self) -> &std::path::Path {
+        &self.root
+    }
+
+    fn path_for(&self, hash: &Hash) -> std::path::PathBuf {
+        self.root.join(hash.to_hex())
+    }
+}
+
+#[async_trait::async_trait]
+impl BlobStore for FsBlobStore {
+    async fn put(&self, bytes: &[u8]) -> Hash {
+        let hash = Hash::of(bytes);
+        let final_path = self.path_for(&hash);
+        // Already present: content addressing means identical hash ⇒ identical
+        // bytes, so re-writing would be pure cost.
+        if final_path.exists() {
+            return hash;
+        }
+        // Write to a temp name in the SAME directory, then rename. Rename is
+        // atomic within a filesystem, so a reader never observes a partial blob
+        // under a hash that promises whole content.
+        let tmp = self.root.join(format!(".tmp-{}-{}", hash.to_hex(), std::process::id()));
+        if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, &final_path).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        hash
+    }
+
+    async fn get(&self, hash: &Hash) -> Option<Vec<u8>> {
+        let bytes = std::fs::read(self.path_for(hash)).ok()?;
+        // Re-verify: a file that no longer hashes to its own name is corrupt or
+        // tampered with, and must read as absent rather than as genuine content.
+        if Hash::of(&bytes) == *hash {
+            Some(bytes)
+        } else {
+            None
+        }
+    }
+
+    async fn has(&self, hash: &Hash) -> bool {
+        self.get(hash).await.is_some()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +313,80 @@ mod tests {
         blobs.insert(url, b"tampered".to_vec());
         let store = HttpBlobStore::new(base, FakeServer { blobs });
         assert_eq!(store.get(&wanted).await, None);
+    }
+
+    // --- FsBlobStore -------------------------------------------------------
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "magnetite-blobs-{tag}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        d
+    }
+
+    #[tokio::test]
+    async fn fs_store_roundtrips_by_hash() {
+        let dir = temp_dir("roundtrip");
+        let store = FsBlobStore::new(&dir).unwrap();
+        let h = store.put(b"shard state").await;
+        assert_eq!(h, Hash::of(b"shard state"));
+        assert!(store.has(&h).await);
+        assert_eq!(store.get(&h).await.as_deref(), Some(&b"shard state"[..]));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The property that makes this usable as a durability target: a *new*
+    /// store opened over the same directory still sees the blob. This is what
+    /// `LocalBlobStore` cannot do, and why checkpoints written to it die with
+    /// their node.
+    #[tokio::test]
+    async fn fs_store_survives_being_reopened() {
+        let dir = temp_dir("reopen");
+        let h = {
+            let store = FsBlobStore::new(&dir).unwrap();
+            store.put(b"outlives the process").await
+        };
+        let reopened = FsBlobStore::new(&dir).unwrap();
+        assert_eq!(
+            reopened.get(&h).await.as_deref(),
+            Some(&b"outlives the process"[..])
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A file that no longer hashes to its own name must read as ABSENT, not be
+    /// handed back as genuine content — otherwise a corrupted checkpoint would
+    /// restore a shard to a state nobody ever simulated.
+    #[tokio::test]
+    async fn fs_store_reports_a_tampered_blob_as_missing() {
+        let dir = temp_dir("tampered");
+        let store = FsBlobStore::new(&dir).unwrap();
+        let h = store.put(b"genuine").await;
+        std::fs::write(dir.join(h.to_hex()), b"swapped out").unwrap();
+        assert_eq!(store.get(&h).await, None);
+        assert!(!store.has(&h).await);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn fs_store_missing_hash_is_none_not_an_error() {
+        let dir = temp_dir("missing");
+        let store = FsBlobStore::new(&dir).unwrap();
+        assert_eq!(store.get(&Hash::of(b"never written")).await, None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Temp files from an interrupted write must never be mistaken for blobs.
+    #[tokio::test]
+    async fn fs_store_ignores_stray_temp_files() {
+        let dir = temp_dir("stray");
+        let store = FsBlobStore::new(&dir).unwrap();
+        std::fs::write(dir.join(".tmp-garbage"), b"half a blob").unwrap();
+        let h = store.put(b"real").await;
+        assert_eq!(store.get(&h).await.as_deref(), Some(&b"real"[..]));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

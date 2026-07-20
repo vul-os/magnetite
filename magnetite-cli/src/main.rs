@@ -171,6 +171,29 @@ enum Commands {
         #[arg(long, value_name = "PATH")]
         node_key_file: Option<PathBuf>,
 
+        /// Directory to write shard checkpoints to. Enables durability.
+        ///
+        /// WHERE this points decides what it survives. On node-local disk,
+        /// checkpoints survive a process restart but die with the machine. For a
+        /// survivor on ANOTHER box to rebuild a dead node's shard, the directory
+        /// must be reachable from both (shared mount / network filesystem).
+        /// Without this flag nothing is checkpointed and a dead node's shards are
+        /// reported lost, exactly as before. Env: `MAGNETITE_CHECKPOINT_DIR`.
+        #[arg(long, value_name = "PATH")]
+        checkpoint_dir: Option<PathBuf>,
+
+        /// Seconds between checkpoints of a given shard.
+        ///
+        /// This IS the loss window: on a death, up to one interval of simulation
+        /// is gone. Shorter costs more writes, it does not make loss zero.
+        #[arg(long, value_name = "SECS", default_value_t = 15)]
+        checkpoint_interval: u64,
+
+        /// Never rebuild a dead peer's shard from a checkpoint; always report the
+        /// loss instead. Checkpoints (if enabled) are still written.
+        #[arg(long, default_value_t = false)]
+        no_recovery: bool,
+
         /// Turn the automatic cluster rebalancer OFF.
         ///
         /// It is ON by default whenever at least one peer was given an address
@@ -253,6 +276,9 @@ fn run(cli: Cli) -> Result<()> {
             cluster_peers_file,
             handoff_addr,
             node_key_file,
+            checkpoint_dir,
+            checkpoint_interval,
+            no_recovery,
             no_rebalance,
             rebalance_interval,
             rebalance_deadband,
@@ -269,6 +295,9 @@ fn run(cli: Cli) -> Result<()> {
                 cluster_peers_file,
                 handoff_addr,
                 node_key_file,
+                checkpoint_dir,
+                checkpoint_interval,
+                no_recovery,
                 no_rebalance,
                 rebalance_interval,
                 rebalance_deadband,
@@ -631,6 +660,9 @@ struct NodeClusterOpts {
     cluster_peers_file: Option<PathBuf>,
     handoff_addr: Option<String>,
     node_key_file: Option<PathBuf>,
+    checkpoint_dir: Option<PathBuf>,
+    checkpoint_interval: u64,
+    no_recovery: bool,
     no_rebalance: bool,
     rebalance_interval: u64,
     rebalance_deadband: u32,
