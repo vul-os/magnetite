@@ -73,7 +73,7 @@ const TIERS = [
 ];
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS
+const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 'rcpt_01HZM6B2C8D4E1F7', date: '2026-05-01', total: 24.99, protocol_fee: 0, description: 'Pro tier — 30 days', rail_pubkey: 'ed25519:0c94ae6217fb3d80', status: 'settled' },
       { id: 'rcpt_01HZ8P4K7T2R9WNX', date: '2026-04-01', total: 24.99, protocol_fee: 0, description: 'Pro tier — 30 days', rail_pubkey: 'ed25519:0c94ae6217fb3d80', status: 'settled' },
@@ -81,7 +81,7 @@ const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS
     ]
   : null;
 
-const MOCK_SUBSCRIPTION = import.meta.env.VITE_USE_MOCKS
+const MOCK_SUBSCRIPTION = import.meta.env.VITE_USE_MOCKS === 'true'
   ? { tier: 'pro', lapsesAt: '2026-06-01', hoursUsed: 67, hoursTotal: 100, receiptId: 'rcpt_01HZM6B2C8D4E1F7' }
   : null;
 
@@ -107,7 +107,7 @@ export default function Subscription() {
   const [receiptRef, setReceiptRef]         = useState('');
 
   const fetchSubscription = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     setLoading(true);
     setError(null);
     try {

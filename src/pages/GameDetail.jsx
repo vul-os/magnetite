@@ -7,6 +7,19 @@ import ReviewList from '../components/ReviewList';
 import { api } from '../api/client';
 import './GameDetail.css';
 
+/*
+ * GameDetail — "cold iron instrumentation".
+ *
+ * This page is a technical dossier on a verifiable artifact, not a storefront.
+ * Its centre of gravity is PROVENANCE: who published the build, which version,
+ * what hash, whether the simulation is replay-checked, where it runs.
+ *
+ * HARD RULE, enforced throughout: nothing numeric is ever invented. Every value
+ * on this page either comes from the API or renders as an explicit
+ * "not reported" / empty state. There is no placeholder rating, no placeholder
+ * player count, no sample leaderboard. If it is not attested, we say so.
+ */
+
 const REQUIRED_TIER = {
   free: ['free'],
   basic: ['free', 'basic'],
@@ -23,7 +36,15 @@ const TIER_NAMES = {
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-// Mock data only used when VITE_USE_MOCKS === 'true'
+/*
+ * Mock fixture, only used when VITE_USE_MOCKS === 'true'.
+ *
+ * It deliberately carries NO aggregate statistics — no rating, no leaderboard,
+ * no reviews. A dev fixture that ships plausible-looking numbers is how invented
+ * figures end up in screenshots and then in copy. The mock leaderboard/review
+ * fixtures that used to live here were removed for exactly that reason; in mock
+ * mode those surfaces render their real empty states.
+ */
 const MOCK_GAME = {
   id: 1,
   title: 'Cosmic Raiders',
@@ -31,16 +52,11 @@ const MOCK_GAME = {
   developerId: 'starforge',
   requiredTier: 'basic',
   isFree: false,
-  rating: 4.7,
   category: 'Action',
   description:
     'Embark on an interstellar adventure in Cosmic Raiders — a server-authoritative Rust game compiled to WebAssembly. Battle alien forces across 12 unique star systems, upgrade your spacecraft, and compete against players worldwide.',
-  thumbnail: 'https://picsum.photos/seed/game1/1920/600',
-  screenshots: [
-    'https://picsum.photos/seed/ss1/1920/1080',
-    'https://picsum.photos/seed/ss2/1920/1080',
-    'https://picsum.photos/seed/ss3/1920/1080',
-  ],
+  thumbnail: null,
+  screenshots: [],
   video: null,
   github: null,
   release_date: '2026-03-15',
@@ -50,65 +66,51 @@ const MOCK_GAME = {
   achievements: [],
 };
 
-const MOCK_LEADERBOARD = [
-  { rank: 1, player: 'NebulaKing',  score: 15420, avatar: 'https://picsum.photos/seed/p1/40/40' },
-  { rank: 2, player: 'SpaceAce',    score: 14850, avatar: 'https://picsum.photos/seed/p2/40/40' },
-  { rank: 3, player: 'AstroNinja',  score: 13200, avatar: 'https://picsum.photos/seed/p3/40/40' },
-];
+const TABS = ['Overview', 'Sessions', 'Leaderboard', 'Reviews'];
 
-const MOCK_REVIEWS = [
-  { user: 'GameMaster42', rating: 5, comment: 'Best space shooter I have played!', date: '2026-05-10', helpful: 24 },
-  { user: 'PocketRocket', rating: 4, comment: 'Great visuals and gameplay.', date: '2026-05-08', helpful: 18 },
-];
-
-const TABS = ['Overview', 'Leaderboard', 'Reviews'];
-
-// Content rating configuration
+/* Content rating is publisher-self-declared — advisory, never verified here. */
 const CONTENT_RATING_META = {
-  everyone: { label: 'E',  title: 'Everyone',   color: 'var(--color-success,  #22c55e)', description: 'Suitable for all ages' },
-  teen:     { label: 'T',  title: 'Teen',        color: 'var(--color-warning,  #f59e0b)', description: 'Suitable for ages 13+' },
-  mature:   { label: 'M',  title: 'Mature',      color: 'var(--color-error,    #ef4444)', description: 'Suitable for ages 17+' },
+  everyone: { label: 'E', title: 'Everyone', description: 'Suitable for all ages' },
+  teen:     { label: 'T', title: 'Teen',     description: 'Suitable for ages 13+' },
+  mature:   { label: 'M', title: 'Mature',   description: 'Suitable for ages 17+' },
 };
 
+const AGE_GATE_REQUIRED_AGE = { everyone: 0, teen: 13, mature: 17 };
+
 function ContentRatingBadge({ rating }) {
-  const meta = CONTENT_RATING_META[rating] ?? CONTENT_RATING_META.everyone;
+  const key = CONTENT_RATING_META[rating] ? rating : 'everyone';
+  const meta = CONTENT_RATING_META[key];
   return (
     <span
-      className="content-rating-badge"
+      className={`gd-rating-badge gd-rating-${key}`}
       title={`${meta.title} — ${meta.description}`}
       aria-label={`Content rating: ${meta.title}`}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 28,
-        height: 28,
-        borderRadius: 4,
-        border: `2px solid ${meta.color}`,
-        color: meta.color,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 'var(--text-xs)',
-        fontWeight: 700,
-        letterSpacing: '0.04em',
-        lineHeight: 1,
-        flexShrink: 0,
-      }}
     >
       {meta.label}
     </span>
   );
 }
 
-const AGE_GATE_REQUIRED_AGE = { everyone: 0, teen: 13, mature: 17 };
+/* Renders a value, or an explicit absence marker. Never a plausible stand-in. */
+function DataValue({ value, className = '' }) {
+  const missing =
+    value === null || value === undefined || value === '' ||
+    (typeof value === 'number' && Number.isNaN(value));
+  if (missing) {
+    return <span className="gd-unreported">— not reported</span>;
+  }
+  return <span className={`font-mono ${className}`}>{value}</span>;
+}
 
 function StarRating({ rating, size = 'md' }) {
+  if (typeof rating !== 'number' || Number.isNaN(rating)) return null;
   const fullStars  = Math.floor(rating);
   const hasHalf    = rating % 1 >= 0.5;
-  const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
+  const emptyStars = Math.max(0, 5 - fullStars - (hasHalf ? 1 : 0));
   const px         = size === 'sm' ? 14 : size === 'lg' ? 22 : 16;
 
   return (
-    <div className="star-rating" aria-label={`${rating} out of 5 stars`}>
+    <div className="star-rating" aria-label={`${rating.toFixed(1)} out of 5 stars`}>
       {[...Array(fullStars)].map((_, i) => (
         <svg key={`full-${i}`} className="star full" viewBox="0 0 24 24" fill="currentColor" width={px} height={px} aria-hidden="true">
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -116,13 +118,7 @@ function StarRating({ rating, size = 'md' }) {
       ))}
       {hasHalf && (
         <svg className="star half" viewBox="0 0 24 24" fill="currentColor" width={px} height={px} aria-hidden="true">
-          <defs>
-            <linearGradient id="halfGrad">
-              <stop offset="50%" stopColor="currentColor" />
-              <stop offset="50%" stopColor="var(--color-border-strong)" />
-            </linearGradient>
-          </defs>
-          <path fill="url(#halfGrad)" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
         </svg>
       )}
       {[...Array(emptyStars)].map((_, i) => (
@@ -130,31 +126,41 @@ function StarRating({ rating, size = 'md' }) {
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
         </svg>
       ))}
-      <span className="rating-value" style={{ fontSize: px - 2 }}>{rating.toFixed(1)}</span>
+      <span className="rating-value font-mono" style={{ fontSize: px - 2 }}>{rating.toFixed(1)}</span>
     </div>
   );
 }
 
 function AchievementCard({ achievement }) {
-  const pct = Math.round((achievement.progress / achievement.total) * 100);
+  const has = typeof achievement.progress === 'number' && typeof achievement.total === 'number' && achievement.total > 0;
+  const pct = has ? Math.round((achievement.progress / achievement.total) * 100) : null;
   return (
-    <div className="achievement-card">
+    <li className="achievement-card">
       <div className="achievement-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
         </svg>
       </div>
       <div className="achievement-info">
-        <h4>{achievement.name}</h4>
-        <p>{achievement.description}</p>
-        <div className="achievement-progress">
-          <div className="progress-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-            <div className="progress-fill" style={{ width: `${pct}%` }} />
+        <h3>{achievement.name}</h3>
+        {achievement.description && <p>{achievement.description}</p>}
+        {has && (
+          <div className="achievement-progress">
+            <div
+              className="progress-bar"
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${achievement.name} progress`}
+            >
+              <div className="progress-fill" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="progress-text font-mono">{achievement.progress}/{achievement.total}</span>
           </div>
-          <span className="progress-text">{achievement.progress}/{achievement.total}</span>
-        </div>
+        )}
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -162,8 +168,8 @@ export default function GameDetail() {
   const { id } = useParams();
 
   const [game, setGame]                         = useState(USE_MOCKS ? MOCK_GAME : null);
-  const [leaderboard, setLeaderboard]           = useState(USE_MOCKS ? MOCK_LEADERBOARD : []);
-  const [reviews, setReviews]                   = useState(USE_MOCKS ? MOCK_REVIEWS : []);
+  const [leaderboard, setLeaderboard]           = useState([]);
+  const [reviews, setReviews]                   = useState([]);
   const [pageLoading, setPageLoading]           = useState(!USE_MOCKS);
   const [pageError, setPageError]               = useState(null);
 
@@ -176,8 +182,9 @@ export default function GameDetail() {
   const [userTier] = useState('basic');
   const [ageGatePassed, setAgeGatePassed] = useState(false);
   const heroRef = useRef(null);
+  const tabRefs = useRef({});
 
-  // Show sticky buy bar once hero scrolls out of view
+  // Show the sticky launch bar once the masthead scrolls out of view.
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => setStickyBarVisible(!entry.isIntersecting),
@@ -252,112 +259,399 @@ export default function GameDetail() {
     setTimeout(() => setShowShareToast(false), 2000);
   };
 
-  const formatDate = (d) =>
-    new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const formatDate = (d) => {
+    if (!d) return null;
+    const parsed = new Date(d);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // Roving-tabindex keyboard support for the tablist.
+  const onTabKeyDown = (e) => {
+    const i = TABS.indexOf(activeTab);
+    let next = null;
+    if (e.key === 'ArrowRight') next = TABS[(i + 1) % TABS.length];
+    else if (e.key === 'ArrowLeft') next = TABS[(i - 1 + TABS.length) % TABS.length];
+    else if (e.key === 'Home') next = TABS[0];
+    else if (e.key === 'End') next = TABS[TABS.length - 1];
+    if (next) {
+      e.preventDefault();
+      setActiveTab(next);
+      tabRefs.current[next]?.focus();
+    }
+  };
+
+  const playLabel = !walletConnected
+    ? 'Connect & Launch'
+    : inQueue
+    ? 'Joining…'
+    : needsUpgrade
+    ? 'Upgrade to Launch'
+    : 'Launch';
+
+  // ─── Loading ──────────────────────────────────────────────────────────────
+  if (pageLoading) {
+    return (
+      <Layout>
+        <div className="game-detail">
+          <div className="gd-shell">
+            <div className="gd-skeleton" aria-busy="true" aria-live="polite">
+              <span className="gd-vh">Loading game dossier</span>
+              <span className="sk gd-sk-plate" />
+              <span className="sk sk-title gd-sk-heading" />
+              <span className="sk sk-text" style={{ width: '30%' }} />
+              <span className="sk gd-sk-panel" />
+              <span className="sk gd-sk-panel" />
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ─── Error ────────────────────────────────────────────────────────────────
+  if (pageError) {
+    return (
+      <Layout>
+        <div className="game-detail">
+          <div className="gd-shell">
+            <div className="state state-error" role="alert">
+              <h1 className="state-title gd-state-title">Could not load this game</h1>
+              <p className="state-body font-mono break-key">{pageError}</p>
+              <div className="state-actions">
+                <a href="/marketplace" className="btn btn-primary">Back to catalogue</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ─── Not found ────────────────────────────────────────────────────────────
+  if (!game) {
+    return (
+      <Layout>
+        <div className="game-detail">
+          <div className="gd-shell">
+            <div className="state state-empty">
+              <h1 className="state-title gd-state-title">Game not found</h1>
+              <p className="state-body">
+                This node has no record of that content address. It may be listed on another tracker.
+              </p>
+              <div className="state-actions">
+                <a href="/marketplace" className="btn btn-primary">Back to catalogue</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ─── Age gate ─────────────────────────────────────────────────────────────
+  const contentRating = game?.content_rating ?? game?.contentRating ?? 'everyone';
+  const requiredAge   = AGE_GATE_REQUIRED_AGE[contentRating] ?? 0;
+
+  if (requiredAge > 0 && !ageGatePassed) {
+    return (
+      <Layout>
+        <div className="game-detail">
+          <div className="gd-shell gd-gate-shell">
+            <section className="panel gd-gate" aria-labelledby="gd-gate-title">
+              <ContentRatingBadge rating={contentRating} />
+              <h1 id="gd-gate-title" className="gd-gate-title">Age confirmation required</h1>
+              <p className="gd-gate-body">
+                <strong>{game.title}</strong> is self-declared{' '}
+                <strong>{CONTENT_RATING_META[contentRating]?.title}</strong> by its publisher and
+                states content suitable for ages {requiredAge} and over.
+              </p>
+              <p className="gd-gate-note m-sm">Publisher-declared · not verified by this node</p>
+              <div className="gd-gate-actions">
+                <button className="btn btn-primary" onClick={() => setAgeGatePassed(true)}>
+                  I am {requiredAge} or older
+                </button>
+                <a href="/marketplace" className="btn btn-secondary">Go back</a>
+              </div>
+            </section>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ─── Derived, never invented ──────────────────────────────────────────────
+  const tierName      = TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free'];
+  const isFree        = Boolean(game.isFree || game.is_free);
+  const screenshots   = Array.isArray(game.screenshots) ? game.screenshots : [];
+  const achievements  = Array.isArray(game.achievements) ? game.achievements : [];
+  const sessions      = Array.isArray(game.sessions) ? game.sessions : [];
+  const sysReq        = Object.entries(game.system_requirements ?? {});
+  const similarGames  = Array.isArray(game.similar) ? game.similar : [];
+
+  const publisherKey  = game.developer_id ?? game.developerId ?? null;
+  const buildVersion  = game.live_version ?? game.liveVersion ?? game.version ?? null;
+  const buildHash     = game.content_hash ?? game.contentHash ?? game.build_hash ?? game.buildHash ?? null;
+  const artifactType  = game.artifact_type ?? game.artifactType ?? null;
+  const sourceRepo    = game.github ?? game.github_repo ?? game.githubRepo ?? null;
+  const listedAt      = formatDate(game.created_at ?? game.release_date ?? game.releaseDate);
+  const tickRate      = game.tick_rate ?? game.tickRate ?? null;
+
+  // Tri-state: true / false / unknown. Unknown is never rendered as "verified".
+  const replayVerified = typeof game.replay_verified === 'boolean' ? game.replay_verified
+                       : typeof game.replayVerified === 'boolean' ? game.replayVerified
+                       : null;
+  const signedBuild    = typeof game.signature_valid === 'boolean' ? game.signature_valid
+                       : typeof game.signatureValid === 'boolean' ? game.signatureValid
+                       : null;
+  const hasArtifact    = typeof game.has_playable_artifact === 'boolean' ? game.has_playable_artifact
+                       : typeof game.hasPlayableArtifact === 'boolean' ? game.hasPlayableArtifact
+                       : null;
+
+  const attestPill = (value, yes, no) =>
+    value === true  ? <span className="st st-field">{yes}</span>
+  : value === false ? <span className="st st-boundary">{no}</span>
+  :                   <span className="st st-off">Not attested</span>;
+
+  // Ratings are computed from the reviews actually returned by the API — this
+  // page has no independent aggregate rating and must never display one.
+  const ratedReviews = reviews.filter(r => typeof r.rating === 'number');
+  const avgRating    = ratedReviews.length
+    ? ratedReviews.reduce((s, r) => s + r.rating, 0) / ratedReviews.length
+    : null;
+
+  const panelId = (tab) => `gd-panel-${tab.toLowerCase()}`;
+  const tabId   = (tab) => `gd-tab-${tab.toLowerCase()}`;
 
   const renderTabContent = () => {
     switch (activeTab) {
+      // ── Overview ──────────────────────────────────────────────────────────
       case 'Overview':
         return (
           <div className="tab-overview">
-            <GameGallery images={game.screenshots ?? []} title={game.title} />
+            {screenshots.length > 0 && (
+              <section aria-labelledby="gd-h-media">
+                <h2 id="gd-h-media" className="gd-h">Media</h2>
+                <GameGallery images={screenshots} title={game.title} />
+              </section>
+            )}
 
-            <div className="overview-section">
-              <h3>// About This Game</h3>
-              <p className="game-description">{game.description}</p>
-            </div>
+            <section aria-labelledby="gd-h-about">
+              <h2 id="gd-h-about" className="gd-h">About this game</h2>
+              {game.description ? (
+                <div className="prose">
+                  <p className="game-description">{game.description}</p>
+                </div>
+              ) : (
+                <div className="state state-empty">
+                  <p className="state-title">No description published</p>
+                  <p className="state-body">The publisher has not supplied a description for this build.</p>
+                </div>
+              )}
+            </section>
 
             {game.video && (
-              <div className="video-section">
-                <h3>// Gameplay Video</h3>
+              <section aria-labelledby="gd-h-video">
+                <h2 id="gd-h-video" className="gd-h">Gameplay video</h2>
+                <p className="gd-boundary-note edge-boundary">
+                  Embedded from a third party. Its contents are outside anything this node can verify.
+                </p>
                 <div className="video-container">
                   <iframe
                     src={game.video}
-                    title="Gameplay Video"
+                    title={`${game.title} gameplay video`}
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
                 </div>
-              </div>
+              </section>
             )}
 
-            <div className="achievements-section">
+            <section aria-labelledby="gd-h-ach">
               <div className="section-header-row">
-                <h3 style={{ margin: 0 }}>// Achievements</h3>
-                <span className="achievement-count">{(game.achievements ?? []).length} Total</span>
+                <h2 id="gd-h-ach" className="gd-h">Achievements</h2>
+                {achievements.length > 0 && (
+                  <span className="achievement-count font-mono">{achievements.length}</span>
+                )}
               </div>
-              <div className="achievements-grid">
-                {(game.achievements ?? []).map((a, i) => (
-                  <AchievementCard key={i} achievement={a} />
-                ))}
-              </div>
-            </div>
+              {achievements.length > 0 ? (
+                <ul className="achievements-grid">
+                  {achievements.map((a, i) => (
+                    <AchievementCard key={a.id ?? a.name ?? i} achievement={a} />
+                  ))}
+                </ul>
+              ) : (
+                <div className="state state-empty">
+                  <p className="state-title">No achievements defined</p>
+                  <p className="state-body">This build does not declare any achievements.</p>
+                </div>
+              )}
+            </section>
           </div>
         );
 
+      // ── Sessions ──────────────────────────────────────────────────────────
+      case 'Sessions':
+        return (
+          <div className="tab-sessions">
+            <section aria-labelledby="gd-h-sessions">
+              <h2 id="gd-h-sessions" className="gd-h">Servers running this build</h2>
+              <p className="gd-section-note">
+                Anyone can host. Node keys and capacity are signed by the operator;
+                operator name, region and player counts are self-declared and unattested.
+              </p>
+              {sessions.length > 0 ? (
+                <div className="table-wrap">
+                  <table className="data">
+                    <caption className="gd-vh">Advertised sessions for {game.title}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Node key</th>
+                        <th scope="col">Operator</th>
+                        <th scope="col">Region</th>
+                        <th scope="col" className="num">Players</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sessions.map((s, i) => (
+                        <tr key={s.id ?? s.node ?? i}>
+                          <td className="key break-key">{s.node ?? s.node_key ?? '—'}</td>
+                          <td>{s.operator ?? <span className="gd-unreported">— self-declared, absent</span>}</td>
+                          <td>{s.region ?? <span className="gd-unreported">—</span>}</td>
+                          <td className="num">
+                            {typeof s.players === 'number'
+                              ? `${s.players}${typeof s.max_players === 'number' ? ` / ${s.max_players}` : ''}`
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="state state-empty">
+                  <p className="state-title">No sessions advertised to this node</p>
+                  <p className="state-body">
+                    Nobody is currently advertising a server for this build on the tracker you are
+                    connected to. You can host one yourself, or connect to another tracker.
+                  </p>
+                </div>
+              )}
+            </section>
+          </div>
+        );
+
+      // ── Leaderboard ───────────────────────────────────────────────────────
       case 'Leaderboard':
         return (
           <div className="tab-leaderboard">
-            <div className="leaderboard-header">
-              <h3>// Top Players</h3>
-              <a href="/leaderboard" className="view-all-link">View Full Leaderboard →</a>
-            </div>
-            <div className="leaderboard-list">
-              {leaderboard.map(entry => (
-                <div key={entry.rank} className={`leaderboard-row rank-${entry.rank}`}>
-                  <span className="rank">#{entry.rank}</span>
-                  <img src={entry.avatar} alt="" className="player-avatar" loading="lazy" aria-hidden="true" />
-                  <span className="player-name">{entry.player}</span>
-                  <span className="player-score">{entry.score.toLocaleString()}</span>
+            <section aria-labelledby="gd-h-lb">
+              <div className="section-header-row">
+                <h2 id="gd-h-lb" className="gd-h">Top players</h2>
+                <a href="/leaderboard" className="view-all-link m-sm">Full leaderboard →</a>
+              </div>
+              {leaderboard.length > 0 ? (
+                <div className="table-wrap">
+                  <table className="data">
+                    <caption className="gd-vh">Leaderboard for {game.title}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" className="num">Rank</th>
+                        <th scope="col">Player</th>
+                        <th scope="col" className="num">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((entry, i) => (
+                        <tr key={entry.user_id ?? entry.rank ?? i}>
+                          <td className="num gd-rank">{typeof entry.rank === 'number' ? entry.rank : i + 1}</td>
+                          <td className="lead">
+                            <span className="gd-player">
+                              {entry.avatar && (
+                                <img src={entry.avatar} alt="" className="player-avatar" loading="lazy" />
+                              )}
+                              {entry.player ?? entry.username ?? '—'}
+                            </span>
+                          </td>
+                          <td className="num">
+                            {typeof entry.score === 'number' ? entry.score.toLocaleString() : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
+              ) : (
+                <div className="state state-empty">
+                  <p className="state-title">Leaderboard unavailable</p>
+                  <p className="state-body">
+                    No scores have been reported for this build, or this node does not carry a
+                    leaderboard for it.
+                  </p>
+                </div>
+              )}
+            </section>
           </div>
         );
 
+      // ── Reviews ───────────────────────────────────────────────────────────
       case 'Reviews':
         return (
           <div className="tab-reviews">
-            <div className="reviews-summary">
-              <div className="rating-overview">
-                <div className="big-rating">{game.rating}</div>
-                <StarRating rating={game.rating} size="lg" />
-                <p>{reviews.length} Reviews</p>
-              </div>
-              <div className="rating-breakdown">
-                {[5, 4, 3, 2, 1].map(stars => {
-                  const count   = reviews.filter(r => r.rating === stars).length;
-                  const percent = (count / reviews.length) * 100;
-                  return (
-                    <div key={stars} className="rating-row">
-                      <span>{stars} Stars</span>
-                      <div className="rating-bar">
-                        <div className="rating-fill" style={{ width: `${percent}%` }} />
-                      </div>
-                      <span className="rating-count">{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <ReviewList
-              reviews={reviews.map((r, i) => ({ ...r, id: r.id ?? i }))}
-              walletConnected={walletConnected}
-              onCreateReview={() => {}}
-              onHelpful={(reviewId) => {
-                // Optimistic: increment helpful count immediately
-                setReviews(prev => prev.map((r, i) => {
-                  const rId = r.id ?? i;
-                  return rId === reviewId ? { ...r, helpful: (r.helpful ?? 0) + 1 } : r;
-                }));
-                // Fire-and-forget; if the backend 404s the optimistic count stays
-                api.reviews.helpful(id, reviewId).catch(() => null);
-              }}
-              onReport={(reviewId) => {
-                api.reviews.report(id, reviewId).catch(() => null);
-              }}
-            />
+            <section aria-labelledby="gd-h-reviews">
+              <h2 id="gd-h-reviews" className="gd-h">Player reviews</h2>
+
+              {ratedReviews.length > 0 ? (
+                <div className="reviews-summary">
+                  <div className="rating-overview">
+                    <p className="big-rating font-mono">{avgRating.toFixed(1)}</p>
+                    <StarRating rating={avgRating} size="lg" />
+                    <p className="m-sm gd-rating-caption">
+                      Mean of {ratedReviews.length} rated {ratedReviews.length === 1 ? 'review' : 'reviews'}
+                    </p>
+                  </div>
+                  <div className="rating-breakdown">
+                    {[5, 4, 3, 2, 1].map(stars => {
+                      const count   = ratedReviews.filter(r => r.rating === stars).length;
+                      const percent = (count / ratedReviews.length) * 100;
+                      return (
+                        <div key={stars} className="rating-row">
+                          <span className="font-mono gd-rating-label">{stars}★</span>
+                          <span className="rating-bar">
+                            <span className="rating-fill" style={{ width: `${percent}%` }} />
+                          </span>
+                          <span className="rating-count font-mono">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="state state-empty">
+                  <p className="state-title">No ratings yet</p>
+                  <p className="state-body">
+                    This build has no rated reviews. No score is shown rather than an estimated one.
+                  </p>
+                </div>
+              )}
+
+              <ReviewList
+                reviews={reviews.map((r, i) => ({ ...r, id: r.id ?? i }))}
+                walletConnected={walletConnected}
+                onCreateReview={() => {}}
+                onHelpful={(reviewId) => {
+                  setReviews(prev => prev.map((r, i) => {
+                    const rId = r.id ?? i;
+                    return rId === reviewId ? { ...r, helpful: (r.helpful ?? 0) + 1 } : r;
+                  }));
+                  api.reviews.helpful(id, reviewId).catch(() => null);
+                }}
+                onReport={(reviewId) => {
+                  api.reviews.report(id, reviewId).catch(() => null);
+                }}
+              />
+            </section>
           </div>
         );
 
@@ -366,172 +660,96 @@ export default function GameDetail() {
     }
   };
 
-  // Loading / error / not-found states — after all hooks
-  if (pageLoading) {
-    return (
-      <Layout>
-        <div className="game-detail" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-          <div style={{ maxWidth: 600, margin: '0 auto' }}>
-            <div style={{ height: 300, borderRadius: 'var(--radius-lg)', marginBottom: '1.5rem', background: 'var(--color-bg-elevated)' }} />
-            <div style={{ height: 32, width: '60%', borderRadius: 'var(--radius)', marginBottom: '1rem', background: 'var(--color-bg-elevated)' }} />
-            <div style={{ height: 20, width: '40%', borderRadius: 'var(--radius)', background: 'var(--color-bg-elevated)' }} />
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (pageError) {
-    return (
-      <Layout>
-        <div className="game-detail" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-          <h2 style={{ color: 'var(--color-error)' }}>Could not load game</h2>
-          <p style={{ color: 'var(--color-text-secondary)', marginTop: '0.5rem' }}>{pageError}</p>
-          <a href="/marketplace" className="btn btn-primary" style={{ marginTop: '1.5rem', display: 'inline-block' }}>
-            Back to Marketplace
-          </a>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (!game) {
-    return (
-      <Layout>
-        <div className="game-detail" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-          <h2>Game not found</h2>
-          <a href="/marketplace" className="btn btn-primary" style={{ marginTop: '1.5rem', display: 'inline-block' }}>
-            Back to Marketplace
-          </a>
-        </div>
-      </Layout>
-    );
-  }
-
-  // Age gate — show blocking screen for mature/teen-rated games on first visit
-  const contentRating = game?.content_rating ?? game?.contentRating ?? 'everyone';
-  const requiredAge   = AGE_GATE_REQUIRED_AGE[contentRating] ?? 0;
-  if (requiredAge > 0 && !ageGatePassed) {
-    return (
-      <Layout>
-        <div
-          className="game-detail"
-          style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}
-        >
-          <div style={{
-            maxWidth: 400, width: '100%', textAlign: 'center',
-            background: 'var(--color-bg-elevated)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '2.5rem 2rem',
-          }}>
-            <ContentRatingBadge rating={contentRating} />
-            <h2 style={{ fontFamily: 'var(--font-mono)', marginTop: '1.25rem', color: 'var(--color-text-primary)' }}>
-              Age Confirmation Required
-            </h2>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)', margin: '0.75rem 0 1.75rem' }}>
-              <strong>{game.title}</strong> is rated <strong>{CONTENT_RATING_META[contentRating]?.title}</strong> and contains content suitable for ages {requiredAge}+.
-              You must confirm your age to continue.
-            </p>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => setAgeGatePassed(true)}
-              >
-                I am {requiredAge} or older
-              </button>
-              <a href="/marketplace" className="btn btn-secondary">
-                Go Back
-              </a>
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
   return (
     <Layout>
       <div className="game-detail">
-        {/* ── Sticky buy/play bar (appears on scroll) ── */}
+        {/* ── Sticky launch bar ─────────────────────────────────────────── */}
         <div className={`gd-sticky-bar ${stickyBarVisible ? 'visible' : ''}`} aria-hidden={!stickyBarVisible}>
           <div className="gd-sticky-inner">
             <div className="gd-sticky-info">
               <span className="gd-sticky-title">{game.title}</span>
-              <span className="gd-sticky-dev">by {game.developer}</span>
+              {game.developer && <span className="gd-sticky-dev font-mono">{game.developer}</span>}
             </div>
             <div className="gd-sticky-actions">
-              {hasAccess ? (
-                <span className="gd-sticky-included">// Included in plan</span>
-              ) : (
-                <span className="gd-sticky-price">Requires {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']}</span>
-              )}
+              <span className={`st ${hasAccess ? 'st-field' : 'st-spec'} gd-sticky-access`}>
+                {hasAccess ? 'Included in plan' : `Requires ${tierName}`}
+              </span>
               <button
-                className="gd-sticky-play"
+                className="btn btn-primary"
                 onClick={handlePlayNow}
                 disabled={inQueue}
                 tabIndex={stickyBarVisible ? 0 : -1}
               >
-                {!walletConnected ? 'Connect & Play' : inQueue ? 'Joining...' : needsUpgrade ? 'Upgrade to Play' : 'Play Now'}
+                {playLabel}
               </button>
             </div>
           </div>
         </div>
 
-        {/* ── Hero ── */}
-        <section className="game-hero" aria-label={`${game.title} hero`} ref={heroRef}>
-          <div className="hero-image-container">
-            <img src={game.thumbnail} alt={game.title} className="hero-image" loading="eager" />
-            <div className="hero-overlay" aria-hidden="true" />
-            <div className="hero-gradient" aria-hidden="true" />
-          </div>
-          <div className="hero-content reveal">
-            <div className="hero-top reveal-1">
-              <span className="category-badge">{game.category}</span>
-              {(game.isFree || game.is_free) ? (
-                <span className="tier-badge free">Free to Play</span>
-              ) : (
-                <span className="tier-badge">
-                  {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']} Tier
-                </span>
-              )}
-              {(game.content_rating || game.contentRating) && (
-                <ContentRatingBadge rating={game.content_rating ?? game.contentRating} />
-              )}
-            </div>
-            <div className="hero-main reveal-2">
-              <h1 className="game-title">{game.title}</h1>
-              <p className="game-developer">
-                by{' '}
-                <a href={`/developer/${game.developerId}`}>
-                  {game.developer}
-                </a>
+        <div className="gd-shell">
+          {/* ── Masthead ───────────────────────────────────────────────── */}
+          <header className="gd-masthead reveal reveal-1" ref={heroRef}>
+            {game.thumbnail && (
+              <div className="gd-plate">
+                <img src={game.thumbnail} alt={`Cover art for ${game.title}`} className="gd-plate-img" loading="eager" />
+              </div>
+            )}
+
+            <div className="gd-identity">
+              <div className="gd-eyebrow">
+                {game.category && <span className="m-sm gd-chip">{game.category}</span>}
+                <span className="m-sm gd-chip">{isFree ? 'Free to play' : `${tierName} tier`}</span>
+                {(game.content_rating || game.contentRating) && (
+                  <ContentRatingBadge rating={game.content_rating ?? game.contentRating} />
+                )}
+              </div>
+
+              <h1 className="gd-title">{game.title}</h1>
+
+              <p className="gd-publisher">
+                Published by{' '}
+                {publisherKey ? (
+                  <a href={`/developer/${publisherKey}`}>{game.developer ?? 'Unknown publisher'}</a>
+                ) : (
+                  <span>{game.developer ?? 'Unknown publisher'}</span>
+                )}
               </p>
-              <StarRating rating={game.rating} size="lg" />
-            </div>
-            <div className="hero-actions reveal-3">
-              <div className="action-buttons">
+
+              <ul className="gd-attest">
+                <li>
+                  <span className="m-sm gd-attest-label">Signed build</span>
+                  {attestPill(signedBuild, 'Signature valid', 'Unsigned')}
+                </li>
+                <li>
+                  <span className="m-sm gd-attest-label">Replay verification</span>
+                  {attestPill(replayVerified, 'Replay-checked', 'Not replay-checked')}
+                </li>
+                <li>
+                  <span className="m-sm gd-attest-label">Playable artifact</span>
+                  {hasArtifact === true
+                    ? <span className="st st-live">Available</span>
+                    : hasArtifact === false
+                    ? <span className="st st-off">None published</span>
+                    : <span className="st st-off">Not reported</span>}
+                </li>
+              </ul>
+
+              <div className="gd-actions">
                 <button
-                  className="btn-play"
+                  className="btn btn-primary btn-lg"
                   onClick={handlePlayNow}
                   disabled={inQueue}
                   aria-label={
-                    !walletConnected ? 'Connect wallet and play' :
+                    !walletConnected ? 'Connect wallet and launch game' :
                     inQueue ? 'Joining game queue' :
-                    needsUpgrade ? `Upgrade to ${TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']} to play` :
-                    'Play Now'
+                    needsUpgrade ? `Upgrade to ${tierName} to launch` :
+                    'Launch game'
                   }
                 >
-                  {!walletConnected
-                    ? 'Connect & Play'
-                    : inQueue
-                    ? 'Joining...'
-                    : needsUpgrade
-                    ? 'Upgrade to Play'
-                    : '▶  Play Now'}
+                  {playLabel}
                 </button>
                 <button
-                  className={`btn-wishlist ${wishlisted ? 'active' : ''}`}
+                  className={`btn btn-secondary gd-icon-btn ${wishlisted ? 'active' : ''}`}
                   onClick={() => setWishlisted(w => !w)}
                   aria-label={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
                   aria-pressed={wishlisted}
@@ -540,160 +758,236 @@ export default function GameDetail() {
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
                   </svg>
                 </button>
+                <span className={`st ${isFree ? 'st-live' : hasAccess ? 'st-field' : 'st-spec'} gd-access`}>
+                  {isFree ? 'Free to play' : hasAccess ? 'Included in your plan' : `Requires ${tierName}`}
+                </span>
               </div>
-              <div className="price-display">
-                {(game.isFree || game.is_free) ? (
-                  <span className="price-free">// Free to Play</span>
-                ) : hasAccess ? (
-                  <span className="price-included">// Included in your plan</span>
-                ) : (
-                  <span className="price-upgrade">// Requires {TIER_NAMES[game.requiredTier ?? game.required_tier ?? 'free']}</span>
-                )}
-              </div>
-            </div>
-            {needsUpgrade && (
-              <div className="upgrade-prompt" role="alert">
-                <p>Upgrade your subscription to unlock this game</p>
-                <a href="/pricing" className="btn btn-primary">View Plans</a>
-              </div>
-            )}
-          </div>
-        </section>
 
-        {/* ── Info bar ── */}
-        <nav className="info-bar" aria-label="Game metadata">
-          <div className="info-bar-inner">
-            <div className="info-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              <span className="info-label">Players</span>
-              <span className="info-value">{game.players_min}–{game.players_max}</span>
+              {needsUpgrade && (
+                <div className="gd-upgrade edge-spec" role="alert">
+                  <p>Your current plan does not include this build.</p>
+                  <a href="/pricing" className="btn btn-secondary btn-sm">View plans</a>
+                </div>
+              )}
             </div>
-            <div className="info-divider" aria-hidden="true" />
-            <div className="info-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              <span className="info-label">Released</span>
-              <span className="info-value">{formatDate(game.release_date)}</span>
-            </div>
-            <div className="info-divider" aria-hidden="true" />
-            <div className="info-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-              </svg>
-              <a href={game.github} target="_blank" rel="noopener noreferrer" className="info-link">
-                Source on GitHub ↗
-              </a>
-            </div>
-            <div className="info-divider" aria-hidden="true" />
-            <div className="info-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
-              <span className="info-label">Runtime</span>
-              <span className="info-value">Rust + Bevy → WASM</span>
-            </div>
-          </div>
-        </nav>
+          </header>
 
-        {/* ── Main grid ── */}
-        <div className="game-content">
-          <main className="game-main">
-            <div className="tabs-section">
-              <div className="tabs-nav" role="tablist">
-                {TABS.map(tab => (
-                  <button
-                    key={tab}
-                    role="tab"
-                    aria-selected={activeTab === tab}
-                    className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
-                    onClick={() => setActiveTab(tab)}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-              <div className="tab-content" role="tabpanel">
-                {renderTabContent()}
-              </div>
+          {/* ── Provenance dossier ─────────────────────────────────────── */}
+          <section className="panel gd-provenance reveal reveal-2" aria-labelledby="gd-h-prov">
+            <div className="gd-prov-head">
+              <span className="kicker">Provenance</span>
+              <h2 id="gd-h-prov" className="gd-h">What this node can and cannot prove</h2>
             </div>
-          </main>
 
-          <aside className="game-sidebar" aria-label="Game details">
-            <div className="sidebar-card developer-card">
-              <h3>// Developer</h3>
-              <div className="developer-info">
-                <img
-                  src={`https://picsum.photos/seed/${game.developerId}/80/80`}
-                  alt={game.developer}
-                  className="developer-avatar"
-                  loading="lazy"
-                />
-                <div className="developer-details">
-                  <span className="developer-name">{game.developer}</span>
-                  <a href={`/developer/${game.developerId}`} className="developer-link">
-                    View Profile →
-                  </a>
+            <dl className="gd-prov-list">
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Publisher key</dt>
+                <dd><DataValue value={publisherKey} className="break-key" /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Build version</dt>
+                <dd><DataValue value={buildVersion} /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Content hash</dt>
+                <dd><DataValue value={buildHash} className="break-key" /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Artifact runtime</dt>
+                <dd><DataValue value={artifactType} /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Simulation tick rate</dt>
+                <dd><DataValue value={typeof tickRate === 'number' ? `${tickRate} Hz` : tickRate} /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Listed</dt>
+                <dd><DataValue value={listedAt} /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-field">
+                <dt className="m-sm">Catalogue status</dt>
+                <dd><DataValue value={game.status} /></dd>
+              </div>
+
+              <div className="gd-prov-row edge-spec">
+                <dt className="m-sm">Content rating</dt>
+                <dd>
+                  <span className="font-mono">{CONTENT_RATING_META[contentRating]?.title ?? 'Unrated'}</span>
+                  <span className="gd-prov-note">Self-declared by the publisher — advisory only.</span>
+                </dd>
+              </div>
+
+              <div className="gd-prov-row edge-boundary">
+                <dt className="m-sm">Source repository</dt>
+                <dd>
+                  {sourceRepo ? (
+                    <>
+                      <a
+                        href={sourceRepo}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono break-key gd-boundary-link"
+                      >
+                        {sourceRepo} ↗
+                      </a>
+                      <span className="gd-prov-note">
+                        Leaves Magnetite. Nothing beyond this link is attested by this node.
+                      </span>
+                    </>
+                  ) : (
+                    <DataValue value={null} />
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          {/* ── Spec strip ─────────────────────────────────────────────── */}
+          {(game.players_min != null || game.players_max != null || listedAt) && (
+            <section className="gd-spec-strip reveal reveal-3" aria-label="Build specification">
+              {(game.players_min != null || game.players_max != null) && (
+                <div className="gd-spec-item">
+                  <span className="m-sm">Players</span>
+                  <DataValue
+                    value={
+                      game.players_min != null && game.players_max != null
+                        ? `${game.players_min}–${game.players_max}`
+                        : (game.players_min ?? game.players_max)
+                    }
+                  />
+                </div>
+              )}
+              {listedAt && (
+                <div className="gd-spec-item">
+                  <span className="m-sm">Listed</span>
+                  <DataValue value={listedAt} />
+                </div>
+              )}
+              <div className="gd-spec-item">
+                <span className="m-sm">Runtime</span>
+                <DataValue value={artifactType} />
+              </div>
+            </section>
+          )}
+
+          {/* ── Main grid ──────────────────────────────────────────────── */}
+          <div className="game-content reveal reveal-4">
+            <main className="game-main">
+              <div className="tabs-section panel">
+                <div className="tabs-nav" role="tablist" aria-label="Game detail sections" onKeyDown={onTabKeyDown}>
+                  {TABS.map(tab => (
+                    <button
+                      key={tab}
+                      id={tabId(tab)}
+                      type="button"
+                      role="tab"
+                      ref={(el) => { tabRefs.current[tab] = el; }}
+                      aria-selected={activeTab === tab}
+                      aria-controls={panelId(tab)}
+                      tabIndex={activeTab === tab ? 0 : -1}
+                      className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
+                      onClick={() => setActiveTab(tab)}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="tab-content"
+                  role="tabpanel"
+                  id={panelId(activeTab)}
+                  aria-labelledby={tabId(activeTab)}
+                  tabIndex={0}
+                >
+                  {renderTabContent()}
                 </div>
               </div>
-            </div>
+            </main>
 
-            <div className="sidebar-card system-req-card">
-              <h3>// System Requirements</h3>
-              <ul className="system-req-list">
-                {Object.entries(game.system_requirements ?? {}).map(([key, value]) => (
-                  <li key={key}>
-                    <span className="req-label">{key}</span>
-                    {value}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <aside className="game-sidebar" aria-label="Build details">
+              <section className="panel sidebar-card">
+                <h2 className="gd-h gd-sidebar-h">Publisher</h2>
+                <div className="developer-info">
+                  <span className="developer-monogram font-mono" aria-hidden="true">
+                    {(game.developer ?? '?').trim().charAt(0).toUpperCase()}
+                  </span>
+                  <div className="developer-details">
+                    <span className="developer-name">{game.developer ?? 'Unknown publisher'}</span>
+                    {publisherKey && (
+                      <>
+                        <span className="font-mono break-key developer-key">{publisherKey}</span>
+                        <a href={`/developer/${publisherKey}`} className="developer-link m-sm">
+                          View profile →
+                        </a>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </section>
 
-            <div className="sidebar-card similar-games-card">
-              <h3>// Similar Games</h3>
-              <div className="similar-games-list">
-                {[].map(game => (
-                  <GameCard key={game.id} game={game} showPlayButton={false} />
-                ))}
-              </div>
-            </div>
+              <section className="panel sidebar-card">
+                <h2 className="gd-h gd-sidebar-h">System requirements</h2>
+                {sysReq.length > 0 ? (
+                  <dl className="system-req-list">
+                    {sysReq.map(([key, value]) => (
+                      <div key={key} className="system-req-item">
+                        <dt className="m-sm req-label">{key}</dt>
+                        <dd className="font-mono req-value">{String(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="gd-unreported">— not reported</p>
+                )}
+              </section>
 
-            <div className="sidebar-card actions-card">
-              <div className="action-links">
-                <button className="action-link-btn" onClick={handleShare}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <circle cx="18" cy="5" r="3" />
-                    <circle cx="6" cy="12" r="3" />
-                    <circle cx="18" cy="19" r="3" />
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                  </svg>
-                  Share Game
-                </button>
-                <button className="action-link-btn danger">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  Report Issue
-                </button>
-              </div>
-            </div>
-          </aside>
+              {similarGames.length > 0 && (
+                <section className="panel sidebar-card">
+                  <h2 className="gd-h gd-sidebar-h">Similar games</h2>
+                  <div className="similar-games-list">
+                    {similarGames.map(g => (
+                      <GameCard key={g.id} game={g} showPlayButton={false} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section className="panel sidebar-card">
+                <h2 className="gd-h gd-sidebar-h">Actions</h2>
+                <div className="action-links">
+                  <button type="button" className="action-link-btn" onClick={handleShare}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                    Copy link to this build
+                  </button>
+                  <button type="button" className="action-link-btn danger">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    Report an issue
+                  </button>
+                </div>
+              </section>
+            </aside>
+          </div>
         </div>
 
         {showShareToast && (
-          <div className="toast-notification" role="status" aria-live="polite">
-            // Link copied to clipboard
+          <div className="toast-notification font-mono" role="status" aria-live="polite">
+            Link copied to clipboard
           </div>
         )}
       </div>

@@ -1,121 +1,146 @@
-/* ── Server browser — discovered SessionAds (seam §3.4) ──────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SERVER BROWSER — discovered SessionAds (seam §3.4)
 
-@keyframes browserReveal {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
+   A control surface, not a storefront. Everything here is tokenised: no hex
+   literal appears in this file, so both themes and prefers-reduced-motion are
+   inherited rather than re-implemented.
+
+   Colour carries provenance and nothing else:
+     --field    (violet)  content-addressed or key-signed — checkable
+     --boundary (magenta) self-declared by the node — nobody can confirm it
+     --spec     (amber)   advisory
+     --live     (green)   currently running / healthy
+   The magenta rule down the Players column is the honest seam of the page.
+   It is never used decoratively.
+═══════════════════════════════════════════════════════════════════════════ */
+
+.sb {
+  max-width: var(--container-xl);
+  margin: 0 auto;
+  min-width: 0;
 }
 
-.browser {
-  max-width: 1320px;
-  margin: 0 auto;
-  animation: browserReveal var(--t-slow) var(--ease-out) both;
+/* Screen-reader-only. Scoped name — the app has no global utility for this. */
+.sb-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
-.browser-header {
-  margin-bottom: 2rem;
+.sb-head {
+  margin-bottom: var(--space-8);
 }
 
-.browser-header h1 {
-  margin: 0.25rem 0 0.5rem;
-  font-family: var(--font-display);
-  font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  color: var(--color-text-primary);
+.sb-head h1 {
+  margin: var(--space-1) 0 var(--space-3);
 }
 
-.browser-subtitle {
-  margin: 0;
+.sb-sub {
   max-width: 74ch;
-  font-family: var(--font-sans);
   font-size: var(--text-sm);
-  line-height: 1.65;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
 }
 
-/* ── Network summary ─────────────────────────────────────────────────────── */
-.browser-stats {
+/* ── Network readout ──────────────────────────────────────────────────────
+   Instrument gauges: hairline-separated, mono values, no card chrome. */
+.sb-readout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1px;
-  margin-bottom: 1.5rem;
-  background: var(--color-border);
-  border: 1px solid var(--color-border);
+  margin-bottom: var(--space-3);
+  background: var(--line);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.stat {
+.sb-readout .stat {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 1.1rem 1.25rem;
-  background: var(--color-bg-card);
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  background: var(--paper);
+  /* the .edge-* rule already supplies border-left + padding-left */
 }
 
-.stat-value {
+.sb-readout .stat-value {
   font-family: var(--font-mono);
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
-  color: var(--color-accent);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-.stat-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
+.sb-readout .stat-label {
+  color: var(--ink-3);
+}
+
+/* ── Provenance legend ───────────────────────────────────────────────────── */
+.sb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-6);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+}
+
+.sb-legend-note {
+  margin-right: var(--space-4);
 }
 
 /* ── Bring your own server ───────────────────────────────────────────────── */
-.byo-card {
+.byo {
   display: grid;
-  grid-template-columns: 1fr minmax(340px, 0.85fr);
-  gap: 1.75rem;
+  grid-template-columns: 1fr minmax(340px, .85fr);
+  gap: var(--space-6);
   align-items: center;
-  padding: 1.75rem;
-  margin-bottom: 1.75rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  background: var(--paper);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  position: relative;
-  overflow: hidden;
-}
-
-.byo-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--color-accent), var(--color-amber), transparent);
+  min-width: 0;
 }
 
 .byo-copy h2 {
-  margin: 0.35rem 0 0.6rem;
-  font-family: var(--font-display);
+  margin: var(--space-1) 0 var(--space-3);
   font-size: var(--text-xl);
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  color: var(--color-text-primary);
 }
 
 .byo-copy p {
-  margin: 0;
   max-width: 58ch;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  line-height: 1.7;
-  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+
+.byo-fig {
+  min-width: 0;
+  margin: 0;
+}
+
+.byo-cap {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--ink-3);
 }
 
 .byo-code {
   margin: 0;
-  padding: 1.1rem 1.25rem;
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
+  padding: var(--space-4);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--spec);   /* advisory: an example, not live data */
   border-radius: var(--radius);
   overflow-x: auto;
 }
@@ -124,432 +149,365 @@
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   line-height: 1.8;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
   white-space: pre;
 }
 
 /* ── Filters ─────────────────────────────────────────────────────────────── */
-.browser-filters {
+.sb-filters {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  margin-bottom: 1.25rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+  background: var(--paper);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
 
 .filter-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .filter-field label {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
+  color: var(--ink-3);
 }
 
 .filter-field select {
   min-width: 170px;
-  padding: 0.5rem 0.65rem;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
+  max-width: 100%;
+  min-height: 36px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
   border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
+  color: var(--ink);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
+  transition: border-color var(--transition-fast);
 }
 
-.filter-field select:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
+.filter-field select:hover { border-color: var(--field-line); }
 
 .filter-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding-bottom: 0.5rem;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
+  gap: var(--space-2);
+  min-height: 36px;
+  font-size: var(--text-sm);
+  color: var(--ink-2);
   cursor: pointer;
 }
 
 .filter-toggle input {
-  accent-color: var(--color-accent);
-  width: 15px;
-  height: 15px;
+  accent-color: var(--field);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Live count of what the filters are actually showing — no rounding, no
+   estimate; it is a straight length of the rendered list. */
+.filter-count {
+  margin-left: auto;
+  align-self: center;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .filter-clear {
-  margin-left: auto;
+  align-self: center;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: .11em;
 }
 
-/* ── States ──────────────────────────────────────────────────────────────── */
-.browser-alert {
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.25rem;
-  background: var(--color-amber-soft);
-  border: 1px solid var(--color-warning);
-  border-radius: var(--radius);
-  color: var(--color-warning);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
+/* ── Loading ─────────────────────────────────────────────────────────────── */
+.sb-skeleton {
+  padding: var(--space-4);
 }
 
-.browser-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 4rem;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-}
-
-.browser-empty {
-  padding: 4rem 2rem;
-  text-align: center;
-  background: var(--color-bg-card);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-lg);
-}
-
-.browser-empty h3 {
-  margin: 0 0 0.5rem;
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  color: var(--color-text-primary);
-}
-
-.browser-empty p {
-  margin: 0 auto;
-  max-width: 56ch;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  line-height: 1.7;
-  color: var(--color-text-muted);
+.sb-loading {
+  margin-bottom: var(--space-3);
+  color: var(--ink-3);
 }
 
 /* ── Session table ───────────────────────────────────────────────────────── */
-.session-table {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+/* Seven dense columns. Below this width the .table-wrap scrolls internally,
+   which is what keeps the page itself from ever scrolling sideways. */
+.sb-table {
+  min-width: 940px;
 }
 
-.session-row {
-  display: grid;
-  grid-template-columns: 1.5fr 1.3fr 0.9fr 1.1fr 0.6fr 0.8fr auto;
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--color-border);
+.sb-table th,
+.sb-table td {
+  vertical-align: top;
 }
 
-.session-row:last-child { border-bottom: none; }
-
-.session-row:not(.session-head):hover {
-  background: var(--color-bg-secondary);
+.sb-table th.edge-field,
+.sb-table td.edge-field,
+.sb-table th.edge-boundary,
+.sb-table td.edge-boundary {
+  /* .edge-* sets padding-left: var(--space-4), which already matches the
+     table cell padding, so the rule lands flush with the column. */
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
 }
 
-.session-head {
-  background: var(--color-bg-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
+/* .num right-aligns by default; these cells are stacked readouts, not single
+   figures, so they stay left-aligned and keep the mono/tabular treatment. */
+.sb-table td.num {
+  text-align: left;
 }
 
-/* Game + content address */
-.cell-game {
+.cell-game,
+.cell-node,
+.cell-players,
+.cell-capacity,
+.cell-ping,
+.cell-price {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-1);
   min-width: 0;
 }
 
+/* Game + content address */
 .game-title {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--ink);
 }
 
 .game-hash {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--color-accent);
+  color: var(--field-text);
+  background: none;
+  border: 0;
+  padding: 0;
 }
 
+/* The hash IS the identity — chip the algorithm, not the value. */
 .hash-tag {
-  padding: 0.05rem 0.3rem;
+  padding: 1px 5px;
   border-radius: var(--radius-xs);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  background: var(--field-tint);
+  color: var(--field-text);
 }
 
 .game-version {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--color-text-muted);
+  color: var(--ink-3);
 }
 
 /* A hash this tracker has no catalog entry for. Not an error state — the
    content address IS the identity — so it is muted, not alarming. */
 .game-version-unknown {
   font-style: italic;
-  opacity: 0.7;
+  color: var(--ink-3);
+  opacity: .8;
+}
+
+/* When a tracker has no catalog entry, the content address is the title —
+   rendered once, in mono, rather than duplicated as title + chip. */
+.game-title-hash {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
 }
 
 /* Node */
-.cell-node {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
 .node-addr {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .node-meta {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--color-text-muted);
+  color: var(--ink-3);
 }
 
 /* Operator/region are claims a node makes about itself. They are signed by the
    node key (so nobody can rewrite them in flight) but no tracker can verify
    them, and the UI must never imply otherwise. */
 .declared-tag {
-  padding: 0.05rem 0.3rem;
+  padding: 1px 5px;
   border-radius: var(--radius-xs);
-  border: 1px dashed var(--color-border-strong);
-  font-size: 9px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  opacity: 0.85;
+  border: 1px dashed var(--boundary);
+  color: var(--boundary-text);
+  background: var(--boundary-tint);
 }
 
 .node-meta-none,
 .players-count-unknown {
   font-style: italic;
-  opacity: 0.6;
+  color: var(--ink-3);
 }
 
 .node-comms {
   display: flex;
-  gap: 0.3rem;
+  flex-wrap: wrap;
+  gap: var(--space-1);
 }
+
+.node-comms:empty { display: none; }
 
 .comms-chip {
-  padding: 0.05rem 0.35rem;
+  padding: 1px 5px;
   border-radius: var(--radius-xs);
-  border: 1px solid var(--color-border-strong);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
+  border: 1px solid var(--line-2);
+  color: var(--ink-3);
 }
 
-/* Players */
-.cell-players {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
+/* Players — unsigned display hints, sat behind the boundary rule. */
 .players-count {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  font-weight: 700;
-  color: var(--color-text-primary);
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Occupancy counters are unsigned display hints and entirely optional; a node
-   that publishes none is normal, not broken. */
 .players-count-unknown {
   font-size: var(--text-2xs);
   font-weight: 400;
-  color: var(--color-text-muted);
 }
 
 .players-max {
   font-weight: 400;
-  color: var(--color-text-muted);
+  color: var(--ink-3);
 }
 
 .players-bar {
   display: block;
-  height: 4px;
+  width: 100%;
+  max-width: 120px;
+  height: 3px;
+  background: var(--surface-2);
   border-radius: var(--radius-full);
-  background: var(--color-bg-elevated);
   overflow: hidden;
 }
 
 .players-fill {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--color-accent), var(--color-amber));
+  background: var(--boundary);
 }
 
 .players-slots {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--color-text-muted);
+  color: var(--ink-3);
 }
 
-/* Capacity */
-.cell-capacity {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.cell-capacity code {
+/* Capacity — measured by the box about itself. */
+.capacity-spec {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
+  white-space: nowrap;
 }
 
 .capacity-shards {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  color: var(--color-text-muted);
+  color: var(--ink-3);
+  white-space: nowrap;
 }
 
-/* Ping */
+/* Ping — a hint, never a measurement we took. Colour is duplicated by the
+   tier word underneath, so status is never encoded by hue alone. */
 .ping {
   display: inline-block;
-  padding: 0.2rem 0.5rem;
+  padding: 2px 7px;
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.ping-excellent { background: rgba(61, 220, 132, 0.12); color: var(--color-success); }
-.ping-good      { background: var(--color-accent-soft);  color: var(--color-accent); }
-.ping-fair      { background: var(--color-amber-soft);   color: var(--color-warning); }
-.ping-poor      { background: rgba(255, 84, 104, 0.12);  color: var(--color-error); }
+.ping-excellent { background: var(--live-tint);   color: var(--live-text); }
+.ping-good      { background: var(--surface-2);   color: var(--ink); }
+.ping-fair      { background: var(--spec-tint);   color: var(--spec-text); }
+.ping-poor      { background: var(--danger-tint); color: var(--danger-text); }
+
+.ping-tier { color: var(--ink-3); }
 
 /* Price */
-.cell-price {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.price-paid {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
+.price-paid,
 .price-free {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--color-success);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.price-note {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-}
+.price-paid { color: var(--ink); }
+.price-free { color: var(--live-text); }
+
+/* Settlement leaves the verifiable core for a third-party rail — the one
+   place a price note earns the boundary colour. */
+.price-note { color: var(--boundary-text); }
 
 /* Join */
 .btn-join {
-  min-width: 76px;
+  min-width: 78px;
+  min-height: 36px;
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.btn-join:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  letter-spacing: .11em;
 }
 
 /* ── Footnote ────────────────────────────────────────────────────────────── */
-.browser-footnote {
-  margin: 1.5rem 0 0;
+.sb-footnote {
+  margin-top: var(--space-6);
   max-width: 82ch;
-  font-family: var(--font-sans);
   font-size: var(--text-xs);
   line-height: 1.7;
-  color: var(--color-text-muted);
+  color: var(--ink-3);
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
-@media (max-width: 1180px) {
-  .session-row {
-    grid-template-columns: 1.4fr 1.2fr 0.9fr 0.7fr 0.8fr auto;
-  }
-  .cell-capacity { display: none; }
-  .session-head > *:nth-child(4) { display: none; }
-}
-
 @media (max-width: 900px) {
-  .byo-card { grid-template-columns: 1fr; }
-  .session-head { display: none; }
-  .session-row {
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem 1rem;
-    padding: 1.25rem;
-  }
-  .cell-join { grid-column: 1 / -1; }
-  .btn-join { width: 100%; min-height: 44px; }
+  .byo { grid-template-columns: 1fr; }
+
+  .sb-filters { gap: var(--space-3); }
+  .filter-field { flex: 1 1 100%; }
+  .filter-field select { min-width: 0; width: 100%; }
+  .filter-count { margin-left: 0; }
+  .filter-clear { margin-left: auto; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .browser { animation: none; }
-}
-
-/* When a tracker has no catalog entry, the content address IS the title —
-   rendered once, in mono, rather than duplicated as title + chip. */
-.game-title-hash {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-primary);
+@media (max-width: 480px) {
+  .sb-readout { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .sb-readout .stat { padding: var(--space-3) var(--space-4); }
+  .filter-clear { width: 100%; }
 }

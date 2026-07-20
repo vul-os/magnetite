@@ -18,7 +18,7 @@ function authFetch(endpoint, options = {}) {
   });
 }
 
-const MOCK_STATS = import.meta.env.VITE_USE_MOCKS
+const MOCK_STATS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? {
       totalUsers: 12847,
       totalGames: 342,
@@ -29,7 +29,7 @@ const MOCK_STATS = import.meta.env.VITE_USE_MOCKS
     }
   : null;
 
-const MOCK_RECENT_ACTIVITY = import.meta.env.VITE_USE_MOCKS
+const MOCK_RECENT_ACTIVITY = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 1, type: 'user_register',     message: 'New user registered: CryptoGamer42',              time: '2 min ago'  },
       { id: 2, type: 'game_submitted',    message: 'Game submitted: Neon Drift by StarForge Studios',  time: '15 min ago' },
@@ -78,7 +78,7 @@ export default function AdminDashboard() {
   const [error, setError]     = useState(null);
 
   useEffect(() => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
 
     async function load() {
       setLoading(true);

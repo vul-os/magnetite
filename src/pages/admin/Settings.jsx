@@ -70,7 +70,7 @@ export default function AdminSettings() {
   const [endpointAvailable, setEndpointAvailable] = useState(true);
 
   const fetchSettings = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) {
+    if (import.meta.env.VITE_USE_MOCKS === 'true') {
       setLoading(false);
       return;
     }

@@ -20,7 +20,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_GAMES = import.meta.env.VITE_USE_MOCKS
+const MOCK_GAMES = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 1, title: 'Cosmic Raiders',  developer: 'StarForge Studios', status: 'active',   featured: true,  players: 8420,  revenue: 12450.00, submittedAt: '2024-01-10' },
       { id: 2, title: 'Galaxy Conquest', developer: 'PixelMaster',       status: 'active',   featured: false, players: 2941,  revenue: 2970.50,  submittedAt: '2024-01-15' },
@@ -61,7 +61,7 @@ export default function Games() {
   const perPage = 10;
 
   const fetchGames = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     setLoading(true);
     setError(null);
     try {

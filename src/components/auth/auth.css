@@ -1,3 +1,7 @@
+/* Button styles removed: .btn* are GLOBAL primitives owned by src/index.css.
+   This file carried a divergent copy (gradient fill, hardcoded #0a0715 ink) that
+   loaded after the global one and silently restyled every button in the app.
+   See src/styles/DESIGN.md. */
 /*
  * Auth Components — Industrial Magnetite shared component styles.
  * These styles apply to AuthForm, PasswordInput, EmailInput, etc.
@@ -563,81 +567,14 @@
 .spinner-lg { width: 28px; height: 28px; }
 
 /* ── Btn shortcuts (for component-level btn classes) ─────────────────────── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    transform var(--transition-fast);
-  border: 1px solid transparent;
-  cursor: pointer;
-}
 
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 
-.btn-primary {
-  background: var(--gradient-primary);
-  color: #0a0715;
-  border-color: transparent;
-}
 
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-1px);
-}
 
-.btn-secondary {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-  border-color: var(--color-border);
-}
 
-.btn-secondary:hover:not(:disabled) {
-  background: var(--color-bg-elevated);
-  border-color: var(--color-border-strong);
-}
 
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-secondary);
-  border-color: transparent;
-}
 
-.btn-ghost:hover:not(:disabled) {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-}
 
-.btn-danger {
-  background: var(--color-error);
-  color: #fff;
-  border-color: var(--color-error);
-}
 
-.btn-danger:hover:not(:disabled) {
-  background: #e04058;
-  box-shadow: 0 0 16px rgba(255, 84, 104, 0.25);
-  transform: translateY(-1px);
-}
 
-.btn-sm {
-  padding: 0.5rem 0.875rem;
-  font-size: var(--text-xs);
-}
 
-.btn-lg {
-  padding: 0.875rem 1.5rem;
-  font-size: var(--text-base);
-}

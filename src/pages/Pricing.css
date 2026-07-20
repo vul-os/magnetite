@@ -1,9 +1,15 @@
 /*
- * Pricing.css — Industrial Magnetite pricing page.
- * Uses ONLY design tokens from tokens.css.
+ * Pricing.css — "cold iron instrumentation".
+ *
+ * The one page in the app allowed a little editorial air: display serif at the
+ * top, one italic line, then straight back to the instrument. Terms are shown
+ * as a dense matrix rather than three floating cards, because legibility of
+ * exact terms IS the product.
+ *
+ * Tokens only — no literal colours. Both themes come free from tokens.css.
  */
 
-/* ─── Accessibility helpers ────────────────────────────────────────────────── */
+/* ─── Accessibility helper (page-local) ────────────────────────────────────── */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -18,263 +24,353 @@
 
 .pricing-page {
   min-height: 100vh;
-  background: var(--color-bg-primary);
+  background: var(--void);
+  overflow-x: clip;
 }
 
-/* ── Hero ──────────────────────────────────────────────────────────────────── */
+/* ── Hero ──────────────────────────────────────────────────────────────────
+   Air, not spectacle: no gradient wash, no glow. A hairline closes it off. */
 .pricing-hero {
-  padding: 7rem 0 5rem;
-  text-align: center;
-  position: relative;
-  background: var(--gradient-hero);
-  overflow: hidden;
+  padding: var(--space-20) 0 var(--space-12);
+  border-bottom: 1px solid var(--line);
 }
 
-.pricing-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, var(--color-accent-soft) 0%, transparent 60%);
-  pointer-events: none;
+.pricing-hero-inner {
+  max-width: var(--container-lg);
 }
-
-.pricing-hero .container { position: relative; z-index: 1; }
 
 .pricing-hero-title {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw, var(--text-4xl));
-  font-weight: 800;
-  letter-spacing: -0.028em;
-  margin: 0.5rem 0 1rem;
-  color: var(--color-text-primary);
-  line-height: 1.06;
+  font-weight: 400;                 /* Instrument Serif has no bold cut */
+  font-size: clamp(2.25rem, 4vw + 1rem, 4rem);
+  letter-spacing: -.02em;
+  line-height: 1;
+  color: var(--ink);
+  margin: 0 0 var(--space-6);
+  max-width: 18ch;
 }
 
-.pricing-hero-subtitle {
+/* The single editorial moment on the page. */
+.pricing-lede {
+  font-family: var(--font-sans);
   font-size: var(--text-lg);
-  color: var(--color-text-secondary);
-  max-width: 520px;
-  margin: 0 auto;
-  line-height: 1.7;
+  line-height: 1.65;
+  color: var(--ink-2);
+  max-width: 58ch;
+  margin: 0;
 }
 
-/* ── Cards ─────────────────────────────────────────────────────────────────── */
-.pricing-cards {
-  padding: 4rem 0 6rem;
+.pricing-lede .display-em {
+  font-size: 1.12em;
+  line-height: 1.3;
 }
 
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  max-width: 960px;
-  margin: 0 auto;
+/* ── The honest boundary ──────────────────────────────────────────────────
+   Magenta is used here because this genuinely is the edge of the verifiable
+   core — the settlement rail — and for no other reason on this page. */
+.pricing-boundary {
+  padding: var(--space-12) 0;
 }
 
-/* ── Section titles ────────────────────────────────────────────────────────── */
+.pricing-boundary-panel {
+  max-width: var(--container-md);
+  padding: var(--space-8);
+  background: var(--paper);
+}
+
+.pricing-boundary-body {
+  padding-left: var(--space-6);
+}
+
+.pricing-boundary-label {
+  color: var(--boundary-text);
+  margin: 0 0 var(--space-3);
+}
+
+.pricing-boundary-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.375rem, 1.4vw + .9rem, 1.875rem);
+  letter-spacing: -.012em;
+  line-height: 1.05;
+  color: var(--ink);
+  margin: 0 0 var(--space-4);
+}
+
+.pricing-boundary-text {
+  font-size: var(--text-sm);
+  line-height: 1.75;
+  color: var(--ink-2);
+  max-width: 68ch;
+  margin: 0;
+}
+
+/* ── Section furniture ─────────────────────────────────────────────────────── */
 .pricing-section-title {
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  font-weight: 700;
-  letter-spacing: -0.023em;
-  color: var(--color-text-primary);
-  margin: 0.5rem 0 2.5rem;
-  text-align: center;
+  font-weight: 400;
+  font-size: clamp(1.625rem, 2vw + 1rem, 2.5rem);
+  letter-spacing: -.015em;
+  line-height: 1.05;
+  color: var(--ink);
+  margin: 0 0 var(--space-8);
 }
 
-/* ── Comparison table ──────────────────────────────────────────────────────── */
-.pricing-comparison {
-  padding: 5rem 0;
-  background: var(--color-bg-secondary);
-  text-align: center;
+/* ── Tier matrix ───────────────────────────────────────────────────────────── */
+.pricing-matrix {
+  padding: var(--space-12) 0 var(--space-16);
 }
 
-.comparison-table-wrapper {
-  overflow-x: auto;
-  max-width: 900px;
-  margin: 0 auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+.pricing-table-wrap {
+  /* .table-wrap already owns the scroll + frame; this only guarantees the
+     scroll container itself is focusable-visible when tabbed to. */
+  scroll-padding-left: var(--space-4);
 }
 
-.comparison-table {
-  width: 100%;
-  border-collapse: collapse;
+.pricing-table-wrap:focus-visible {
+  outline: 2px solid var(--field);
+  outline-offset: 2px;
 }
 
-.comparison-table th,
-.comparison-table td {
-  padding: 1rem 1.25rem;
+.pricing-table {
+  min-width: 720px;   /* below this the matrix scrolls INSIDE .table-wrap */
+}
+
+.pricing-th-attr {
+  min-width: 190px;
+}
+
+/* Tier column heads: mono label, per the "tier names are labels" rule. */
+.pricing-th-tier {
+  min-width: 128px;
+}
+
+.pricing-th-name {
+  display: block;
+  color: var(--ink);
+  font-size: 11.5px;
+  letter-spacing: .11em;
+}
+
+.pricing-th-tier.is-current .pricing-th-name {
+  color: var(--live-text);
+}
+
+.pricing-th-current {
+  margin-top: var(--space-1);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+}
+
+/* Group bands — the .m-sm micro-label doing structural work. */
+.pricing-group-row > .pricing-group-label {
+  position: static;      /* override the sticky rule on table.data th */
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-sm);
 }
 
-.comparison-table tr:last-child td { border-bottom: none; }
+.pricing-tgroup:first-of-type .pricing-group-label {
+  border-top: 0;
+}
 
-.comparison-table th {
-  font-family: var(--font-mono);
+/* Row labels are the reading spine: sans, inked, not sticky. */
+.pricing-row-label {
+  position: static;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
   font-weight: 500;
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-elevated);
+  letter-spacing: -.005em;
+  text-transform: none;
+  color: var(--ink);
+  white-space: normal;
+  border-bottom: 1px solid var(--rule);
+}
+
+.pricing-tgroup tr:last-child > .pricing-row-label {
+  border-bottom: 0;
+}
+
+.pricing-cell,
+.pricing-cell-num {
+  color: var(--ink-2);
+}
+
+/* Figures a user compares down a column: mono, tabular, inked up. */
+.pricing-cell-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-weight: 600;
   white-space: nowrap;
 }
 
-.comparison-table td { color: var(--color-text-secondary); }
-
-.comparison-table tr:hover td {
-  background: rgba(255, 255, 255, 0.015);
+/* Current plan column: green rail + a text pill in the header, never colour
+   alone. */
+.pricing-cell.is-current,
+.pricing-cell-num.is-current {
+  background: var(--live-tint);
+  color: var(--ink);
 }
 
-.comparison-accent {
-  color: var(--color-accent) !important;
-  font-weight: 500;
+.pricing-table-note {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--ink-3);
+  max-width: 68ch;
+  margin: var(--space-4) 0 0;
+}
+
+/* ── Action strip ─────────────────────────────────────────────────────────
+   Deliberately not "cards": no shadow, no lift, no highlight badge. Four
+   equal columns of terms with a control at the foot of each. */
+.pricing-actions {
+  list-style: none;
+  margin: var(--space-10) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-6);
+}
+
+.pricing-action {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--line-2);
+  min-width: 0;
+}
+
+/* The recommended tier keeps the .edge-field rail (violet = the verifiable
+   core); everything else gets the quieter hairline. Both selectors are
+   doubled so they outrank the base rule above regardless of load order. */
+.pricing-action.edge-field { border-left-color: var(--field); }
+.pricing-action.edge-none  { border-left-color: var(--line); }
+
+.pricing-action-name {
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.pricing-action-price {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pricing-action-period {
+  display: block;
+  font-size: var(--text-2xs);
+  font-weight: 400;
+  letter-spacing: .04em;
+  color: var(--ink-3);
+  margin-top: var(--space-1);
+}
+
+.pricing-action-summary {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0 0 var(--space-2);
+  flex: 1 1 auto;
+}
+
+.pricing-action-current {
+  margin: 0;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* ── FAQ ───────────────────────────────────────────────────────────────────── */
 .pricing-faq {
-  padding: 5rem 0;
-  background: var(--color-bg-primary);
-  text-align: center;
+  padding: var(--space-12) 0 var(--space-16);
 }
 
-.faq-grid {
+.faq-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-  max-width: 1000px;
-  margin: 0 auto;
-  text-align: left;
+  gap: var(--space-6) var(--space-10);
+  margin: 0;
+  max-width: var(--container-xl);
 }
 
 .faq-item {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.75rem;
-  transition:
-    border-color var(--t) var(--ease-out),
-    box-shadow   var(--t) var(--ease-out);
-}
-
-.faq-item:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-4);
+  min-width: 0;
 }
 
 .faq-question {
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0 0 0.75rem;
-  color: var(--color-text-primary);
+  letter-spacing: -.005em;
+  color: var(--ink);
+  margin: 0 0 var(--space-2);
 }
 
 .faq-answer {
-  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   line-height: 1.75;
+  color: var(--ink-2);
   margin: 0;
+  max-width: 62ch;
 }
 
 /* ── Final CTA ─────────────────────────────────────────────────────────────── */
 .pricing-cta {
-  padding: 6rem 0;
-  text-align: center;
-  background: var(--color-bg-secondary);
-  position: relative;
-  overflow: hidden;
+  padding: var(--space-16) 0 var(--space-20);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
 }
 
-.pricing-cta::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 70% 60% at 50% 100%, var(--color-accent-soft) 0%, transparent 65%);
-  pointer-events: none;
+.pricing-cta-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.625rem, 2vw + 1rem, 2.5rem);
+  letter-spacing: -.015em;
+  line-height: 1.05;
+  color: var(--ink);
+  margin: 0 0 var(--space-3);
+  max-width: 22ch;
 }
 
-.pricing-cta .container { position: relative; z-index: 1; }
-
-.pricing-cta h2 {
-  font-size: var(--text-3xl);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0.5rem 0 0.75rem;
-  color: var(--color-text-primary);
-}
-
-.pricing-cta p {
-  font-size: var(--text-lg);
-  color: var(--color-text-secondary);
-  margin: 0 0 2rem;
-  line-height: 1.6;
+.pricing-cta-body {
+  font-size: var(--text-base);
+  line-height: 1.65;
+  color: var(--ink-2);
+  max-width: 52ch;
+  margin: 0 0 var(--space-8);
 }
 
 .cta-buttons {
   display: flex;
-  gap: 1rem;
-  justify-content: center;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
-.btn-primary,
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-decoration: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition:
-    background    var(--t-fast) var(--ease-out),
-    border-color  var(--t-fast) var(--ease-out),
-    box-shadow    var(--t-fast) var(--ease-out),
-    transform     var(--t-fast) var(--ease-out);
-}
-
-.btn-lg { padding: 0.875rem 2rem; font-size: var(--text-base); }
-
-.btn-primary {
-  background: var(--gradient-primary);
-  color: #0a0715;
-  border-color: transparent;
-}
-
-.btn-primary:hover {
-  filter: brightness(1.08);
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-2px);
-}
-
-.btn-secondary {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  border-color: var(--color-border);
-}
-
-.btn-secondary:hover {
-  background: var(--color-bg-card);
-  border-color: var(--color-border-strong);
-  transform: translateY(-2px);
-  color: var(--color-text-primary);
-}
-
-/* ── Responsive ────────────────────────────────────────────────────────────── */
+/* ── Responsive ────────────────────────────────────────────────────────────
+   No layout below relies on the matrix being visible in full: it scrolls
+   inside .table-wrap, and the action strip carries the price at any width. */
 @media (max-width: 768px) {
-  .pricing-hero { padding: 5rem 0 3rem; }
-
-  .pricing-grid { grid-template-columns: 1fr; padding: 0 1rem; }
-
-  .faq-grid { padding: 0 1rem; }
-
-  .cta-buttons { flex-direction: column; align-items: center; }
+  .pricing-hero { padding: var(--space-12) 0 var(--space-10); }
+  .pricing-hero-title { max-width: none; }
+  .pricing-boundary-panel { padding: var(--space-5); }
+  .pricing-boundary-body { padding-left: var(--space-4); }
+  .pricing-matrix { padding: var(--space-10) 0 var(--space-12); }
+  .pricing-actions { gap: var(--space-5); }
+  .cta-buttons .btn { width: 100%; }
 }

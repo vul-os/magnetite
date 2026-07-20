@@ -1,156 +1,386 @@
 /*
- * Industrial Magnetite — Design Tokens
- * Single source of truth for all design primitives.
- * All values flow from here into index.css and component stylesheets.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * MAGNETITE — "Cold Iron" design tokens
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * Fonts are loaded performantly via <link> in index.html.
- * No @import here — avoids render-blocking duplication.
+ * Single source of truth for every design primitive in the app.
+ *
+ * IDENTITY (shared with the marketing site — see site/index.html):
+ *   magnetite = magnetic iron ore. Graphite-blue neutrals, field lines,
+ *   violet for the verifiable core, magenta for the boundary where
+ *   verification stops.
+ *
+ * SEMANTIC COLOUR NAMES — these carry meaning, use them deliberately:
+ *   --field     violet   the verifiable core: deterministic sim, replay-checked,
+ *                        signed, hash-addressed. "We can prove this."
+ *   --boundary  magenta  the one honest boundary where verification stops:
+ *                        untrusted input, third-party rails, unattested clients.
+ *                        NEVER use it merely because it looks good.
+ *   --spec      amber    specification / advisory / needs attention.
+ *   --live      green    a running, healthy, currently-true thing.
+ *
+ * THEME MECHANISM: ThemeContext sets `data-theme="dark|light"` on <html>.
+ *   This stylesheet is the ONLY authority for theme colour. Do not write
+ *   colours as inline styles from JS — inline styles outrank these rules and
+ *   silently defeat the whole system (that bug existed here and was removed).
+ *
+ * FONTS: self-hosted woff2, no CDN. All SIL Open Font License 1.1.
+ *   See public/fonts/OFL.txt.
+ *
+ * LEGACY NAMES: ~70 stylesheets already reference --color-* names. Those are
+ *   kept below as ALIASES onto the semantic layer, so every existing page
+ *   inherits the new palette without being edited. Prefer semantic names in
+ *   new code; the alias layer exists for the migration tail.
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 
-/* ─── Root (dark, default) ────────────────────────────────────────────────── */
+/* ─── Self-hosted faces (OFL-1.1) ─────────────────────────────────────────── */
+
+/* Instrument Serif — display only. 400 weight only: never apply a heavier
+   font-weight to it or the browser will synthesise a fake bold. */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/instrument-serif.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('/fonts/instrument-serif-italic.woff2') format('woff2');
+}
+
+/* IBM Plex Sans — variable 100..700. The UI workhorse. */
+@font-face {
+  font-family: 'IBM Plex Sans Var';
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-var.woff2') format('woff2-variations');
+}
+
+/* IBM Plex Mono — data, IDs, hashes, micro-labels. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-600.woff2') format('woff2');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NON-COLOUR PRIMITIVES (theme-independent)
+═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  /* Background layers — graphite ramp, matched to site/index.html */
-  --color-bg-primary:    #08090c;
-  --color-bg-secondary:  #0c0d12;
-  --color-bg-card:       #111319;
-  --color-bg-elevated:   #15171f;
+  /* ── Type families ──────────────────────────────────────────────────────
+     An editorial serif set deliberately against industrial mono: the
+     "lab notebook on cold iron" tension is the product's signature. */
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-sans:    'IBM Plex Sans Var', ui-sans-serif, system-ui, -apple-system,
+                  'Segoe UI', sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-family:  var(--font-sans);   /* legacy alias */
 
-  /* Text */
-  --color-text-primary:  #f4f4f6;
-  --color-text-secondary:#a8a8b3;
-  --color-text-muted:    #6b6b78;
+  /* ── Type scale (px) — denser than a marketing site; this is a tool ────── */
+  --text-2xs:  11px;
+  --text-xs:   12px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-lg:   17px;
+  --text-xl:   20px;
+  --text-2xl:  25px;
+  --text-3xl:  32px;
+  --text-4xl:  42px;
+  --text-5xl:  56px;
 
-  /* Borders */
-  --color-border:        #23232e;
-  --color-border-strong: #33333f;
+  /* ── Spacing: 4px base grid (canonical home) ────────────────────────────── */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
 
-  /* ── Accent: violet -> magenta "magnetic field" duo ── */
-  --color-accent:        #7b61ff;
-  --color-accent-2:      #ff4d9d;
-  --color-accent-hover:  #6a4bf5;
-  --color-accent-soft:   rgba(123, 97, 255, 0.12);
-  --color-accent-glow:   rgba(123, 97, 255, 0.18);
+  /* Legacy --spacing-N aliases (heavily used across pages) */
+  --spacing-1:  var(--space-1);
+  --spacing-2:  var(--space-2);
+  --spacing-3:  var(--space-3);
+  --spacing-4:  var(--space-4);
+  --spacing-5:  var(--space-5);
+  --spacing-6:  var(--space-6);
+  --spacing-8:  var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
 
-  --color-amber:         #f5a524;
-  --color-amber-hover:   #d98c18;
-  --color-amber-soft:    rgba(245, 165, 36, 0.12);
+  /* ── Containers ─────────────────────────────────────────────────────────── */
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1240px;
+  --navbar-height: 56px;
 
-  /* ── Legacy aliases (kept for backward-compat with page-level code) ── */
-  --color-primary:       var(--color-accent);
-  --color-primary-hover: var(--color-accent-hover);
-  --color-primary-light: #a599ff;
-  --color-secondary:     var(--color-amber);
-
-  /* ── Status ── */
-  --color-success: #3ddc84;
-  --color-warning: #f5a524;
-  --color-error:   #ff5468;
-  --color-info:    #5b9dff;
-
-  /* ── Gradients ── */
-  --gradient-primary: linear-gradient(135deg, #7b61ff 0%, #ff4d9d 100%);
-  --gradient-energy:  linear-gradient(135deg, #f5a524 0%, #ff5468 100%);
-  --gradient-hero:    radial-gradient(ellipse at 50% 0%, #15171f 0%, #08090c 60%);
-
-  /* ── Typography ── */
-  /* Display (headings): Archivo — industrial, characterful, credible for Rust infra */
-  --font-display:     'Archivo', 'Archivo Variable', system-ui, sans-serif;
-  /* Body / UI prose: Hanken Grotesk — refined, warm, distinctive; replaces Inter */
-  --font-sans:        'Hanken Grotesk', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  /* Mono (labels, stats, code, IDs): JetBrains Mono — on-brand for a code platform */
-  --font-mono:        'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  /* Legacy alias — keeps existing --font-family refs working */
-  --font-family:      var(--font-sans);
-
-  /* Type scale: 12/13/14/16/18/22/28/36/48/64 */
-  --text-2xs:  12px;
-  --text-xs:   13px;
-  --text-sm:   14px;
-  --text-base: 16px;
-  --text-lg:   18px;
-  --text-xl:   22px;
-  --text-2xl:  28px;
-  --text-3xl:  36px;
-  --text-4xl:  48px;
-  --text-5xl:  64px;
-
-  /* ── Shape (radius) ── */
-  --radius-xs:  4px;
-  --radius-sm:  6px;
-  --radius:     10px;
-  --radius-lg:  16px;
-  --radius-xl:  24px;
+  /* ── Shape — machined, not pillowy ──────────────────────────────────────── */
+  --radius-xs:   3px;
+  --radius-sm:   5px;
+  --radius:      8px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
   --radius-full: 9999px;
-
-  /* ── Legacy radius aliases ── */
   --border-radius:    var(--radius-sm);
   --border-radius-lg: var(--radius-lg);
 
-  /* ── Shadows ── */
-  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg:  0 12px 32px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-xl:  0 24px 48px rgba(0, 0, 0, 0.7);
-  --shadow-glow:        0 0 24px var(--color-accent-glow);
-  --shadow-glow-amber:  0 0 24px rgba(245, 165, 36, 0.18);
-  --shadow-glow-focus:  0 0 0 3px rgba(123, 97, 255, 0.22);
+  /* ── Motion — one ease for nearly everything, and fast ──────────────────── */
+  --ease-out:    cubic-bezier(.16, 1, .3, 1);
+  --ease-in:     cubic-bezier(.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(.4, 0, .2, 1);
 
-  /* ── Motion ── */
-  --ease-out:      cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-in:       cubic-bezier(0.4, 0, 1, 1);
-  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 120ms;
+  --t:      200ms;
+  --t-slow: 380ms;
 
-  --t-fast:   140ms;
-  --t:        240ms;
-  --t-slow:   420ms;
+  --transition-fast:     var(--t-fast) var(--ease-out);
+  --transition-normal:   var(--t) var(--ease-out);
+  --transition-slow:     var(--t-slow) var(--ease-out);
+  --transition-duration: var(--t);
 
-  /* Legacy transition aliases */
-  --transition-fast:   var(--t-fast) var(--ease-out);
-  --transition-normal: var(--t) var(--ease-out);
-  --transition-slow:   var(--t-slow) var(--ease-out);
-
-  /* ── Z-index ladder ── */
+  /* ── Z-index ladder ─────────────────────────────────────────────────────── */
   --z-base:     0;
   --z-elevated: 10;
   --z-dropdown: 100;
   --z-sticky:   200;
+  --z-overlay:  900;
   --z-modal:    1000;
   --z-toast:    9999;
 }
 
-/* ─── Light theme overrides ───────────────────────────────────────────────── */
-[data-theme="light"] {
-  --color-bg-primary:    #f7f7fa;
-  --color-bg-secondary:  #ededf2;
-  --color-bg-card:       #ffffff;
-  --color-bg-elevated:   #e8e8f0;
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLOUR — DARK ("cold iron"). Default when no data-theme is present.
+═══════════════════════════════════════════════════════════════════════════ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-  --color-text-primary:  #131318;
-  --color-text-secondary:#4b4b58;
-  --color-text-muted:    #8b8b98;
+  /* Surfaces: a cool-shifted graphite ramp */
+  --void:      #07080C;
+  --paper:     #0C0E14;
+  --surface-2: #11141C;
+  --elevated:  #161A24;
+  --sunk:      #090A0F;
 
-  --color-border:        #d5d5e0;
-  --color-border-strong: #b8b8c8;
+  /* Rules & ink */
+  --line:   #1C212D;
+  --line-2: #2E3646;
+  --ink:    #E7EAF2;
+  --ink-2:  #99A2B6;
+  --ink-3:  #6B7488;
+  --rule:   rgba(231, 234, 242, .055);
 
-  /* accents stay the same (just adjust soft/glow for light bg) */
-  --color-accent-soft:   rgba(123, 97, 255, 0.10);
-  --color-accent-glow:   rgba(123, 97, 255, 0.12);
-  --color-amber-soft:    rgba(245, 165, 36, 0.10);
+  /* Semantic accents */
+  --field:      #8B74FF;
+  --field-text: #A08FFF;
+  --field-tint: rgba(139, 116, 255, .13);
+  --field-line: rgba(139, 116, 255, .34);
 
-  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
-  --shadow-lg:  0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-xl:  0 24px 48px rgba(0, 0, 0, 0.15);
+  --boundary:      #FF4D9D;
+  --boundary-text: #FF74B2;
+  --boundary-tint: rgba(255, 77, 157, .12);
 
-  --gradient-hero: radial-gradient(ellipse at 50% 0%, #e8e8f0 0%, #f7f7fa 60%);
+  --spec:      #FFB020;
+  --spec-text: #FFC24D;
+  --spec-tint: rgba(255, 176, 32, .12);
+
+  --live:      #4ADE80;
+  --live-text: #6EE79B;
+  --live-tint: rgba(74, 222, 128, .11);
+
+  --danger:      #FF5468;
+  --danger-text: #FF7D8C;
+  --danger-tint: rgba(255, 84, 104, .12);
+
+  --bar-bg: rgba(7, 8, 12, .80);
+
+  /* ── Text ON a filled accent ────────────────────────────────────────────
+     In the dark theme every accent is a BRIGHT fill, so it needs DARK text.
+     Measured contrast of near-black (#08090C) on each fill:
+       field #8B74FF 6.04:1 · boundary #FF4D9D 6.4:1 · spec #FFB020 10.9:1
+       live  #4ADE80 11.4:1 · danger   #FF5468 6.7:1
+     White on those same fills is 3.1–3.5:1 and FAILS. Do not hardcode #fff
+     on an accent — use these tokens, they flip correctly per theme. */
+  --on-field:    #08090C;
+  --on-boundary: #08090C;
+  --on-spec:     #08090C;
+  --on-live:     #08090C;
+  --on-danger:   #08090C;
+
+  /* Dark UIs get depth from a hairline as much as from shadow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .6);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, .5), 0 12px 28px -14px rgba(0, 0, 0, .8);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, .5), 0 28px 60px -24px rgba(0, 0, 0, .85);
+  --shadow-xl: 0 40px 90px -30px rgba(0, 0, 0, .9);
+  --shadow:    var(--shadow-md);
 }
 
-/* ─── Reduced-motion ──────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLOUR — LIGHT ("milled steel").
+   Accents are DARKENED here rather than reused from dark: the dark-theme
+   violet and magenta do not reach 4.5:1 on white. This is a contrast
+   requirement, not a stylistic preference.
+═══════════════════════════════════════════════════════════════════════════ */
+:root[data-theme='light'],
+[data-theme='light'] {
+  color-scheme: light;
+
+  --void:      #E9ECF3;
+  --paper:     #FFFFFF;
+  --surface-2: #F4F6FA;
+  --elevated:  #FFFFFF;
+  --sunk:      #EFF2F7;
+
+  --line:   #DFE3EC;
+  --line-2: #C3CAD8;
+  --ink:    #0D1017;
+  --ink-2:  #4A5265;
+  --ink-3:  #737C90;
+  --rule:   rgba(13, 16, 23, .05);
+
+  --field:      #5B3FE0;
+  --field-text: #4B2FD0;
+  --field-tint: rgba(91, 63, 224, .075);
+  --field-line: rgba(91, 63, 224, .26);
+
+  --boundary:      #C4006B;
+  --boundary-text: #A80059;
+  --boundary-tint: rgba(196, 0, 107, .07);
+
+  --spec:      #A45B00;
+  --spec-text: #8A4A00;
+  --spec-tint: rgba(164, 91, 0, .09);
+
+  --live:      #17803D;
+  --live-text: #126032;
+  --live-tint: rgba(23, 128, 61, .09);
+
+  --danger:      #C6122A;
+  --danger-text: #A80D22;
+  --danger-tint: rgba(198, 18, 42, .08);
+
+  --bar-bg: rgba(233, 236, 243, .82);
+
+  /* Light-theme accents are DARK fills, so they need WHITE text — the exact
+     inverse of dark theme. Measured contrast of #FFFFFF on each fill:
+       field #5B3FE0 6.49:1 · boundary #C4006B 6.9:1 · spec #A45B00 5.6:1
+       live  #17803D 4.9:1  · danger   #C6122A 6.4:1 */
+  --on-field:    #FFFFFF;
+  --on-boundary: #FFFFFF;
+  --on-spec:     #FFFFFF;
+  --on-live:     #FFFFFF;
+  --on-danger:   #FFFFFF;
+
+  --shadow-sm: 0 1px 2px rgba(20, 25, 40, .06);
+  --shadow-md: 0 2px 8px rgba(20, 25, 40, .06), 0 12px 24px -14px rgba(25, 30, 60, .18);
+  --shadow-lg: 0 2px 8px rgba(20, 25, 40, .06), 0 28px 56px -26px rgba(25, 30, 60, .28);
+  --shadow-xl: 0 40px 80px -30px rgba(25, 30, 60, .32);
+  --shadow:    var(--shadow-md);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEGACY ALIAS LAYER
+   Maps the --color-* names used across existing pages onto the semantic layer.
+   These are var() references, not copies, so they follow the theme
+   automatically — every untouched page inherits the new palette for free.
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --color-bg-primary:   var(--void);
+  --color-bg-secondary: var(--surface-2);
+  --color-bg-card:      var(--paper);
+  --color-bg-elevated:  var(--elevated);
+  --color-bg-surface:   var(--surface-2);
+  --color-bg-sunk:      var(--sunk);
+
+  --color-text-primary:   var(--ink);
+  --color-text-secondary: var(--ink-2);
+  --color-text-muted:     var(--ink-3);
+
+  --color-border:        var(--line);
+  --color-border-strong: var(--line-2);
+  --border:              1px solid var(--line);
+
+  --color-accent:       var(--field);
+  --color-accent-hover: var(--field-text);
+  --color-accent-soft:  var(--field-tint);
+  --color-accent-glow:  var(--field-line);
+  --color-accent-line:  var(--field-line);
+  --color-accent-text:  var(--field-text);
+  --accent:             var(--field);
+  --accent-bg:          var(--field-tint);
+  --accent-border:      var(--field-line);
+
+  --color-boundary:      var(--boundary);
+  --color-boundary-soft: var(--boundary-tint);
+
+  --color-amber:       var(--spec);
+  --color-amber-hover: var(--spec-text);
+  --color-amber-soft:  var(--spec-tint);
+
+  --color-primary:       var(--field);
+  --color-primary-hover: var(--field-text);
+  --color-primary-light: var(--field-text);
+  --color-secondary:     var(--spec);
+
+  --color-success: var(--live);
+  --color-warning: var(--spec);
+  --color-error:   var(--danger);
+  --color-info:    var(--field);
+
+  --color-success-soft: var(--live-tint);
+  --color-warning-soft: var(--spec-tint);
+  --color-error-soft:   var(--danger-tint);
+
+  /* Achievement/rank tiers — metallic, legible in both themes */
+  --color-tier-bronze:   #C87F3A;
+  --color-tier-silver:   #9BA3B4;
+  --color-tier-gold:     #D9A227;
+  --color-tier-platinum: #6FB6C4;
+  --color-tier-diamond:  #7EA6FF;
+
+  /* Gradients — reserved for the field-line motif; used sparingly */
+  --gradient-primary: linear-gradient(135deg, var(--field) 0%, var(--boundary) 100%);
+  --gradient-energy:  linear-gradient(135deg, var(--spec) 0%, var(--boundary) 100%);
+  --gradient-hero:    radial-gradient(ellipse at 50% -10%, var(--surface-2) 0%, var(--void) 62%);
+
+  /* Focus + glow */
+  --shadow-glow:       0 0 24px var(--field-line);
+  --shadow-glow-amber: 0 0 24px var(--spec-tint);
+  --shadow-glow-focus: 0 0 0 3px var(--field-tint);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDUCED MOTION — collapse durations at the source
+═══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --t-fast:  0ms;
-    --t:       0ms;
-    --t-slow:  0ms;
+    --t-fast: 0ms;
+    --t:      0ms;
+    --t-slow: 0ms;
     --transition-fast:   0ms linear;
     --transition-normal: 0ms linear;
     --transition-slow:   0ms linear;
@@ -158,18 +388,102 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SHARED CSS-CLASS CONTRACT
-   These utility classes are the foundation every page/component applies.
-   The implementation lives here so all agents compose without editing each
-   other's files.
+   SHARED CLASS CONTRACT
+   Composable utilities every page builds on, so parallel work never needs to
+   edit another agent's stylesheet.
 ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Keyframes for reveal system ────────────────────────────────────────── */
-@keyframes im-reveal-up {
-  from { opacity: 0; transform: translateY(28px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* ─── Micro-labels ────────────────────────────────────────────────────────
+   Wide-tracked uppercase mono: the connective tissue of the whole UI. Used
+   for field labels, table headers, stat captions and section eyebrows. */
+.m-xs, .m-sm, .m-md {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.m-xs { font-size: 9.5px;  letter-spacing: .22em; }
+.m-sm { font-size: 10.5px; letter-spacing: .15em; }
+.m-md { font-size: 11.5px; letter-spacing: .11em; }
+
+/* Section eyebrow (canonical — do not redefine elsewhere) */
+.kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--field-text);
+  margin-bottom: var(--space-2);
 }
 
+/* ─── The field-line motif ────────────────────────────────────────────────
+   A coloured rule on the leading edge marking epistemic status. This is the
+   app's signature detail — use it to mean something, never for decoration.
+     .edge-field    verified / provable
+     .edge-boundary verification stops here
+     .edge-spec     advisory
+     .edge-live     currently running */
+.edge-field,
+.edge-boundary,
+.edge-spec,
+.edge-live {
+  border-left: 2px solid var(--line-2);
+  padding-left: var(--space-4);
+}
+.edge-field    { border-left-color: var(--field); }
+.edge-boundary { border-left-color: var(--boundary); }
+.edge-spec     { border-left-color: var(--spec); }
+.edge-live     { border-left-color: var(--live); }
+
+/* ─── Hairline rule ───────────────────────────────────────────────────────── */
+.rule {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: var(--space-6) 0;
+}
+
+/* ─── Surfaces ────────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.panel-sunk {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* ─── Status pill ─────────────────────────────────────────────────────────── */
+.st {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.st::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.st-live     { color: var(--live-text); }
+.st-field    { color: var(--field-text); }
+.st-boundary { color: var(--boundary-text); }
+.st-spec     { color: var(--spec-text); }
+.st-off      { color: var(--ink-3); }
+
+/* ─── Atmosphere ──────────────────────────────────────────────────────────
+   Grain + a faint magnetic grid. Deliberately near-invisible: texture on the
+   metal, never a pattern competing with data. */
 @keyframes im-grain-drift {
   0%   { transform: translate(0, 0); }
   20%  { transform: translate(-1px, 2px); }
@@ -179,88 +493,49 @@
   100% { transform: translate(0, 0); }
 }
 
-/* ─── Atmosphere backdrop ────────────────────────────────────────────────── */
-/* Apply to section/page backdrops for grain + faint magnetic grid */
-.bg-atmosphere {
-  position: relative;
-  isolation: isolate;
-}
-
-.bg-atmosphere::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  /* Magnetic grid: subtle crosshatch */
-  background-image:
-    linear-gradient(rgba(123, 97, 255, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(123, 97, 255, 0.028) 1px, transparent 1px);
-  background-size: 52px 52px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.bg-atmosphere::after {
-  content: '';
-  position: absolute;
-  inset: -50%;
-  /* Grain texture via SVG fractal noise */
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-  opacity: 0.022;
-  pointer-events: none;
-  z-index: 0;
-  animation: im-grain-drift 8s steps(1) infinite;
-}
-
-/* Make sure content within .bg-atmosphere sits above the pseudo-elements */
-.bg-atmosphere > * { position: relative; z-index: 1; }
-
-/* ─── Standalone grain-only helper ──────────────────────────────────────── */
-.bg-grain {
-  position: relative;
-  isolation: isolate;
-}
-
-.bg-grain::after {
-  content: '';
-  position: absolute;
-  inset: -50%;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-  opacity: 0.022;
-  pointer-events: none;
-  z-index: 0;
-  animation: im-grain-drift 8s steps(1) infinite;
-}
-
-.bg-grain > * { position: relative; z-index: 1; }
-
-/* ─── Grid-only helper ───────────────────────────────────────────────────── */
+.bg-atmosphere,
+.bg-grain,
 .bg-grid {
   position: relative;
   isolation: isolate;
 }
 
+.bg-atmosphere::before,
 .bg-grid::before {
   content: '';
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(123, 97, 255, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(123, 97, 255, 0.028) 1px, transparent 1px);
-  background-size: 52px 52px;
+    linear-gradient(var(--field-tint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--field-tint) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: .5;
   pointer-events: none;
   z-index: 0;
 }
 
-.bg-grid > * { position: relative; z-index: 1; }
-
-/* ─── Glow utilities ─────────────────────────────────────────────────────── */
-/* Place .glow-accent as a sibling/child pseudo-element backdrop */
-.glow-accent {
-  position: relative;
-  isolation: isolate;
+.bg-atmosphere::after,
+.bg-grain::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: .02;
+  pointer-events: none;
+  z-index: 0;
+  animation: im-grain-drift 8s steps(1) infinite;
 }
 
-.glow-accent::before {
+.bg-atmosphere > *,
+.bg-grain > *,
+.bg-grid > * { position: relative; z-index: 1; }
+
+/* ─── Glow ────────────────────────────────────────────────────────────────── */
+.glow-accent,
+.glow-amber { position: relative; isolation: isolate; }
+
+.glow-accent::before,
+.glow-amber::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -268,78 +543,78 @@
   transform: translate(-50%, -50%);
   width: min(700px, 90vw);
   height: min(700px, 90vw);
-  background: radial-gradient(ellipse, var(--color-accent-soft) 0%, transparent 65%);
   pointer-events: none;
   z-index: 0;
 }
+.glow-accent::before { background: radial-gradient(ellipse, var(--field-tint) 0%, transparent 65%); }
+.glow-amber::before  { background: radial-gradient(ellipse, var(--spec-tint) 0%, transparent 65%); }
 
-.glow-accent > * { position: relative; z-index: 1; }
-
-.glow-amber {
-  position: relative;
-  isolation: isolate;
-}
-
-.glow-amber::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(600px, 90vw);
-  height: min(600px, 90vw);
-  background: radial-gradient(ellipse, var(--color-amber-soft) 0%, transparent 65%);
-  pointer-events: none;
-  z-index: 0;
-}
-
+.glow-accent > *,
 .glow-amber > * { position: relative; z-index: 1; }
 
-/* ─── Kicker label (mono, above headings) ────────────────────────────────── */
-/* Canonical definition — do not re-define in index.css.                      */
-.kicker {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-accent);
-  display: block;
-  margin-bottom: 0.5rem;
+/* ─── Reveal system — one orchestrated page-load stagger ──────────────────── */
+@keyframes reveal-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Reveal system ──────────────────────────────────────────────────────── */
-/* Canonical definition — do not re-define in index.css.                      */
-/* Add .reveal to elements; add .reveal-N (1–8) for staggered entry.         */
 .reveal {
   opacity: 0;
-  transform: translateY(16px);
   animation: reveal-in var(--t-slow) var(--ease-out) forwards;
 }
-.reveal-1 { animation-delay:  60ms; }
-.reveal-2 { animation-delay: 120ms; }
-.reveal-3 { animation-delay: 200ms; }
-.reveal-4 { animation-delay: 290ms; }
-.reveal-5 { animation-delay: 390ms; }
-.reveal-6 { animation-delay: 500ms; }
-.reveal-7 { animation-delay: 620ms; }
-.reveal-8 { animation-delay: 750ms; }
+.reveal-1 { animation-delay:  40ms; }
+.reveal-2 { animation-delay:  90ms; }
+.reveal-3 { animation-delay: 150ms; }
+.reveal-4 { animation-delay: 220ms; }
+.reveal-5 { animation-delay: 300ms; }
+.reveal-6 { animation-delay: 390ms; }
+.reveal-7 { animation-delay: 490ms; }
+.reveal-8 { animation-delay: 600ms; }
 
-@keyframes reveal-in {
-  to { opacity: 1; transform: translateY(0); }
+/* ─── Focus ───────────────────────────────────────────────────────────────
+   One visible focus treatment for the entire app. Never remove without
+   replacing — keyboard users depend on it. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--field);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
 
-/* ─── Reduced-motion overrides ───────────────────────────────────────────── */
+/* Skip link — the first tab stop on every page */
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: var(--z-toast);
+  transform: translateY(-200%);
+  background: var(--field);
+  color: #fff;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  transition: transform var(--transition-fast);
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* ─── Reduced motion: disable the animations themselves ───────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .bg-atmosphere::after,
-  .bg-grain::after {
-    animation: none;
-  }
+  .bg-grain::after { animation: none; }
+
   .reveal,
   .reveal-1, .reveal-2, .reveal-3, .reveal-4,
   .reveal-5, .reveal-6, .reveal-7, .reveal-8 {
     animation: none;
     opacity: 1;
     transform: none;
+  }
+
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
 }

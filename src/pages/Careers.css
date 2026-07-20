@@ -1,3 +1,7 @@
+/* Button styles intentionally removed: .btn* are GLOBAL primitives owned by
+   src/index.css. These page files each carried a divergent copy (gradient fill,
+   hardcoded #0a0715 ink) and, being lazy-loaded chunks, whichever page loaded
+   last silently restyled every button in the app. See src/styles/DESIGN.md. */
 /*
  * Careers.css — Industrial Magnetite careers page.
  * Uses ONLY design tokens from tokens.css.
@@ -34,51 +38,11 @@
 }
 
 /* btn stubs */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  border-radius: var(--radius-sm);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-decoration: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition:
-    background   var(--t-fast) var(--ease-out),
-    border-color var(--t-fast) var(--ease-out),
-    box-shadow   var(--t-fast) var(--ease-out),
-    transform    var(--t-fast) var(--ease-out);
-}
 
-.btn-primary {
-  background: var(--gradient-primary);
-  color: #0a0715;
-  border-color: transparent;
-}
 
-.btn-primary:hover {
-  filter: brightness(1.08);
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-2px);
-}
 
-.btn-secondary {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  border-color: var(--color-border);
-}
 
-.btn-secondary:hover {
-  background: var(--color-bg-card);
-  border-color: var(--color-border-strong);
-  color: var(--color-text-primary);
-  transform: translateY(-2px);
-}
 
-.btn-lg { padding: 0.875rem 2rem; font-size: var(--text-base); }
 
 /* ── Hero ──────────────────────────────────────────────────────────────────── */
 .careers-hero {
