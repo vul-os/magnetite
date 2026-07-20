@@ -624,6 +624,8 @@
     "moreGamesBody": "Upgrade to and unlock additional Rust-powered games.",
     "upgradeNow": "Upgrade Now →",
     "subscriptionError": "Could not load your subscription data — showing free-tier access.",
+    "noGamesYet": "No games are available yet. New titles will appear here as developers publish them.",
+    "gamesError": "Could not load games right now. Please try again shortly.",
     "lobbyKicker": "// Game Lobby",
     "lobbyTitle": "Rust Match",
     "lobbyGame": "Chess — Server-Authoritative",
