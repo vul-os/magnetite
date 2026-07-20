@@ -268,6 +268,19 @@
 
 .igs-item-card:hover .igs-item-img { transform: scale(1.04); }
 
+/* Neutral placeholder tile — shown when an item has no artwork of its own.
+   Clearly a placeholder, never a stock photo standing in for a paid product. */
+.igs-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sunk);
+  color: var(--ink-3);
+  transform: none;
+}
+.igs-thumb-empty svg { width: 32px; height: 32px; }
+.igs-confirm-item-img.igs-thumb-empty svg { width: 22px; height: 22px; }
+
 .igs-item-type-badge {
   position: absolute;
   top: 6px;

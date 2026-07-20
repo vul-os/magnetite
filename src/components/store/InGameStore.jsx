@@ -65,6 +65,50 @@ function AlertIcon() {
   );
 }
 
+// ── Item artwork ────────────────────────────────────────────────────────────
+
+/** Neutral placeholder glyph shown when a store item has no artwork. */
+function ItemPlaceholderGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <path d="M3.27 6.96 12 12.01l8.73-5.05" />
+      <path d="M12 22.08V12" />
+    </svg>
+  );
+}
+
+/**
+ * Store-item thumbnail. Renders the item's own artwork (`item.image`) when it
+ * exists; otherwise a designed neutral placeholder tile. A player paying for an
+ * item must never see a random stock photo standing in for the product, so we
+ * never substitute unrelated imagery.
+ */
+function ItemThumb({ item, imgClassName, fallbackClassName, width, height, alt = '' }) {
+  const [broken, setBroken] = useState(false);
+  const src = !broken && item.image ? item.image : null;
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className={imgClassName}
+        width={width}
+        height={height}
+        loading="lazy"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
+  return (
+    <div className={fallbackClassName} aria-hidden="true">
+      <ItemPlaceholderGlyph />
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ITEM_TYPE_LABELS = {
@@ -114,12 +158,13 @@ function ConfirmPurchaseModal({ item, priceLabel, onConfirm, onCancel, confirmin
         <h3 id="igs-confirm-title" className="igs-confirm-title">Confirm Purchase</h3>
 
         <div className="igs-confirm-item-preview">
-          <img
-            src={`https://picsum.photos/seed/${item.id}/80/56`}
-            alt={item.name}
-            className="igs-confirm-item-img"
+          <ItemThumb
+            item={item}
+            imgClassName="igs-confirm-item-img"
+            fallbackClassName="igs-confirm-item-img igs-thumb-empty"
             width={80}
             height={56}
+            alt={item.name}
           />
           <div className="igs-confirm-item-info">
             <span className="igs-confirm-item-name">{item.name}</span>
@@ -396,13 +441,12 @@ export function InGameStore({
               return (
                 <li key={item.id} className="igs-item-card" role="listitem">
                   <div className="igs-item-img-wrap" aria-hidden="true">
-                    <img
-                      src={`https://picsum.photos/seed/${item.id}/120/80`}
-                      alt=""
-                      className="igs-item-img"
+                    <ItemThumb
+                      item={item}
+                      imgClassName="igs-item-img"
+                      fallbackClassName="igs-item-img igs-thumb-empty"
                       width={120}
                       height={80}
-                      loading="lazy"
                     />
                     <span className="igs-item-type-badge">
                       {ITEM_TYPE_LABELS[item.item_type] ?? item.item_type}

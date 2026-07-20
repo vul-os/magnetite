@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { initialsAvatar } from '../utils/initialsAvatar';
 
 const TOP3_BADGES = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
@@ -38,7 +39,7 @@ export default memo(function LeaderboardRow({ entry, isCurrentUser = false, high
 
       <div className="player-info" role="cell">
         <img
-          src={entry.avatar || `https://picsum.photos/seed/${entry.username}/100/100`}
+          src={entry.avatar || initialsAvatar(entry.username)}
           alt={`${entry.username} avatar`}
           className="player-avatar"
           loading="lazy"

@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { initialsAvatar } from '../utils/initialsAvatar';
 
 /** Map a presence status string to CSS modifier + human label. */
 function resolveStatus(status) {
@@ -19,7 +20,7 @@ export default memo(function FriendCard({ friend, onInvite, onBlock, showActions
     <div className="friend-card">
       <div className="friend-avatar">
         <img
-          src={friend.avatar || `https://picsum.photos/seed/${friend.id}/100/100`}
+          src={friend.avatar || initialsAvatar(friend.username)}
           alt={`${friend.username} avatar`}
           loading="lazy"
         />
