@@ -29,3 +29,6 @@ target
 
 # Rust build artifacts (any crate)
 **/target/
+
+# Claude Code session state (local only)
+.claude/

@@ -1,3 +1,11 @@
+<style>
+/* magnetite type: the docs shell exposes --doc-font/--doc-display-font from the
+   manifest but not the mono stack, so the product's mono is set here — it drives
+   code blocks, inline code and every figure label. */
+.dv{--doc-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+     --mg-bnd:#C4006B;--mg-live:#17803D;--mg-spec:#A45B00}
+:root[data-theme="dark"] .dv{--mg-bnd:#FF74B2;--mg-live:#6EE79B;--mg-spec:#FFC24D}
+</style>
 # Getting started
 
 Magnetite is one binary and one SDK. You do not need a database, a cloud
@@ -24,7 +32,7 @@ cd my-game
 
 This generates a crate implementing `AuthoritativeGame` from
 `magnetite-sdk::authority` — the frozen trait boundary for deterministic
-`validate`/`step` game logic. See [`game-template-authoritative/`](../game-template-authoritative/)
+`validate`/`step` game logic. See [`game-templates/authoritative/`](../game-templates/authoritative/)
 for the canonical reference implementation (a top-down arena shooter).
 
 ## Build
@@ -35,7 +43,7 @@ magnetite build
 
 Compiles your game to `wasm32-wasip1` and produces `game.wasm`. The artifact
 already carries a sha256 hash — it's content-addressable from the moment it's
-built (see [Architecture](architecture.md#blobstore)).
+built (see [Architecture](./docs.html#architecture)).
 
 ## Run it — zero backend
 
@@ -61,11 +69,11 @@ and bandwidth, content-addresses the game (BLAKE3), verifies the hash before
 executing it, and advertises what it can hold. With no `TRACKER_URL` set it
 uses `LanDiscovery` (mDNS) and needs nothing external at all. Player capacity
 is emergent from the box — not a config constant you have to guess at. See
-[Hosting a server](hosting-a-server.md) for the full capacity-elastic model.
+[Hosting a server](./docs.html#hosting-a-server) for the full capacity-elastic model.
 
 ## Next
 
-- [Architecture](architecture.md) — the seams and how they compose
-- [Payments](payments.md) — non-custodial checkout, hosting fees, wagers
-- [Comms](comms.md) — pluggable chat/voice/video/streaming
-- [Screenshots](screenshots.md) — the docs/landing gallery
+- [Architecture](./docs.html#architecture) — the seams and how they compose
+- [Payments](./docs.html#payments) — non-custodial checkout, hosting fees, wagers
+- [Comms](./docs.html#comms) — pluggable chat/voice/video/streaming
+- [Status](./docs.html#status) — what actually runs today, audited against the tree
