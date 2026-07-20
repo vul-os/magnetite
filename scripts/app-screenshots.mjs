@@ -34,7 +34,7 @@ const ROUTES = [
   { name: 'server-browser', path: '/servers',   label: 'Dense data — discovery' },
   { name: 'game-detail',    path: '/game/1',    label: 'Game-centric' },
   { name: 'login',          path: '/login',     label: 'Form / auth' },
-  { name: 'pricing',        path: '/pricing',   label: 'Editorial' },
+  { name: 'marketplace',    path: '/',          label: 'Editorial — catalogue' },
 
   /* Unavailable / honest-failure states. */
   { name: 'points-rewards',   path: '/points',                  label: 'Unavailable — rewards catalogue', auth: true, click: '#points-tab-rewards' },
