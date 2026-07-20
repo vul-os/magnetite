@@ -2,727 +2,959 @@
 <html lang="en" data-theme="dark" data-theme-pref="system">
 <head>
 <meta charset="utf-8" />
-<title>magnetite — a game is a portable object, a node is generic compute</title>
-<meta name="description" content="magnetite is a Rust games platform built on deterministic authoritative simulation: clients send inputs, a WASM sandbox steps the world, and anyone can re-simulate the log to prove tampering. A node measures its own hardware and fills it. Mid-redesign toward no central cloud — this page separates what runs today from what is still specified." />
+<title>magnetite — anyone can re-run the match and check the result</title>
+<meta name="description" content="magnetite is a Rust games platform built on deterministic authoritative simulation: clients send inputs, a WASM sandbox steps the world, and anyone can re-simulate the log to prove tampering. A node measures its own hardware and fills it. Mid-redesign toward no central cloud — every claim on this page is marked with what actually runs." />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light dark" />
 <link rel="icon" href="./assets/magnetite-mark.svg" />
 
-<!-- Resolve theme before paint to avoid a flash. Preference (light|dark|system)
-     lives in localStorage 'vulos-theme'; <html data-theme> holds the RESOLVED
-     light|dark value so CSS and theme-aware imagery switch together. -->
+<!-- Resolve theme before paint. Preference (light|dark|system) lives in
+     localStorage 'vulos-theme' — the key is shared suite-wide. <html data-theme>
+     carries the RESOLVED light|dark value so CSS and theme-aware imagery switch
+     together; data-theme-pref carries the raw preference for the selector. -->
 <script>
   (function () {
     try {
-      var pref = localStorage.getItem('vulos-theme') || 'system';
+      var pref = localStorage.getItem('vulos-theme');
+      if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
       var sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      var resolved = pref === 'system' ? sys : pref;
-      document.documentElement.setAttribute('data-theme', resolved);
+      document.documentElement.setAttribute('data-theme', pref === 'system' ? sys : pref);
       document.documentElement.setAttribute('data-theme-pref', pref);
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme-pref', 'system');
     }
   })();
 </script>
 
 <style>
-  /* ─────────────────────────────────────────────────────────────────────────
-     magnetite mini-site — self-contained brand styles.
+  /* ═══════════════════════════════════════════════════════════════════════
+     magnetite — "FIELD RECORD"
 
-     IDENTITY: "Lodestone" — magnetite is magnetic iron ore, and the page reads
-     as machined iron: graphite-blue neutrals, hard edges, a faint field-line
-     grid. Two accents with fixed meanings, never used decoratively:
-       · VIOLET  is the verifiable core — determinism, replay, proof.
-       · MAGENTA (--spark) marks the one boundary where verification stops:
-         client-attested sensor input, which no replay can check.
-     Amber is functional only: it means "specified, not built".
-       · fonts   Space Grotesk (display) · Inter (body) · JetBrains Mono (code)
-       · violet  #5B3FE0 light / #8B74FF dark
-       · spark   #C4006B light / #FF4D9D dark
-     All fonts are vendored under ./fonts — nothing is fetched
-     from a CDN at runtime, and the page makes no network request at all.
-     ───────────────────────────────────────────────────────────────────────── */
+     Magnetite is lodestone: the first material humans used to detect an
+     invisible, reproducible force. The product's one real asset is that its
+     simulation is REPRODUCIBLE — a log anyone can re-run. So the page is
+     built as the artifact of a measurement: a laboratory field record.
+     Numbered plates, ruled hairlines, a margin of mono annotations, a stated
+     legend, and magnetic field lines as the structural motif.
+
+     COLOUR IS SEMANTIC. It is declared once, in the legend, and never used
+     decoratively anywhere on this page:
+       · VIOLET   the verifiable core — determinism, replay, proof
+       · MAGENTA  the ONE boundary where verification stops (attested input)
+       · AMBER    specified, not built
+       · GREEN    running today
+
+     TYPE (all vendored under /products/magnetite/fonts, all SIL OFL 1.1 —
+     see fonts/OFL.txt; the page makes zero network requests):
+       · Instrument Serif  display — a high-contrast editorial serif, so the
+                           page reads as a scientific plate, not a dev-tool ad
+       · IBM Plex Sans     body/UI — engineering neutral with real character
+       · IBM Plex Mono     the entire status system, labels and code
+     ═══════════════════════════════════════════════════════════════════════ */
 
   @font-face {
-    font-family: 'Space Grotesk var';
-    src: url('./fonts/space-grotesk.woff2') format('woff2');
-    font-weight: 300 700; font-style: normal; font-display: swap;
+    font-family: 'Instrument Serif'; font-weight: 400; font-style: normal; font-display: swap;
+    src: url('./fonts/instrument-serif.woff2') format('woff2');
   }
   @font-face {
-    font-family: 'Inter var';
-    src: url('./fonts/inter.woff2') format('woff2');
-    font-weight: 100 900; font-style: normal; font-display: swap;
+    font-family: 'Instrument Serif'; font-weight: 400; font-style: italic; font-display: swap;
+    src: url('./fonts/instrument-serif-italic.woff2') format('woff2');
   }
   @font-face {
-    font-family: 'JetBrains Mono var';
-    src: url('./fonts/jetbrains-mono.woff2') format('woff2');
-    font-weight: 100 800; font-style: normal; font-display: swap;
+    font-family: 'IBM Plex Sans Var'; font-weight: 100 700; font-style: normal; font-display: swap;
+    src: url('./fonts/ibm-plex-sans-var.woff2') format('woff2-variations');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono'; font-weight: 400; font-style: normal; font-display: swap;
+    src: url('./fonts/ibm-plex-mono-400.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono'; font-weight: 600; font-style: normal; font-display: swap;
+    src: url('./fonts/ibm-plex-mono-600.woff2') format('woff2');
   }
 
   :root {
-    --display: 'Space Grotesk var', 'Inter var', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --sans: 'Inter var', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    --mono: 'JetBrains Mono var', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-
-    --maxw: 1120px;
-    --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 26px;
-    --ease: cubic-bezier(.22,.61,.36,1);
+    --display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+    --sans: 'IBM Plex Sans Var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --maxw: 1180px;
+    --r-sm: 4px; --r-md: 8px; --r-lg: 14px;
+    --ease: cubic-bezier(.16, 1, .3, 1);
   }
 
-  /* ── Cold iron (dark) — the magnetite default canvas ── */
+  /* ── Cold iron ─────────────────────────────────────────────────────── */
   :root[data-theme='dark'] {
     color-scheme: dark;
-    --bg-base: #0A0C11;
-    --bg-primary: #0F1218;
-    --bg-secondary: #14181F;
-    --bg-elevated: #191E27;
-    --bg-hover: #1E242F;
-    --border: #212734;
-    --border-strong: #364052;
-    --text: #E9ECF3;
-    --text-2: #98A1B3;
-    --text-3: #656D7E;
-    --accent: #8B74FF;
-    --accent-hover: #A794FF;
-    --accent-ink: #0A0616;
-    --accent-dim: rgba(139,116,255,.14);
-    --accent-glow: rgba(139,116,255,.24);
-    --spark: #FF4D9D;
-    --spark-dim: rgba(255,77,157,.13);
-    --planned: #FFB020;
-    --planned-dim: rgba(255,176,32,.13);
-    --shipped: #4ADE80;
-    --shipped-dim: rgba(74,222,128,.12);
-    --field-line: rgba(233,236,243,.055);
-    --shadow-sm: 0 1px 2px rgba(0,0,0,.5), 0 4px 14px rgba(0,0,0,.42);
-    --shadow-lg: 0 30px 80px -24px rgba(0,0,0,.86), 0 8px 30px rgba(0,0,0,.5);
+    --void: #07080C;
+    --paper: #0C0E14;
+    --surface-2: #11141C;
+    --elevated: #161A24;
+    --sunk: #090A0F;
+    --line: #1C212D;
+    --line-2: #2E3646;
+    --ink: #E7EAF2;
+    --ink-2: #99A2B6;
+    --ink-3: #6B7488;
+    --field: #8B74FF;        --field-text: #A08FFF;
+    --field-tint: rgba(139,116,255,.13);  --field-line: rgba(139,116,255,.34);
+    --boundary: #FF4D9D;     --boundary-text: #FF74B2;
+    --boundary-tint: rgba(255,77,157,.12);
+    --spec: #FFB020;         --spec-text: #FFC24D;
+    --spec-tint: rgba(255,176,32,.12);
+    --live: #4ADE80;         --live-text: #6EE79B;
+    --live-tint: rgba(74,222,128,.11);
+    --rule: rgba(231,234,242,.055);
+    --bar-bg: rgba(7,8,12,.80);
+    --sh-1: 0 1px 2px rgba(0,0,0,.6);
+    --sh-2: 0 2px 8px rgba(0,0,0,.5), 0 28px 60px -24px rgba(0,0,0,.85);
   }
 
-  /* ── Milled steel (light) ── */
+  /* ── Milled steel ──────────────────────────────────────────────────── */
   :root[data-theme='light'] {
     color-scheme: light;
-    --bg-base: #F1F2F7;
-    --bg-primary: #FFFFFF;
-    --bg-secondary: #F8F9FC;
-    --bg-elevated: #FFFFFF;
-    --bg-hover: #EBEDF4;
-    --border: #E0E3EC;
-    --border-strong: #C0C6D4;
-    --text: #11141B;
-    --text-2: #4D5464;
-    --text-3: #818899;
-    --accent: #5B3FE0;
-    --accent-hover: #4930C0;
-    --accent-ink: #FFFFFF;
-    --accent-dim: rgba(91,63,224,.08);
-    --accent-glow: rgba(91,63,224,.15);
-    --spark: #C4006B;
-    --spark-dim: rgba(196,0,107,.08);
-    --planned: #A45B00;
-    --planned-dim: rgba(164,91,0,.10);
-    --shipped: #17803D;
-    --shipped-dim: rgba(23,128,61,.10);
-    --field-line: rgba(17,20,27,.05);
-    --shadow-sm: 0 1px 2px rgba(20,25,40,.06), 0 6px 18px rgba(20,25,40,.07);
-    --shadow-lg: 0 34px 80px -30px rgba(25,30,60,.32), 0 10px 30px rgba(25,30,60,.10);
+    --void: #E9ECF3;
+    --paper: #FFFFFF;
+    --surface-2: #F4F6FA;
+    --elevated: #FFFFFF;
+    --sunk: #EFF2F7;
+    --line: #DFE3EC;
+    --line-2: #C3CAD8;
+    --ink: #0D1017;
+    --ink-2: #4A5265;
+    --ink-3: #737C90;
+    --field: #5B3FE0;        --field-text: #4B2FD0;
+    --field-tint: rgba(91,63,224,.075); --field-line: rgba(91,63,224,.26);
+    --boundary: #C4006B;     --boundary-text: #A80059;
+    --boundary-tint: rgba(196,0,107,.07);
+    --spec: #A45B00;         --spec-text: #8A4A00;
+    --spec-tint: rgba(164,91,0,.09);
+    --live: #17803D;         --live-text: #126032;
+    --live-tint: rgba(23,128,61,.09);
+    --rule: rgba(13,16,23,.05);
+    --bar-bg: rgba(233,236,243,.82);
+    --sh-1: 0 1px 2px rgba(20,25,40,.06);
+    --sh-2: 0 2px 8px rgba(20,25,40,.06), 0 28px 56px -26px rgba(25,30,60,.28);
   }
 
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
   body {
     margin: 0;
     font-family: var(--sans);
-    background: var(--bg-base);
-    color: var(--text);
-    line-height: 1.62;
+    font-size: 16px; line-height: 1.62;
+    background: var(--void); color: var(--ink);
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-    overflow-x: hidden;
   }
+  /* overflow clip lives on .page, and <header> is a SIBLING of it — a clipped
+     ancestor becomes the containing block and silently kills position:sticky. */
+  .page { overflow-x: clip; }
 
   a { color: inherit; text-decoration: none; }
   img, svg { max-width: 100%; display: block; }
-  ::selection { background: var(--accent-glow); }
+  ::selection { background: color-mix(in srgb, var(--field) 26%, transparent); }
+  :focus-visible { outline: 2px solid var(--field); outline-offset: 3px; border-radius: 3px; }
 
-  .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
-  h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -.02em; line-height: 1.1; margin: 0; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; line-height: 1.04; letter-spacing: -.012em; }
   code, pre, .mono { font-family: var(--mono); }
-  .link { color: var(--accent); font-weight: 600; }
-  .link:hover { color: var(--accent-hover); text-decoration: underline; }
+  .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 560px) { .wrap { padding: 0 18px; } }
 
-  /* ── Top bar ─────────────────────────────────────────────────────────── */
-  .topbar {
-    position: sticky; top: 0; z-index: 60;
-    backdrop-filter: blur(14px);
-    background: color-mix(in srgb, var(--bg-base) 82%, transparent);
-    border-bottom: 1px solid var(--border);
-  }
-  .topbar-in {
-    max-width: var(--maxw); margin: 0 auto; padding: 0 24px;
-    height: 64px; display: flex; align-items: center; gap: 16px;
-  }
-  .brand { display: flex; align-items: center; gap: 10px; }
-  .brand .plaque {
-    width: 34px; height: 34px; border-radius: 10px; flex: none;
-    background: var(--bg-elevated); border: 1px solid var(--border);
-    display: grid; place-items: center; padding: 5px; box-shadow: var(--shadow-sm);
-  }
-  .brand-word { font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: -.03em; }
-  .grow { flex: 1; }
-  .nav-links { display: flex; align-items: center; gap: 20px; }
-  .nav-links a { color: var(--text-2); font-size: 14px; font-weight: 500; transition: color .15s; }
-  .nav-links a:hover { color: var(--text); }
-  @media (max-width: 980px) { .nav-links { display: none; } }
+  /* Mono tracking ladder — the smaller the label, the wider the tracking. */
+  .m-xs { font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; }
+  .m-sm { font-family: var(--mono); font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; }
+  .m-md { font-family: var(--mono); font-size: 11.5px; letter-spacing: .11em; text-transform: uppercase; }
 
-  .seg {
-    display: inline-flex; align-items: center; gap: 2px; padding: 3px;
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: 999px;
-  }
-  .seg button {
-    display: grid; place-items: center; width: 30px; height: 28px;
-    border: 0; background: transparent; color: var(--text-3); cursor: pointer;
-    border-radius: 999px; transition: color .15s, background .15s;
-  }
-  .seg button:hover { color: var(--text-2); }
-  .seg button svg { width: 16px; height: 16px; }
-  .seg button[aria-pressed='true'] {
-    background: var(--bg-elevated); color: var(--accent);
-    box-shadow: var(--shadow-sm);
-  }
+  .link { color: var(--field-text); font-weight: 500; border-bottom: 1px solid var(--field-line); }
+  .link:hover { border-bottom-color: var(--field); }
 
-  .vulos-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 13px 6px 7px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--bg-secondary);
-    color: var(--text-2); font-size: 13px; font-weight: 600;
-    transition: border-color .18s, color .18s;
+  /* ── Top bar ───────────────────────────────────────────────────────── */
+  .bar {
+    position: sticky; top: 0; z-index: 80;
+    background: var(--bar-bg); backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--line);
   }
-  .vulos-btn:hover { border-color: var(--accent); color: var(--text); }
-  .vulos-btn img { width: 20px; height: 20px; border-radius: 6px; }
-  @media (max-width: 620px) { .vulos-btn .lead { display: none; } }
+  .bar-in { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; height: 62px; display: flex; align-items: center; gap: 18px; }
+  @media (max-width: 560px) { .bar-in { padding: 0 18px; } }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .brand .stone { width: 30px; height: 30px; flex: none; color: var(--ink-3); }
+  .brand b { font-family: var(--display); font-size: 23px; font-weight: 400; letter-spacing: -.01em; line-height: 1; }
+  .brand small { display: block; color: var(--ink-3); margin-top: 2px; }
+  .spacer { flex: 1; }
+  .bar-nav { display: flex; gap: 22px; }
+  .bar-nav a { color: var(--ink-2); font-size: 13.5px; transition: color .15s; }
+  .bar-nav a:hover { color: var(--ink); }
+  @media (max-width: 1000px) { .bar-nav { display: none; } }
+  .bar-right { display: flex; align-items: center; gap: 10px; }
 
-  /* ── Buttons ─────────────────────────────────────────────────────────── */
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 12px 20px; border-radius: var(--r-md);
-    font-family: var(--sans); font-weight: 600; font-size: 14.5px;
-    border: 1px solid transparent; cursor: pointer;
-    transition: transform .16s var(--ease), background .18s, border-color .18s, color .18s;
+  .theme-seg { display: inline-flex; gap: 1px; padding: 3px; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; }
+  .theme-seg button {
+    display: grid; place-items: center; width: 27px; height: 24px;
+    border: 0; background: transparent; color: var(--ink-3); cursor: pointer; border-radius: 2px;
+    transition: color .15s, background .15s;
   }
-  .btn:hover { transform: translateY(-1px); }
-  .btn-primary { background: var(--accent); color: var(--accent-ink); }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-ghost { background: var(--bg-primary); border-color: var(--border-strong); color: var(--text); }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .theme-seg button:hover { color: var(--ink-2); }
+  .theme-seg button svg { width: 15px; height: 15px; }
+  .theme-seg button[aria-pressed='true'] { background: var(--elevated); color: var(--field-text); box-shadow: var(--sh-1); }
 
-  /* ── Hero ────────────────────────────────────────────────────────────── */
-  .hero { position: relative; padding: 76px 0 52px; overflow: hidden; }
+  .vulos {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px;
+    border: 1px solid var(--line); border-radius: 3px; background: var(--sunk);
+    color: var(--ink-2); font-size: 12.5px; transition: border-color .18s, color .18s;
+  }
+  .vulos:hover { border-color: var(--line-2); color: var(--ink); }
+  .vulos img { width: 16px; height: 16px; border-radius: 3px; }
+  @media (max-width: 640px) { .vulos .label { display: none; } }
+
+  /* ── Plate layout: a lab-notebook margin + the content ──────────────── */
+  .plate { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 40px; align-items: start; }
+  @media (max-width: 940px) { .plate { grid-template-columns: 1fr; gap: 18px; } }
+  .margin { position: sticky; top: 92px; color: var(--ink-3); }
+  @media (max-width: 940px) { .margin { position: static; display: flex; align-items: center; gap: 12px; } }
+  .margin .no { font-family: var(--display); font-size: 34px; line-height: 1; color: var(--line-2); display: block; }
+  @media (max-width: 940px) { .margin .no { font-size: 22px; } }
+  .margin .tag { display: block; margin-top: 8px; }
+  @media (max-width: 940px) { .margin .tag { margin-top: 0; } }
+
+  .section { padding: clamp(58px, 8vw, 104px) 0; border-top: 1px solid var(--line); position: relative; }
+  /* tick marks along each section rule — instrument-panel detail */
+  .section::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px; pointer-events: none;
+    background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 56px);
+    mask-image: linear-gradient(90deg, #000, transparent 62%);
+  }
+  .section.tinted { background: linear-gradient(180deg, transparent, var(--surface-2) 6%, var(--surface-2) 94%, transparent); }
+
+  h2 { font-size: clamp(30px, 4.6vw, 46px); letter-spacing: -.018em; }
+  h2 em { font-style: italic; color: var(--field-text); }
+  h2 .b { font-style: italic; color: var(--boundary-text); }
+  .lead { color: var(--ink-2); font-size: clamp(15.5px, 1.6vw, 17.5px); max-width: 66ch; margin: 16px 0 0; }
+  .sec-head { margin-bottom: 40px; }
+
+  /* ── Hero ──────────────────────────────────────────────────────────── */
+  .hero { position: relative; padding: clamp(52px, 7vw, 88px) 0 clamp(46px, 6vw, 76px); overflow: hidden; }
+  .field-bg {
+    position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    /* Keep the field off the text column: it only resolves in the empty right
+       half, so the copy never sits on top of a stray arc or the core. */
+    mask-image: linear-gradient(90deg, transparent 0, transparent 34%, #000 62%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent 34%, #000 62%);
+  }
+  .field-bg svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 1500px; height: 820px; max-width: none; opacity: .9; }
+  @media (max-width: 900px) { .field-bg { display: none; } }
+  .hero .wrap { position: relative; z-index: 1; }
+  /* faint ruled grid, the graph-paper the record is written on */
   .hero::before {
     content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
     background:
-      linear-gradient(var(--field-line) 1px, transparent 1px) 0 0 / 100% 78px,
-      linear-gradient(90deg, var(--field-line) 1px, transparent 1px) 0 0 / 78px 100%,
-      radial-gradient(700px 380px at 76% -10%, var(--accent-glow), transparent 68%);
-    mask-image: linear-gradient(180deg, #000 0%, transparent 88%);
+      linear-gradient(var(--rule) 1px, transparent 1px) 0 0 / 100% 64px,
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px) 0 0 / 64px 100%;
+    mask-image: radial-gradient(120% 90% at 50% 30%, #000 30%, transparent 78%);
   }
-  .hero .wrap { position: relative; z-index: 1; }
 
-  .eyebrow {
-    display: inline-flex; align-items: center; gap: 8px;
-    font-family: var(--mono); font-size: 11.5px; font-weight: 600;
-    letter-spacing: .07em; text-transform: uppercase;
-    color: var(--planned); background: var(--planned-dim);
-    border: 1px solid color-mix(in srgb, var(--planned) 32%, transparent);
-    padding: 6px 13px; border-radius: 999px;
-  }
+  .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--ink-3); }
+  .eyebrow .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--spec); box-shadow: 0 0 0 3px var(--spec-tint); flex: none; }
+
   .hero h1 {
-    font-size: clamp(38px, 6.2vw, 64px); letter-spacing: -.035em;
-    margin: 22px 0 0; font-weight: 700; max-width: 17ch;
+    font-size: clamp(44px, 8.4vw, 92px); line-height: .98; letter-spacing: -.022em;
+    margin: 26px 0 0; max-width: 15ch;
   }
-  .hero h1 em { font-style: normal; color: var(--accent); }
-  .hero .tagline { font-size: clamp(17px, 2.1vw, 21px); color: var(--text); margin: 20px 0 0; max-width: 720px; font-weight: 500; }
-  .hero .blurb { font-size: 16px; color: var(--text-2); margin: 16px 0 0; max-width: 700px; }
-  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .hero h1 em { font-style: italic; color: var(--field-text); }
+  .hero .tagline { font-size: clamp(17px, 2.2vw, 22px); color: var(--ink); margin: 24px 0 0; max-width: 60ch; font-weight: 300; }
+  .hero .blurb { color: var(--ink-2); margin: 18px 0 0; max-width: 62ch; font-size: 15.5px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
 
-  .status-line {
-    margin: 24px 0 0; max-width: 740px;
-    font-size: 13.5px; line-height: 1.7; color: var(--text-2);
-    border-left: 3px solid var(--planned); background: var(--planned-dim);
-    padding: 12px 16px; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px;
+    font-family: var(--sans); font-size: 14px; font-weight: 500;
+    border: 1px solid transparent; border-radius: var(--r-sm); cursor: pointer;
+    transition: background .18s, border-color .18s, color .18s, transform .12s;
   }
-  .status-line b { color: var(--planned); font-family: var(--mono); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--field); color: #fff; }
+  :root[data-theme='dark'] .btn-primary { color: #0A0616; }
+  .btn-primary:hover { background: color-mix(in srgb, var(--field) 84%, var(--ink)); }
+  .btn-ghost { background: var(--paper); border-color: var(--line-2); color: var(--ink); }
+  .btn-ghost:hover { border-color: var(--field); color: var(--field-text); }
 
-  /* ── Hero schematic (there is no product screenshot yet) ─────────────── */
-  .schematic {
-    margin-top: 46px; border-radius: var(--r-xl);
-    border: 1px solid var(--border); background: var(--bg-primary);
-    box-shadow: var(--shadow-lg); overflow: hidden;
+  /* ── The legend — the status system, stated once, up front ─────────── */
+  .legend { margin-top: 46px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); box-shadow: var(--sh-2); overflow: hidden; }
+  .legend-head { padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--sunk); color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+  .legend-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 860px) { .legend-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 460px) { .legend-grid { grid-template-columns: 1fr; } }
+  .lg { padding: 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .lg:last-child { border-right: 0; }
+  @media (max-width: 860px) { .lg:nth-child(2n) { border-right: 0; } }
+  @media (max-width: 460px) { .lg { border-right: 0; } }
+  .lg .swatch { width: 26px; height: 3px; border-radius: 2px; background: var(--c); margin-bottom: 11px; }
+  .lg b { display: block; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ct); }
+  .lg span { display: block; color: var(--ink-2); font-size: 13px; line-height: 1.5; margin-top: 6px; }
+  .lg.f { --c: var(--field); --ct: var(--field-text); }
+  .lg.b { --c: var(--boundary); --ct: var(--boundary-text); }
+  .lg.s { --c: var(--spec); --ct: var(--spec-text); }
+  .lg.l { --c: var(--live); --ct: var(--live-text); }
+  .legend-foot { padding: 13px 18px; color: var(--ink-3); font-size: 13px; background: var(--sunk); }
+
+  /* ── Re-simulation strip — the signature demonstration ─────────────── */
+  .resim { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); overflow: hidden; box-shadow: var(--sh-2); }
+  .resim-head { display: grid; grid-template-columns: 62px 1fr 1fr; border-bottom: 1px solid var(--line); background: var(--sunk); }
+  .resim-head > div { padding: 11px 14px; color: var(--ink-3); border-right: 1px solid var(--line); }
+  .resim-head > div:last-child { border-right: 0; }
+  .resim-scroll { overflow-x: auto; }
+  .resim-body { min-width: 520px; }
+  .rrow { display: grid; grid-template-columns: 62px 1fr 1fr; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; }
+  .rrow:last-child { border-bottom: 0; }
+  .rrow > div { padding: 9px 14px; border-right: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rrow > div:last-child { border-right: 0; }
+  .rrow .t { color: var(--ink-3); }
+  .rrow .h { color: var(--ink-2); }
+  .rrow.match .h { color: var(--live-text); }
+  .rrow.mismatch { background: var(--boundary-tint); }
+  .rrow.mismatch .h { color: var(--boundary-text); font-weight: 600; }
+  .resim-foot { padding: 13px 16px; background: var(--sunk); border-top: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
+  .resim-foot b { color: var(--boundary-text); font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+
+  .two { display: grid; grid-template-columns: 1fr 1.12fr; gap: clamp(30px, 4vw, 56px); align-items: start; }
+  @media (max-width: 940px) { .two { grid-template-columns: 1fr; } }
+  .two p { color: var(--ink-2); font-size: 15px; }
+  .two h3 { font-size: 22px; margin-bottom: 8px; }
+
+  /* ── Status ledger ─────────────────────────────────────────────────── */
+  .ledger-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
+  table.ledger { width: 100%; border-collapse: collapse; min-width: 660px; font-size: 14px; }
+  table.ledger th, table.ledger td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.ledger th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); font-weight: 400; background: var(--sunk); }
+  table.ledger tr:last-child td { border-bottom: 0; }
+  table.ledger td:first-child { font-weight: 500; white-space: nowrap; }
+  table.ledger td.d { color: var(--ink-2); font-size: 13.5px; }
+  table.ledger code { font-family: var(--mono); font-size: .88em; color: var(--field-text); }
+  .st { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+  .st::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .st.live { color: var(--live-text); }
+  .st.lan  { color: var(--live-text); }
+  .st.lan::after { content: 'LAN'; margin-left: 2px; padding: 1px 5px; border-radius: 2px; background: var(--spec-tint); color: var(--spec-text); font-size: 9.5px; letter-spacing: .1em; }
+  .st.spec { color: var(--spec-text); }
+  .st.no   { color: var(--ink-3); }
+
+  /* ── Seam cards ────────────────────────────────────────────────────── */
+  .seams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+  @media (max-width: 940px) { .seams { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .seams { grid-template-columns: 1fr; } }
+  .seam { background: var(--paper); padding: 24px; transition: background .2s; }
+  .seam:hover { background: var(--surface-2); }
+  .seam .no { color: var(--ink-3); }
+  .seam h3 { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: -.01em; margin: 12px 0 0; color: var(--field-text); }
+  .seam p { color: var(--ink-2); font-size: 14px; margin: 10px 0 0; }
+  .seam .chip { display: inline-block; margin-top: 12px; font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; }
+  .chip.live { color: var(--live-text); background: var(--live-tint); }
+  .chip.spec { color: var(--spec-text); background: var(--spec-tint); }
+  .chip.bnd  { color: var(--boundary-text); background: var(--boundary-tint); }
+  /* seam 07 breaks the grid — it is the boundary, and it should not sit quietly in a row */
+  .seam.edge { grid-column: 1 / -1; background: var(--paper); border-top: 2px solid var(--boundary); padding: 30px; }
+  .seam.edge h3 { color: var(--boundary-text); font-size: 17px; }
+  .seam.edge .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 6px; }
+  @media (max-width: 780px) { .seam.edge .cols { grid-template-columns: 1fr; gap: 14px; } }
+
+  /* ── Plates: screenshots ───────────────────────────────────────────── */
+  .shots { display: grid; gap: clamp(34px, 4.6vw, 62px); }
+  .shot { display: grid; grid-template-columns: 1fr 1.35fr; gap: clamp(24px, 3.4vw, 46px); align-items: center; }
+  @media (max-width: 940px) { .shot { grid-template-columns: 1fr; } }
+  .shot:nth-child(even) .shot-media { order: -1; }
+  @media (max-width: 940px) { .shot:nth-child(even) .shot-media { order: 0; } }
+  .shot h3 { font-size: clamp(21px, 2.6vw, 27px); margin-bottom: 10px; }
+  .shot p { color: var(--ink-2); font-size: 14.5px; margin: 0; }
+  .shot .caveat { margin-top: 14px; padding: 11px 13px; border-left: 2px solid var(--spec); background: var(--spec-tint); color: var(--ink-2); font-size: 13px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+  .shot .caveat b { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--spec-text); display: block; margin-bottom: 3px; }
+  .frame { border: 1px solid var(--line-2); border-radius: var(--r-md); overflow: hidden; background: var(--paper); box-shadow: var(--sh-2); }
+  .frame-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--sunk); }
+  .frame-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); }
+  .frame-bar span { margin-left: 8px; color: var(--ink-3); font-family: var(--mono); font-size: 10.5px; }
+  .frame img { width: 100%; height: auto; }
+  /* CSS-only theme-aware imagery — no JS, no <picture>, no extra request beyond the one shown */
+  .frame img.dark { display: none; }
+  :root[data-theme='dark'] .frame img.light { display: none; }
+  :root[data-theme='dark'] .frame img.dark { display: block; }
+
+  /* ── Terminal ──────────────────────────────────────────────────────── */
+  .term {
+    /* locally-scoped palette: the terminal stays dark in both themes */
+    --t-bg: #0A0C12; --t-bar: #10131B; --t-line: #1E2431;
+    --t-fg: #DFE4EF; --t-dim: #6B7488; --t-vio: #A08FFF;
+    background: var(--t-bg); border: 1px solid var(--t-line); border-radius: var(--r-md); overflow: hidden; box-shadow: var(--sh-2);
   }
-  .schematic-grid { display: grid; grid-template-columns: 1fr 1fr; }
-  @media (max-width: 780px) { .schematic-grid { grid-template-columns: 1fr; } }
-  .schematic-pane { padding: 26px; min-width: 0; }
-  .schematic-pane + .schematic-pane { border-left: 1px solid var(--border); }
-  @media (max-width: 780px) {
-    .schematic-pane + .schematic-pane { border-left: 0; border-top: 1px solid var(--border); }
+  .term-bar { display: flex; align-items: center; gap: 6px; padding: 9px 13px; background: var(--t-bar); border-bottom: 1px solid var(--t-line); }
+  .term-bar i { width: 8px; height: 8px; border-radius: 50%; background: #2A3140; }
+  .term-bar span { margin-left: 8px; color: var(--t-dim); font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; }
+  .term pre { margin: 0; padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.95; color: var(--t-fg); }
+  .term .c { color: var(--t-dim); }
+  .term .p { color: var(--t-vio); user-select: none; }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+  .steps li { display: grid; grid-template-columns: 40px 1fr; gap: 15px; align-items: start; }
+  .steps .n { font-family: var(--display); font-size: 30px; line-height: .9; color: var(--field-text); text-align: right; }
+  .steps b { display: block; font-size: 15.5px; font-weight: 500; margin-bottom: 3px; }
+  .steps span { color: var(--ink-2); font-size: 14px; }
+
+  /* ── Gaps ──────────────────────────────────────────────────────────── */
+  .gaps { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; margin: 0; padding: 0; }
+  .gaps li { list-style: none; background: var(--paper); padding: 20px 22px; display: grid; grid-template-columns: 190px 1fr; gap: 24px; }
+  @media (max-width: 780px) { .gaps li { grid-template-columns: 1fr; gap: 7px; } }
+  .gaps b { font-size: 15px; font-weight: 500; }
+  .gaps b .st { display: flex; margin-top: 7px; }
+  .gaps span { color: var(--ink-2); font-size: 14px; }
+  .gaps code { font-family: var(--mono); font-size: .88em; color: var(--field-text); }
+
+  /* ── Vulos band + footer ───────────────────────────────────────────── */
+  .band { display: flex; gap: 20px; align-items: center; padding: 30px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
+  @media (max-width: 700px) { .band { flex-direction: column; text-align: center; } }
+  .band img { width: 46px; height: 46px; border-radius: 10px; flex: none; }
+  .band h3 { font-size: 20px; margin-bottom: 7px; }
+  .band p { margin: 0; color: var(--ink-2); font-size: 14.5px; max-width: 74ch; }
+  .band .more { display: inline-block; margin-top: 11px; color: var(--field-text); font-size: 14px; font-weight: 500; }
+
+  .foot { border-top: 1px solid var(--line); padding: 30px 0; }
+  .foot-in { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+  .foot-in .l { display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 13px; }
+  .foot-in .l img { width: 17px; height: 17px; border-radius: 4px; }
+  .foot-in nav { display: flex; gap: 20px; flex-wrap: wrap; }
+  .foot-in nav a { color: var(--ink-2); font-size: 13px; }
+  .foot-in nav a:hover { color: var(--ink); }
+
+  /* ── Motion: one hero stagger. Nothing below the fold animates, so
+        nothing can fail invisible. ───────────────────────────────────── */
+  @keyframes rise { from { opacity: 0; transform: translateY(13px); } to { opacity: 1; transform: none; } }
+  .rise { animation: rise .75s var(--ease) both; }
+  .d1 { animation-delay: .05s; } .d2 { animation-delay: .12s; }
+  .d3 { animation-delay: .19s; } .d4 { animation-delay: .27s; } .d5 { animation-delay: .35s; }
+  @keyframes fieldflow { to { stroke-dashoffset: -520; } }
+  .flowline { stroke-dasharray: 3 9; animation: fieldflow 22s linear infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rise { animation: none; }
+    .flowline { animation: none; }
+    *, *::before, *::after { transition-duration: .001ms !important; }
   }
-  .pane-cap {
-    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--text-3); margin-bottom: 16px;
-  }
-  .schematic pre { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.8; color: var(--text); overflow-x: auto; }
-  .schematic pre .k { color: var(--accent); }
-  .schematic pre .s { color: var(--text-2); }
-  .schematic pre .n { color: var(--planned); }
-  .schematic pre .c { color: var(--text-3); }
-  .schematic pre .x { color: var(--spark); }
-  .schematic-note {
-    border-top: 1px solid var(--border); background: var(--bg-secondary);
-    padding: 13px 26px; font-size: 12.5px; color: var(--text-3);
-  }
-
-  /* ── Sections ────────────────────────────────────────────────────────── */
-  .section { padding: 62px 0; }
-  .section > .wrap > h2 { font-size: clamp(25px, 3.6vw, 34px); letter-spacing: -.03em; margin: 0 0 10px; }
-  .lead { color: var(--text-2); margin: 0 0 34px; font-size: 16px; max-width: 700px; }
-
-  /* ── Status table ────────────────────────────────────────────────────── */
-  .table-scroll { overflow-x: auto; border-radius: var(--r-lg); border: 1px solid var(--border); }
-  .status-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--bg-primary); min-width: 620px; }
-  .status-table th, .status-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
-  .status-table th { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); font-weight: 600; background: var(--bg-secondary); }
-  .status-table tr:last-child td { border-bottom: none; }
-  .status-table td.state { white-space: nowrap; font-family: var(--mono); font-size: 12px; font-weight: 600; }
-  .state.done { color: var(--shipped); }
-  .state.plan { color: var(--planned); }
-  .state.no { color: var(--text-3); }
-  .status-table code { font-size: .87em; }
-
-  /* ── Seam cards ──────────────────────────────────────────────────────── */
-  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  @media (max-width: 940px) { .cards { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
-  .card {
-    background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: var(--r-lg); padding: 22px;
-    transition: border-color .2s, transform .2s var(--ease);
-  }
-  .card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
-  .card.flag { border-left: 3px solid var(--spark); }
-  .card .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
-  .card h3 { margin: 8px 0 8px; font-size: 17.5px; }
-  .card p { margin: 0; color: var(--text-2); font-size: 14.5px; }
-  .card p + p { margin-top: 10px; }
-  .card code { font-size: .87em; background: var(--bg-secondary); border: 1px solid var(--border); padding: 1px 5px; border-radius: 5px; }
-
-  .chip {
-    display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
-    letter-spacing: .08em; text-transform: uppercase;
-    padding: 2px 7px; border-radius: 5px; vertical-align: 2px; margin-left: 7px;
-  }
-  .chip.now { color: var(--shipped); background: var(--shipped-dim); border: 1px solid color-mix(in srgb, var(--shipped) 30%, transparent); }
-  .chip.plan { color: var(--planned); background: var(--planned-dim); border: 1px solid color-mix(in srgb, var(--planned) 32%, transparent); }
-  .chip.spark { color: var(--spark); background: var(--spark-dim); border: 1px solid color-mix(in srgb, var(--spark) 32%, transparent); }
-
-  /* ── Not built ───────────────────────────────────────────────────────── */
-  .notbuilt { display: grid; gap: 13px; margin: 0; padding: 0; }
-  .notbuilt li {
-    list-style: none; background: var(--bg-primary); border: 1px solid var(--border);
-    border-left: 3px solid var(--planned); border-radius: var(--r-md); padding: 16px 18px;
-  }
-  .notbuilt li b { display: block; margin-bottom: 4px; font-size: 14.5px; }
-  .notbuilt li span { color: var(--text-2); font-size: 14px; }
-
-  /* ── Thesis panel ────────────────────────────────────────────────────── */
-  .thesis { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 38px; }
-  @media (max-width: 620px) { .thesis { padding: 26px; } }
-  .thesis h2 { font-size: clamp(23px, 3.2vw, 30px); letter-spacing: -.03em; }
-  .thesis > p { color: var(--text-2); margin: 12px 0 0; max-width: 760px; font-size: 15px; }
-  .thesis .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 28px; }
-  @media (max-width: 860px) { .thesis .cols { grid-template-columns: 1fr; } }
-  .thesis h4 { margin: 0 0 6px; font-family: var(--display); font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; }
-  .thesis h4::before { content: '/ '; color: var(--accent); }
-  .thesis .cols p { margin: 0; color: var(--text-2); font-size: 14.5px; }
-  .thesis .cols .spark-h::before { color: var(--spark); }
-
-  /* ── Quick start ─────────────────────────────────────────────────────── */
-  .quick { display: grid; grid-template-columns: 1.15fr 1fr; gap: 30px; align-items: center; }
-  @media (max-width: 860px) { .quick { grid-template-columns: 1fr; } }
-  .codeblock { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
-  .codeblock .bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
-  .codeblock .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); display: inline-block; }
-  .codeblock pre { margin: 0; padding: 18px 20px; overflow-x: auto; font-size: 12.8px; line-height: 1.85; color: var(--text); }
-  .codeblock .c { color: var(--text-3); }
-  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
-  .steps li { display: flex; gap: 13px; align-items: flex-start; }
-  .steps .num {
-    flex: none; width: 27px; height: 27px; border-radius: 9px;
-    background: var(--accent-dim); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
-    color: var(--accent); font-family: var(--mono); font-weight: 700;
-    display: grid; place-items: center; font-size: 13px;
-  }
-  .steps b { display: block; font-size: 15px; }
-  .steps span { color: var(--text-2); font-size: 13.5px; }
-
-  /* ── Vulos band ──────────────────────────────────────────────────────── */
-  .vulos-band {
-    margin: 24px 0; background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: var(--r-xl); padding: 34px; display: flex; gap: 22px; align-items: center;
-  }
-  @media (max-width: 700px) { .vulos-band { flex-direction: column; text-align: center; } }
-  .vulos-band img { width: 54px; height: 54px; border-radius: 14px; flex: none; }
-  .vulos-band h3 { margin: 0 0 6px; font-size: 19px; }
-  .vulos-band p { margin: 0; color: var(--text-2); max-width: 700px; font-size: 14.5px; }
-  .vulos-band .more { margin-top: 12px; display: inline-flex; color: var(--accent); font-weight: 600; font-size: 14px; }
-
-  /* ── Footer ──────────────────────────────────────────────────────────── */
-  .site-footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 34px 0; }
-  .foot { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
-  .foot .left { display: flex; align-items: center; gap: 9px; color: var(--text-2); font-size: 13.5px; }
-  .foot .left img { width: 18px; height: 18px; border-radius: 5px; }
-  .foot .links { display: flex; gap: 18px; flex-wrap: wrap; }
-  .foot .links a { color: var(--text-2); font-size: 13.5px; }
-  .foot .links a:hover { color: var(--text); }
 </style>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="topbar-in">
+<header class="bar">
+  <div class="bar-in">
     <a class="brand" href="./index.html" aria-label="magnetite home">
-      <span class="plaque">
-        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <!-- lodestone: an octahedral crystal with a field arc through it -->
-          <path d="M100 20 L168 100 L100 180 L32 100 Z" fill="none" stroke="currentColor" stroke-width="13" stroke-linejoin="round" opacity=".5"/>
-          <path d="M100 20 L100 180 M32 100 L168 100" stroke="currentColor" stroke-width="9" opacity=".28"/>
-          <path d="M46 132 Q100 92 154 132" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round"/>
-          <circle cx="100" cy="100" r="17" fill="var(--accent)"/>
-        </svg>
+      <svg class="stone" viewBox="0 0 200 200" aria-hidden="true">
+        <path d="M100 20 L168 100 L100 180 L32 100 Z" fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" opacity=".55"/>
+        <path d="M100 20 V180 M32 100 H168" stroke="currentColor" stroke-width="8" opacity=".26"/>
+        <path d="M46 132 Q100 92 154 132" fill="none" stroke="var(--field)" stroke-width="14" stroke-linecap="round"/>
+        <circle cx="100" cy="100" r="16" fill="var(--field)"/>
+      </svg>
+      <span>
+        <b>magnetite</b>
+        <small class="m-xs">Field record</small>
       </span>
-      <span class="brand-word">magnetite</span>
     </a>
 
-    <span class="grow"></span>
+    <span class="spacer"></span>
 
-    <nav class="nav-links" aria-label="Primary">
-      <a href="#status">Status</a>
-      <a href="#seams">Seams</a>
-      <a href="#not-built">Not built yet</a>
+    <nav class="bar-nav" aria-label="Primary">
       <a href="#determinism">Determinism</a>
-      <a href="#quickstart">Quick start</a>
+      <a href="#ledger">Status</a>
+      <a href="#seams">Seams</a>
+      <a href="#boundary">The boundary</a>
+      <a href="#plates">Screens</a>
+      <a href="#start">Quick start</a>
       <a href="./docs.html">Docs</a>
-      <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
 
-    <!-- 3-way Light / Dark / System selector -->
-    <div class="seg" role="group" aria-label="Colour theme">
-      <button type="button" data-set="light" title="Light" aria-label="Light theme">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      </button>
-      <button type="button" data-set="dark" title="Dark" aria-label="Dark theme">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-      </button>
-      <button type="button" data-set="system" title="System" aria-label="Match system theme">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
-      </button>
+    <div class="bar-right">
+      <div class="theme-seg" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-val="light" title="Light" aria-label="Light theme" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button type="button" data-theme-val="dark" title="Dark" aria-label="Dark theme" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+        <button type="button" data-theme-val="system" title="System" aria-label="Match system theme" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        </button>
+      </div>
+      <a class="vulos" href="https://vulos.org/products" target="_top" aria-label="Back to the Vulos suite">
+        <img src="./assets/vulos-logo.png" alt="" aria-hidden="true" width="16" height="16" />
+        <span class="label">Vulos</span>
+      </a>
     </div>
-
-    <a class="vulos-btn" href="https://vulos.org" target="_blank" rel="noopener noreferrer" title="Back to the Vulos suite" aria-label="Back to Vulos">
-      <img src="./assets/vulos-logo.png" alt="" aria-hidden="true" width="20" height="20" />
-      <span><span class="lead">Part of&nbsp;</span>Vulos</span>
-    </a>
   </div>
 </header>
 
+<div class="page">
 <main>
-  <!-- ── Hero ────────────────────────────────────────────────────────── -->
+
+  <!-- ══ Hero ═════════════════════════════════════════════════════════ -->
   <section class="hero">
+    <!-- The motif: a dipole field. Lines close on themselves — a loop you can
+         trace all the way round, which is what determinism buys. One line is
+         dashed and broken: attested sensor input, which cannot be traced back. -->
+    <div class="field-bg" aria-hidden="true">
+      <svg viewBox="0 0 1500 820" fill="none">
+        <g stroke="var(--field)" stroke-linecap="round">
+          <path d="M420 380 C 560 300, 760 316, 830 410 C 760 504, 560 520, 420 440" opacity=".30" stroke-width="1.4"/>
+          <path d="M415 340 C 600 216, 880 250, 975 410 C 880 570, 600 604, 415 480" opacity=".24" stroke-width="1.4"/>
+          <path d="M410 300 C 640 130, 1000 184, 1120 410 C 1000 636, 640 690, 410 520" opacity=".18" stroke-width="1.4"/>
+          <path d="M405 258 C 680 44, 1120 118, 1265 410 C 1120 702, 680 776, 405 562" opacity=".12" stroke-width="1.4"/>
+          <path class="flowline" d="M415 340 C 600 216, 880 250, 975 410 C 880 570, 600 604, 415 480" opacity=".55" stroke-width="1.8"/>
+        </g>
+        <!-- the one broken line -->
+        <g stroke="var(--boundary)" stroke-linecap="round" stroke-width="1.6">
+          <path d="M400 214 C 700 -22, 1230 60, 1400 410" opacity=".42" stroke-dasharray="4 10"/>
+          <path d="M1400 410 C 1300 600, 1080 720, 880 762" opacity=".16" stroke-dasharray="4 10"/>
+          <circle cx="1400" cy="410" r="3.5" fill="var(--boundary)" stroke="none" opacity=".8"/>
+        </g>
+        <!-- the lodestone core: everything resolves through one point -->
+        <circle cx="400" cy="410" r="6" fill="var(--field)" opacity=".7"/>
+      </svg>
+    </div>
+
     <div class="wrap">
-      <span class="eyebrow">Mid-redesign · core is real · the network layer is LAN-only</span>
-      <h1>Anyone can <em>re-run the match</em> and check the result.</h1>
-      <p class="tagline">Clients send inputs, never state. A deterministic WASM sandbox steps the world. Every tick lands in a log that anybody can re-simulate from scratch.</p>
-      <p class="blurb">magnetite is a Rust games platform whose one real asset is that its simulation is reproducible. The same ordered commands, the same seed, the same tick produce the same state on any host — so cheating is not something you detect by heuristics, it is something you <em>prove</em> from the record. Around that core sits a set of seams the platform programs against, each with a working offline default, so no provider is welded in. The project is currently being rebuilt around a no-central-cloud design; this page keeps what runs today apart from what is written down.</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="#status">See what's actually built</a>
-        <a class="btn btn-ghost" href="./docs.html">Read the docs</a>
-        <a class="btn btn-ghost" href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      <span class="eyebrow m-sm rise d1"><span class="pip"></span>Mid-redesign · the core is real · the network layer is LAN-only</span>
+
+      <h1 class="rise d1">Anyone can <em>re-run</em> the match and check the result.</h1>
+
+      <p class="tagline rise d2">Clients send inputs, never state. A deterministic WASM sandbox steps the world. Every tick lands in a log that a stranger can re-simulate from scratch and compare.</p>
+
+      <p class="blurb rise d3">magnetite is a Rust games platform whose one real asset is that its simulation is reproducible. Cheating is not something you detect by heuristics — it is something you <em>prove</em> from the record. Around that core sit seven seams, each with a working offline default, so no provider is welded in. The project is being rebuilt around a no-central-cloud design, and this page keeps what runs today strictly apart from what is only written down.</p>
+
+      <div class="cta-row rise d4">
+        <a class="btn btn-primary" href="#ledger">Read the status ledger</a>
+        <a class="btn btn-ghost" href="./docs.html">Documentation</a>
+        <a class="btn btn-ghost" href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
       </div>
-      <p class="status-line"><b>Honest status</b><br />
-        The game core is genuine and tested: authoritative simulation, the Wasmtime sandbox, replay verification, the seam crate with offline defaults, and a node that measures its own hardware. The multi-node parts are real code proven only <b style="font-family:inherit;text-transform:none;letter-spacing:0;font-size:inherit">in-process and on a LAN</b> — there is no NAT traversal, no relay and no WAN validation, so internet-scale clusters are undemonstrated. There is no on-chain payment rail: the shipped rail is a deterministic offline mock. Some of the pre-redesign central backend is still in the tree.</p>
 
-      <div class="schematic">
-        <div class="schematic-grid">
-          <div class="schematic-pane">
-            <div class="pane-cap">Authority — the loop the whole platform rests on</div>
-            <svg viewBox="0 0 320 220" role="img" aria-label="Diagram: clients send inputs to an authoritative host, which steps a WASM sandbox and appends each tick to a replay log that a third party can re-simulate">
-              <rect x="3" y="3" width="314" height="214" rx="14" fill="var(--bg-secondary)" stroke="var(--border)"/>
-              <g font-family="ui-monospace,monospace" font-size="10">
-                <rect x="20" y="30" width="74" height="30" rx="7" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
-                <text x="57" y="49" fill="var(--text-2)" text-anchor="middle">client A</text>
-                <rect x="20" y="72" width="74" height="30" rx="7" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
-                <text x="57" y="91" fill="var(--text-2)" text-anchor="middle">client B</text>
-                <text x="57" y="122" fill="var(--text-3)" text-anchor="middle">inputs only</text>
-
-                <rect x="126" y="30" width="86" height="72" rx="9" fill="var(--bg-primary)" stroke="var(--accent)" stroke-width="1.6"/>
-                <text x="169" y="55" fill="var(--text)" text-anchor="middle">host</text>
-                <text x="169" y="70" fill="var(--text-3)" text-anchor="middle">validate</text>
-                <text x="169" y="84" fill="var(--text-3)" text-anchor="middle">step</text>
-
-                <rect x="126" y="126" width="86" height="34" rx="8" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
-                <text x="169" y="141" fill="var(--text-2)" text-anchor="middle">WASM sandbox</text>
-                <text x="169" y="153" fill="var(--text-3)" text-anchor="middle">fuel · no clock</text>
-
-                <rect x="238" y="30" width="62" height="72" rx="9" fill="var(--bg-elevated)" stroke="var(--border-strong)"/>
-                <text x="269" y="52" fill="var(--text-2)" text-anchor="middle">ReplayLog</text>
-                <text x="269" y="68" fill="var(--text-3)" text-anchor="middle">inputs +</text>
-                <text x="269" y="80" fill="var(--text-3)" text-anchor="middle">state hash</text>
-
-                <text x="269" y="132" fill="var(--accent)" text-anchor="middle">anyone</text>
-                <text x="269" y="146" fill="var(--text-3)" text-anchor="middle">re-simulates</text>
-                <text x="269" y="160" fill="var(--text-3)" text-anchor="middle">→ proof</text>
-              </g>
-              <g stroke="var(--text-3)" stroke-width="1.6" fill="none" marker-end="url(#a)">
-                <path d="M96 45 H122"/><path d="M96 87 H122"/>
-                <path d="M169 104 V122"/><path d="M212 66 H234"/>
-                <path d="M269 104 V122"/>
-              </g>
-              <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--text-3)"/></marker></defs>
-            </svg>
+      <!-- The status system, declared as a legend rather than bolted on as a disclaimer -->
+      <div class="legend rise d5">
+        <div class="legend-head">
+          <span class="m-sm">Reading key</span>
+          <span class="m-xs">Colour is load-bearing on this page</span>
+        </div>
+        <div class="legend-grid">
+          <div class="lg l">
+            <div class="swatch"></div>
+            <b>Running</b>
+            <span>Built, tested, exercised. You can run it today.</span>
           </div>
-          <div class="schematic-pane">
-            <div class="pane-cap">…and the one place that guarantee stops</div>
-<pre><span class="c">// deterministic: replay proves it</span>
-<span class="k">InputClass</span>::<span class="s">Deterministic</span>
-  <span class="c">// keyboard, gamepad, bot</span>
-  is_replay_verifiable() → <span class="n">true</span>
-
-<span class="c">// sensor input: it never can</span>
-<span class="x">InputClass</span>::<span class="x">Attested</span>
-  <span class="c">// camera gesture, IMU</span>
-  is_replay_verifiable() → <span class="n">false</span>
-
-<span class="c">// a host screens these for rate,</span>
-<span class="c">// cooldown and human-reachable</span>
-<span class="c">// speed — and that is the ceiling.</span>
-<span class="c">// A plausible fake still passes.</span></pre>
+          <div class="lg f">
+            <div class="swatch"></div>
+            <b>Verifiable</b>
+            <span>Inside the deterministic core — a replay can prove it.</span>
+          </div>
+          <div class="lg b">
+            <div class="swatch"></div>
+            <b>Boundary</b>
+            <span>Where verification stops. Attested sensor input; no replay reaches it.</span>
+          </div>
+          <div class="lg s">
+            <div class="swatch"></div>
+            <b>Not built</b>
+            <span>Specified in the redesign doc, absent from the tree.</span>
           </div>
         </div>
-        <div class="schematic-note">Diagrams, not screenshots — magnetite's own site has no captured product shots yet and none have been invented for this page. The <code>InputClass</code> split is real code in <code>magnetite-seams</code>; see <a class="link" href="#determinism">what determinism does and does not buy you</a>.</div>
+        <div class="legend-foot">Every claim below carries one of these four marks. Nothing on this page is coloured for decoration.</div>
       </div>
     </div>
   </section>
 
-  <!-- ── Status ──────────────────────────────────────────────────────── -->
-  <section class="section" id="status">
-    <div class="wrap">
-      <h2>Status, component by component</h2>
-      <p class="lead">Audited against the tree, not against the pitch. The redesign spec (<code>DECENTRALIZATION.md</code>) is the authority on what is intended; this is what exists.</p>
-      <div class="table-scroll">
-        <table class="status-table">
-          <thead><tr><th>Capability</th><th>What it is</th><th>State</th></tr></thead>
-          <tbody>
-            <tr><td>Authoritative simulation</td><td><code>AuthoritativeGame</code> — deterministic <code>validate</code> / <code>step</code> in the SDK</td><td class="state done">Working</td></tr>
-            <tr><td>WASM sandbox</td><td>Wasmtime, <code>wasm32-wasip1</code>, fuel budget, memory cap, epoch interrupt; no OS randomness or wall clock in the guest</td><td class="state done">Working</td></tr>
-            <tr><td>Replay verification</td><td><code>ReplayLog</code> + <code>verify_replay</code> — re-simulate from scratch and prove tampering</td><td class="state done">Working</td></tr>
-            <tr><td>Anti-cheat validators</td><td>Composable validator chain, trust scoring, warn/kick/ban escalation</td><td class="state done">Working</td></tr>
-            <tr><td>Zero-backend dev loop</td><td><code>magnetite dev</code> — builds to wasm and serves a live match with no server</td><td class="state done">Working</td></tr>
-            <tr><td>Seam crate</td><td>Every seam a trait with a default that needs no external service; CI runs fully offline</td><td class="state done">Working</td></tr>
-            <tr><td>Content-addressed games</td><td>Game id = hash of wasm + manifest; loaded by hash with BLAKE3 verification, fail-closed</td><td class="state done">Working</td></tr>
-            <tr><td>Capacity-elastic node</td><td>Node measures cores/RAM, derives its own shard and player budget — no config constant</td><td class="state done">Working</td></tr>
-            <tr><td>Signed discovery</td><td>Self-advertised <code>SessionAd</code>s, signed, leased and TTL-capped; LAN + a dumb HTTP tracker</td><td class="state done">Working</td></tr>
-            <tr><td>Comms adapters</td><td>Matrix, Jitsi, LiveKit, Owncast and a builtin fallback behind one trait</td><td class="state done">Working</td></tr>
-            <tr><td>Shard migration</td><td>Two-phase, epoch-fenced handoff; every failure resolves to "source keeps authority"</td><td class="state done">Working — LAN only</td></tr>
-            <tr><td>Cluster membership + session follow</td><td>Deny-by-default operator allowlist; signed single-use redirects move players with their shard</td><td class="state done">Working — LAN only</td></tr>
-            <tr><td>WAN / internet-scale fleets</td><td>NAT traversal, relaying, real-world routing between operators</td><td class="state no">Not built</td></tr>
-            <tr><td>On-chain payment rail</td><td>Real USDC/L2 settlement behind <code>PaymentRail</code></td><td class="state no">Mock rail only</td></tr>
-            <tr><td>DHT discovery</td><td>Trackerless peer discovery</td><td class="state plan">Specified</td></tr>
-            <tr><td>Gesture / sensor input source</td><td>Anything that <em>produces</em> attested events (camera, pose model)</td><td class="state no">Seam only — no producer</td></tr>
-            <tr><td>Pre-redesign backend</td><td>The central API/database from before the redesign</td><td class="state plan">Partly removed</td></tr>
-          </tbody>
-        </table>
+  <!-- ══ Determinism ══════════════════════════════════════════════════ -->
+  <section class="section tinted" id="determinism">
+    <div class="wrap plate">
+      <div class="margin">
+        <span class="no">01</span>
+        <span class="tag m-xs">Determinism</span>
       </div>
-    </div>
-  </section>
+      <div>
+        <div class="sec-head">
+          <h2>A proof, not a <em>promise</em>.</h2>
+          <p class="lead">Most anti-cheat asks a server to guess whether a player is lying. magnetite makes the match reproducible instead, so a third party can re-run it and compare hashes. Same state, same ordered commands, same tick, same seed — same result, on any machine.</p>
+        </div>
 
-  <!-- ── Seams ───────────────────────────────────────────────────────── -->
-  <section class="section" id="seams">
-    <div class="wrap">
-      <h2>Seven seams, seven working defaults</h2>
-      <p class="lead">Nothing in the game runtime, scheduler or payment path may name a provider-specific type — they see only these traits. Every seam ships a default that works with no network, no chain and no account, so the test suite runs fully offline and no external project is a hard dependency.</p>
-      <div class="cards">
-        <div class="card">
-          <span class="kicker">Seam 01</span>
-          <h3><code>Identity</code><span class="chip now">Default ships</span></h3>
-          <p>Identity is a keypair. Sign-a-challenge login over raw Ed25519, with the node able to mint short-lived audience- and scope-bound tokens so one keypair login can enter external comms systems.</p>
+        <div class="resim">
+          <div class="resim-head">
+            <div class="m-xs">Tick</div>
+            <div class="m-xs">Host — authoritative run</div>
+            <div class="m-xs">Anyone — independent re-simulation</div>
+          </div>
+          <div class="resim-scroll">
+            <div class="resim-body">
+              <div class="rrow match"><div class="t">1041</div><div class="h">state 7f41c0a8e3…938ab1</div><div class="h">state 7f41c0a8e3…938ab1</div></div>
+              <div class="rrow match"><div class="t">1042</div><div class="h">state 2ad9e6104b…fb03c8</div><div class="h">state 2ad9e6104b…fb03c8</div></div>
+              <div class="rrow match"><div class="t">1043</div><div class="h">state c184de0a7b…3c5e29</div><div class="h">state c184de0a7b…3c5e29</div></div>
+              <div class="rrow mismatch"><div class="t">1044</div><div class="h">state 9f2c41a7be…d85610</div><div class="h">state 5c8de4f13a…0b7e2c</div></div>
+              <div class="rrow"><div class="t">1045</div><div class="h">—</div><div class="h">halted: divergence at 1044</div></div>
+            </div>
+          </div>
+          <div class="resim-foot"><b>Tampering located</b> Not inferred from behaviour, not scored by a heuristic — the two runs disagree at a specific tick, and the log says which one. This is what <code>verify_replay</code> does.</div>
         </div>
-        <div class="card">
-          <span class="kicker">Seam 02</span>
-          <h3><code>Naming</code><span class="chip now">Default ships</span></h3>
-          <p>Human names are a display layer; the substrate is always raw keys. Short-hash addressing by default, with an optional word-based key-name provider that adds zero dependencies and exists to prove the seam really is swappable.</p>
-        </div>
-        <div class="card">
-          <span class="kicker">Seam 03</span>
-          <h3><code>BlobStore</code><span class="chip now">Default ships</span></h3>
-          <p>Content addressing: the hash is the id. A game needs no registry row to be identified. Local and HTTP stores today; peer-to-peer distribution is a later adapter behind the same trait.</p>
-        </div>
-        <div class="card">
-          <span class="kicker">Seam 04</span>
-          <h3><code>Discovery</code><span class="chip now">Default ships</span></h3>
-          <p>A phonebook, never an authority. Nodes sign and lease their own advertisements; a tracker can refuse forgeries without gaining any say over who may host what. LAN plus a dumb HTTP tracker anyone can run, fanned out redundantly.</p>
-        </div>
-        <div class="card">
-          <span class="kicker">Seam 05</span>
-          <h3><code>CommsProvider</code><span class="chip now">Adapters ship</span></h3>
-          <p>Chat, voice, video and streaming are adapters, not a product we build. Matrix, Jitsi, LiveKit and Owncast sit behind one trait, with the old in-house stack demoted to a fallback.</p>
-        </div>
-        <div class="card">
-          <span class="kicker">Seam 06</span>
-          <h3><code>PaymentRail</code><span class="chip plan">Mock only</span></h3>
-          <p>Non-custodial by design: no balances, no payout queue, no custody. An entitlement is a signed receipt; hosting fees ride a channel; wagers settle from escrow.</p>
-          <p><b>What ships is the deterministic offline mock.</b> No chain is wired up, so nothing here moves real money today.</p>
-        </div>
-        <div class="card flag">
-          <span class="kicker">Seam 07</span>
-          <h3><code>InputProvider</code><span class="chip spark">Read the caveat</span></h3>
-          <p>Input is split into two classes that the compiler will not let you confuse. Deterministic input is replay-verifiable. Attested input — anything sensor-derived — is not, and never will be.</p>
-          <p>The default is a deterministic keyboard/gamepad queue that <em>refuses</em> attested events at runtime. A host-side gate screens attested events for rate, cooldown and human-reachable speed. <b>No gesture producer exists in this repo</b> — the seam is the socket, and today only the socket.</p>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <!-- ── Not built ───────────────────────────────────────────────────── -->
-  <section class="section" id="not-built">
-    <div class="wrap">
-      <h2>What's specified, not built</h2>
-      <p class="lead">The redesign spec is deliberately candid about its own gaps, and so is this page. These are the things a reader could reasonably assume work, and which do not.</p>
-      <ul class="notbuilt">
-        <li><b>Internet-scale clusters</b><span>Cross-node shard handoff, cluster membership and player-follow redirects are real, tested code — but tested in-process and over a LAN. There is no NAT traversal, no relay and no WAN validation, so nodes must already be directly reachable. Federated compute between strangers' machines over the open internet is not demonstrated.</span></li>
-        <li><b>Money</b><span>The payment seam models atomic wallet-to-wallet splits, signed-receipt entitlements, hosting channels and wager escrow. What is implemented is a deterministic mock that signs receipts offline so CI can run. There is no chain integration, so no real payment has ever settled through it.</span></li>
-        <li><b>Trackerless discovery</b><span>Discovery works over LAN and over ordinary HTTP trackers, fanned out so no single tracker is load-bearing. A DHT adapter is specified and unwritten.</span></li>
-        <li><b>Sensor input producers</b><span>The <code>InputProvider</code> seam accepts and screens attested events, but nothing in magnetite generates one. There is no camera capture, no pose model and no vendor SDK anywhere in the tree.</span></li>
-        <li><b>The redesign itself</b><span>magnetite is mid-conversion from a conventional central-backend game platform to the no-cloud model described in <code>DECENTRALIZATION.md</code>. Fiat billing and custody are gone; parts of the old central backend are still present. Treat the spec as the intent and the status table above as the state.</span></li>
-      </ul>
-    </div>
-  </section>
-
-  <!-- ── Determinism thesis ──────────────────────────────────────────── -->
-  <section class="section" id="determinism">
-    <div class="wrap">
-      <div class="thesis">
-        <h2>Determinism is a proof, not a promise — and it has an edge</h2>
-        <p>Most anti-cheat asks a server to guess whether a player is lying. Magnetite instead makes the match reproducible, so a third party can re-run it and compare. That is a much stronger claim, which is exactly why the places it does <em>not</em> apply have to be marked rather than glossed over.</p>
-        <div class="cols">
+        <div class="two" style="margin-top: 40px;">
           <div>
-            <h4>Inputs, never state</h4>
+            <h3>Inputs, never state</h3>
             <p>A client can only ask. The host validates the request and steps the world itself, so a modified client cannot assert a position, a hit or a score — it can only send commands the host was always free to reject.</p>
           </div>
           <div>
-            <h4>The same result anywhere</h4>
-            <p>Game logic compiles to WASM and runs under a sandbox with a fuel budget, a memory cap and no access to the wall clock or OS randomness. Given the same state, ordered commands, tick and seed it produces the same output on any machine — which is what makes a log checkable at all.</p>
-          </div>
-          <div>
-            <h4 class="spark-h">Where it stops</h4>
-            <p>Sensor input — a camera gesture, an IMU reading — cannot be re-derived from a log, because the pixels are gone and were never authoritative. A host can screen those events for human-reachable rate, cooldown and velocity, and that is genuinely all: a careful fake passes. The type system marks this class so nobody downstream mistakes it for proof.</p>
+            <h3>The same result anywhere</h3>
+            <p>Game logic compiles to WASM and runs under a sandbox with a fuel budget, a memory cap and an epoch interrupt — with no wall clock and no OS randomness reachable from the guest. Those absences are the point: they are what make a log checkable at all.</p>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ── Quick start ─────────────────────────────────────────────────── -->
-  <section class="section" id="quickstart">
-    <div class="wrap">
-      <h2>Quick start</h2>
-      <p class="lead">A game is a crate that implements one trait. The dev loop needs no server, no account and no network.</p>
-      <div class="quick">
-        <div class="codeblock">
-          <div class="bar"><i></i><i></i><i></i></div>
+  <!-- ══ Status ledger ════════════════════════════════════════════════ -->
+  <section class="section" id="ledger">
+    <div class="wrap plate">
+      <div class="margin">
+        <span class="no">02</span>
+        <span class="tag m-xs">Ledger</span>
+      </div>
+      <div>
+        <div class="sec-head">
+          <h2>Component by component.</h2>
+          <p class="lead">Audited against the tree, not against the pitch. <code style="font-family:var(--mono);font-size:.88em;color:var(--field-text)">DECENTRALIZATION.md</code> is the authority on what is intended; this table is what exists.</p>
+        </div>
+
+        <div class="ledger-scroll">
+          <table class="ledger">
+            <thead><tr><th>Capability</th><th>What it is</th><th>State</th></tr></thead>
+            <tbody>
+              <tr><td>Authoritative simulation</td><td class="d"><code>AuthoritativeGame</code> — deterministic <code>validate</code> / <code>step</code> in the SDK</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>WASM sandbox</td><td class="d">Wasmtime, <code>wasm32-wasip1</code>, fuel budget, memory cap, epoch interrupt; no OS randomness or wall clock in the guest</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Replay verification</td><td class="d"><code>ReplayLog</code> + <code>verify_replay</code> — re-simulate from scratch and locate tampering</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Anti-cheat validators</td><td class="d">Composable validator chain, trust scoring, warn / kick / ban escalation</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Zero-backend dev loop</td><td class="d"><code>magnetite dev</code> — builds to wasm and serves a live match with no server at all</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Seam crate</td><td class="d">Every seam a trait with a default needing no external service; CI runs fully offline</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Content-addressed games</td><td class="d">Game id = hash of wasm + manifest; loaded by hash with BLAKE3 verification, fail-closed</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Capacity-elastic node</td><td class="d">Node measures cores and RAM, derives its own shard and player budget — never a config constant</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Signed discovery</td><td class="d">Self-advertised <code>SessionAd</code>s, signed, leased and TTL-capped; LAN plus a dumb HTTP tracker</td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Comms adapters</td><td class="d">Matrix, Jitsi, LiveKit, Owncast and a builtin fallback behind one trait, in <code>backend/src/comms</code></td><td><span class="st live">Running</span></td></tr>
+              <tr><td>Shard migration</td><td class="d">Two-phase, epoch-fenced handoff; every partial failure resolves to “source keeps authority”</td><td><span class="st lan">Running</span></td></tr>
+              <tr><td>Cluster membership</td><td class="d">Deny-by-default operator allowlist of node public keys, checked at three separate points</td><td><span class="st lan">Running</span></td></tr>
+              <tr><td>Session follow</td><td class="d">Signed, single-use redirects move players with their shard; a forged redirect is inert</td><td><span class="st lan">Running</span></td></tr>
+              <tr><td>Attested input wire</td><td class="d">Signed events reach a live node over a real socket, rate-limited then verified then gated</td><td><span class="st lan">Running</span></td></tr>
+              <tr><td>WAN / internet fleets</td><td class="d">NAT traversal, relaying, real-world routing between operators who are not on one LAN</td><td><span class="st no">Not built</span></td></tr>
+              <tr><td>On-chain payment rail</td><td class="d">Real USDC / L2 settlement behind <code>PaymentRail</code>. The shipped rail is a deterministic offline mock</td><td><span class="st no">Mock only</span></td></tr>
+              <tr><td>Multi-node Sharded</td><td class="d">The full “Bucket D” topology rung above a single operator’s cluster</td><td><span class="st spec">Specified</span></td></tr>
+              <tr><td>DHT discovery</td><td class="d">Trackerless peer discovery behind the same <code>Discovery</code> trait</td><td><span class="st spec">Specified</span></td></tr>
+              <tr><td>Gesture / sensor producer</td><td class="d">Anything that <em>produces</em> an attested event — camera capture, pose model, vendor SDK</td><td><span class="st no">None in tree</span></td></tr>
+              <tr><td>Attested input consumer</td><td class="d">A game that actually drains the accepted-event queue</td><td><span class="st no">None in tree</span></td></tr>
+              <tr><td>Pre-redesign backend</td><td class="d">The central API and database from before the redesign. Fiat and custody are gone; parts remain</td><td><span class="st spec">Partly removed</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Seams ════════════════════════════════════════════════════════ -->
+  <section class="section tinted" id="seams">
+    <div class="wrap plate">
+      <div class="margin">
+        <span class="no">03</span>
+        <span class="tag m-xs">Seams</span>
+      </div>
+      <div>
+        <div class="sec-head">
+          <h2>Seven seams, seven working <em>defaults</em>.</h2>
+          <p class="lead">Nothing in the game runtime, scheduler or payment path may name a provider-specific type — they see only these traits. Every seam ships a default that works with no network, no chain and no account, so the test suite runs fully offline and no external project is a hard dependency.</p>
+        </div>
+
+        <div class="seams">
+          <div class="seam">
+            <span class="no m-xs">Seam 01</span>
+            <h3>Identity</h3>
+            <p>Identity is a keypair. Sign-a-challenge login over raw Ed25519, with the node able to mint short-lived audience- and scope-bound tokens, so one keypair login can enter external comms systems.</p>
+            <span class="chip live">Default ships</span>
+          </div>
+          <div class="seam">
+            <span class="no m-xs">Seam 02</span>
+            <h3>Naming</h3>
+            <p>Human names are a display layer; the substrate is always raw keys. Short-hash addressing by default, with an optional word-based key-name provider that adds zero dependencies and exists to prove the seam is genuinely swappable.</p>
+            <span class="chip live">Default ships</span>
+          </div>
+          <div class="seam">
+            <span class="no m-xs">Seam 03</span>
+            <h3>BlobStore</h3>
+            <p>Content addressing: the hash is the id. A game needs no registry row to be identified. Local and HTTP stores today; peer-to-peer distribution is a later adapter behind the same trait.</p>
+            <span class="chip live">Default ships</span>
+          </div>
+          <div class="seam">
+            <span class="no m-xs">Seam 04</span>
+            <h3>Discovery</h3>
+            <p>A phonebook, never an authority. Nodes sign and lease their own advertisements, so a tracker can refuse forgeries without gaining any say over who may host what. LAN plus a dumb HTTP tracker anyone can run.</p>
+            <span class="chip live">Default ships</span>
+          </div>
+          <div class="seam">
+            <span class="no m-xs">Seam 05</span>
+            <h3>CommsProvider</h3>
+            <p>Chat, voice, video and streaming are adapters, not a product we build. Matrix, Jitsi, LiveKit and Owncast sit behind one trait, with the old in-house stack demoted to a fallback.</p>
+            <span class="chip live">Adapters ship</span>
+          </div>
+          <div class="seam">
+            <span class="no m-xs">Seam 06</span>
+            <h3>PaymentRail</h3>
+            <p>Non-custodial by design: no balances, no payout queue, no custody. An entitlement is a signed receipt; hosting fees ride a channel; wagers settle from escrow. What actually ships is the deterministic offline mock — no chain is wired up, so nothing here moves real money today.</p>
+            <span class="chip spec">Mock rail only</span>
+          </div>
+
+          <!-- Seam 07 breaks the grid. It is the boundary; it should not sit quietly in a row. -->
+          <div class="seam edge" id="boundary">
+            <span class="no m-xs">Seam 07 — the edge of the record</span>
+            <h3>InputProvider</h3>
+            <div class="cols">
+              <div>
+                <p>Input is split into two classes the compiler will not let you confuse. <b>Deterministic</b> input — keyboard, gamepad, bot — is replay-verifiable. <b>Attested</b> input — anything sensor-derived — is not, and never will be: the pixels are gone and were never authoritative.</p>
+                <p style="margin-top:12px">The default provider is a deterministic queue that <em>refuses</em> attested events at runtime, so the class boundary is enforced rather than merely documented. A host-side gate screens attested events for rate, per-kind cooldown, human-reachable velocity, a confidence floor and monotonic sequence. Rejection means “not physically reachable”. <b>Acceptance means nothing stronger than “not obviously impossible”.</b></p>
+              </div>
+              <div>
+                <p>A signature proves <b>authorship, not truth</b>. It stops one player forging events in another’s name and stops a relay editing them in flight. A cheater who signs their own fabricated numbers with their own genuine key passes every check — there is a test asserting exactly that, so the limit stays written down in code.</p>
+                <p style="margin-top:12px">The wire ingress is real: <a class="link" href="https://vulos.org/products/wibbly" target="_top">wibbly</a>, a browser camera-gesture project, signs pose-derived events and a live magnetite node accepts them — <code style="font-family:var(--mono);font-size:.88em">attested_ack</code> comes back, pinned to a shared golden vector at both ends. That proves the seam carries traffic and nothing more: <b>no game in either repo consumes those events.</b> This is a validated transport, not gesture multiplayer.</p>
+              </div>
+            </div>
+            <span class="chip bnd">Transport validated · no producer, no consumer</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Plates: real screens ═════════════════════════════════════════ -->
+  <section class="section" id="plates">
+    <div class="wrap plate">
+      <div class="margin">
+        <span class="no">04</span>
+        <span class="tag m-xs">Plates</span>
+      </div>
+      <div>
+        <div class="sec-head">
+          <h2>The reference client.</h2>
+          <p class="lead">Captured from the app in the repository against deterministic mock data. Every figure on these screens is fixture data — they show the shape of the interface, not a live network. Each is captioned with what it does <em>not</em> prove.</p>
+        </div>
+
+        <div class="shots">
+          <div class="shot">
+            <div>
+              <h3>Server browser</h3>
+              <p>Nodes advertise themselves; the client lists what the phonebook returned. Each row carries the game’s BLAKE3 content address, the node’s <em>self-declared</em> capacity — cores, RAM, bandwidth, shard ceiling — and its hosting price. Nothing here is a registry row: no central authority decided any of these servers may exist.</p>
+              <div class="caveat">
+                <b>What this does not show</b>
+                Fixture data. The nodes are labelled with far-apart regions, but cross-operator routing over the open internet is <b>not built</b> — there is no NAT traversal and no relay. Real multi-node operation is proven on a LAN only.
+              </div>
+            </div>
+            <div class="shot-media">
+              <div class="frame">
+                <div class="frame-bar"><i></i><i></i><i></i><span>magnetite · /servers</span></div>
+                <img class="light" src="./shots/servers-light.png" alt="magnetite server browser listing discovered nodes with content addresses, self-declared capacity, ping and hosting price" loading="lazy" decoding="async" width="2880" height="1800" />
+                <img class="dark" src="./shots/servers-dark.png" alt="" aria-hidden="true" loading="lazy" decoding="async" width="2880" height="1800" />
+              </div>
+            </div>
+          </div>
+
+          <div class="shot">
+            <div>
+              <h3>Non-custodial wallet</h3>
+              <p>There are no balances to display, because the platform holds none. What the screen lists is <em>receipts</em> — each independently verifiable against the rail’s signing key, each granting an entitlement by signature rather than by a ledger row someone controls. The API reports <code style="font-family:var(--mono);font-size:.88em;color:var(--field-text)">custodial: false</code> and the protocol fee defaults to 0&nbsp;bps.</p>
+              <div class="caveat">
+                <b>What this does not show</b>
+                The screen names its own rail: <b>MOCK</b>. This is the deterministic offline rail that signs receipts so CI can run without a network. No chain is integrated and no real payment has ever settled through magnetite.
+              </div>
+            </div>
+            <div class="shot-media">
+              <div class="frame">
+                <div class="frame-bar"><i></i><i></i><i></i><span>magnetite · /wallet</span></div>
+                <img class="light" src="./shots/wallet-light.png" alt="magnetite wallet screen showing a linked address and a list of signed, independently verifiable receipts, labelled non-custodial with rail set to mock" loading="lazy" decoding="async" width="2880" height="1800" />
+                <img class="dark" src="./shots/wallet-dark.png" alt="" aria-hidden="true" loading="lazy" decoding="async" width="2880" height="1800" />
+              </div>
+            </div>
+          </div>
+
+          <div class="shot">
+            <div>
+              <h3>Developer revenue</h3>
+              <p>The custodial surfaces this replaced — fiat balances, a payout queue, bank details, a withdrawal flow — were deleted in the redesign, not hidden. A sale settles wallet-to-wallet at checkout and produces a signed receipt, so there is nothing to withdraw and nothing for an operator to freeze.</p>
+              <div class="caveat">
+                <b>What this does not show</b>
+                Same mock rail. The settlement model is implemented and the custody code is genuinely gone; the money movement behind it is simulated.
+              </div>
+            </div>
+            <div class="shot-media">
+              <div class="frame">
+                <div class="frame-bar"><i></i><i></i><i></i><span>magnetite · /developers/earnings</span></div>
+                <img class="light" src="./shots/earnings-light.png" alt="magnetite developer revenue screen showing settled USDC received, signed receipt count and a zero-basis-point protocol fee, stating there is no custodial balance or payout queue" loading="lazy" decoding="async" width="2880" height="1800" />
+                <img class="dark" src="./shots/earnings-dark.png" alt="" aria-hidden="true" loading="lazy" decoding="async" width="2880" height="1800" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Quick start ══════════════════════════════════════════════════ -->
+  <section class="section tinted" id="start">
+    <div class="wrap plate">
+      <div class="margin">
+        <span class="no">05</span>
+        <span class="tag m-xs">Procedure</span>
+      </div>
+      <div>
+        <div class="sec-head">
+          <h2>A game is a crate that implements <em>one trait</em>.</h2>
+          <p class="lead">The dev loop needs no server, no account and no network. It is also the path most exercised in the repository.</p>
+        </div>
+        <div class="two">
+          <div class="term">
+            <div class="term-bar"><i></i><i></i><i></i><span>SHELL</span></div>
 <pre><span class="c"># install the CLI from the repo</span>
-cargo install --path magnetite-cli
+<span class="p">$</span> cargo install --path magnetite-cli
 
 <span class="c"># scaffold a crate implementing AuthoritativeGame</span>
-magnetite new my-game
-cd my-game
+<span class="p">$</span> magnetite new my-game
+<span class="p">$</span> cd my-game
 
 <span class="c"># cargo build --release --target wasm32-wasip1</span>
-magnetite build
+<span class="p">$</span> magnetite build
 
 <span class="c"># sandboxed executor + live match, ZERO backend</span>
-magnetite dev
+<span class="p">$</span> magnetite dev
 
 <span class="c"># bring a box: it measures its own hardware,</span>
 <span class="c"># content-addresses the game and advertises itself</span>
-magnetite node --advertise lan</pre>
+<span class="p">$</span> magnetite node --advertise lan</pre>
+          </div>
+          <ol class="steps">
+            <li><span class="n">1</span><div><b>Write the game once</b><span>Implement <code style="font-family:var(--mono);font-size:.88em;color:var(--field-text)">AuthoritativeGame</code> — a <code style="font-family:var(--mono);font-size:.88em">validate</code> and a <code style="font-family:var(--mono);font-size:.88em">step</code>, deterministic by construction. The SDK will not hand you a clock or a random number generator, because those are precisely what break replay.</span></div></li>
+            <li><span class="n">2</span><div><b>Run it with no backend</b><span><code style="font-family:var(--mono);font-size:.88em">magnetite dev</code> compiles to wasm, boots the sandboxed executor and serves a playable match locally. No database, no account, no cloud.</span></div></li>
+            <li><span class="n">3</span><div><b>Bring your own box</b><span><code style="font-family:var(--mono);font-size:.88em">magnetite node</code> measures cores and RAM, derives its shard and player budget from them, and advertises what it can hold. The player cap is emergent from hardware rather than a config constant. Read the gaps below before planning an internet-wide fleet.</span></div></li>
+          </ol>
         </div>
-        <ol class="steps">
-          <li><span class="num">1</span><div><b>Write the game once</b><span>Implement <code>AuthoritativeGame</code> — a <code>validate</code> and a <code>step</code>, deterministic by construction. The SDK will not hand you a clock or a random number generator, because those are what break replay.</span></div></li>
-          <li><span class="num">2</span><div><b>Run it with no backend</b><span><code>magnetite dev</code> compiles to wasm, boots the sandboxed executor and serves a playable match locally. No database, no account, no cloud — this path is the one most exercised.</span></div></li>
-          <li><span class="num">3</span><div><b>Bring your own box</b><span><code>magnetite node</code> measures cores and RAM, derives its own shard and player budget from them, and advertises what it can hold. Today that mesh is reachable over a LAN; see <a class="link" href="#not-built">what's not built</a> before planning an internet-wide fleet.</span></div></li>
-        </ol>
       </div>
     </div>
   </section>
 
-  <!-- ── Vulos band ──────────────────────────────────────────────────── -->
+  <!-- ══ Gaps ═════════════════════════════════════════════════════════ -->
+  <section class="section" id="gaps">
+    <div class="wrap plate">
+      <div class="margin">
+        <span class="no">06</span>
+        <span class="tag m-xs">Gaps</span>
+      </div>
+      <div>
+        <div class="sec-head">
+          <h2>What the record does <span class="b">not</span> contain.</h2>
+          <p class="lead">The redesign spec is deliberately candid about its own gaps, and so is this page. These are the things a reader could reasonably assume work, and which do not.</p>
+        </div>
+        <ul class="gaps">
+          <li>
+            <b>Internet-scale clusters<span class="st no">Not built</span></b>
+            <span>Cross-node shard handoff, cluster membership and player-follow redirects are real, tested code — tested in-process and over a LAN. There is no NAT traversal, no relay and no WAN validation, so nodes must already be directly reachable. Federated compute between strangers’ machines over the open internet is not demonstrated. The multi-node <em>Sharded</em> topology rung above a single operator’s cluster is unbuilt.</span>
+          </li>
+          <li>
+            <b>Money<span class="st no">Mock only</span></b>
+            <span>The payment seam models atomic wallet-to-wallet splits, signed-receipt entitlements, hosting channels and wager escrow. What is implemented is a deterministic mock that signs receipts offline so CI can run. Fiat, custody and payouts were removed outright; no chain was added in their place, so no real payment has ever settled.</span>
+          </li>
+          <li>
+            <b>Trackerless discovery<span class="st spec">Specified</span></b>
+            <span>Discovery works over LAN and over ordinary HTTP trackers, fanned out so no single tracker is load-bearing. A DHT adapter is specified and unwritten.</span>
+          </li>
+          <li>
+            <b>Anything that uses attested input<span class="st no">None in tree</span></b>
+            <span>The <code>InputProvider</code> seam accepts, screens and acknowledges attested events over a real socket. Nothing in magnetite <em>produces</em> one — no camera capture, no pose model, no vendor SDK anywhere in the tree — and no game <em>consumes</em> one either: accepted events sit in a queue nothing drains. Both ends of the useful path are missing on purpose, because the seam exists to draw a boundary, not to ship gesture control.</span>
+          </li>
+          <li>
+            <b>The redesign itself<span class="st spec">In progress</span></b>
+            <span>magnetite is mid-conversion from a conventional central-backend game platform to the no-cloud model described in <code>DECENTRALIZATION.md</code>. Treat that spec as the intent and the ledger above as the state.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Vulos ════════════════════════════════════════════════════════ -->
   <section class="section">
     <div class="wrap">
-      <div class="vulos-band">
-        <img src="./assets/vulos-logo.png" alt="Vulos logo" />
+      <div class="band">
+        <img src="./assets/vulos-logo.png" alt="Vulos" width="46" height="46" />
         <div>
           <h3>Listed alongside the Vulos suite</h3>
-          <p><a href="https://vulos.org" target="_blank" rel="noopener noreferrer" style="color:var(--text);font-weight:600">Vulos</a> is a family of open, self-hostable software. magnetite is fully independent — it runs on hardware you control, needs no Vulos account and no Vulos infrastructure — and shares the suite's position that the software should work on your own machine first and reach for a network second.</p>
-          <a class="more" href="https://vulos.org" target="_blank" rel="noopener noreferrer">Explore Vulos →</a>
+          <p><a href="https://vulos.org/products" target="_top" style="color:var(--ink);font-weight:500">Vulos</a> is a family of open, self-hostable software. magnetite is fully independent — it runs on hardware you control, needs no Vulos account and no Vulos infrastructure — and shares the suite’s position that software should work on your own machine first and reach for a network second.</p>
+          <a class="more" href="https://vulos.org/products" target="_top">Explore Vulos →</a>
         </div>
       </div>
     </div>
   </section>
 </main>
 
-<footer class="site-footer">
-  <div class="wrap foot">
-    <div class="left">
-      <img src="./assets/vulos-logo.png" alt="Vulos" />
-      <span>Listed on <a href="https://vulos.org" target="_blank" rel="noopener noreferrer" style="color:var(--text)">Vulos</a> — open, self-hostable software. magnetite is standalone and mid-redesign.</span>
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="l">
+      <img src="./assets/vulos-logo.png" alt="Vulos" width="17" height="17" />
+      <span>Listed on <a href="https://vulos.org/products" target="_top" style="color:var(--ink)">Vulos</a> — open, self-hostable software. magnetite is standalone and mid-redesign.</span>
     </div>
-    <div class="links">
+    <nav>
       <a href="./docs.html">Docs</a>
       <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">GitHub</a>
-      <a href="https://vulos.org" target="_blank" rel="noopener noreferrer">vulos.org</a>
-    </div>
+      <a href="https://vulos.org/products" target="_top">Vulos suite</a>
+    </nav>
   </div>
 </footer>
+</div>
 
 <script>
+  /* Theme selector — shared suite mechanism. localStorage key 'vulos-theme'
+     holds light|dark|system; <html data-theme> holds the resolved value.
+     CSP-safe: no eval, no new Function, no external request. */
   (function () {
     var root = document.documentElement;
     var mql = window.matchMedia('(prefers-color-scheme: dark)');
+    var btns = document.querySelectorAll('.theme-seg button');
 
-    function resolve(pref) { return pref === 'system' ? (mql.matches ? 'dark' : 'light') : pref; }
-    function currentPref() { try { return localStorage.getItem('vulos-theme') || 'system'; } catch (e) { return 'system'; } }
-
-    function paintSeg(pref) {
-      document.querySelectorAll('.seg button').forEach(function (b) {
-        b.setAttribute('aria-pressed', String(b.dataset.set === pref));
-      });
+    function getPref() {
+      try {
+        var p = localStorage.getItem('vulos-theme');
+        return (p === 'light' || p === 'dark' || p === 'system') ? p : 'system';
+      } catch (e) { return 'system'; }
     }
     function apply(pref) {
-      root.setAttribute('data-theme', resolve(pref));
+      root.setAttribute('data-theme', pref === 'system' ? (mql.matches ? 'dark' : 'light') : pref);
       root.setAttribute('data-theme-pref', pref);
-      paintSeg(pref);
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].setAttribute('aria-pressed', String(btns[i].getAttribute('data-theme-val') === pref));
+      }
     }
-
-    document.querySelectorAll('.seg button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var pref = b.dataset.set;
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', function () {
+        var pref = this.getAttribute('data-theme-val');
         try { localStorage.setItem('vulos-theme', pref); } catch (e) {}
         apply(pref);
       });
+    }
+    if (mql.addEventListener) {
+      mql.addEventListener('change', function () { if (getPref() === 'system') apply('system'); });
+    }
+    apply(getPref());
+  })();
+
+  /* Anchor scrolling with a sticky-bar offset. */
+  (function () {
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        var el = document.querySelector(a.getAttribute('href'));
+        if (!el) return;
+        e.preventDefault();
+        var y = el.getBoundingClientRect().top + window.pageYOffset - 74;
+        window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
+      });
     });
-    mql.addEventListener('change', function () { if (currentPref() === 'system') apply('system'); });
-    apply(currentPref());
   })();
 </script>
 </body>

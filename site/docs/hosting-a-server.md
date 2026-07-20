@@ -1,3 +1,24 @@
+<style>
+/* magnetite type: the docs shell exposes --doc-font/--doc-display-font from the
+   manifest but not the mono stack, so the product's mono is set here — it drives
+   code blocks, inline code and every figure label. */
+.dv{--doc-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+     --mg-bnd:#C4006B;--mg-live:#17803D;--mg-spec:#A45B00}
+:root[data-theme="dark"] .dv{--mg-bnd:#FF74B2;--mg-live:#6EE79B;--mg-spec:#FFC24D}
+</style>
+<style>
+.mg-plate{margin:1.9rem 0;border:1px solid var(--dv-border);border-radius:10px;overflow:hidden;background:var(--dv-surface);box-shadow:var(--dv-shadow-sm)}
+.mg-plate img{display:block;width:100%;height:auto;margin:0}
+.mg-dark{display:none}
+:root[data-theme="dark"] .mg-light{display:none}
+:root[data-theme="dark"] .mg-dark{display:block}
+.mg-cap{padding:11px 15px;border-top:1px solid var(--dv-border);background:var(--dv-code-bg);font-family:var(--doc-mono);font-size:.76rem;line-height:1.6;color:var(--dv-ink-3)}
+.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.68rem;display:block;margin-bottom:3px}
+.mg-bar{display:flex;align-items:center;gap:6px;padding:8px 13px;border-bottom:1px solid var(--dv-border);background:var(--dv-code-bg)}
+.mg-bar i{width:8px;height:8px;border-radius:50%;background:var(--dv-border-2)}
+.mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.68rem;color:var(--dv-ink-faint)}
+</style>
+
 # Hosting a server
 
 **Bring any server. It scales to your hardware. No cloud required.**
@@ -11,10 +32,17 @@ you already have, and it takes it from there.
 
 On start, a node measures its own hardware — cores, RAM, bandwidth — and
 advertises that as `Capacity` to the discovery layer (see
-[Architecture](architecture.md#the-seams)). Nothing about player capacity is a
+[Architecture](./docs.html#architecture)). Nothing about player capacity is a
 config constant you have to guess and tune; it is **emergent from the box**.
 Give the node more cores, and it runs more shards. Give it a faster uplink,
 and it advertises a higher player ceiling.
+
+<div class="mg-plate">
+<div class="mg-bar"><i></i><i></i><i></i><span>magnetite · /servers</span></div>
+<img class="mg-light" src="./shots/servers-light.png" alt="" loading="lazy" decoding="async" />
+<img class="mg-dark" src="./shots/servers-dark.png" alt="magnetite server browser listing self-advertised nodes with content addresses, self-declared capacity, ping and hosting price" loading="lazy" decoding="async" />
+<div class="mg-cap"><b>Discovery is a list, not a permission system</b>Each row is a node’s own signed <code>SessionAd</code>: the game’s BLAKE3 content address, the operator’s <em>self-declared</em> capacity and price. A tracker can refuse a forged ad but has no say over who may host what — note the row marked “not in this tracker’s catalog”, which is listed anyway. Fixture data; cross-operator routing over the internet is not built.</div>
+</div>
 
 ## Shards, not fixed rooms
 
@@ -36,7 +64,7 @@ the same game code walk the full topology ladder:
 The design target is a **shard mesh** across an operator's many boxes, and past
 the cluster, **other operators' nodes joining the same mesh**: federated
 compute, paid per-seat or per-hour through the non-custodial `PaymentRail`
-(see [Payments](payments.md)). Capacity isn't rented from Magnetite; it's
+(see [Payments](./docs.html#payments)). Capacity isn't rented from Magnetite; it's
 contributed by whoever chooses to run a node.
 
 > **Status — built, proven on a LAN, unproven on the internet.**

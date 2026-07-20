@@ -1,3 +1,11 @@
+<style>
+/* magnetite type: the docs shell exposes --doc-font/--doc-display-font from the
+   manifest but not the mono stack, so the product's mono is set here — it drives
+   code blocks, inline code and every figure label. */
+.dv{--doc-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+     --mg-bnd:#C4006B;--mg-live:#17803D;--mg-spec:#A45B00}
+:root[data-theme="dark"] .dv{--mg-bnd:#FF74B2;--mg-live:#6EE79B;--mg-spec:#FFC24D}
+</style>
 # Comms
 
 **Chat, voice, video, and streaming are pluggable integrations. Magnetite
@@ -58,7 +66,7 @@ Matrix account to create and no separate Jitsi password to remember.
 
 ## Paid rooms
 
-A `JoinCred` can be gated behind a payment receipt (see [Payments](payments.md)):
+A `JoinCred` can be gated behind a payment receipt (see [Payments](./docs.html#payments)):
 a paid room only issues a join credential after `PaymentRail::verify_receipt`
 succeeds. This is how ticketed tournaments, subscriber-only voice channels, or
 paid watch-parties work without Magnetite ever touching the money itself —
@@ -66,7 +74,7 @@ the comms room just checks a signed receipt before letting someone in.
 
 ## Discovery carries room addresses
 
-A `SessionAd` — the thing a node advertises to [Discovery](hosting-a-server.md#discovery-is-a-phonebook-not-a-gatekeeper)
+A `SessionAd` — the thing a node advertises to [Discovery](./docs.html#hosting-a-server)
 — can carry optional `chat_room` and `voice_room` addresses alongside the game
 session itself, so finding a match and finding its lobby chat happen in one
 lookup.

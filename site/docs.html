@@ -26,15 +26,27 @@
 
 <style>*,*::before,*::after{box-sizing:border-box}
 /* Self-hosted fonts — nothing is fetched from a CDN at runtime. */
-@font-face{font-family:'Space Grotesk var';src:url('./fonts/space-grotesk.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap}
-@font-face{font-family:'Inter var';src:url('./fonts/inter.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
-@font-face{font-family:'JetBrains Mono var';src:url('./fonts/jetbrains-mono.woff2') format('woff2');font-weight:100 800;font-style:normal;font-display:swap}
+@font-face{font-family:'Instrument Serif';src:url('./fonts/instrument-serif.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'Instrument Serif';src:url('./fonts/instrument-serif-italic.woff2') format('woff2');font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:'IBM Plex Sans Var';src:url('./fonts/ibm-plex-sans-var.woff2') format('woff2-variations');font-weight:100 700;font-style:normal;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('./fonts/ibm-plex-mono-400.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('./fonts/ibm-plex-mono-600.woff2') format('woff2');font-weight:600;font-style:normal;font-display:swap}
 
 :root{
   --radius:16px; --max:1120px;
-  --mono:'JetBrains Mono var',ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  --sans:'Inter var',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --display:'Space Grotesk var','Inter var',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:'IBM Plex Sans Var',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --display:'Instrument Serif','Iowan Old Style',Georgia,"Times New Roman",serif;
+  /* Compatibility aliases: the chapter markdown is SHARED with the vulos.org
+     DocsViewer and its inline figure styles read that shell's token names.
+     Aliasing them here means one set of .md renders correctly in both shells. */
+  --doc-mono:var(--mono); --doc-font:var(--sans); --doc-display-font:var(--display);
+}
+:root[data-theme="dark"],:root[data-theme="light"]{
+  --dv-surface:var(--panel); --dv-code-bg:var(--bg-soft);
+  --dv-border:var(--border); --dv-border-2:var(--border-2);
+  --dv-ink:var(--text); --dv-ink-2:var(--muted); --dv-ink-3:var(--muted); --dv-ink-faint:var(--faint);
+  --dv-shadow-sm:0 1px 2px rgba(0,0,0,.16);
 }
 /* "Lodestone" identity — cold iron (dark) / milled steel (light). Violet is the
    verifiable core; magenta (--accent-2) marks where verification stops. */
@@ -52,7 +64,7 @@
   --text:#11141B; --muted:#4D5464; --faint:#818899;
   --accent:#5B3FE0; --accent-2:#C4006B;
 }
-h1,h2,h3{font-family:var(--display);letter-spacing:-.02em}
+h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:-.01em;line-height:1.08}
 /* 3-way Light / Dark / System selector */
 .theme-seg{display:inline-flex;align-items:center;gap:2px;padding:3px;background:var(--panel-2);border:1px solid var(--border);border-radius:999px}
 .theme-seg button{display:grid;place-items:center;width:30px;height:28px;border:0;background:transparent;color:var(--faint);cursor:pointer;border-radius:999px;transition:color .15s,background .15s}
