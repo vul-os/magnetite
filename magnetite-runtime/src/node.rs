@@ -316,6 +316,15 @@ pub struct NodeConfig {
     /// [`ClusterMembership`](crate::cluster::ClusterMembership) to opt in, and
     /// an empty membership still admits nobody.
     pub fleet: Option<crate::follow::FleetSession>,
+    /// Optional durability wiring: when `Some`, every simulated tick's snapshot
+    /// is published into the fleet [`ShardAuthority`](crate::fleet::ShardAuthority)
+    /// so a [`Checkpointer`](crate::checkpoint::Checkpointer) has real state to
+    /// make durable.
+    ///
+    /// `None` — the default — means this node owns no shard as far as the fleet
+    /// layer is concerned, and therefore checkpoints nothing. That is the
+    /// pre-durability behaviour: a death is an honest total loss.
+    pub shard_sink: Option<crate::checkpoint::ShardStateSink>,
 }
 
 impl Default for NodeConfig {
@@ -331,6 +340,7 @@ impl Default for NodeConfig {
             region: None,
             lease: Duration::from_secs(DEFAULT_LEASE_SECS),
             fleet: None,
+            shard_sink: None,
         }
     }
 }
@@ -417,6 +427,18 @@ pub async fn run_node<B: BlobStore, D: Discovery + Send + Sync + 'static>(
     )
     .map_err(|e| NodeError::Server(ServerError(format!("wasm load error: {e}"))))?;
 
+    // Durability wiring. Wrapping the executor is what makes the simulated world
+    // visible to the fleet layer at all: without it this node owns no shard, so
+    // an attached checkpointer would find nothing to checkpoint and would write
+    // nothing, quietly, forever.
+    let executor: Box<dyn magnetite_sdk::authority::GameExecutor> = match cfg.shard_sink {
+        Some(sink) => Box::new(crate::checkpoint::ShardStateExecutor::new(
+            Box::new(executor),
+            sink,
+        )),
+        None => Box::new(executor),
+    };
+
     let heartbeat = spawn_heartbeat(
         Arc::clone(&discovery) as Arc<dyn Discovery + Send + Sync>,
         prepared.ad.clone(),
@@ -433,7 +455,7 @@ pub async fn run_node<B: BlobStore, D: Discovery + Send + Sync + 'static>(
         fleet: cfg.fleet,
     };
 
-    let result = GameServer::with_executor(Box::new(executor), server_cfg)
+    let result = GameServer::with_executor(executor, server_cfg)
         .await
         .map_err(NodeError::Server);
 
