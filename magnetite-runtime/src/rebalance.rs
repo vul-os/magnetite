@@ -836,6 +836,8 @@ mod tests {
             node: k,
             shards: shards.iter().copied().map(ShardId).collect(),
             capacity: cap(ceiling),
+            epochs: Vec::new(),
+            checkpoints: Vec::new(),
         }
     }
 

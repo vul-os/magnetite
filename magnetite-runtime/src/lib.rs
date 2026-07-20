@@ -123,6 +123,7 @@
 //! ```
 
 pub mod capacity;
+pub mod checkpoint;
 pub mod cluster;
 pub mod connection;
 pub mod fleet;
