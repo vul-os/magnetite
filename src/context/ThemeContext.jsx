@@ -1,37 +1,57 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { themes } from './themeConstants';
 
+/*
+ * Theme provider.
+ *
+ * Responsibility is deliberately narrow: resolve the user's choice
+ * ('dark' | 'light' | 'system') to a concrete theme and publish it as
+ * `data-theme` on <html>. All colour lives in src/styles/tokens.css, which
+ * keys off that attribute.
+ *
+ * This provider must never write colour values as inline styles — inline
+ * styles beat stylesheet rules and would override the token layer.
+ */
+
 const ThemeContext = createContext();
+
+const STORAGE_KEY = 'theme';
+
+/** Resolve a stored preference to the theme that should actually be applied. */
+function resolve(pref) {
+  if (pref !== 'system') return pref;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
-    const stored = localStorage.getItem('theme');
-    return stored || 'dark';
+    try {
+      return localStorage.getItem(STORAGE_KEY) || 'dark';
+    } catch {
+      // Private mode / storage disabled — fall back to the default.
+      return 'dark';
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('theme', theme);
-    
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const applySystemTheme = () => {
-        const isDark = mediaQuery.matches;
-        const root = document.documentElement;
-        Object.entries(themes[isDark ? 'dark' : 'light']).forEach(([key, value]) => {
-          root.style.setProperty(key, value);
-        });
-        root.setAttribute('data-theme', isDark ? 'dark' : 'light');
-      };
-      applySystemTheme();
-      mediaQuery.addEventListener('change', applySystemTheme);
-      return () => mediaQuery.removeEventListener('change', applySystemTheme);
-    } else {
-      const root = document.documentElement;
-      Object.entries(themes[theme]).forEach(([key, value]) => {
-        root.style.setProperty(key, value);
-      });
-      root.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch {
+      // Persistence is best-effort; the theme still applies for this session.
     }
+
+    const root = document.documentElement;
+    const apply = () => root.setAttribute('data-theme', resolve(theme));
+
+    apply();
+
+    // Only 'system' needs to react to OS changes.
+    if (theme !== 'system') return;
+
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return;
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, [theme]);
 
   return (
@@ -49,6 +69,6 @@ export function useTheme() {
   return context;
 }
 
-// Re-export of the theme constants imported from themeConstants for convenience.
+// Re-export of the theme constants for convenience.
 // eslint-disable-next-line react-refresh/only-export-components
 export { themes };

@@ -18,7 +18,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock fallbacks — only used when VITE_USE_MOCKS=true */
-const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS
+const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 'sess_001', device: 'Chrome on Mac OS',   location: 'San Francisco, CA', lastActive: 'Now',        current: true  },
       { id: 'sess_002', device: 'Safari on iPhone',   location: 'San Francisco, CA', lastActive: '2 hours ago', current: false },
@@ -83,7 +83,7 @@ export default function Security() {
 
   /* Load real sessions from backend */
   useEffect(() => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     async function loadSessions() {
       setSessionsLoading(true);
       try {
@@ -104,7 +104,7 @@ export default function Security() {
 
   /* Load API keys */
   const loadApiKeys = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     setApiKeysLoading(true);
     setApiKeysError(null);
     try {

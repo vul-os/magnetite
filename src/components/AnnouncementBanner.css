@@ -3,21 +3,25 @@
  * Amber accent strip, mono type, intentful motion.
  */
 
+/*
+ * Sits in normal flow at the very top of the page, above the sticky navbar,
+ * and scrolls away with the content.
+ *
+ * It used to be `position: fixed; top: 0; z-index: 9999`, which laid it over
+ * the sticky navbar (z-index 200) on every page — clipping the logo and the
+ * primary nav links — because nothing offset the page to compensate.
+ */
 .announcement-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: var(--z-toast, 9999);
+  position: relative;
+  z-index: var(--z-elevated);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.625rem 1.25rem;
-  background: var(--color-bg-elevated);
-  border-bottom: 1px solid rgba(245, 165, 36, 0.3);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  animation: banner-slide-down var(--t-slow, 420ms) var(--ease-out, cubic-bezier(.2,.8,.2,1)) forwards;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-5);
+  background: var(--elevated);
+  border-bottom: 1px solid var(--spec-tint);
+  animation: banner-slide-down var(--t-slow) var(--ease-out) forwards;
 }
 
 @keyframes banner-slide-down {

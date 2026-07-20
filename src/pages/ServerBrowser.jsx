@@ -11,6 +11,14 @@ import './ServerBrowser.css';
  * assigned by a central scheduler: nodes measure their own hardware, decide
  * what they can host, name their own price, and announce. We just render the
  * phonebook. Anyone can add a row by running the `magnetite` binary.
+ *
+ * The layout encodes provenance, because provenance is the product. Two
+ * columns are content-addressed or key-signed and therefore checkable — those
+ * carry the violet field rule. Everything from `Players` rightwards is a claim
+ * the node makes about itself and nobody can confirm; that column boundary
+ * carries the magenta rule and says so in words. No number on this page is
+ * synthesised by the frontend: if the tracker did not send it, the cell says
+ * it was not reported rather than showing a plausible figure.
  */
 
 const PING_TIERS = [
@@ -68,45 +76,63 @@ export default function ServerBrowser() {
 
   const hasFilters = gameFilter || freeSlotsOnly || freeOnly || maxPing;
 
+  function clearFilters() {
+    setGameFilter('');
+    setFreeSlotsOnly(false);
+    setFreeOnly(false);
+    setMaxPing('');
+  }
+
   return (
     <Layout>
-      <div className="browser">
-        <header className="browser-header">
+      <div className="sb">
+        <header className="sb-head">
           <span className="kicker">// DISCOVERY</span>
-          <h1>Server browser</h1>
-          <p className="browser-subtitle">
+          <h1 className="display-hero">Server browser</h1>
+          <p className="sb-sub">
             Nodes advertise themselves. Discovery is a phonebook, never an authority — no central
             scheduler decided any of this, and no permission was granted. Bring your own server and
             you appear here too.
           </p>
         </header>
 
-        {/* ── Network summary ─────────────────────────────────────────────── */}
-        <section className="browser-stats" aria-label="Network summary">
-          <div className="stat">
+        {/* ── Network readout ─────────────────────────────────────────────────
+            Derived only from the ads actually received. Nothing is estimated,
+            extrapolated or held over from a previous poll. */}
+        <section className="sb-readout" aria-label="Network summary">
+          <div className="stat edge-field">
             <span className="stat-value">{allSessions.length}</span>
-            <span className="stat-label">sessions advertised</span>
+            <span className="stat-label m-sm">sessions advertised</span>
           </div>
-          <div className="stat">
+          <div className="stat edge-field">
             <span className="stat-value">{operators}</span>
-            <span className="stat-label">distinct node keys</span>
+            <span className="stat-label m-sm">distinct node keys</span>
           </div>
-          <div className="stat">
+          <div className="stat edge-field">
             <span className="stat-value">{games.length}</span>
-            <span className="stat-label">games by content hash</span>
+            <span className="stat-label m-sm">games by content hash</span>
           </div>
-          <div className="stat">
+          {/* Occupancy counters are unsigned display hints — the sum inherits
+              exactly that weakness, so it is marked at the boundary. */}
+          <div className="stat edge-boundary">
             <span className="stat-value">{totalPlayers}</span>
-            <span className="stat-label">players online</span>
+            <span className="stat-label m-sm">players reported</span>
           </div>
-          <div className="stat">
+          <div className="stat edge-field">
             <span className="stat-value">{totalSlots}</span>
-            <span className="stat-label">free slots</span>
+            <span className="stat-label m-sm">free slots</span>
           </div>
         </section>
 
+        <p className="sb-legend">
+          <span className="st st-field">checkable</span>
+          <span className="sb-legend-note">signed by the node key or addressed by content hash</span>
+          <span className="st st-boundary">unverifiable</span>
+          <span className="sb-legend-note">carried in the ad, verifiable by nobody</span>
+        </p>
+
         {/* ── BYO server ──────────────────────────────────────────────────── */}
-        <section className="byo-card" aria-label="Bring your own server">
+        <section className="byo" aria-label="Bring your own server">
           <div className="byo-copy">
             <span className="kicker">// BRING YOUR OWN SERVER</span>
             <h2>Any box. No application, no allowlist.</h2>
@@ -116,23 +142,32 @@ export default function ServerBrowser() {
               announce to any tracker, and you are in the list — charge for seats or host it free.
             </p>
           </div>
-          <pre className="byo-code" aria-label="Commands to host a server">
-            <code>
-              {'$ magnetite node --game 7f41c0a8e35d92b6… \\\n'}
-              {'    --announce tracker.example.org \\\n'}
-              {'    --price 20usdc/hr\n'}
-              {'\n'}
-              {'  measured  32 cores · 128GB · 2000Mbps\n'}
-              {'  shards    24 max, 11 live\n'}
-              {'  announced ✓ lease renewed every 60s'}
-            </code>
-          </pre>
+          <figure className="byo-fig">
+            <figcaption className="m-sm byo-cap">example invocation</figcaption>
+            <pre className="byo-code" aria-label="Commands to host a server">
+              <code>
+                {'$ magnetite node --game 7f41c0a8e35d92b6… \\\n'}
+                {'    --announce tracker.example.org \\\n'}
+                {'    --price 20usdc/hr\n'}
+                {'\n'}
+                {'  measured  32 cores · 128GB · 2000Mbps\n'}
+                {'  shards    24 max, 11 live\n'}
+                {'  announced ✓ lease renewed every 60s'}
+              </code>
+            </pre>
+          </figure>
         </section>
 
         {/* ── Filters ─────────────────────────────────────────────────────── */}
-        <section className="browser-filters" aria-label="Filter sessions">
+        <form
+          className="sb-filters"
+          aria-label="Filter sessions"
+          onSubmit={(e) => e.preventDefault()}
+        >
           <div className="filter-field">
-            <label htmlFor="sb-game">Game</label>
+            <label className="m-sm" htmlFor="sb-game">
+              Game
+            </label>
             <select id="sb-game" value={gameFilter} onChange={(e) => setGameFilter(e.target.value)}>
               <option value="">All games</option>
               {games.map((g) => (
@@ -144,7 +179,9 @@ export default function ServerBrowser() {
           </div>
 
           <div className="filter-field">
-            <label htmlFor="sb-ping">Max ping</label>
+            <label className="m-sm" htmlFor="sb-ping">
+              Max ping
+            </label>
             <select id="sb-ping" value={maxPing} onChange={(e) => setMaxPing(e.target.value)}>
               <option value="">Any</option>
               <option value="30">≤ 30 ms</option>
@@ -163,171 +200,206 @@ export default function ServerBrowser() {
           </label>
 
           <label className="filter-toggle">
-            <input type="checkbox" checked={freeOnly} onChange={(e) => setFreeOnly(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={freeOnly}
+              onChange={(e) => setFreeOnly(e.target.checked)}
+            />
             <span>No hosting fee</span>
           </label>
 
+          <span className="filter-count m-sm" aria-live="polite">
+            {loading ? 'querying' : `${sessions.length} of ${allSessions.length} shown`}
+          </span>
+
           {hasFilters && (
-            <button
-              type="button"
-              className="btn btn-secondary filter-clear"
-              onClick={() => {
-                setGameFilter('');
-                setFreeSlotsOnly(false);
-                setFreeOnly(false);
-                setMaxPing('');
-              }}
-            >
+            <button type="button" className="btn btn-secondary filter-clear" onClick={clearFilters}>
               Clear
             </button>
           )}
-        </section>
-
-        {error && (
-          <div className="browser-alert" role="alert">
-            {error} — discovery is redundant by design, so try another tracker or use LAN discovery.
-          </div>
-        )}
+        </form>
 
         {/* ── Session list ────────────────────────────────────────────────── */}
         {loading ? (
-          <div className="browser-loading">
-            <span className="spinner" aria-hidden="true" />
-            <span>Querying trackers…</span>
+          <div className="table-wrap sb-skeleton">
+            <p className="sb-loading m-md" role="status">
+              Querying trackers…
+            </p>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <span className="sk sk-row" key={i} aria-hidden="true" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="state state-error" role="alert">
+            <p className="state-title">No tracker answered</p>
+            <p className="state-body">
+              {error} — discovery is redundant by design, so try another tracker or use LAN
+              discovery. Nothing is cached and nothing is guessed, so the list is empty rather than
+              stale.
+            </p>
           </div>
         ) : sessions.length === 0 ? (
-          <div className="browser-empty">
-            <h3>No sessions match</h3>
-            <p>
+          <div className="state state-empty">
+            <p className="state-title">No sessions match</p>
+            <p className="state-body">
               Nobody is advertising a session that fits. Relax the filters, point at another
               tracker, or host it yourself — the list is only as full as the peers you can reach.
             </p>
+            {hasFilters && (
+              <div className="state-actions">
+                <button type="button" className="btn btn-secondary" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="session-table" role="table" aria-label="Discovered sessions">
-            <div className="session-row session-head" role="row">
-              <span role="columnheader">Game / content address</span>
-              <span role="columnheader">Node</span>
-              <span role="columnheader">Players</span>
-              <span role="columnheader">Capacity</span>
-              <span role="columnheader">Ping</span>
-              <span role="columnheader">Price</span>
-              <span role="columnheader" className="sr-only">
-                Join
-              </span>
-            </div>
+          <div className="table-wrap">
+            <table className="data sb-table">
+              <caption className="sb-sr">
+                Discovered sessions. Columns from Players onwards are claims the node makes about
+                itself and are not verified by any tracker.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="edge-field">
+                    Game / content address
+                  </th>
+                  <th scope="col">Node</th>
+                  <th scope="col" className="edge-boundary">
+                    Players
+                  </th>
+                  <th scope="col">Capacity</th>
+                  <th scope="col">Ping</th>
+                  <th scope="col">Price</th>
+                  <th scope="col">
+                    <span className="sb-sr">Join</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s) => {
+                  const full = !(s.capacity?.free_slots > 0);
+                  const hash = s.game ?? '';
+                  const shortHash = shortKey(hash, 10, 6);
+                  // The tracker may not know this hash. The content address is
+                  // the real identity, so fall back to it rather than to a
+                  // placeholder — and when we do, show it ONCE rather than as
+                  // both title and chip.
+                  const titled = s.game_title != null;
+                  const declared = declaredBy(s);
+                  const hasCounts = s.players != null && s.max_players > 0;
+                  return (
+                    <tr key={s.id}>
+                      <td className="lead cell-game edge-field">
+                        {titled ? (
+                          <>
+                            <span className="game-title">{s.game_title}</span>
+                            <code className="game-hash break-key" title={hash}>
+                              {shortHash}
+                              <span className="hash-tag m-xs">blake3</span>
+                            </code>
+                          </>
+                        ) : (
+                          <code className="game-title game-title-hash break-key" title={hash}>
+                            {shortHash}
+                            <span className="hash-tag m-xs">blake3</span>
+                          </code>
+                        )}
+                        {s.game_version ? (
+                          <span className="game-version">v{s.game_version}</span>
+                        ) : (
+                          <span className="game-version game-version-unknown">
+                            not in this tracker&rsquo;s catalog
+                          </span>
+                        )}
+                      </td>
 
-            {sessions.map((s) => {
-              const full = !(s.capacity?.free_slots > 0);
-              const hash = s.game ?? '';
-              const shortHash = shortKey(hash, 10, 6);
-              // The tracker may not know this hash. The content address is the
-              // real identity, so fall back to it rather than to a placeholder —
-              // and when we do, show it ONCE rather than as both title and chip.
-              const titled = s.game_title != null;
-              const declared = declaredBy(s);
-              const hasCounts = s.players != null && s.max_players > 0;
-              return (
-                <div className="session-row" role="row" key={s.id}>
-                  <div className="cell-game" role="cell">
-                    {titled ? (
-                      <>
-                        <span className="game-title">{s.game_title}</span>
-                        <code className="game-hash" title={hash}>
-                          {shortHash}
-                          <span className="hash-tag">blake3</span>
-                        </code>
-                      </>
-                    ) : (
-                      <code className="game-title game-title-hash" title={hash}>
-                        {shortHash}
-                        <span className="hash-tag">blake3</span>
-                      </code>
-                    )}
-                    {s.game_version ? (
-                      <span className="game-version">v{s.game_version}</span>
-                    ) : (
-                      <span className="game-version game-version-unknown">
-                        not in this tracker&rsquo;s catalog
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="cell-node" role="cell">
-                    <span className="node-addr">{s.node}</span>
-                    {declared ? (
-                      <span className="node-meta" title="Declared by the node itself — signed by its key, but not verified by any tracker">
-                        {declared}
-                        <span className="declared-tag">self-declared</span>
-                      </span>
-                    ) : (
-                      <span className="node-meta node-meta-none">no operator declared</span>
-                    )}
-                    <span className="node-comms">
-                      {s.chat_room && <span className="comms-chip">chat</span>}
-                      {s.voice_room && <span className="comms-chip">voice</span>}
-                    </span>
-                  </div>
-
-                  <div className="cell-players" role="cell">
-                    {hasCounts ? (
-                      <>
-                        <span className="players-count">
-                          {s.players}
-                          <span className="players-max">/{s.max_players}</span>
-                        </span>
-                        <span className="players-bar" aria-hidden="true">
+                      <td className="key cell-node">
+                        <span className="node-addr">{s.node}</span>
+                        {declared ? (
                           <span
-                            className="players-fill"
-                            style={{
-                              width: `${Math.min(100, (s.players / s.max_players) * 100)}%`,
-                            }}
-                          />
+                            className="node-meta"
+                            title="Declared by the node itself — signed by its key, but not verified by any tracker"
+                          >
+                            {declared}
+                            <span className="declared-tag m-xs">self-declared</span>
+                          </span>
+                        ) : (
+                          <span className="node-meta node-meta-none">no operator declared</span>
+                        )}
+                        <span className="node-comms">
+                          {s.chat_room && <span className="comms-chip m-xs">chat</span>}
+                          {s.voice_room && <span className="comms-chip m-xs">voice</span>}
                         </span>
-                      </>
-                    ) : (
-                      <span className="players-count players-count-unknown" title="This node publishes no occupancy counters — they are unsigned display hints and entirely optional">
-                        not reported
-                      </span>
-                    )}
-                    <span className="players-slots">{s.capacity?.free_slots ?? 0} free</span>
-                  </div>
+                      </td>
 
-                  <div className="cell-capacity" role="cell">
-                    <code>{formatCapacity(s.capacity)}</code>
-                    <span className="capacity-shards">
-                      {s.capacity?.max_shards ?? 0} shards max
-                    </span>
-                  </div>
+                      <td className="num cell-players edge-boundary">
+                        {hasCounts ? (
+                          <>
+                            <span className="players-count">
+                              {s.players}
+                              <span className="players-max">/{s.max_players}</span>
+                            </span>
+                            <span className="players-bar" aria-hidden="true">
+                              <span
+                                className="players-fill"
+                                style={{
+                                  width: `${Math.min(100, (s.players / s.max_players) * 100)}%`,
+                                }}
+                              />
+                            </span>
+                          </>
+                        ) : (
+                          <span
+                            className="players-count players-count-unknown"
+                            title="This node publishes no occupancy counters — they are unsigned display hints and entirely optional"
+                          >
+                            not reported
+                          </span>
+                        )}
+                        <span className="players-slots">{s.capacity?.free_slots ?? 0} free</span>
+                      </td>
 
-                  <div className="cell-ping" role="cell">
-                    <span className={`ping ping-${pingClass(s.ping_hint ?? Infinity)}`}>
-                      {s.ping_hint != null ? `${s.ping_hint} ms` : '—'}
-                    </span>
-                  </div>
+                      <td className="num cell-capacity">
+                        <span className="capacity-spec">{formatCapacity(s.capacity)}</span>
+                        <span className="capacity-shards">{s.capacity?.max_shards ?? 0} shards max</span>
+                      </td>
 
-                  <div className="cell-price" role="cell">
-                    <span className={s.price ? 'price-paid' : 'price-free'}>
-                      {formatPrice(s.price)}
-                    </span>
-                    {s.price && <span className="price-note">paid to operator</span>}
-                  </div>
+                      <td className="num cell-ping">
+                        <span className={`ping ping-${pingClass(s.ping_hint ?? Infinity)}`}>
+                          {s.ping_hint != null ? `${s.ping_hint} ms` : '—'}
+                        </span>
+                        <span className="ping-tier m-xs">
+                          {s.ping_hint != null ? pingClass(s.ping_hint) : 'no hint'}
+                        </span>
+                      </td>
 
-                  <div className="cell-join" role="cell">
-                    <button type="button" className="btn btn-primary btn-join" disabled={full}>
-                      {full ? 'Full' : 'Join'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      <td className="num cell-price">
+                        <span className={s.price ? 'price-paid' : 'price-free'}>
+                          {formatPrice(s.price)}
+                        </span>
+                        {s.price && <span className="price-note m-xs">paid to operator</span>}
+                      </td>
+
+                      <td className="cell-join">
+                        <button type="button" className="btn btn-primary btn-join" disabled={full}>
+                          {full ? 'Full' : 'Join'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
 
-        <p className="browser-footnote">
+        <p className="sb-footnote edge-boundary">
           Paid sessions settle wallet&rarr;wallet on the payment rail: joining mints a signed
           receipt the node checks before it lets you in. We never hold the funds and never sit
-          between you and the operator.
+          between you and the operator — which also means the rail itself is outside anything we
+          can verify for you.
         </p>
       </div>
     </Layout>

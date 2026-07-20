@@ -20,7 +20,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_USERS = import.meta.env.VITE_USE_MOCKS
+const MOCK_USERS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 1,  username: 'CryptoGamer42',   email: 'crypto@example.com',    verified: true,  developer: true,  banned: false, createdAt: '2024-01-15', games: 3  },
       { id: 2,  username: 'PixelMaster',     email: 'pixel@example.com',     verified: true,  developer: true,  banned: false, createdAt: '2024-02-20', games: 7  },
@@ -68,7 +68,7 @@ export default function Users() {
   const [actionError, setActionError]     = useState(null);
 
   const fetchUsers = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     setLoading(true);
     setError(null);
     try {

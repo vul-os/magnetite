@@ -99,16 +99,22 @@ pre, samp    { font-family: var(--font-mono); }
 }
 
 /* ─── .btn utility ───────────────────────────────────────────────────────── */
+/* Buttons.
+   Solid fills, not gradients: the violet→magenta sweep means "field →
+   boundary" in this system, and a button is not a boundary. Minimum height is
+   40px so every control clears the 44px-with-margin touch target on mobile. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-4);
   border-radius: var(--radius-sm);
-  font-family: inherit;
+  font-family: var(--font-sans);
   font-weight: 500;
   font-size: var(--text-sm);
+  letter-spacing: -.005em;
   border: 1px solid transparent;
   cursor: pointer;
   white-space: nowrap;
@@ -117,65 +123,81 @@ pre, samp    { font-family: var(--font-mono); }
     background var(--transition-fast),
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),
-    transform var(--transition-fast),
     color var(--transition-fast);
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--field);
   outline-offset: 2px;
 }
 
 .btn:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: .45;
 }
 
 /* Variants */
+
+/* Primary — the verifiable core.
+   Text colour comes from --on-field, which FLIPS between themes: the dark
+   theme's violet is a bright fill needing dark ink (white would be 3.5:1 and
+   fail), the light theme's violet is a dark fill needing white. Never
+   hardcode #fff or #000 here. */
 .btn-primary {
-  background: var(--gradient-primary);
-  color: #0a0715;
-  border-color: transparent;
+  background: var(--field);
+  color: var(--on-field);
+  border-color: var(--field);
 }
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: var(--field-text);
+  border-color: var(--field-text);
   box-shadow: var(--shadow-glow);
-  transform: translateY(-1px);
 }
-.btn-primary:active:not(:disabled) { transform: translateY(0); box-shadow: none; filter: none; }
+.btn-primary:active:not(:disabled) { box-shadow: none; }
 
 .btn-secondary {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-  border-color: var(--color-border);
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: var(--line-2);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: var(--color-bg-elevated);
-  border-color: var(--color-border-strong);
+  background: var(--elevated);
+  border-color: var(--field-line);
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
+/* Destructive. Always pair with a confirm step for anything irreversible. */
 .btn-danger {
-  background: var(--color-error);
-  color: #fff;
-  border-color: var(--color-error);
+  background: var(--danger);
+  color: var(--on-danger);
+  border-color: var(--danger);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #e04058; /* darkened var(--color-error); no direct token — intentional */
-  box-shadow: 0 0 16px rgba(255, 84, 104, 0.3); /* var(--color-error) at 0.30 alpha */
+  background: var(--danger-text);
+  border-color: var(--danger-text);
 }
 
+/* Boundary — for actions that cross out of the verifiable core (leaving for a
+   third-party rail, trusting an unattested client). Rare and deliberate. */
+.btn-boundary {
+  background: transparent;
+  color: var(--boundary-text);
+  border-color: var(--boundary);
+}
+.btn-boundary:hover:not(:disabled) { background: var(--boundary-tint); }
+
 /* Sizes */
-.btn-sm { height: 32px; padding: 0 0.75rem; font-size: var(--text-xs); }
-.btn-lg { height: 48px; padding: 0 1.5rem; font-size: var(--text-base); }
+.btn-sm { min-height: 32px; padding: 0 var(--space-3); font-size: var(--text-xs); }
+.btn-lg { min-height: 48px; padding: 0 var(--space-6); font-size: var(--text-base); }
+.btn-block { width: 100%; }
 
 /* ─── Main content ───────────────────────────────────────────────────────── */
 .main-content {
@@ -192,7 +214,10 @@ pre, samp    { font-family: var(--font-mono); }
   padding: 1rem 1.5rem;
   position: sticky;
   top: 0;
-  background: rgba(8, 9, 12, 0.88); /* --color-bg-primary (#08090c) at 88% opacity */
+  /* Theme-aware translucent bar. This was hardcoded to a dark rgba(), which
+     left the navbar dark in the light theme. --bar-bg carries the correct
+     translucent fill for each theme. */
+  background: var(--bar-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: var(--z-sticky);
@@ -459,8 +484,193 @@ pre, samp    { font-family: var(--font-mono); }
 
 .form-group textarea { min-height: 100px; resize: vertical; }
 
-.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.form-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+/* Inputs that carry keys, hashes or IDs — set them in mono so users can
+   compare them character by character. */
+.form-group input.mono,
+.form-input.mono { font-family: var(--font-mono); letter-spacing: -.01em; }
+
+/* Invalid state. Announce errors with aria-describedby + role="alert" on the
+   .form-error element; colour alone is never sufficient. */
+.form-group input[aria-invalid='true'],
+.form-group textarea[aria-invalid='true'],
+.form-group select[aria-invalid='true'],
+.form-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.form-group input[aria-invalid='true']:focus,
+.form-input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px var(--danger-tint);
+}
+
+.form-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--danger-text);
+}
+.form-error::before { content: '!'; font-family: var(--font-mono); font-weight: 600; }
+
+.form-hint {
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.form-actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* Single column below the tablet breakpoint — two side-by-side fields are the
+   most common source of horizontal overflow at 390px. */
+@media (max-width: 640px) {
+  .form-row { grid-template-columns: 1fr; }
+  .form-actions { flex-direction: column-reverse; }
+  .form-actions .btn { width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATA TABLE
+   The default surface for anything with more than three columns. Header is a
+   mono micro-label; rows are hairline-separated rather than boxed.
+   Always wrap in .table-wrap so a wide table scrolls inside itself instead of
+   forcing the page to scroll horizontally.
+═══════════════════════════════════════════════════════════════════════════ */
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  -webkit-overflow-scrolling: touch;
+}
+
+table.data {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+table.data th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  background: var(--sunk);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+table.data td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+
+table.data tbody tr:last-child td { border-bottom: 0; }
+table.data tbody tr { transition: background var(--transition-fast); }
+table.data tbody tr:hover { background: var(--surface-2); }
+
+/* Identifiers, amounts, timestamps: mono + tabular. */
+table.data td.num,
+table.data td.key,
+table.data th.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+table.data td.num,
+table.data th.num { text-align: right; }
+table.data td.key { color: var(--field-text); }
+
+/* Primary cell in a row */
+table.data td.lead { color: var(--ink); font-weight: 500; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STATE SURFACES — empty / loading / error
+   Every data surface must render one of these rather than nothing. Never
+   substitute invented sample data for an unavailable API.
+═══════════════════════════════════════════════════════════════════════════ */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--sunk);
+}
+
+.state-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.state-body {
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  max-width: 46ch;
+  line-height: 1.6;
+}
+
+.state-actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); flex-wrap: wrap; justify-content: center; }
+
+/* Empty: there is genuinely nothing here yet. */
+.state-empty .state-icon { color: var(--ink-3); }
+
+/* Error: the request failed. */
+.state-error {
+  border-style: solid;
+  border-color: var(--danger);
+  background: var(--danger-tint);
+}
+.state-error .state-title { color: var(--danger-text); }
+
+/* Unavailable: this feature has no backend on this node. Distinct from an
+   error — nothing is broken, the capability simply is not present here. */
+.state-unavailable {
+  border-color: var(--spec);
+  background: var(--spec-tint);
+}
+.state-unavailable .state-title { color: var(--spec-text); }
+
+.state-icon { width: 28px; height: 28px; opacity: .75; }
+
+/* Loading: a skeleton, sized like the content it replaces. */
+@keyframes im-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.sk {
+  display: block;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--elevated) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: im-shimmer 1.4s linear infinite;
+}
+.sk-text { height: 12px; margin-block: 6px; }
+.sk-title { height: 20px; width: 40%; }
+.sk-row { height: 44px; margin-bottom: 1px; border-radius: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; background: var(--surface-2); }
+}
 
 /* ─── Status badge ───────────────────────────────────────────────────────── */
 .status-badge {

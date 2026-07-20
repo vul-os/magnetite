@@ -25,7 +25,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_REPOS = import.meta.env.VITE_USE_MOCKS
+const MOCK_REPOS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { value: 'cosmic-raiders',  label: 'cosmic-raiders',  description: 'Action space shooter game' },
       { value: 'galaxy-conquest', label: 'galaxy-conquest',  description: '4X strategy game'          },
@@ -33,7 +33,7 @@ const MOCK_REPOS = import.meta.env.VITE_USE_MOCKS
     ]
   : null;
 
-const MOCK_DEPLOYMENTS = import.meta.env.VITE_USE_MOCKS
+const MOCK_DEPLOYMENTS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       {
         id:         'deploy-1',
@@ -148,7 +148,7 @@ export default function GameDeploy() {
 
   /* Load repos from backend when connected */
   const loadRepos = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     setReposLoading(true);
     try {
       const res = await authFetch('/api/github/repos');
@@ -172,7 +172,7 @@ export default function GameDeploy() {
 
   /* Load recent deployments */
   useEffect(() => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     async function loadDeployments() {
       setDeploymentsLoading(true);
       try {

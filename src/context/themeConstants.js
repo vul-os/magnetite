@@ -1,27 +1,22 @@
+/*
+ * Theme registry.
+ *
+ * NOTE — this file used to hold the actual colour values, which ThemeContext
+ * then wrote onto <html> as INLINE STYLES. That silently defeated the entire
+ * design system: inline styles outrank stylesheet rules, so the palette in
+ * src/styles/tokens.css never reached the page and every screen rendered in a
+ * flat neutral ramp instead. The colours have been removed and tokens.css is
+ * now the single authority; ThemeContext only sets `data-theme` on <html>.
+ *
+ * Do not reintroduce colour values here.
+ */
+
+/** The themes a user can select. `system` follows the OS preference. */
+export const THEME_NAMES = ['dark', 'light', 'system'];
+
+/** Backwards-compatible shape: callers use `Object.keys(themes)` for the list. */
 export const themes = {
-  dark: {
-    '--color-bg-primary': '#0a0a0f',
-    '--color-bg-secondary': '#12121a',
-    '--color-bg-card': '#1a1a25',
-    '--color-text-primary': '#e4e4e7',
-    '--color-text-secondary': '#a1a1aa',
-    '--color-text-muted': '#71717a',
-    '--color-border': '#27272a',
-    '--shadow-sm': '0 1px 2px rgba(0,0,0,0.3)',
-    '--shadow-md': '0 4px 6px rgba(0,0,0,0.4)',
-    '--shadow-lg': '0 10px 25px rgba(0,0,0,0.5)',
-  },
-  light: {
-    '--color-bg-primary': '#fafafa',
-    '--color-bg-secondary': '#f4f4f5',
-    '--color-bg-card': '#ffffff',
-    '--color-text-primary': '#18181b',
-    '--color-text-secondary': '#52525b',
-    '--color-text-muted': '#a1a1aa',
-    '--color-border': '#e4e4e7',
-    '--shadow-sm': '0 1px 2px rgba(0,0,0,0.05)',
-    '--shadow-md': '0 4px 6px rgba(0,0,0,0.1)',
-    '--shadow-lg': '0 10px 25px rgba(0,0,0,0.15)',
-  },
+  dark: {},
+  light: {},
   system: {},
 };

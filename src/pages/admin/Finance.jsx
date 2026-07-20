@@ -36,7 +36,7 @@ function authFetch(endpoint, options = {}) {
 const RAIL_PUBKEY = '3ac9017e5fb2d846902ce15b7a4d3f80c6e1927b5d0af348e2c76b91045fd8a2';
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS
+const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 'rcpt_01HQ8ZK3NP', kind: 'item_purchase', buyer: 'CryptoGamer42', payee: '5c8de401f9b7236a0d14e8c93b750af26e1d3809c47ba62e91d70b385ac64f13', game: 'Cosmic Raiders',  total:  2.50, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-16 14:32', voided: false },
       { id: 'rcpt_01HQ7WX8TM', kind: 'hosting_fee',   buyer: 'NeonRacer99',   payee: '7e30b8a1cd94c25e06f381ba47d9e2c0518736fa9db4e18c02735d6ab91af4e2', game: 'Neon Drift',      total:  1.50, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-16 14:28', voided: false },
@@ -81,7 +81,7 @@ export default function Finance() {
   const perPage = 10;
 
   const fetchData = useCallback(async () => {
-    if (import.meta.env.VITE_USE_MOCKS) return;
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
 
     setLoading(true);
     setError(null);

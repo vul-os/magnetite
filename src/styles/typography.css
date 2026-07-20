@@ -1,215 +1,231 @@
 /*
- * Industrial Magnetite — Typography
- * Display = Archivo (headings, large callouts)
- * Sans   = Hanken Grotesk (body, UI prose)
- * Mono   = JetBrains Mono (labels, stats, code, IDs)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * MAGNETITE — Typography
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * Scale (px): 12 / 13 / 14 / 16 / 18 / 22 / 28 / 36 / 48 / 64 / 80
- * Fluid clamp() for hero/section headings; tight tracking on display; wide on mono kickers.
+ *   Display : Instrument Serif  — page titles and editorial moments ONLY.
+ *   Sans    : IBM Plex Sans     — all UI prose, labels, buttons, body.
+ *   Mono    : IBM Plex Mono     — data, IDs, hashes, stats, micro-labels.
+ *
+ * THE RULE THAT MATTERS: in this product the hash *is* the content. Anything
+ * a user might copy, compare, or verify — an ID, a public key, a tick count,
+ * a duration, a checksum — is set in mono. Anything they merely read is sans.
+ * Display is reserved for the one title at the top of a page.
+ *
+ * Instrument Serif ships a 400 weight only. Never set font-weight above 400
+ * on it: the browser will synthesise a fake bold and it looks broken.
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 
-/* ─── Base element styles ─────────────────────────────────────────────────── */
+/* ─── Base ────────────────────────────────────────────────────────────────── */
 
 body {
   font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--void);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* h1–h6: Archivo, tight tracking, display-weight */
+/* Headings.
+   h1/h2 are display serif — the editorial voice.
+   h3–h6 are sans — they are structural UI labels, not editorial, and a serif
+   at small sizes in a dense tool just reads as noise. */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-  color: var(--color-text-primary);
+  color: var(--ink);
   margin: 0;
 }
 
-/* Fluid heading sizes (clamp: min, fluid, max) */
-h1 {
-  font-size: clamp(2rem, 5vw + 0.5rem, 5rem);     /* 32px → 80px */
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.0;
+h1, h2 {
+  font-family: var(--font-display);
+  font-weight: 400;            /* Instrument Serif has no bold cut */
+  letter-spacing: -.012em;
+  line-height: 1.04;
 }
 
-h2 {
-  font-size: clamp(1.5rem, 3vw + 0.5rem, 3rem);   /* 24px → 48px */
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-}
+h1 { font-size: clamp(1.75rem, 2.2vw + 1rem, 2.75rem); }   /* 28 → 44px */
+h2 { font-size: clamp(1.375rem, 1.4vw + .9rem, 1.875rem); } /* 22 → 30px */
 
-h3 {
-  font-size: clamp(1.125rem, 2vw + 0.25rem, 1.75rem); /* 18px → 28px */
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-h4 {
-  font-size: clamp(1rem, 1.5vw + 0.25rem, 1.375rem); /* 16px → 22px */
-  font-weight: 600;
-  letter-spacing: -0.015em;
+h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  letter-spacing: -.005em;
   line-height: 1.3;
 }
 
-h5 {
-  font-size: 1rem;          /* 16px */
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.4;
-}
+h3 { font-size: var(--text-xl);  font-weight: 600; }
+h4 { font-size: var(--text-lg);  font-weight: 600; }
+h5 { font-size: var(--text-base); font-weight: 600; }
+h6 { font-size: var(--text-sm);  font-weight: 600; }
 
-h6 {
-  font-size: 0.875rem;      /* 14px */
-  font-weight: 600;
-  letter-spacing: 0em;
-  line-height: 1.4;
-}
-
-/* Body paragraphs */
 p {
   font-family: var(--font-sans);
   line-height: 1.65;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
   margin: 0;
 }
 
-/* Code, kbd, pre, samp inherit mono from base */
+/* Prose measure — long-form text should never run the full width of a page. */
+.prose { max-width: 68ch; }
+.prose p + p { margin-top: 1em; }
+
 code, kbd, pre, samp {
   font-family: var(--font-mono);
+  font-size: .92em;
 }
 
-/* ─── Utility classes ─────────────────────────────────────────────────────── */
+/* Inline code / identifier chip */
+:not(pre) > code {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: .1em .35em;
+  color: var(--field-text);
+}
 
-/* Font families */
-.font-display { font-family: var(--font-display); }
+/* Tabular figures wherever numbers are compared down a column. */
+table, .tnum, .stat-value, td { font-variant-numeric: tabular-nums; }
+
+a { color: var(--field-text); text-decoration-color: var(--field-line); }
+a:hover { text-decoration-color: currentColor; }
+
+/* ─── Families ────────────────────────────────────────────────────────────── */
+.font-display { font-family: var(--font-display); font-weight: 400; }
 .font-sans    { font-family: var(--font-sans); }
 .font-mono    { font-family: var(--font-mono); }
 
-/* Size tokens (aligned to the 12-step scale) */
-.text-2xs  { font-size: var(--text-2xs); }   /* 12px */
-.text-xs   { font-size: var(--text-xs); }    /* 13px */
-.text-sm   { font-size: var(--text-sm); }    /* 14px */
-.text-base { font-size: var(--text-base); }  /* 16px */
-.text-lg   { font-size: var(--text-lg); }    /* 18px */
-.text-xl   { font-size: var(--text-xl); }    /* 22px */
-.text-2xl  { font-size: var(--text-2xl); }   /* 28px */
-.text-3xl  { font-size: var(--text-3xl); }   /* 36px */
-.text-4xl  { font-size: var(--text-4xl); }   /* 48px */
-.text-5xl  { font-size: var(--text-5xl); }   /* 64px */
+/* ─── Sizes ───────────────────────────────────────────────────────────────── */
+.text-2xs  { font-size: var(--text-2xs); }
+.text-xs   { font-size: var(--text-xs); }
+.text-sm   { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-lg   { font-size: var(--text-lg); }
+.text-xl   { font-size: var(--text-xl); }
+.text-2xl  { font-size: var(--text-2xl); }
+.text-3xl  { font-size: var(--text-3xl); }
+.text-4xl  { font-size: var(--text-4xl); }
+.text-5xl  { font-size: var(--text-5xl); }
 
-/* Weights */
+/* ─── Weights (sans/mono only) ────────────────────────────────────────────── */
 .font-light    { font-weight: 300; }
 .font-normal   { font-weight: 400; }
 .font-medium   { font-weight: 500; }
 .font-semibold { font-weight: 600; }
 .font-bold     { font-weight: 700; }
-.font-extrabold{ font-weight: 800; }
-.font-black    { font-weight: 900; }
+/* Legacy aliases — IBM Plex Sans var tops out at 700; clamp rather than
+   let the browser fake anything heavier. */
+.font-extrabold { font-weight: 700; }
+.font-black     { font-weight: 700; }
 
-/* Tracking */
-.tracking-tight   { letter-spacing: -0.025em; }
-.tracking-normal  { letter-spacing: 0em; }
-.tracking-wide    { letter-spacing: 0.06em; }
-.tracking-wider   { letter-spacing: 0.10em; }
-.tracking-widest  { letter-spacing: 0.16em; }
+/* ─── Tracking ────────────────────────────────────────────────────────────── */
+.tracking-tight  { letter-spacing: -.02em; }
+.tracking-normal { letter-spacing: 0; }
+.tracking-wide   { letter-spacing: .06em; }
+.tracking-wider  { letter-spacing: .11em; }
+.tracking-widest { letter-spacing: .18em; }
 
-/* Leading */
+/* ─── Leading ─────────────────────────────────────────────────────────────── */
 .leading-none    { line-height: 1; }
 .leading-tight   { line-height: 1.1; }
 .leading-snug    { line-height: 1.25; }
-.leading-normal  { line-height: 1.6; }
+.leading-normal  { line-height: 1.55; }
 .leading-relaxed { line-height: 1.75; }
 
-/* Colors */
-.text-primary   { color: var(--color-text-primary); }
-.text-secondary { color: var(--color-text-secondary); }
-.text-muted     { color: var(--color-text-muted); }
-.text-accent    { color: var(--color-accent); }
-.text-amber     { color: var(--color-amber); }
-.text-success   { color: var(--color-success); }
-.text-warning   { color: var(--color-warning); }
-.text-error     { color: var(--color-error); }
-.text-info      { color: var(--color-info); }
+/* ─── Colour ──────────────────────────────────────────────────────────────── */
+.text-primary   { color: var(--ink); }
+.text-secondary { color: var(--ink-2); }
+.text-muted     { color: var(--ink-3); }
+.text-accent    { color: var(--field-text); }
+.text-boundary  { color: var(--boundary-text); }
+.text-amber     { color: var(--spec-text); }
+.text-success   { color: var(--live-text); }
+.text-warning   { color: var(--spec-text); }
+.text-error     { color: var(--danger-text); }
+.text-info      { color: var(--field-text); }
 
-/* Alignment */
+/* ─── Alignment / transform ───────────────────────────────────────────────── */
 .text-left   { text-align: left; }
 .text-center { text-align: center; }
 .text-right  { text-align: right; }
+.uppercase   { text-transform: uppercase; }
+.lowercase   { text-transform: lowercase; }
+.capitalize  { text-transform: capitalize; }
 
-/* Transform */
-.uppercase  { text-transform: uppercase; }
-.lowercase  { text-transform: lowercase; }
-.capitalize { text-transform: capitalize; }
-
-/* Overflow */
+/* ─── Overflow ────────────────────────────────────────────────────────────── */
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
+.line-clamp-2,
 .line-clamp-3 {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.line-clamp-2 { -webkit-line-clamp: 2; }
+.line-clamp-3 { -webkit-line-clamp: 3; }
 
-/* Decoration */
+/* Long hashes and keys: break anywhere rather than force a horizontal
+   scrollbar. Pair with .font-mono. */
+.break-key {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* ─── Decoration ──────────────────────────────────────────────────────────── */
 .underline    { text-decoration: underline; }
 .line-through { text-decoration: line-through; }
 .no-underline { text-decoration: none; }
 
-/* ─── Display heading utilities ───────────────────────────────────────────── */
+/* ─── Display utilities ───────────────────────────────────────────────────── */
 
-/* Hero-scale display: largest fluid heading */
+/* The page title. One per page, at the top. */
 .display-hero {
   font-family: var(--font-display);
-  font-size: clamp(3rem, 7vw + 0.5rem, 6.25rem); /* 48px → 100px */
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
+  font-weight: 400;
+  font-size: clamp(2.25rem, 4vw + 1rem, 4rem);
+  letter-spacing: -.02em;
+  line-height: 1;
 }
 
-/* Section-scale display */
 .display-section {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw + 0.5rem, 3.5rem); /* 32px → 56px */
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.0;
+  font-weight: 400;
+  font-size: clamp(1.625rem, 2vw + 1rem, 2.5rem);
+  letter-spacing: -.015em;
+  line-height: 1.05;
 }
 
-/* Numeric / stat display (mono) */
+/* Editorial emphasis — the italic serif. Use for a single phrase, rarely. */
+.display-em {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--field-text);
+}
+
+/* A headline number. Mono, because it is data. */
 .display-stat {
   font-family: var(--font-mono);
-  font-size: clamp(2.25rem, 5vw, 4rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.75rem, 3vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -.02em;
   line-height: 1;
-  color: var(--color-text-primary);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Gradient text helper */
-.text-gradient {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
+/* Gradient text — the field→boundary sweep. Reserve for the single most
+   important phrase on a marketing surface; never in dense UI. */
+.text-gradient,
 .text-gradient-energy {
-  background: var(--gradient-energy);
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
+.text-gradient        { background-image: var(--gradient-primary); }
+.text-gradient-energy { background-image: var(--gradient-energy); }
