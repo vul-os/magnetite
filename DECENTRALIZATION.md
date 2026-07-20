@@ -132,6 +132,48 @@ struct PaymentSplit { developer: Split, operator: Option<Split>, protocol_fee_bp
 - **Points/XP:** stay OFF-chain, signed per-game ledgers. Not money. Not tokenized by default.
 - Protocol fee: checkout has a `protocol_fee_bps` param, **default 0** (decide later via governance).
 
+### 3.7 `InputProvider` (where input comes from — and what it can be proven to be)
+
+```rust
+enum InputClass { Deterministic, Attested }   // the load-bearing type
+trait InputProvider {
+    fn class(&self) -> InputClass;                       // truthful, always
+    async fn submit(&self, event: InputEvent) -> Result<()>;  // fails closed on class mismatch
+    async fn drain(&self, now_ms: u64) -> Vec<InputEvent>;
+    fn plausibility_limits(&self) -> Option<&PlausibilityLimits>;
+}
+```
+
+- **Default:** `LocalDeviceInput` — a deterministic keyboard/gamepad-style queue. Offline,
+  dependency-free, replay-verifiable. It **refuses attested events at runtime**, so the class
+  boundary is enforced rather than merely documented.
+- **The point of this seam is the boundary it draws.** Everything else here assumes deterministic
+  input: `ReplayLog` + `verify_replay` (§1) can prove tampering only because replaying the same
+  ordered commands from the same seed reproduces the same state. A camera-gesture stream (the
+  reason this seam exists — see `wibbly/WIBBLY.md` §6) is a **nondeterministic sensor reading** and
+  **cannot be replay-verified, at any point, ever**. It is *client-attested*: the client asserts
+  what happened and the host decides whether to believe it.
+- **What a host can actually do with attested input:** `PlausibilityGate` screens per player for
+  rate, per-kind cooldown, human-reachable velocity, a confidence floor, timestamp sanity, and
+  monotonic sequence numbers. Rejection means "not physically reachable". **Acceptance means
+  nothing stronger than "not obviously impossible."** A cheater who synthesises *plausible* events
+  is not detectable here and never will be — there is a test
+  (`a_plausible_synthetic_event_is_indistinguishable_from_a_real_one`) asserting exactly that, so
+  the limit stays written down in code.
+- A `SignedAttestedEvent` signature proves **authorship, not truth**: it stops one player forging
+  events in another's name and stops a relay editing them in flight. A cheater signs their own
+  fabricated events with their own genuine key and passes every time.
+- **Rule:** never settle a wager escrow (§3.6) or issue a competitive ranking from attested input
+  on the strength of replay proof. `InputClass::is_replay_verifiable()` exists so that decision is
+  made in code, not by a reader remembering this paragraph.
+- **Built:** the traits, both event classes, the signed-event wrapper, the plausibility gate, and
+  two providers — `LocalDeviceInput` (the default) and `AttestedEventInput`, a transport-agnostic
+  host-side ingress for attested events.
+- **Not built:** anything that *produces* a gesture event. `AttestedEventInput` contains no camera
+  capture, no pose model, and no vendor code; magnetite has no such code anywhere. Wibbly is not a
+  dependency of magnetite and no camera client is wired up in this repo. This seam is the socket
+  wibbly will plug into, and today it is only that.
+
 ## 4. Generic capacity-elastic node (the "bring any server → scales to infinity" property)
 
 Collapse `backend` + `magnetite-runtime` into one `magnetite` node binary.
@@ -202,6 +244,10 @@ Legend: **[O]** = Opus-class agent, **[S]** = Sonnet-class agent. One writer per
   architecture, screenshots. **R1 [S]** README rewrite (decentralized-games pitch, screenshots, badges).
   **SC1 [S]** Screenshotter: `npm run screenshotter` mirroring ofisi/wede (Playwright), captures
   landing + docs + app routes → images referenced by landing/docs/README.
+
+- **IN1 [O]** INPUT: `InputProvider` seam (§3.7) — `InputClass` boundary, `PlausibilityGate`,
+  `LocalDeviceInput` default + `AttestedEventInput` ingress. **Done** (seam only; no gesture
+  *producer* exists in this repo — see §3.7 "Not built"). Owns: `magnetite-seams/src/input.rs`.
 
 ### Wave 3 — Integration & optional providers
 - **I1 [O]** ~~Wire DMTAP optional providers~~ — **DROPPED 2026-07-19 (founder call).** DMTAP was

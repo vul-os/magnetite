@@ -34,6 +34,14 @@ pub enum SeamError {
     #[error("transport error: {0}")]
     Transport(String),
 
+    /// An attested (sensor-derived) input event failed plausibility screening.
+    ///
+    /// This means "not physically reachable", **never** "cheating proven" — see
+    /// [`crate::input::Implausible`]. Only the [`crate::InputClass::Attested`]
+    /// path produces it; deterministic input is checked by replay instead.
+    #[error("input event is not plausible: {0}")]
+    Implausible(String),
+
     /// Generic invalid-input guard.
     #[error("invalid input: {0}")]
     Invalid(String),
