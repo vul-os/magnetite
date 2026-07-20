@@ -37,7 +37,7 @@ wasm = [
 
 # ── Common dependencies ──────────────────────────────────────────────────────
 [dependencies]
-magnetite-sdk = { path = "../backend/magnetite-sdk" }
+magnetite-sdk = { path = "../../backend/magnetite-sdk" }
 
 # Bevy — optional; only compiled under `native` or `wasm`.
 bevy = { version = "0.14", default-features = false, optional = true }

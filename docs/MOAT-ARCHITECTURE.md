@@ -29,7 +29,7 @@ Plus the **pipeline**: `magnetite new|build|dev|deploy` (GitHub → live multipl
   aggregation. Depends on sdk only.
 - `magnetite-cli/` (NEW) — the `magnetite` binary: `new|build|dev|deploy`. (N1: `new` + `build` only — they
   just scaffold + shell `cargo`; `dev`/`deploy` come in N2 once runtime+sandbox exist.)
-- `game-template-authoritative/` (NEW) — reference game implementing `AuthoritativeGame` (a small top-down
+- `game-templates/authoritative/` (NEW) — reference game implementing `AuthoritativeGame` (a small top-down
   arena shooter) used by everything as the canonical example + integration target.
 
 ## FROZEN INTERFACES (`magnetite-sdk::authority`)

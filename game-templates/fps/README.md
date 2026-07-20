@@ -1,7 +1,7 @@
 # Magnetite FPS Starter
 
 A credible, minimal **first-person shooter** starter built on the
-[Magnetite SDK](../backend/magnetite-sdk), [Bevy 0.14](https://bevyengine.org),
+[Magnetite SDK](../../backend/magnetite-sdk), [Bevy 0.14](https://bevyengine.org),
 and [bevy_rapier3d](https://rapier.rs).  It demonstrates the **advanced 3-D
 path** on the Magnetite platform — the same SDK surface that powers the simple
 arcade game template, scaled up to a full FPS.
@@ -28,7 +28,7 @@ arcade game template, scaled up to a full FPS.
 ### Fast check (no Bevy build, CI-friendly)
 
 ```bash
-cd game-template-fps
+cd game-templates/fps
 cargo check --no-default-features
 ```
 
@@ -82,7 +82,7 @@ function loop() {
 ## Project layout
 
 ```
-game-template-fps/
+game-templates/fps/
 ├── Cargo.toml          — features: native / wasm / (neither = SDK-only)
 ├── build.sh            — WASM build + native run helper
 ├── README.md

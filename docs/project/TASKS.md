@@ -1,5 +1,14 @@
 # Magnetite — Implementation Tasks
 
+> **[2026-07-20] STALE — historical record.**
+> Moved here from the repository root. This checklist predates the
+> decentralization redesign; many entries describe subsystems that were since
+> deleted (fiat payments, custodial wallets) or restructured. Superseded by
+> [`DECENTRALIZATION.md`](../../DECENTRALIZATION.md) §backlog and
+> [DECENTRALIZATION_PROGRESS.md](./DECENTRALIZATION_PROGRESS.md).
+
+---
+
 Tasks are derived from the actual files present in the repository.
 Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 
@@ -148,7 +157,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 
 ---
 
-## game-template (`game-template/src/`)
+## game-template (`game-templates/arcade/src/`)
 
 - [x] Bevy plugin (`GamePlugin`) with `handle_input_system` and `tick_system`
 - [x] Implements `GameLogic` for `GamePluginState`
@@ -160,7 +169,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 
 ---
 
-## game-template-fps (`game-template-fps/src/`)
+## game-template-fps (`game-templates/fps/src/`)
 
 - [x] Crate: `magnetite-fps-starter` (Bevy + rapier3d + magnetite-sdk)
 - [x] `GameLogic` implemented for `FpsGame`
@@ -174,7 +183,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 
 ---
 
-## game-template-motorsport (`game-template-motorsport/src/`)
+## game-template-motorsport (`game-templates/motorsport/src/`)
 
 - [x] Crate: `magnetite-game-motorsport` (Bevy + rapier3d + magnetite-sdk)
 - [x] `GameLogic` implemented for `MotorsportGame`
@@ -427,7 +436,7 @@ Check marks mean the code exists and compiles; unchecked items are genuine gaps.
 ## WASM build & hosting pipeline
 
 - [x] Backend distribution module: artifact/version registration, play-manifest endpoint, build-webhook receiver (`backend/src/api/distribution.rs` + migration `20260530_game_distribution.sql`)
-- [x] `game-template/build.sh` WASM build script (cargo + wasm-bindgen + wasm-opt stub)
+- [x] `game-templates/arcade/build.sh` WASM build script (cargo + wasm-bindgen + wasm-opt stub)
 - [x] `game-ci.yml` / `game-deploy.yml` wired with WASM build steps and S3 upload placeholders
 - [x] Developer dashboard: GameDeploy / DeploymentStatus / BuildLogs pages implemented
 - [ ] Platform CI: GitHub webhook → pull source → `cargo build --target wasm32-unknown-unknown` → wasm-opt → security scan → sandboxed smoke test → store artifact in S3 (wasm-opt step live)

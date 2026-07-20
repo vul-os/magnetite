@@ -1,6 +1,6 @@
 # FPS Starter Template
 
-The `game-template-fps/` crate (`magnetite-fps-starter`) is a ready-made advanced
+The `game-templates/fps/` crate (`magnetite-fps-starter`) is a ready-made advanced
 first-person shooter built on **Bevy + rapier3d**, controller-ready, and wired to the
 Magnetite SDK.
 
@@ -32,7 +32,7 @@ Magnetite SDK.
 
 ```bash
 git clone https://github.com/<org>/magnetite.git
-cd magnetite/game-template-fps
+cd magnetite/game-templates/fps
 ```
 
 ### Fast CI check (no Bevy compile)

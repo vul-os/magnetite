@@ -55,7 +55,7 @@ fi
 log ""
 
 # ── Step 1: Build game-template-authoritative to wasm32-wasip1 ───────────────
-GAME_CRATE="$REPO_ROOT/game-template-authoritative"
+GAME_CRATE="$REPO_ROOT/game-templates/authoritative"
 WASM_OUT="$GAME_CRATE/target/wasm32-wasip1/release/game_template_authoritative.wasm"
 
 log "Step 1: Building game-template-authoritative → wasm32-wasip1"
@@ -187,7 +187,7 @@ log "  (The convergence test binds a real ephemeral port; clients connect"
 log "   and receive server-authoritative state updates via WebSocket.)"
 log ""
 log "  To run individually:"
-log "    cd game-template-authoritative"
+log "    cd game-templates/authoritative"
 log "    cargo build --release --target wasm32-wasip1 --features wasm"
 log "    cd ../magnetite-e2e"
 log "    cargo test --test wasm_end_to_end -- --nocapture"

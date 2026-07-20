@@ -285,8 +285,8 @@ let cfg = MatchConfig::auto(player_count);  // SingleRoom / Dedicated / Sharded
 ```
 
 See [`backend/magnetite-sdk/`](backend/magnetite-sdk/) and
-[`game-template/`](game-template/) for the full starter, and
-[`game-template-authoritative/`](game-template-authoritative/) for the
+[`game-templates/arcade/`](game-templates/arcade/) for the full starter, and
+[`game-templates/authoritative/`](game-templates/authoritative/) for the
 canonical `AuthoritativeGame` reference implementation.
 
 ---

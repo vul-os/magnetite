@@ -1,8 +1,8 @@
 [package]
-name = "magnetite-fps-starter"
+name = "magnetite-game-template"
 version = "0.1.0"
 edition = "2021"
-description = "FPS starter template for the Magnetite platform — advanced 3D, Bevy + rapier3d, controller-ready."
+description = "Starter game template for the Magnetite platform — runs natively and in-browser via WASM."
 license = "MIT"
 
 # Produce both a cdylib (for WASM/wasm-bindgen) and an rlib (for tests / native linking).
@@ -11,53 +11,40 @@ crate-type = ["cdylib", "rlib"]
 
 # ── Feature flags ──────────────────────────────────────────────────────────────
 #
-# `native`  – full Bevy render stack + rapier3d for desktop; gilrs for gamepad.
+# `native`  – pulls in the full Bevy render/window/input stack for desktop.
 #             Usage:  cargo run --features native
 #
-# `wasm`    – Bevy ECS + winit + WebGL2 backend + rapier3d for browser;
-#             uses the Gamepad API (web-sys) for controller input.
+# `wasm`    – WASM-only build: Bevy ECS + winit + WebGL2 backend + browser
+#             panic hook.
 #             Usage:  cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
 #
-# *(neither)* – SDK-only: no Bevy, no rapier, no render stack.
+# *(neither)* – SDK + wasm-bindgen glue only, no Bevy crates compiled.
 #               Used by `cargo check` / `cargo test` in CI for a fast pass.
 [features]
-default = []
-
 native = [
     "dep:bevy",
-    "bevy/default",
-    "dep:bevy_rapier3d",
-    "bevy_rapier3d/debug-render-3d",
-    "dep:gilrs",
+    "bevy/default",           # window + renderer + audio + all standard plugins
 ]
-
 wasm = [
     "dep:bevy",
-    "bevy/bevy_winit",
-    "bevy/webgl2",
-    "dep:bevy_rapier3d",
+    "bevy/bevy_winit",        # Bevy→winit bridge (required for run())
+    "bevy/webgl2",            # WebGL2 rendering backend
     "dep:console_error_panic_hook",
     "dep:web-sys",
 ]
 
 # ── Common dependencies ────────────────────────────────────────────────────────
 [dependencies]
-# The Magnetite platform SDK — GameLogic, Input, InputMap, GameState, comms, …
-magnetite-sdk = { path = "../backend/magnetite-sdk" }
+# magnetite-sdk provides GameLogic, Input, GameState, PlayerId, …
+magnetite-sdk = { path = "../../backend/magnetite-sdk" }
 
-# Bevy — optional; compiled only when `native` or `wasm` feature is active.
+# Bevy — optional; only compiled when `native` or `wasm` feature is active.
 bevy = { version = "0.14", default-features = false, optional = true }
-
-# rapier3d — Bevy physics plugin for 3-D rigid-body + character collisions.
-# optional: only compiled with the render features.
-bevy_rapier3d = { version = "0.27", default-features = false, optional = true }
-
-# gilrs — game-controller / gamepad support for native builds.
-gilrs = { version = "0.10", optional = true }
 
 serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"
 wasm-bindgen = "0.2"
+# getrandom js feature is required on wasm32 for anything that needs entropy.
 getrandom   = { version = "0.2", features = ["js"] }
 
 # ── WASM-only dependencies ─────────────────────────────────────────────────────
@@ -67,18 +54,20 @@ web-sys = { version = "0.3", optional = true, features = [
     "Window",
     "Document",
     "HtmlCanvasElement",
-    "Gamepad",
-    "GamepadButton",
-    "GamepadEvent",
-    "Navigator",
+    "WebGlRenderingContext",
 ] }
+
+# ── Dev dependencies (tests run on the host) ──────────────────────────────────
+[dev-dependencies]
+# nothing extra needed; serde_json is already a normal dep
 
 # ── Build profiles ─────────────────────────────────────────────────────────────
 [profile.release]
+# Small + fast WASM binaries: LTO + size optimisation.
 lto           = true
 opt-level     = "z"
 codegen-units = 1
-panic         = "abort"
+panic         = "abort"   # required for wasm32; also shrinks native
 
 [profile.dev]
 opt-level = 0

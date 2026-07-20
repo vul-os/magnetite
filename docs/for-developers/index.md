@@ -26,9 +26,9 @@ Build Rust games on Magnetite — from a weekend jam to a COD-scale AAA title.
 ## One-minute summary
 
 1. **Clone** a starter template:
-   - `game-template/` — 2D arcade, any genre
-   - `game-template-fps/` — advanced 3D FPS
-   - `game-template-motorsport/` — vehicle physics + racing
+   - `game-templates/arcade/` — 2D arcade, any genre
+   - `game-templates/fps/` — advanced 3D FPS
+   - `game-templates/motorsport/` — vehicle physics + racing
 2. **Implement** the `GameLogic` trait: `new()`, `handle_input()`, `tick()`, `state()`.
 3. **Build** to WASM: `bash build.sh` (wraps `cargo build --target wasm32-unknown-unknown`
    + `wasm-bindgen`).

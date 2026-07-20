@@ -282,7 +282,7 @@ build_game() {
 
     # Build for wasm32-wasip1 with the --features wasm flag (exposes mag_* ABI exports).
     # The game crate must have a [features] wasm section in Cargo.toml that enables
-    # the mag_* export functions (see game-template-authoritative/src/wasm_abi.rs).
+    # the mag_* export functions (see game-templates/authoritative/src/wasm_abi.rs).
     echo "=== cargo build --target wasm32-wasip1 ==="
     (
       cd "$src_dir"

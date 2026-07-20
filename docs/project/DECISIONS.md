@@ -1,5 +1,17 @@
 # Magnetite — Autonomous Build Decisions & Design System
 
+> **[2026-07-20] PARTLY SUPERSEDED — historical record.**
+> Moved here from the repository root. This document is kept for the record, not
+> as current guidance. In particular the **"PAYMENTS PIVOT — remove crypto → Wise
+> for payouts" decision immediately below was later REVERSED**: Magnetite is now
+> non-custodial, there is no fiat on-ramp, and Paystack/Wise/custodial balances/
+> the 70/30 split were deleted from the codebase. For the current design see
+> [`DECENTRALIZATION.md`](../../DECENTRALIZATION.md) and
+> [Payments](../payments.md). Decisions unrelated to payments may still hold —
+> check them against the code before relying on them.
+
+---
+
 ## ⚑ PAYMENTS PIVOT (2026-06-01, user directive): REMOVE CRYPTO → WISE FOR PAYOUTS
 **Crypto/USDC/Circle is removed entirely. The platform is fiat-only.** Grounded decisions (Wave PAY):
 - **D-PAY-1 — Currency:** Wallet/earnings/marketplace are denominated in **USD** (fiat). Remove all "USDC",
@@ -852,7 +864,7 @@ pub enum ServerNet {
 
 ## 9. MOAT — Wave N1 (2026-06-01): CLI + Reference Game
 
-**Agents: CLI (owns `magnetite-cli/`) + Reference Game (owns `game-template-authoritative/`)**
+**Agents: CLI (owns `magnetite-cli/`) + Reference Game (owns `game-templates/authoritative/`)**
 
 ### Crossroads recorded
 
@@ -879,7 +891,7 @@ pub enum ServerNet {
 ### Files created
 
 ```
-game-template-authoritative/
+game-templates/authoritative/
   Cargo.toml                  — cdylib+rlib, wasm feature, deps: magnetite-sdk/serde/serde_json
   src/lib.rs                  — crate root, pub re-exports
   src/types.rs                — ArenaSnapshot/Delta/View/Command/ShooterPlayer/Projectile + constants
@@ -1070,7 +1082,7 @@ magnetite-cli/
 
 ## N3 — Wasm end-to-end pipeline proof (Wave N3, 2026-06-01)
 
-**Agent: N3 (owns `magnetite-e2e/tests/wasm_end_to_end.rs` + `scripts/moat-demo.sh`; reads `game-template-authoritative/` for wasm build config only; does NOT modify runtime/sandbox/cli sources)**
+**Agent: N3 (owns `magnetite-e2e/tests/wasm_end_to_end.rs` + `scripts/moat-demo.sh`; reads `game-templates/authoritative/` for wasm build config only; does NOT modify runtime/sandbox/cli sources)**
 
 ### Goal
 
@@ -1091,7 +1103,7 @@ Prove the one-command pipeline: compile `game-template-authoritative` to `wasm32
 | Step | Result |
 |---|---|
 | `rustup target add wasm32-wasip1` | installed |
-| `cargo build --release --target wasm32-wasip1 --features wasm` (in `game-template-authoritative/`) | **EXIT 0** — artifact at `target/wasm32-wasip1/release/game_template_authoritative.wasm` |
+| `cargo build --release --target wasm32-wasip1 --features wasm` (in `game-templates/authoritative/`) | **EXIT 0** — artifact at `target/wasm32-wasip1/release/game_template_authoritative.wasm` |
 | `cargo check --tests` (magnetite-e2e) | **0 warnings, EXIT 0** |
 | `cargo fmt --check` (magnetite-e2e) | **clean, EXIT 0** |
 | `cargo test --test wasm_end_to_end` | **3/3 pass, EXIT 0** |
@@ -1152,7 +1164,7 @@ Prove the one-command pipeline: compile `game-template-authoritative` to `wasm32
 | `game-client-bevy` | 0 warnings (`--no-default-features`) | clean | 21 tests (`--no-default-features`) |
 | `magnetite-e2e` | 0 warnings | clean | 3 tests pass; 2 bench `#[ignore]`-gated |
 
-**WASM build:** `cargo build --release --target wasm32-wasip1 --features wasm` in `game-template-authoritative/` exits 0; artifact at `target/wasm32-wasip1/release/game_template_authoritative.wasm`.
+**WASM build:** `cargo build --release --target wasm32-wasip1 --features wasm` in `game-templates/authoritative/` exits 0; artifact at `target/wasm32-wasip1/release/game_template_authoritative.wasm`.
 
 ---
 

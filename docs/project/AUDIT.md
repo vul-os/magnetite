@@ -1,5 +1,14 @@
 # Magnetite — Wiring & Security Audit (2026-06-01)
 
+> **[2026-07-20] HISTORICAL — closed audit wave.**
+> Moved here from the repository root. This is the record of the 2026-06-01
+> audit wave, whose critical and high findings were resolved (see the status
+> note below). It predates the decentralization redesign, so its file and
+> module references may no longer resolve. Kept as the audit record; it is not
+> a live findings list.
+
+---
+
 > Read-only audit, 5 agents. Severity counts: **16 critical · 36 high · 30 medium · 7 low**.
 >
 > **STATUS 2026-06-03 (CONSOLIDATE+OBSERVE wave — Agent 5 docs+audit consolidation):** All

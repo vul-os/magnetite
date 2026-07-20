@@ -83,7 +83,7 @@ docker compose -f docker-compose.yml config --services
 ### Step 2 — wasm build
 
 ```bash
-cd game-template-authoritative
+cd game-templates/authoritative
 cargo build --release --target wasm32-wasip1 --features wasm
 # artifact: target/wasm32-wasip1/release/game_template_authoritative.wasm
 ```

@@ -1,10 +1,9 @@
 // Game Template Registry — GET /api/v1/templates
 //
 // Returns the list of available game templates that a developer can scaffold
-// from. Templates are backed by the real on-disk crates under the repo root
-// (game-template, game-template-authoritative, game-template-fps,
-// game-template-motorsport) plus a hard-coded "arcade" entry that points to
-// the plain game-template crate.
+// from. Templates are backed by the real on-disk crates under game-templates/
+// (arcade, authoritative, fps, motorsport). Directory names match the catalog
+// `id` values below.
 //
 // No auth required — templates are public catalog data.
 
@@ -65,8 +64,8 @@ static TEMPLATES: &[GameTemplate] = &[
                        and quick prototypes. No Bevy, no rapier — just pure Rust logic and the \
                        Magnetite SDK.",
         graphics_tier: GraphicsTier::Lite2d,
-        template_path: "game-template",
-        template_repo: "magnetite/game-template",
+        template_path: "game-templates/arcade",
+        template_repo: "magnetite/game-templates/arcade",
         preview_url: None,
         starter_files: &["Cargo.toml", "src/lib.rs", "src/game.rs", "README.md"],
     },
@@ -79,8 +78,8 @@ static TEMPLATES: &[GameTemplate] = &[
                        deterministic tick loop, interest-filtered views (anti-wallhack), \
                        WASM ABI for the sandbox executor, and replay verification.",
         graphics_tier: GraphicsTier::Lite2d,
-        template_path: "game-template-authoritative",
-        template_repo: "magnetite/game-template-authoritative",
+        template_path: "game-templates/authoritative",
+        template_repo: "magnetite/game-templates/authoritative",
         preview_url: None,
         starter_files: &[
             "Cargo.toml",
@@ -100,8 +99,8 @@ static TEMPLATES: &[GameTemplate] = &[
                        input mapping, a static level, and an optional Bevy rendering client. \
                        Scales from browser WASM to dedicated server.",
         graphics_tier: GraphicsTier::Standard3d,
-        template_path: "game-template-fps",
-        template_repo: "magnetite/game-template-fps",
+        template_path: "game-templates/fps",
+        template_repo: "magnetite/game-templates/fps",
         preview_url: None,
         starter_files: &[
             "Cargo.toml",
@@ -123,8 +122,8 @@ static TEMPLATES: &[GameTemplate] = &[
                        Bevy ECS rendering client. Zero rapier dependency on the server path — \
                        `cargo check --no-default-features` stays fast.",
         graphics_tier: GraphicsTier::Advanced3d,
-        template_path: "game-template-motorsport",
-        template_repo: "magnetite/game-template-motorsport",
+        template_path: "game-templates/motorsport",
+        template_repo: "magnetite/game-templates/motorsport",
         preview_url: None,
         starter_files: &[
             "Cargo.toml",

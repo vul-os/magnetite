@@ -308,4 +308,4 @@ in place with every seam defaulting to a working offline provider; landing + doc
 - Program against §3 traits only; never leak a provider type into runtime/scheduler/payment code.
 - Every seam keeps a working non-chain default; CI must pass with zero external services.
 - Keep the game core (authority/sandbox/replay) intact — that's the moat.
-- Record progress in `DECENTRALIZATION_PROGRESS.md` (append-only log: task id, files touched, status).
+- Record progress in `docs/project/DECENTRALIZATION_PROGRESS.md` (append-only log: task id, files touched, status).

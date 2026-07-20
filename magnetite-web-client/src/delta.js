@@ -3,7 +3,7 @@
  *
  * Apply an ArenaDelta onto an ArenaView/ArenaSnapshot state.
  *
- * ArenaDelta shape (mirrors game-template-authoritative/src/types.rs):
+ * ArenaDelta shape (mirrors game-templates/authoritative/src/types.rs):
  *   {
  *     changed_players: ShooterPlayer[],
  *     removed_projectile_ids: u64[],

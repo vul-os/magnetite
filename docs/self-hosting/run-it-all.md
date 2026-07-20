@@ -162,7 +162,7 @@ export BUILD_RUNNER_TOKEN=<token-from-register-output>
 
 ./scripts/wasm-build-runner.sh \
   --game-id <game-uuid> \
-  --path ./game-template-authoritative
+  --path ./game-templates/authoritative
 ```
 
 What this script does:
@@ -178,7 +178,7 @@ What this script does:
 ```bash
 ./scripts/wasm-build-runner.sh \
   --game-id any-uuid \
-  --path ./game-template-authoritative \
+  --path ./game-templates/authoritative \
   --dry-run
 ```
 
@@ -373,7 +373,7 @@ Ensure you pass the path to the crate root (the directory containing
 `Cargo.toml`), not the workspace root:
 
 ```bash
-./scripts/wasm-build-runner.sh -g <uuid> -p ./game-template-authoritative
+./scripts/wasm-build-runner.sh -g <uuid> -p ./game-templates/authoritative
 ```
 
 ### `run-runtime.sh` — `cargo run` takes a long time on first run

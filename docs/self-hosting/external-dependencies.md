@@ -191,7 +191,7 @@ If email credentials are absent:
 
 ## Roadmap
 
-The items above are tracked in `TASKS.md`. Contributions that integrate dedicated
+The items above are tracked in `docs/project/TASKS.md`. Contributions that integrate dedicated
 game server allocation (e.g. via Agones), automate the WASM CI pipeline, implement a
 real on-chain `PaymentRail`, or improve the media deployment story are welcome — see
 [CONTRIBUTING.md](../../CONTRIBUTING.md).

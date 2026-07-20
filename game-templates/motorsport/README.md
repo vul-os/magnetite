@@ -1,7 +1,7 @@
 # Circuit Rush — Magnetite Motorsport Starter
 
 A racing / motorsport game starter template built on the
-[Magnetite platform SDK](../backend/magnetite-sdk).  Demonstrates:
+[Magnetite platform SDK](../../backend/magnetite-sdk).  Demonstrates:
 
 - **Bevy + rapier3d** vehicle physics on the Magnetite SDK
 - **Gamepad / controller input** — analog throttle (right trigger), brake

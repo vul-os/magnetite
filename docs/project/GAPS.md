@@ -1,5 +1,14 @@
 # Magnetite — Gap Audit (re-audit post F1+F2, 2026-05-30)
 
+> **[2026-07-20] STALE — historical record.**
+> Moved here from the repository root. This gap audit predates the
+> decentralization redesign and describes the platform in its "one big backend"
+> shape. Superseded by [`DECENTRALIZATION.md`](../../DECENTRALIZATION.md) (the
+> spec) and [DECENTRALIZATION_PROGRESS.md](./DECENTRALIZATION_PROGRESS.md)
+> (what actually landed). Do not use it as a current to-do list.
+
+---
+
 > Re-audit performed by the RE-AUDIT partition agent after F1 and F2 fix waves are
 > committed. Every claim below was verified by reading the actual .rs and .jsx files;
 > line numbers reference the state of the working tree at the time of this re-audit.
@@ -119,8 +128,8 @@ These are real gaps in the current working tree, confirmed by code inspection.
 | low | stub | `useVoice` — `joinRoom` catch path returns `mock-voice-token-${roomId}-${Date.now()}`; only triggered when `VITE_USE_MOCKS=true` | `src/hooks/useVoice.js:73-74` |
 | low | partial | SDK networking layer (`TickLoop`, `PredictionBuffer`, `StateSyncProtocol`) — real typed implementations with unit tests; no server-side driver calls `TickLoop` on a real async runtime in the backend binary | `backend/magnetite-sdk/src/networking.rs` |
 | low | partial | `StreamPlayer` — `if (hlsUrl) { video.src = hlsUrl }` works for native HLS (Safari); comment says "HLS.js would be loaded here dynamically in production" but no HLS.js import exists; `<video>` shows "Awaiting media source" without a real `hlsUrl` | `src/components/streaming/StreamPlayer.jsx:38-41` |
-| low | stub | `game-template-fps` `input_map.rs` — `gamepad_button()` always returns `false` (native gilrs integration is a documented future path) | `game-template-fps/src/input_map.rs:307-328` |
-| low | stub | `game-template-fps` `bevy_client.rs` — `hud_text()` is `#[allow(dead_code)]` placeholder | `game-template-fps/src/bevy_client.rs:429` |
+| low | stub | `game-template-fps` `input_map.rs` — `gamepad_button()` always returns `false` (native gilrs integration is a documented future path) | `game-templates/fps/src/input_map.rs:307-328` |
+| low | stub | `game-template-fps` `bevy_client.rs` — `hud_text()` is `#[allow(dead_code)]` placeholder | `game-templates/fps/src/bevy_client.rs:429` |
 
 ---
 
@@ -134,7 +143,7 @@ All four are now implemented as real, compiling, tested Rust crates. Evidence is
 | **Scale primitive** — `SingleRoom` / `Dedicated` / `Sharded` topology auto-selection; identical game code across all three | **closed** | `backend/magnetite-sdk/src/authority.rs` — `Topology` enum, `MatchConfig::auto()`, `NativeExecutor<G: AuthoritativeGame>`; `magnetite-runtime/` — `TickScheduler` + `ShardManager` (N1 single-shard seam, handoff hook for N2+); `magnetite-e2e/tests/scale_bench.rs` — throughput bench across SingleRoom→Dedicated |
 | **Sandbox** — untrusted game logic runs in Wasmtime with fuel/memory/epoch limits; deterministic (no wall clock, no OS random) | **closed** | `magnetite-sandbox/` — `WasmExecutor` implementing `GameExecutor`; `LimitsConfig` (fuel/memory/epoch); 9 WASI stub imports (clock→ENOSYS, random→ENOSYS); `magnetite-e2e/tests/wasm_end_to_end.rs` — `wasm_sandbox_parity_with_native` proves identical state_hash vs `NativeExecutor` over 30 ticks |
 | **Anti-cheat** — server-authoritative by construction; composable `Validator` chain; deterministic replay re-simulation; trust-score escalation | **closed** | `magnetite-anticheat/` — `Anticheat`, `AimbotSnap`, `PositionTeleport`, `FireRateCooldown`, `InputFlood`, `TrustScoreMap`, `ReplayVerifier`; `magnetite-e2e/tests/anticheat.rs` — `anticheat_rejects_speedhack_and_escalates_trust_score` + `anticheat_allows_honest_client`; `magnetite-e2e/tests/convergence.rs` — `verify_replay` returns `Clean` |
-| **One-command pipeline** — `magnetite new\|build\|dev\|deploy`; `cargo build --target wasm32-wasip1` → `WasmExecutor` → live server → connect URL | **closed** | `magnetite-cli/` — `magnetite new\|build\|dev\|deploy` binary (clap 4); `game-template-authoritative/src/wasm_abi.rs` — `mag_*` ABI exports (behind `--features wasm`); `scripts/moat-demo.sh` — one-command build→sandbox-parity→convergence→fmt→check pipeline; `magnetite-e2e/tests/wasm_end_to_end.rs` — end-to-end proof |
+| **One-command pipeline** — `magnetite new\|build\|dev\|deploy`; `cargo build --target wasm32-wasip1` → `WasmExecutor` → live server → connect URL | **closed** | `magnetite-cli/` — `magnetite new\|build\|dev\|deploy` binary (clap 4); `game-templates/authoritative/src/wasm_abi.rs` — `mag_*` ABI exports (behind `--features wasm`); `scripts/moat-demo.sh` — one-command build→sandbox-parity→convergence→fmt→check pipeline; `magnetite-e2e/tests/wasm_end_to_end.rs` — end-to-end proof |
 
 ---
 

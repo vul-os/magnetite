@@ -48,8 +48,8 @@ cd my-game
 
 > `magnetite new` takes a name only — there is **no `--template` flag**. It
 > emits one canonical scaffold. To start from a richer starter, copy
-> `game-template/`, `game-template-authoritative/`, `game-template-fps/`, or
-> `game-template-motorsport/` from this repository instead.
+> `game-templates/arcade/`, `game-templates/authoritative/`, `game-templates/fps/`, or
+> `game-templates/motorsport/` from this repository instead.
 
 `magnetite new` creates a ready-to-build crate:
 
@@ -120,7 +120,7 @@ impl AuthoritativeGame for MyGame {
   strips these capabilities).
 
 See the [SDK Reference](./sdk.md) for all types, and the reference
-implementation in `game-template-authoritative/src/game.rs`.
+implementation in `game-templates/authoritative/src/game.rs`.
 
 ---
 

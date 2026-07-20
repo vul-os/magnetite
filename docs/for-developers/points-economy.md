@@ -147,7 +147,7 @@ println!("Balance: {} pts", balance.balance);
 The motorsport template awards points when a player completes a lap:
 
 ```rust
-// game-template-motorsport/src/lib.rs
+// game-templates/motorsport/src/lib.rs
 use magnetite_sdk::platform::points::{AwardPointsRequest, PointsClient};
 
 fn on_lap_complete(&self, player_id: PlayerId, lap_time_ms: u64) {

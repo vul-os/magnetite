@@ -1,5 +1,41 @@
 # Changelog
 
+## [Unreleased] — Repository structure
+
+### Changed
+- **Game templates consolidated.** The four root-level template crates moved
+  under a single `game-templates/` directory, and their directory names now
+  match the template-catalog `id` values served by `GET /api/v1/templates`:
+  - `game-template/` → `game-templates/arcade/`
+  - `game-template-authoritative/` → `game-templates/authoritative/`
+  - `game-template-fps/` → `game-templates/fps/`
+  - `game-template-motorsport/` → `game-templates/motorsport/`
+
+  Cargo **package names are unchanged** (`magnetite-game-template`,
+  `game-template-authoritative`, `magnetite-fps-starter`,
+  `magnetite-game-motorsport`) — only paths moved, so `cargo` dependency
+  entries that refer to crates by name keep working. Path dependencies
+  (`game-client-bevy`, `magnetite-e2e`, and each template's `magnetite-sdk`
+  dep) were re-pointed.
+
+  The `template_path` / `template_repo` fields in the templates API now report
+  the new locations — **API response values changed**.
+
+- **Root markdown folded into `docs/`.** The repository root now carries only
+  the files tooling and GitHub expect (`README.md`, `CONTRIBUTING.md`,
+  `CHANGELOG.md`, `LICENSE`) plus `DECENTRALIZATION.md`, which stays at the
+  root because it is the active anchor spec referenced by path from outside
+  this repository. `AUDIT.md`, `DECISIONS.md`, `GAPS.md`, `TASKS.md`,
+  `roadmap.md`, and `DECENTRALIZATION_PROGRESS.md` moved to `docs/project/`
+  with a new [`docs/project/index.md`](docs/project/index.md) index. Documents
+  that are superseded or predate the decentralization redesign now carry a
+  dated header saying so; none were deleted.
+
+  **Note for agents:** the decentralization progress log is now at
+  `docs/project/DECENTRALIZATION_PROGRESS.md`.
+
+---
+
 ## [Unreleased] — Gaming Suite (Waves 6–9)
 
 This entry covers the full gaming suite expansion on top of the completed

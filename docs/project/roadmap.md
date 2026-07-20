@@ -1,5 +1,13 @@
 # Magnetite — Platform Roadmap
 
+> **[2026-07-20] STALE — historical record.**
+> Moved here from the repository root. This roadmap is from the centralized era
+> and its phases no longer map to how Magnetite is built. Superseded by
+> [`DECENTRALIZATION.md`](../../DECENTRALIZATION.md) and
+> [DECENTRALIZATION_PROGRESS.md](./DECENTRALIZATION_PROGRESS.md).
+
+---
+
 **Magnetite (Fe₃O₄)** — Iron oxide, magnetic, grounded.
 
 *Build, distribute, and monetize Rust games — from a weekend jam to a COD-scale AAA title.*
@@ -165,7 +173,7 @@ Wire the complete platform to the "Rust games at any scale" vision; replace stal
 Ship the end-to-end path from developer Rust source to player-facing WASM game.
 
 - [x] Backend distribution API: artifact/version registration, play-manifest endpoint, build-webhook receiver
-- [x] `game-template/build.sh`: cargo → wasm-bindgen → wasm-opt pipeline defined
+- [x] `game-templates/arcade/build.sh`: cargo → wasm-bindgen → wasm-opt pipeline defined
 - [x] `game-ci.yml` / `game-deploy.yml`: WASM build steps + S3 upload placeholders
 - [x] Developer portal pages: GameDeploy, DeploymentStatus, BuildLogs implemented
 - [ ] Platform CI: live end-to-end (GitHub webhook → pull source → `cargo build --target wasm32-unknown-unknown` → wasm-opt → security scan → sandboxed smoke test → store artifact in S3)
@@ -222,8 +230,8 @@ Extend Magnetite from a game host into a full gaming suite with Discord-class co
 - [x] **240 tests pass, 0 warnings**
 
 ### Game templates
-- [x] `game-template-fps/` (`magnetite-fps-starter`): Bevy + rapier3d, hitscan, gamepad look/move/shoot, Advanced3D tier; `cargo check --no-default-features` 0/0, 38 tests
-- [x] `game-template-motorsport/` (`magnetite-game-motorsport`): vehicle physics, analog throttle/brake/steer, lap → points, rapier3d; `cargo check --no-default-features` 0/0, 26 tests
+- [x] `game-templates/fps/` (`magnetite-fps-starter`): Bevy + rapier3d, hitscan, gamepad look/move/shoot, Advanced3D tier; `cargo check --no-default-features` 0/0, 38 tests
+- [x] `game-templates/motorsport/` (`magnetite-game-motorsport`): vehicle physics, analog throttle/brake/steer, lap → points, rapier3d; `cargo check --no-default-features` 0/0, 26 tests
 
 ### Frontend
 - [x] Communities page (`/communities`): server rail, channel list, real-time chat, typing indicators, voice panel, member list, presence dots, CommsProvider context

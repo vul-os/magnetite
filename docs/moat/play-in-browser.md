@@ -341,4 +341,4 @@ echo $GAME_SERVER_WS_BASE
 - [architecture-overview.md](architecture-overview.md) — per-tick pipeline
   and crate map
 - `magnetite-web-client/src/` — web client source
-- `game-template-authoritative/src/game.rs` — reference `View` / `Delta` shapes
+- `game-templates/authoritative/src/game.rs` — reference `View` / `Delta` shapes

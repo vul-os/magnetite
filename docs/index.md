@@ -41,6 +41,7 @@ database, no payment provider.
 | [Comms Suite (builtin provider)](./comms/index.md) | The in-house chat/presence/voice/streaming stack, now one adapter among several |
 | [Self-Hosting Guide](./self-hosting/index.md) | Docker Compose, Fly.io, k8s, Nomad deployments |
 | [Security & Sandboxing](./security/index.md) | Auth, sandboxing, anti-cheat, signature verification |
+| [Project History](./project/index.md) | Progress log, recorded decisions, audits, roadmap, task lists |
 | [API Reference](./api-reference/index.md) | REST API endpoints |
 
 ---
@@ -116,10 +117,11 @@ magnetite/
 ├── magnetite-cli/                  # magnetite new|build|dev|node|deploy binary (clap 4)
 ├── magnetite-web-client/           # JS web client (ClientNet/ServerNet); prediction; replay player
 ├── magnetite-e2e/                  # Integration, full-stack, sharded, scale-bench, decentralized-loop tests
-├── game-template/                  # 2D arcade starter (Bevy + GameLogic + WASM-ready)
-├── game-template-authoritative/    # Arena shooter reference (AuthoritativeGame + wasm ABI)
-├── game-template-fps/              # FPS starter (Bevy + rapier3d; hitscan; gamepad)
-├── game-template-motorsport/       # Motorsport starter (Bevy + rapier3d; lap → points)
+├── game-templates/                 # Starter game crates (dir name == template catalog id)
+│   ├── arcade/                     # 2D arcade starter (Bevy + GameLogic + WASM-ready)
+│   ├── authoritative/              # Arena shooter reference (AuthoritativeGame + wasm ABI)
+│   ├── fps/                        # FPS starter (Bevy + rapier3d; hitscan; gamepad)
+│   └── motorsport/                 # Motorsport starter (Bevy + rapier3d; lap → points)
 ├── game-client-bevy/               # Bevy client (prediction/reconciliation wired to ServerNet)
 ├── src/                            # React 19 frontend (server browser, wallet, storefront)
 │   ├── i18n/                       # I18nProvider, useTranslation, en/es/fr JSON locales
@@ -133,9 +135,9 @@ magnetite/
 ├── .github/workflows/              # CI, deploy, game-ci, game-deploy, release
 ├── docker-compose.yml              # Local stack; MediaMTX is an opt-in profile, not a dependency
 ├── Dockerfile.backend / Dockerfile.frontend / Dockerfile.fly
-├── DECENTRALIZATION.md             # The redesign spec — seams, backlog, guardrails
-├── DECENTRALIZATION_PROGRESS.md    # Append-only log of what actually landed
+├── DECENTRALIZATION.md             # The redesign spec — seams, backlog, guardrails (kept at root)
 └── docs/                           # This documentation tree
+    └── project/                    # Program history: progress log, decisions, audits, roadmap
 ```
 
 ---

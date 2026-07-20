@@ -28,7 +28,7 @@ magnetite-sandbox/      (new)  — Wasmtime WasmExecutor
 magnetite-anticheat/    (new)  — composable validators + replay verifier
 magnetite-cli/          (new)  — `magnetite` binary
 
-game-template-authoritative/   — reference arena shooter
+game-templates/authoritative/   — reference arena shooter
 game-client-bevy/              — reference Bevy client
 magnetite-e2e/                 — integration test suite
 ```
@@ -89,7 +89,7 @@ magnetite-e2e/                 — integration test suite
 
 Everything else depends on these types. They are defined in
 `backend/magnetite-sdk/src/authority.rs` and must not change without a
-recorded decision in `DECISIONS.md`.
+recorded decision in `docs/project/DECISIONS.md`.
 
 ### `AuthoritativeGame`
 
@@ -298,7 +298,7 @@ All `-> u32` returns are pointers to a 4-byte LE length prefix followed by
 a JSON payload in the guest's linear memory. The sandbox reads the length,
 copies the bytes out, and deserialises.
 
-See `game-template-authoritative/src/wasm_abi.rs` for the reference
+See `game-templates/authoritative/src/wasm_abi.rs` for the reference
 implementation.
 
 ---
@@ -405,8 +405,8 @@ The client uses `magnetite_sdk::networking::PredictionBuffer` to:
 
 | Purpose | Location |
 |---|---|
-| Arena shooter (full `AuthoritativeGame`) | `game-template-authoritative/src/game.rs` |
-| Wasm ABI exports | `game-template-authoritative/src/wasm_abi.rs` |
+| Arena shooter (full `AuthoritativeGame`) | `game-templates/authoritative/src/game.rs` |
+| Wasm ABI exports | `game-templates/authoritative/src/wasm_abi.rs` |
 | Bevy client app | `game-client-bevy/src/app.rs` |
 | Client prediction/reconciliation | `game-client-bevy/src/prediction.rs` |
 | WebSocket transport | `game-client-bevy/src/net.rs` |

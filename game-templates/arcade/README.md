@@ -9,7 +9,7 @@
 ## What's here
 
 ```
-game-template/
+game-templates/arcade/
 ├── Cargo.toml        — dependencies + feature flags (native / wasm)
 ├── src/
 │   └── lib.rs        — game logic + Bevy plugin + wasm-bindgen entry points
@@ -46,7 +46,7 @@ it exercises every part of the `magnetite-sdk`:
 
 ```bash
 # From the repo root
-cd game-template
+cd game-templates/arcade
 
 # Build and open a desktop window (requires a GPU / display)
 cargo run --features native
@@ -76,7 +76,7 @@ cargo install wasm-opt --locked  # or use the system binaryen package
 ### Build
 
 ```bash
-# From game-template/
+# From game-templates/arcade/
 ./build.sh               # release build → dist/
 ./build.sh --dev         # debug build (no optimisations)
 ./build.sh --check       # cargo check only (fastest; no WASM output)
@@ -86,7 +86,7 @@ cargo install wasm-opt --locked  # or use the system binaryen package
 Or call the central script from the repo root:
 
 ```bash
-GAME_DIR=./game-template ./scripts/build-game.sh
+GAME_DIR=./game-templates/arcade ./scripts/build-game.sh
 ```
 
 ### Output
@@ -173,7 +173,7 @@ const tick   = game.tick_count();              // number
 ## CI/CD
 
 The workflow at `.github/workflows/game-ci.yml` runs on every push that touches
-`game-template/` or the SDK:
+`game-templates/arcade/` or the SDK:
 
 | Job | What it does |
 |-----|-------------|
@@ -189,4 +189,4 @@ To deploy manually: **Actions → Game CI → Run workflow → deploy: true**.
 
 ## License
 
-MIT — see [LICENSE](../LICENSE).
+MIT — see [LICENSE](../../LICENSE).

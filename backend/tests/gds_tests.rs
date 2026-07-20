@@ -49,7 +49,7 @@ mod templates_catalog_tests {
     fn arcade_template_is_lite2d() {
         let t = find_template("arcade").expect("arcade template missing");
         assert!(matches!(t.graphics_tier, GraphicsTier::Lite2d));
-        assert_eq!(t.template_path, "game-template");
+        assert_eq!(t.template_path, "game-templates/arcade");
     }
 
     #[test]
@@ -154,7 +154,7 @@ mod templates_catalog_tests {
     fn authoritative_template_path_matches_repo_dir() {
         let t = find_template("authoritative").unwrap();
         // The template_path must match the on-disk directory name.
-        assert_eq!(t.template_path, "game-template-authoritative");
+        assert_eq!(t.template_path, "game-templates/authoritative");
     }
 }
 
@@ -233,8 +233,8 @@ mod scaffold_logic_tests {
         let crate_name = "my_fps";
         let cli_command = build_cli_command(crate_name, template.id);
 
-        assert_eq!(template.template_path, "game-template-fps");
-        assert_eq!(template.template_repo, "magnetite/game-template-fps");
+        assert_eq!(template.template_path, "game-templates/fps");
+        assert_eq!(template.template_repo, "magnetite/game-templates/fps");
         assert!(cli_command.contains("fps"));
     }
 
@@ -399,8 +399,8 @@ mod scaffold_response_roundtrip_tests {
             game_id: Uuid::new_v4(),
             scaffold: ScaffoldInfo {
                 cli_command: "magnetite new my_shooter --template authoritative".to_string(),
-                template_path: "game-template-authoritative".to_string(),
-                template_repo: "magnetite/game-template-authoritative".to_string(),
+                template_path: "game-templates/authoritative".to_string(),
+                template_repo: "magnetite/game-templates/authoritative".to_string(),
                 starter_files: vec![
                     "Cargo.toml".to_string(),
                     "src/lib.rs".to_string(),

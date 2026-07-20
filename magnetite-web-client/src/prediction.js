@@ -209,7 +209,7 @@ export class PredictionBuffer {
  * player only (we can't predict other players). Used as the default
  * `applyInput` function when createClient is used with the arena-shooter game.
  *
- * Constants match game-template-authoritative/src/types.rs:
+ * Constants match game-templates/authoritative/src/types.rs:
  *   MAX_SPEED = 4.0, ARENA_WIDTH = 200.0, ARENA_HEIGHT = 200.0
  */
 const ARENA_MAX_SPEED = 4.0;

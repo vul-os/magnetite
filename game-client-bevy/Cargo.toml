@@ -27,7 +27,7 @@ required-features = ["render"]
 # ── Dependencies ──────────────────────────────────────────────────────────────
 [dependencies]
 magnetite-sdk           = { path = "../backend/magnetite-sdk" }
-game-template-authoritative = { path = "../game-template-authoritative" }
+game-template-authoritative = { path = "../game-templates/authoritative" }
 
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -47,7 +47,7 @@ ewebsock = { version = "0.6", optional = true }
 [dev-dependencies]
 # Tests that don't need Bevy — only sdk + game-template types.
 magnetite-sdk           = { path = "../backend/magnetite-sdk" }
-game-template-authoritative = { path = "../game-template-authoritative" }
+game-template-authoritative = { path = "../game-templates/authoritative" }
 
 # ── Build profiles ─────────────────────────────────────────────────────────────
 [profile.release]

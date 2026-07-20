@@ -31,7 +31,7 @@
 //!
 //! ```sh
 //! # 1. Build the wasm (one-time):
-//! cd game-template-authoritative
+//! cd game-templates/authoritative
 //! cargo build --release --target wasm32-wasip1 --features wasm
 //!
 //! # 2. Run the parity test:
@@ -69,7 +69,7 @@ const SEED: u64 = 0xDEAD_CAFE_1337_BABE;
 ///
 /// The wasm must be built before running this test:
 ///   `cargo build --release --target wasm32-wasip1 --features wasm`
-/// from `game-template-authoritative/`.
+/// from `game-templates/authoritative/`.
 fn wasm_path() -> PathBuf {
     // The canonical release output path relative to the workspace root.
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -78,7 +78,8 @@ fn wasm_path() -> PathBuf {
         .to_path_buf();
 
     workspace_root
-        .join("game-template-authoritative")
+        .join("game-templates")
+        .join("authoritative")
         .join("target")
         .join("wasm32-wasip1")
         .join("release")
@@ -107,7 +108,7 @@ fn match_config() -> MatchConfig {
 /// `state_hash` on every tick given identical inputs and seed.
 ///
 /// This test requires the wasm artifact to be present at:
-///   `game-template-authoritative/target/wasm32-wasip1/release/game_template_authoritative.wasm`
+///   `game-templates/authoritative/target/wasm32-wasip1/release/game_template_authoritative.wasm`
 ///
 /// If the file is absent, the test is skipped with a clear message.
 #[test]
@@ -117,11 +118,11 @@ fn wasm_sandbox_parity_with_native() {
     if !wasm.exists() {
         println!("[SKIP] wasm artifact not found at {}", wasm.display());
         println!("Build it first:");
-        println!("  cd game-template-authoritative");
+        println!("  cd game-templates/authoritative");
         println!("  cargo build --release --target wasm32-wasip1 --features wasm");
         // Hard fail so the CI script can distinguish missing-artifact from pass.
         panic!(
-            "wasm artifact missing — run `cargo build --release --target wasm32-wasip1 --features wasm` in game-template-authoritative/ first"
+            "wasm artifact missing — run `cargo build --release --target wasm32-wasip1 --features wasm` in game-templates/authoritative/ first"
         );
     }
 
@@ -203,7 +204,7 @@ fn wasm_state_hash_is_reproducible_across_instances() {
     let wasm = wasm_path();
     if !wasm.exists() {
         panic!(
-            "wasm artifact missing — run `cargo build --release --target wasm32-wasip1 --features wasm` in game-template-authoritative/ first"
+            "wasm artifact missing — run `cargo build --release --target wasm32-wasip1 --features wasm` in game-templates/authoritative/ first"
         );
     }
 

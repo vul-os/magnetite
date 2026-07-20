@@ -1,6 +1,6 @@
 # Motorsport Starter Template
 
-The `game-template-motorsport/` crate (`magnetite-game-motorsport`) is a ready-made
+The `game-templates/motorsport/` crate (`magnetite-game-motorsport`) is a ready-made
 racing / motorsport game built on **Bevy + rapier3d** vehicle physics, with analog
 gamepad input and automatic lap → points integration.
 
@@ -31,7 +31,7 @@ gamepad input and automatic lap → points integration.
 
 ```bash
 git clone https://github.com/<org>/magnetite.git
-cd magnetite/game-template-motorsport
+cd magnetite/game-templates/motorsport
 ```
 
 ### Fast CI check

@@ -281,7 +281,7 @@ the given commit SHA, compiles, and reports the result.
 ```bash
 ./scripts/wasm-build-runner.sh \
   --game-id any-uuid \
-  --path ./game-template-authoritative \
+  --path ./game-templates/authoritative \
   --dry-run
 ```
 
@@ -380,7 +380,7 @@ BUILD_RUNNER_TOKEN=<your-token> \
 MAGNETITE_API_URL=http://localhost:8080 \
 ./scripts/wasm-build-runner.sh \
   --game-id <game-uuid> \
-  --path ./game-template-authoritative
+  --path ./game-templates/authoritative
 ```
 
 ### 4. Start the runtime (if not using Docker Compose)

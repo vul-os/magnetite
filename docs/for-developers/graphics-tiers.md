@@ -107,7 +107,7 @@ native = ["dep:bevy", "bevy/default"]
 wasm = ["dep:bevy", "dep:bevy_rapier3d"]
 ```
 
-See `game-template-fps/Cargo.toml` and `game-template-motorsport/Cargo.toml` for
+See `game-templates/fps/Cargo.toml` and `game-templates/motorsport/Cargo.toml` for
 concrete examples.
 
 ---

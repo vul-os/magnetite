@@ -111,7 +111,7 @@ This proves the sandbox is self-consistent across instances — any number of Wa
 running the same game with the same seed will agree on state at every tick.
 
 Note: snapshot/restore across instances is not tested here because the N1/N2 ABI's static
-`CURRENT_TICK` counter in the WASM guest is not reset by `mag_restore` (see DECISIONS.md
+`CURRENT_TICK` counter in the WASM guest is not reset by `mag_restore` (see `docs/project/DECISIONS.md`
 crossroads M15 and N3-3). Two fresh instances are used instead. The production fix is to pass
 tick as an explicit ABI parameter.
 
@@ -214,7 +214,7 @@ The wasm parity tests require the WASM artifact to be built first:
 rustup target add wasm32-wasip1
 
 # 2. Build the reference game as a WASM module:
-cd game-template-authoritative
+cd game-templates/authoritative
 cargo build --release --target wasm32-wasip1 --features wasm
 
 # 3. Run the end-to-end parity tests:

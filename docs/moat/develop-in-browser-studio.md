@@ -27,7 +27,7 @@ can be executed locally or inside a Codespace.
 ## Templates
 
 Templates are returned by `GET /api/v1/templates` and are compiled from the
-`game-template/`, `game-template-fps/`, and `game-template-motorsport/`
+`game-templates/arcade/`, `game-templates/fps/`, and `game-templates/motorsport/`
 workspace crates. The current set:
 
 | Template slug | Description | Topology | Tick rate |

@@ -24,7 +24,7 @@ cd my-game
 
 This generates a crate implementing `AuthoritativeGame` from
 `magnetite-sdk::authority` — the frozen trait boundary for deterministic
-`validate`/`step` game logic. See [`game-template-authoritative/`](../game-template-authoritative/)
+`validate`/`step` game logic. See [`game-templates/authoritative/`](../game-templates/authoritative/)
 for the canonical reference implementation (a top-down arena shooter).
 
 ## Build

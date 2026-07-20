@@ -5,7 +5,7 @@
 # Called by the GitHub Actions game-ci workflow and can be invoked locally.
 #
 # Usage:
-#   GAME_DIR=./game-template ./scripts/build-game.sh
+#   GAME_DIR=./game-templates/arcade ./scripts/build-game.sh
 #   GAME_DIR=/path/to/your-game ./scripts/build-game.sh
 #
 # Environment variables:
@@ -32,7 +32,7 @@ err()   { printf '\033[31m[game-build]\033[0m ERROR: %s\n'   "$*" >&2; exit 1; }
 
 # ── Validate inputs ──────────────────────────────────────────────────────────
 GAME_DIR="${GAME_DIR:-}"
-[[ -n "$GAME_DIR" ]] || err "GAME_DIR is not set. Usage: GAME_DIR=./game-template $0"
+[[ -n "$GAME_DIR" ]] || err "GAME_DIR is not set. Usage: GAME_DIR=./game-templates/arcade $0"
 [[ -d "$GAME_DIR" ]] || err "GAME_DIR '$GAME_DIR' does not exist or is not a directory."
 [[ -f "$GAME_DIR/Cargo.toml" ]] || err "No Cargo.toml found in '$GAME_DIR'."
 

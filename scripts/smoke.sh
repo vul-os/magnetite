@@ -132,7 +132,7 @@ echo ""
 echo -e "${BOLD}Step 2: Build game-template-authoritative → wasm32-wasip1${NC}"
 
 SKIP_WASM_BUILD="${SKIP_WASM_BUILD:-0}"
-GAME_CRATE="$REPO_ROOT/game-template-authoritative"
+GAME_CRATE="$REPO_ROOT/game-templates/authoritative"
 WASM_TARGET="wasm32-wasip1"
 WASM_OUT="$GAME_CRATE/target/$WASM_TARGET/release/game_template_authoritative.wasm"
 
@@ -253,7 +253,7 @@ if ! command -v cargo &>/dev/null; then
   step_skip "Step 5: 'cargo' not found on PATH"
 elif [[ "$WASM_BUILD_DONE" -eq 0 ]]; then
   step_skip "Step 5: wasm artifact not built (Step 2 was skipped or failed) — run Step 2 first"
-  info "  To build: cd game-template-authoritative && cargo build --release --target wasm32-wasip1 --features wasm"
+  info "  To build: cd game-templates/authoritative && cargo build --release --target wasm32-wasip1 --features wasm"
 else
   info "  Running: cargo test --test wasm_end_to_end -- --nocapture"
   {

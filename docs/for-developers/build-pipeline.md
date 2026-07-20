@@ -86,7 +86,7 @@ Response includes `commit_sha`, `status` (queued / in_progress / completed), and
 
 ## WASM build details
 
-The `game-template/build.sh` script is the canonical build command:
+The `game-templates/arcade/build.sh` script is the canonical build command:
 
 ```bash
 #!/bin/bash
@@ -110,7 +110,7 @@ is launched from there via `App::new().add_plugins(…).run()`.
 
 - Use `MinimalPlugins` (not `DefaultPlugins`) to avoid windowing/audio dependencies
   that do not compile to WASM.
-- The `game-template` `Cargo.toml` declares `[lib] crate-type = ["cdylib", "rlib"]` — both
+- The `game-templates/arcade` `Cargo.toml` declares `[lib] crate-type = ["cdylib", "rlib"]` — both
   are required for `wasm-bindgen` (cdylib) and Rust tests (rlib).
 - `getrandom` must be enabled with the `js` feature to work in WASM:
   ```toml

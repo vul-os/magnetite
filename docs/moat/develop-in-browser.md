@@ -348,6 +348,6 @@ Implement a custom `applyInput` function that matches your game's
   per-tick pipeline
 - [../../docs/MOAT-ARCHITECTURE.md](../MOAT-ARCHITECTURE.md) — frozen
   interface definitions (source of truth)
-- `game-template-authoritative/src/` — reference arena shooter
+- `game-templates/authoritative/src/` — reference arena shooter
   implementation (Snapshot / Delta / View / Command shapes)
 - `src/magnetite-web-client/src/` — web client source and tests

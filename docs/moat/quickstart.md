@@ -229,7 +229,7 @@ mag_view(player_id: u64) -> u32
 
 Each `-> u32` return is a pointer into linear memory where a
 4-byte little-endian length prefix is followed by a JSON payload.
-See `game-template-authoritative/src/wasm_abi.rs` for the reference
+See `game-templates/authoritative/src/wasm_abi.rs` for the reference
 implementation.
 
 ---
@@ -447,6 +447,6 @@ crosses a cell boundary. Because the game state is serialisable via
 
 - **Architecture details** — [architecture-overview.md](architecture-overview.md)
 - **Full interface reference** — [../../docs/MOAT-ARCHITECTURE.md](../MOAT-ARCHITECTURE.md)
-- **Reference game implementation** — `game-template-authoritative/src/game.rs`
-- **Wasm ABI reference** — `game-template-authoritative/src/wasm_abi.rs`
+- **Reference game implementation** — `game-templates/authoritative/src/game.rs`
+- **Wasm ABI reference** — `game-templates/authoritative/src/wasm_abi.rs`
 - **Anti-cheat validators** — `magnetite-anticheat/src/lib.rs`

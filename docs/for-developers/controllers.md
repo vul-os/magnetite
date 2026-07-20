@@ -138,7 +138,7 @@ state.handle_event(GamepadEvent::AxisMoved(GamepadAxis::LeftStickX, 0.72));
 
 ## FPS example (game-template-fps)
 
-The FPS starter template (`game-template-fps/src/input_map.rs`) uses the `InputMap`
+The FPS starter template (`game-templates/fps/src/input_map.rs`) uses the `InputMap`
 for look (right stick), move (left stick), fire (right trigger), and reload (West button):
 
 ```rust
