@@ -59,7 +59,7 @@ pub use naming::{HashNaming, Naming};
 pub use keyname::KeyNameNaming;
 
 // Seam §3.3 — BlobStore
-pub use blobstore::{BlobFetcher, BlobStore, Hash, HttpBlobStore, LocalBlobStore};
+pub use blobstore::{BlobFetcher, BlobStore, FsBlobStore, Hash, HttpBlobStore, LocalBlobStore};
 
 // Seam §3.4 — Discovery
 pub use discovery::{

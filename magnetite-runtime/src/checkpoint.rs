@@ -97,17 +97,21 @@
 //! - **A shard nobody ever checkpointed**, or whose checkpoint the survivor
 //!   never heard about (it never successfully probed the owner). Falls back to
 //!   [`ShardLoss`], unchanged.
-//! - **Anything, if the blob store is node-local.** [`LocalBlobStore`] is
-//!   in-memory and dies with its node; a survivor cannot read it. Restore across
-//!   nodes needs a blob store both nodes can reach — that is what
-//!   `--checkpoint-store <url>` is for. Local-only is the safe default and it
-//!   degrades to exactly today's behaviour: honest [`ShardLoss`].
+//! - **Anything, if the blob store is not reachable by the survivor.**
+//!   [`LocalBlobStore`] is in-memory and dies with its node.
+//!   [`FsBlobStore`] — what `--checkpoint-dir` builds — outlives the *process*,
+//!   but a node-local directory does not outlive the *machine*, so a survivor on
+//!   another box still cannot read it. Cross-machine restore needs
+//!   `--checkpoint-dir` pointed at storage both nodes can reach (a shared
+//!   mount). Every one of these cases degrades to exactly today's behaviour:
+//!   honest [`ShardLoss`].
 //! - **Player connections.** A restored shard is a restored *world*; clients
 //!   still reconnect.
 //!
 //! [`BlobStore`]: magnetite_seams::blobstore::BlobStore
 //! [`ShardLoss`]: crate::rebalance::ShardLoss
 //! [`LocalBlobStore`]: magnetite_seams::blobstore::LocalBlobStore
+//! [`FsBlobStore`]: magnetite_seams::blobstore::FsBlobStore
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -674,6 +678,215 @@ impl Checkpointer {
 }
 
 // ---------------------------------------------------------------------------
+// Driving checkpoints from a live node
+// ---------------------------------------------------------------------------
+
+/// Seconds since the Unix epoch, or 0 if the clock is before it.
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Publishes a live shard's state and tick into [`ShardAuthority`] so that a
+/// [`Checkpointer`] has something real to checkpoint.
+///
+/// # Why this type has to exist
+///
+/// [`Checkpointer::checkpoint_due`] can only checkpoint shards the node
+/// *owns* — it reads [`ShardAuthority::owned_shards`] and
+/// [`ShardAuthority::state_of`]. A serving node whose game state lives only
+/// inside its executor owns nothing as far as the fleet layer is concerned, so
+/// a checkpointer attached to it writes **nothing**, forever, and reports no
+/// error while doing so. This sink is the connection between "the game is
+/// simulating a world" and "the fleet layer knows this node holds that world".
+///
+/// # The claim happens exactly once
+///
+/// The first publish [`ShardAuthority::claim`]s the shard, taking epoch 1. Every
+/// publish after that is an [`ShardAuthority::update_state`], which is a no-op
+/// unless this node still owns the shard.
+///
+/// It **never re-claims**, and that is deliberate rather than incidental. Losing
+/// ownership means one of two things: the shard was handed to a peer, or this
+/// node was fenced because a survivor restored the shard at a higher epoch.
+/// Re-claiming would bump the epoch and resurrect this node as a competing owner
+/// — precisely the split-brain the epoch fence exists to prevent. A sink that
+/// has lost its shard goes quiet and stays quiet.
+#[derive(Clone)]
+pub struct ShardStateSink {
+    authority: ShardAuthority,
+    shard: ShardId,
+    /// Latest simulation tick, read by the checkpoint loop so a checkpoint
+    /// records the tick it was actually taken at.
+    tick: Arc<std::sync::atomic::AtomicU64>,
+    claimed: Arc<std::sync::atomic::AtomicBool>,
+    lost_warned: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl std::fmt::Debug for ShardStateSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShardStateSink")
+            .field("shard", &self.shard)
+            .field("tick", &self.tick())
+            .finish_non_exhaustive()
+    }
+}
+
+impl ShardStateSink {
+    /// Publish `shard`'s state into `authority`.
+    pub fn new(authority: ShardAuthority, shard: ShardId) -> Self {
+        Self {
+            authority,
+            shard,
+            tick: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            claimed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            lost_warned: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    /// The shard being published.
+    pub fn shard(&self) -> ShardId {
+        self.shard
+    }
+
+    /// The authority being published into.
+    pub fn authority(&self) -> &ShardAuthority {
+        &self.authority
+    }
+
+    /// The most recent tick published.
+    pub fn tick(&self) -> u64 {
+        self.tick.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// A shared handle to the live tick counter, for the checkpoint loop.
+    pub fn tick_source(&self) -> Arc<std::sync::atomic::AtomicU64> {
+        Arc::clone(&self.tick)
+    }
+
+    /// Record the world as of `tick`.
+    ///
+    /// Returns `true` while this node still owns the shard. Once it does not,
+    /// this returns `false` forever: see the type docs on why re-claiming is
+    /// not an option.
+    pub fn publish(&self, tick: u64, state: Vec<u8>) -> bool {
+        use std::sync::atomic::Ordering;
+        self.tick.store(tick, Ordering::Relaxed);
+        if !self.claimed.load(Ordering::Acquire) {
+            self.authority.claim(self.shard, state);
+            self.claimed.store(true, Ordering::Release);
+            info!(
+                shard = self.shard.0,
+                epoch = self.authority.epoch_of(self.shard).unwrap_or(0),
+                tick,
+                "node claimed its local shard — state is now checkpointable"
+            );
+            return true;
+        }
+        if self.authority.update_state(self.shard, state) {
+            return true;
+        }
+        if !self.lost_warned.swap(true, Ordering::Relaxed) {
+            warn!(
+                shard = self.shard.0,
+                tick,
+                "this node no longer owns shard {} (handed off, or fenced by a higher epoch); \
+                 it will NOT re-claim it — re-claiming would make this node a second owner",
+                self.shard.0
+            );
+        }
+        false
+    }
+}
+
+/// Wraps a [`GameExecutor`] so every simulated tick is published to a
+/// [`ShardStateSink`].
+///
+/// This is the only place a real node's world becomes visible to the durability
+/// machinery. It is a pass-through in every other respect: it changes no
+/// simulation behaviour, and the state it publishes is the executor's own
+/// `snapshot()` bytes, so a restore rebuilds byte-identical state.
+///
+/// [`GameExecutor`]: magnetite_sdk::authority::GameExecutor
+pub struct ShardStateExecutor {
+    inner: Box<dyn magnetite_sdk::authority::GameExecutor>,
+    sink: ShardStateSink,
+}
+
+impl ShardStateExecutor {
+    /// Wrap `inner`, publishing each tick's snapshot into `sink`.
+    pub fn new(
+        inner: Box<dyn magnetite_sdk::authority::GameExecutor>,
+        sink: ShardStateSink,
+    ) -> Self {
+        Self { inner, sink }
+    }
+}
+
+impl magnetite_sdk::authority::GameExecutor for ShardStateExecutor {
+    fn step(
+        &mut self,
+        tick: magnetite_sdk::authority::Tick,
+        inputs: &[(magnetite_sdk::state::PlayerId, magnetite_sdk::input::Input)],
+    ) -> magnetite_sdk::authority::StepOutput {
+        let out = self.inner.step(tick, inputs);
+        // Publish AFTER the step, so the state and the tick describe the same
+        // moment. A checkpoint taken from this is a world that was really
+        // simulated, not one mid-step.
+        self.sink.publish(tick, self.inner.snapshot());
+        out
+    }
+    fn snapshot(&self) -> Vec<u8> {
+        self.inner.snapshot()
+    }
+    fn restore(&mut self, bytes: &[u8]) {
+        self.inner.restore(bytes)
+    }
+    fn view_for(&self, player: magnetite_sdk::state::PlayerId) -> Vec<u8> {
+        self.inner.view_for(player)
+    }
+    fn delta_since(&self, snapshot_bytes: &[u8]) -> Vec<u8> {
+        self.inner.delta_since(snapshot_bytes)
+    }
+}
+
+/// Longest a checkpoint loop sleeps between cadence checks.
+///
+/// The loop polls rather than sleeping a whole cadence so that the checkpoint it
+/// writes reflects a tick from the last fraction of a second, not one from a
+/// full cadence ago. Polling is what keeps the *content* fresh; the cadence in
+/// [`CheckpointPolicy`] is still what decides when a write happens.
+const CHECKPOINT_POLL: Duration = Duration::from_millis(250);
+
+/// Start the background thread that actually writes checkpoints.
+///
+/// **This is the production driver.** A [`Checkpointer`] attached to a node does
+/// nothing on its own — it exposes `checkpoint_due` and waits to be called. If
+/// nothing calls it, no checkpoint is ever written and the entire restore path
+/// downstream is unreachable, silently, with every test still green. This
+/// function is what calls it.
+///
+/// The thread runs for the life of the process, like the rebalance loop.
+pub fn spawn_checkpoint_loop(
+    authority: ShardAuthority,
+    checkpointer: Checkpointer,
+    tick: Arc<std::sync::atomic::AtomicU64>,
+) -> std::thread::JoinHandle<()> {
+    let poll = checkpointer.policy().cadence.min(CHECKPOINT_POLL);
+    std::thread::spawn(move || loop {
+        std::thread::sleep(poll);
+        checkpointer.checkpoint_due(
+            &authority,
+            tick.load(std::sync::atomic::Ordering::Relaxed),
+            now_unix(),
+            Instant::now(),
+        );
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Restoring
 // ---------------------------------------------------------------------------
 
@@ -1026,6 +1239,58 @@ mod tests {
         // And the announced ref really resolves to the later state.
         let cp = cpr.store().get_verified(r2.id, ShardId(2)).unwrap();
         assert_eq!(cp.state, b"later".to_vec());
+    }
+
+    #[test]
+    fn the_sink_claims_once_and_then_only_updates() {
+        let auth = ShardAuthority::new();
+        let sink = ShardStateSink::new(auth.clone(), ShardId(1));
+        assert!(sink.publish(1, b"t1".to_vec()));
+        let epoch = auth.epoch_of(ShardId(1)).expect("claimed");
+        for t in 2..10 {
+            assert!(sink.publish(t, format!("t{t}").into_bytes()));
+        }
+        assert_eq!(
+            auth.epoch_of(ShardId(1)),
+            Some(epoch),
+            "publishing state must not bump the epoch — only a claim does that"
+        );
+        assert_eq!(auth.state_of(ShardId(1)).as_deref(), Some(&b"t9"[..]));
+        assert_eq!(sink.tick(), 9, "the live tick must be readable by the loop");
+    }
+
+    /// The split-brain guard. Once a survivor has restored this shard at a
+    /// higher epoch, the fenced node's game keeps ticking and keeps publishing.
+    /// If any of those publishes re-claimed the shard, this node would come back
+    /// as a second owner of a shard someone else legitimately holds.
+    #[test]
+    fn a_fenced_sink_never_re_claims_its_shard() {
+        let auth = ShardAuthority::new();
+        let sink = ShardStateSink::new(auth.clone(), ShardId(1));
+        sink.publish(1, b"alive".to_vec());
+        let mine = auth.epoch_of(ShardId(1)).expect("claimed");
+
+        // A survivor restored it at a strictly higher epoch and fenced us.
+        assert!(auth.fence(ShardId(1), mine + 5), "fence must strip ownership");
+        assert!(!auth.owns(ShardId(1)));
+
+        // The game does not know it is dead and keeps simulating.
+        for t in 2..20 {
+            assert!(
+                !sink.publish(t, b"zombie".to_vec()),
+                "a fenced sink must report that it no longer owns the shard"
+            );
+        }
+        assert!(
+            !auth.owns(ShardId(1)),
+            "a fenced node re-claimed its shard — this is split-brain: two nodes \
+             now believe they own the same shard"
+        );
+        assert_eq!(
+            auth.high_water(ShardId(1)),
+            mine + 5,
+            "a fenced sink must not move the epoch fence at all"
+        );
     }
 
     #[test]

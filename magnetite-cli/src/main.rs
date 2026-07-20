@@ -1039,6 +1039,7 @@ fn spawn_rebalance_loop(
     directory: magnetite_runtime::cluster::RouteDirectory,
     capacity: magnetite_seams::discovery::Capacity,
     policy: magnetite_runtime::rebalance::RebalancePolicy,
+    recovery: Option<magnetite_runtime::checkpoint::CheckpointStore>,
 ) -> std::thread::JoinHandle<()> {
     use magnetite_runtime::rebalance::Rebalancer;
     use magnetite_runtime::rebalance::SpreadScheduler;
@@ -1046,6 +1047,15 @@ fn spawn_rebalance_loop(
     std::thread::spawn(move || {
         let interval = policy.interval;
         let mut rebalancer = Rebalancer::new(local, policy, Box::new(SpreadScheduler));
+        // Recovery is opt-in and reads from the SAME store this node writes to.
+        // Without it the death path can only ever report loss, which is what it
+        // did before checkpointing was wired up at all.
+        if let Some(store) = recovery {
+            rebalancer = rebalancer.with_recovery(
+                store,
+                magnetite_runtime::checkpoint::RecoveryPolicy::default(),
+            );
+        }
         loop {
             std::thread::sleep(interval);
             let now_unix = std::time::SystemTime::now()
@@ -1078,6 +1088,19 @@ fn spawn_rebalance_loop(
                     "  rebalance: shard {shard} -> {} FAILED: {err} \
                      (this node still owns the shard and its state)",
                     hex::encode(target.0)
+                );
+            }
+            // Recoveries are printed in full, and every one of them states the
+            // window of simulation that was lost and the tick it rolled back to.
+            // A recovery line that read like a clean save would be worse than no
+            // line at all, because the operator would stop looking.
+            for rec in &report.recovered {
+                println!("  rebalance: {rec}");
+                println!(
+                    "  rebalance: shard {} is now owned by this node at epoch {} \
+                     (rolled back to tick {}, {}s of simulation lost); \
+                     players must reconnect",
+                    rec.shard, rec.epoch, rec.checkpoint_tick, rec.loss_window_secs
                 );
             }
             // Losses are printed one per line, in full, and never summarised
@@ -1207,6 +1230,54 @@ fn cmd_node(
         ..Default::default()
     };
 
+    // Durability wiring. `--checkpoint-dir` is the operator's explicit opt-in:
+    // without it nothing is made durable and a death stays an honest total loss.
+    //
+    // Every piece below has to be present for the feature to do anything, which
+    // is why they are built together rather than in three places:
+    //   * the store        — where checkpoints are written and read from;
+    //   * the sink         — makes the live world visible to the fleet layer, so
+    //                        there is something to checkpoint at all;
+    //   * the write loop   — actually calls the checkpointer on a cadence;
+    //   * `with_recovery`  — lets the death path read what was written.
+    let checkpoint_cadence =
+        std::time::Duration::from_secs(cluster.checkpoint_interval.max(1));
+    let checkpointing = match &cluster.checkpoint_dir {
+        Some(dir) => {
+            use magnetite_runtime::checkpoint::{CheckpointPolicy, CheckpointStore, Checkpointer};
+            let fs = magnetite_seams::blobstore::FsBlobStore::new(dir).map_err(|e| {
+                anyhow::anyhow!("--checkpoint-dir `{}`: {e}", dir.display())
+            })?;
+            let store = CheckpointStore::new(Arc::new(fs));
+            let checkpointer = Checkpointer::new(
+                store.clone(),
+                CheckpointPolicy {
+                    enabled: true,
+                    cadence: checkpoint_cadence,
+                },
+            );
+            // A node with no cluster still gets a real authority table so that
+            // `--checkpoint-dir` does what it says on the tin; it simply has no
+            // peer that could ever read those checkpoints back.
+            let authority = _handoff_node
+                .as_ref()
+                .map(|n| n.authority())
+                .unwrap_or_default();
+            let sink = magnetite_runtime::checkpoint::ShardStateSink::new(
+                authority.clone(),
+                magnetite_runtime::shard::ShardId::LOCAL,
+            );
+            // Peers learn where the durable copies are through the ordinary
+            // authenticated status exchange.
+            if let Some(n) = _handoff_node.as_ref() {
+                n.attach_checkpointer(checkpointer.clone());
+            }
+            Some((store, checkpointer, authority, sink))
+        }
+        None => None,
+    };
+    let recovery_on = checkpointing.is_some() && !cluster.no_recovery;
+
     let result = rt.block_on(async move {
         // Default, fully-offline providers: local content store + LAN phonebook.
         let blobs = LocalBlobStore::new();
@@ -1232,6 +1303,10 @@ fn cmd_node(
             cell_size,
             seed,
             fleet: fleet_session,
+            // Publishes every tick's snapshot into the shard authority. Without
+            // this the node owns no shard as far as the fleet layer is
+            // concerned, and the checkpointer below would find nothing to write.
+            shard_sink: checkpointing.as_ref().map(|(_, _, _, s)| s.clone()),
             ..Default::default()
         };
 
@@ -1318,10 +1393,23 @@ fn cmd_node(
                         rebalance_policy.deadband_shards,
                         rebalance_policy.max_in_flight
                     );
-                    println!(
-                        "  Node death       : LOSES that node's shard state — there is NO state \n\
-                         \x20                    replication; losses are reported, never 'recovered'"
-                    );
+                    if recovery_on {
+                        println!(
+                            "  Node death       : a dead peer's shard is REBUILT from its newest \n\
+                             \x20                    checkpoint at a strictly higher epoch, when one is \n\
+                             \x20                    readable; otherwise reported as an honest loss"
+                        );
+                    } else if cluster.no_recovery {
+                        println!(
+                            "  Node death       : LOSES that node's shard state (--no-recovery) — \n\
+                             \x20                    losses are reported, never 'recovered'"
+                        );
+                    } else {
+                        println!(
+                            "  Node death       : LOSES that node's shard state — there is NO state \n\
+                             \x20                    replication; losses are reported, never 'recovered'"
+                        );
+                    }
                 } else if cluster.no_rebalance {
                     println!("  Rebalancer       : OFF (--no-rebalance) — placement is manual");
                 } else {
@@ -1336,6 +1424,41 @@ fn cmd_node(
                  (pass --cluster-peer <hex> to join a cluster)"
             ),
         }
+        // Durability. Printed whether it is on or off: an operator who cannot
+        // see that checkpointing is running has no way to tell a working
+        // durability setup from one that silently writes nothing.
+        match &cluster.checkpoint_dir {
+            Some(dir) => {
+                println!(
+                    "  Checkpointing    : ON — shard {} every {}s to {}",
+                    magnetite_runtime::shard::ShardId::LOCAL.0,
+                    checkpoint_cadence.as_secs(),
+                    dir.display()
+                );
+                println!(
+                    "  Loss window      : up to {}s of simulation is lost on a death — a restore \n\
+                     \x20                    is a ROLLBACK to the last checkpoint, not a resurrection",
+                    checkpoint_cadence.as_secs()
+                );
+                if fleet_addr.is_none() {
+                    println!(
+                        "  Restorable by    : NOBODY — no cluster is configured, so no peer can \n\
+                         \x20                    ever read these checkpoints back"
+                    );
+                } else {
+                    println!(
+                        "  Restorable by    : peers that can READ {} — a node-local path \n\
+                         \x20                    survives a restart but NOT losing this machine; use a \n\
+                         \x20                    shared mount for cross-machine recovery",
+                        dir.display()
+                    );
+                }
+            }
+            None => println!(
+                "  Checkpointing    : OFF — nothing is made durable; a node death loses that \
+                 node's shard state (pass --checkpoint-dir <path> to enable)"
+            ),
+        }
         println!();
         println!("Press Ctrl-C to stop.");
         println!();
@@ -1346,6 +1469,16 @@ fn cmd_node(
         if let Some(pubr) = &capacity_publisher {
             pubr.publish(prepared.ad.capacity.clone());
         }
+        // Start writing checkpoints. Attaching a checkpointer is not enough: it
+        // only answers `checkpoint_due` when something calls it, and nothing did
+        // before this loop existed.
+        if let Some((_, checkpointer, authority, sink)) = &checkpointing {
+            let _checkpointer = magnetite_runtime::checkpoint::spawn_checkpoint_loop(
+                authority.clone(),
+                checkpointer.clone(),
+                sink.tick_source(),
+            );
+        }
         if rebalance_on {
             if let (Some(t), Some(d)) = (fleet_transport.clone(), fleet_dir.clone()) {
                 let _rebalancer = spawn_rebalance_loop(
@@ -1354,6 +1487,8 @@ fn cmd_node(
                     d,
                     prepared.ad.capacity.clone(),
                     rebalance_policy.clone(),
+                    recovery_on.then(|| checkpointing.as_ref().map(|(s, _, _, _)| s.clone()))
+                        .flatten(),
                 );
             }
         }
