@@ -63,7 +63,6 @@ const footerLinks = {
     { label: 'Marketplace', href: '/marketplace' },
     { label: 'Wallet', href: '/wallet' },
     { label: 'Leaderboards', href: '/leaderboards' },
-    { label: 'Pricing', href: '/pricing' },
   ],
   developers: [
     { label: 'Documentation', href: '/docs' },

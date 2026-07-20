@@ -11,7 +11,6 @@ const LINK_COLUMNS = [
     links: [
       { labelKey: 'footer.links.marketplace', path: '/marketplace' },
       { labelKey: 'footer.links.developers',  path: '/developers' },
-      { labelKey: 'footer.links.pricing',     path: '/pricing' },
       { labelKey: 'footer.links.faq',         path: '/faq' },
     ],
   },

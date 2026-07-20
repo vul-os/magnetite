@@ -62,7 +62,6 @@ const Contact = lazy(() => import('./pages/Contact'));
 const Careers = lazy(() => import('./pages/Careers'));
 const FAQ = lazy(() => import('./pages/FAQ'));
 const Playground = lazy(() => import('./pages/Playground'));
-const Subscription = lazy(() => import('./pages/Subscription'));
 const GameAccess = lazy(() => import('./pages/GameAccess'));
 const GameLobby = lazy(() => import('./pages/GameLobby'));
 const Spectator = lazy(() => import('./pages/Spectator'));
@@ -74,7 +73,6 @@ const EditProfile = lazy(() => import('./pages/EditProfile'));
 const Wishlist = lazy(() => import('./pages/Wishlist'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 const Welcome = lazy(() => import('./pages/Welcome'));
-const Pricing = lazy(() => import('./pages/Pricing'));
 const Forbidden = lazy(() => import('./pages/Forbidden'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const ServerError = lazy(() => import('./pages/ServerError'));
@@ -172,7 +170,6 @@ function App() {
                       <Route path="/servers" element={<ServerBrowser />} />
                       <Route path="/game/:id" element={<GameDetail />} />
                       <Route path="/play/:id" element={<Playground />} />
-                      <Route path="/subscription" element={<Subscription />} />
                       <Route path="/game-access" element={<GameAccess />} />
                       <Route path="/matchmaking" element={<Matchmaking />} />
                       <Route path="/lobby/:id" element={<GameLobby />} />
@@ -192,7 +189,6 @@ function App() {
                       <Route path="/wishlist" element={<Wishlist />} />
                       <Route path="/onboarding" element={<Onboarding />} />
                       <Route path="/welcome" element={<Welcome />} />
-                      <Route path="/pricing" element={<Pricing />} />
                       <Route path="/about" element={<About />} />
                       <Route path="/contact" element={<Contact />} />
                       <Route path="/careers" element={<Careers />} />

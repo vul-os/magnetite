@@ -3,10 +3,10 @@ import LegalLayout, { LegalSection } from '../components/LegalLayout';
 const SECTIONS = [
   { id: 'acceptance', title: 'Acceptance of Terms' },
   { id: 'accounts', title: 'User Accounts' },
-  { id: 'subscriptions', title: 'Subscriptions' },
+  { id: 'payments', title: 'Payments' },
   { id: 'game-access', title: 'Game Access and Payments' },
   { id: 'developer-terms', title: 'Developer Terms' },
-  { id: 'developer-revenue', title: 'Developer Revenue Share' },
+  { id: 'developer-revenue', title: 'Developer Payments' },
   { id: 'usage-limits', title: 'Usage Limits' },
   { id: 'intellectual-property', title: 'Intellectual Property' },
   { id: 'liability', title: 'Limitation of Liability' },
@@ -15,7 +15,7 @@ const SECTIONS = [
 
 export default function Terms() {
   return (
-    <LegalLayout title="Terms of Service" lastUpdated="May 15, 2026" sections={SECTIONS}>
+    <LegalLayout title="Terms of Service" lastUpdated="July 20, 2026" sections={SECTIONS}>
       <LegalSection id="acceptance" title="Acceptance of Terms">
         <p>
           By accessing or using Magnetite, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our platform. These terms apply to all users of Magnetite, including game developers, players, and content creators.
@@ -42,36 +42,33 @@ export default function Terms() {
         </p>
       </LegalSection>
 
-      <LegalSection id="subscriptions" title="Subscriptions">
+      <LegalSection id="payments" title="Payments">
         <p>
-          Magnetite offers subscription plans that provide access to additional features, games, or content. Subscription terms are displayed at the time of sign-up and are part of this agreement.
+          Magnetite is a distributed, self-hostable platform: you run your own node, or connect to one an operator runs. The platform itself charges you nothing. There is no subscription, no tier fee, no metered billing, and no platform-held balance &mdash; we take custody of no funds and process no charge against you.
         </p>
         <p>
-          <strong>Billing:</strong> Subscription fees are charged in advance on a recurring basis (weekly or monthly depending on your selected plan). All fees are in USD unless otherwise specified.
+          <strong>The only money movement is optional and direct.</strong> Any payment happens wallet-to-wallet between users, with no intermediary holding the funds &mdash; for example, a player paying a developer for a game (see Game Access and Payments below), or a hosting fee paid directly to the operator who runs a server. You link an Ed25519 wallet address; a checkout settles the transfer on a third-party payment rail we do not operate and returns a signed receipt as the record.
         </p>
         <p>
-          <strong>Auto-Renewal:</strong> Your subscription automatically renews at the end of each billing period unless you cancel before the renewal date. By subscribing, you authorize us to charge your payment method for the next billing period.
-        </p>
-        <p>
-          <strong>Cancellation:</strong> You may cancel your subscription at any time through your account settings. Cancellation takes effect at the end of your current billing period. You will retain access to subscription features until that date.
-        </p>
-        <p>
-          <strong>Refunds:</strong> Subscriptions are non-refundable for the current billing period once charged. If you cancel before the end of your billing period, you will not be charged for the next period but will not receive a refund for the current period. We do not offer prorated refunds unless required by applicable law.
-        </p>
-        <p>
-          <strong>Price Changes:</strong> We reserve the right to change subscription pricing. We will notify you of any price changes at least 30 days before they take effect. Price changes apply to the next billing cycle after the notice period.
+          <strong>No custody, so no payouts or clawbacks.</strong> Because the platform never holds funds, there is nothing for us to pay out, freeze, refund, or claw back, and no card or bank details for us to store. A completed wallet settlement is final; any recourse for a disputed payment is a matter between the users who transacted, on whatever terms they agreed. Chargebacks do not apply to non-custodial wallet settlement.
         </p>
       </LegalSection>
 
       <LegalSection id="game-access" title="Game Access and Payments">
         <p>
-          Magnetite provides access to games developed by third-party developers. When you purchase or access games through our platform, you agree to the payment terms specified at the time of purchase.
+          Magnetite provides access to games published by third-party developers. When you purchase or unlock a game or item through the platform, you agree to the payment terms shown at the time of purchase.
         </p>
         <p>
-          <strong>Purchases:</strong> All game purchases are final and non-refundable unless otherwise stated by the developer or required by applicable law. Digital items and currencies purchased through Magnetite are for use within the platform only.
+          <strong>Wallet-to-wallet purchases:</strong> Purchases settle directly from your wallet to the developer&rsquo;s wallet (and, where applicable, the operator&rsquo;s) in a single atomic transfer. The platform never holds the funds. Your entitlement is the signed receipt the payment rail returns, keyed to your wallet and the item purchased; the node reads that receipt to grant access.
         </p>
         <p>
-          <strong>Virtual Currency:</strong> Any virtual currency or tokens purchased through Magnetite have no real-world monetary value and cannot be exchanged for cash or any third-party services.
+          <strong>Finality:</strong> Because settlement is wallet-to-wallet and non-custodial, completed purchases are final. We hold no balance from which a refund could be issued and cannot reverse a rail settlement. Chargebacks do not apply to non-custodial wallet payments. Any recourse is a matter between you and the developer or operator you paid, on whatever terms they offer.
+        </p>
+        <p>
+          <strong>Protocol fee:</strong> A checkout may carry a protocol fee, expressed in basis points and itemised on the receipt. It defaults to zero, in which case the developer or operator receives the full subtotal.
+        </p>
+        <p>
+          <strong>Points and XP:</strong> Any in-platform points or experience are off-chain records, not money. They have no monetary value, are not a stored balance, and cannot be exchanged for cash or transferred off the platform.
         </p>
         <p>
           <strong>Game Content:</strong> The availability of games, updates, and downloadable content may vary by region. Developers may modify or discontinue games at any time.
@@ -93,35 +90,28 @@ export default function Terms() {
           Developers retain ownership of their intellectual property. By publishing on Magnetite, you grant us a license to host and distribute your content on our platform.
         </p>
         <p>
-          Revenue sharing and payment processing fees are as specified in your developer agreement.
+          Payment splits and any protocol fee settle directly at checkout, wallet-to-wallet, as described in Developer Payments below and in your developer agreement.
         </p>
       </LegalSection>
 
-      <LegalSection id="developer-revenue" title="Developer Revenue Share">
+      <LegalSection id="developer-revenue" title="Developer Payments">
         <p>
-          Developers earn revenue from games and content sold through Magnetite. This section explains how developer payouts are calculated and when payments are made.
+          Developers are paid for games and content sold through Magnetite. Payment is non-custodial: the platform never holds developer funds and operates no payout system. This section explains how developers are paid.
         </p>
         <p>
-          <strong>Payout Calculation:</strong> Developers receive a percentage of net revenue from their games, as specified in their developer agreement. Net revenue is calculated after deducting platform fees, payment processing fees, and any applicable taxes.
+          <strong>Direct settlement at checkout:</strong> When a player checks out, the payment rail splits the transfer and pays the developer&rsquo;s wallet directly, in the same atomic settlement. There is no platform-held balance that accrues to you and no payout to request — you are paid at the moment of sale, wallet-to-wallet.
         </p>
         <p>
-          <strong>Platform Fee:</strong> Magnetite retains a percentage of gross revenue as a platform fee for hosting, distribution, and platform maintenance. This fee is disclosed in your developer agreement and may vary.
+          <strong>No holding period, no minimum threshold:</strong> Because nothing is held on your behalf, there is no holding period before funds are released, no minimum balance to reach before a payout, and no rollover of earnings between periods. These concepts do not apply to non-custodial settlement.
         </p>
         <p>
-          <strong>Payment Schedule:</strong> Payouts are processed on a schedule you choose during setup:
-        </p>
-        <ul>
-          <li><strong>Weekly:</strong> Payouts are processed every Monday for the previous week's earnings, with a 7-day holding period to account for chargebacks or disputes.</li>
-          <li><strong>Monthly:</strong> Payouts are processed on the 15th of each month for the previous month's earnings, with a 14-day holding period.</li>
-        </ul>
-        <p>
-          <strong>Minimum Payout Threshold:</strong> Payouts are only processed when your earnings exceed the minimum threshold specified in your developer agreement. Earnings below this threshold roll over to the next payout period.
+          <strong>No clawbacks:</strong> Settlements are wallet-to-wallet and final. The platform holds no balance from which prior earnings could be clawed back, and chargebacks do not apply to non-custodial wallet payments. We cannot and do not reverse a completed settlement.
         </p>
         <p>
-          <strong>Chargebacks and Refunds:</strong> If a player requests a chargeback or refund, the associated revenue may be clawed back from your earnings, even if payout has already been processed.
+          <strong>Protocol fee and splits:</strong> A checkout may carry a protocol fee, expressed in basis points and itemised on the receipt; it defaults to zero. Any operator hosting fee is likewise a direct payment to the operator, not a balance held by the platform. Aside from that optional protocol fee, the platform takes no cut of your sales.
         </p>
         <p>
-          <strong>Tax Responsibilities:</strong> Developers are responsible for their own tax obligations in their jurisdiction. Magnetite may be required to withhold taxes based on your location.
+          <strong>Tax Responsibilities:</strong> Developers are responsible for their own tax obligations in their jurisdiction. Because payments settle directly to your wallet and the platform holds no funds, the platform does not withhold taxes on your behalf; you are responsible for reporting and remitting any tax due on amounts you receive.
         </p>
       </LegalSection>
 
