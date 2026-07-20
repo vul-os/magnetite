@@ -1,0 +1,122 @@
+/**
+ * Unavailable / LoadError — see Unavailable.jsx.
+ *
+ * Colour comes only from tokens (DESIGN.md §2). The base `.state`,
+ * `.state-unavailable` and `.state-error` rules live in index.css; this file
+ * adds the capability manifest, the kicker and the inline variant.
+ */
+
+/* The eyebrow that names the state in one word, above the heading. */
+.state-kicker {
+  color: var(--spec-text);
+  margin: 0;
+}
+.state-error .state-kicker {
+  color: var(--danger-text);
+}
+
+/* `.state` centres its children; the leading field-line reads better with the
+   block left-aligned, so the unavailable variant squares itself up. */
+.state.state-unavailable {
+  align-items: flex-start;
+  text-align: left;
+  border-style: solid;
+  padding: var(--space-8) var(--space-6);
+}
+.state.state-unavailable .state-body {
+  max-width: 60ch;
+}
+.state.state-unavailable .state-actions {
+  justify-content: flex-start;
+}
+
+/* ── Capability manifest ──────────────────────────────────────────────────
+   The routes that are not mounted, set as data: mono, one per row, hairline
+   separated. This is a readout, not a warning banner. */
+.state-manifest {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--sunk);
+  overflow: hidden;
+}
+
+.state-manifest li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  flex-wrap: wrap;
+}
+
+.state-manifest li + li {
+  border-top: 1px solid var(--rule);
+}
+
+.state-route {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.state-route-verdict {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--spec-text);
+  white-space: nowrap;
+}
+
+/* The failure detail on an error state — an exact message, so: mono. */
+.state-detail {
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+/* ── Inline variant ───────────────────────────────────────────────────────
+   One unavailable action inside a page that otherwise works. Sits in the flow
+   where the control would have been; never takes the page over. */
+.state-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--spec);
+  border-radius: var(--radius-sm);
+  background: var(--spec-tint);
+}
+
+.state-inline .state-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--spec-text);
+  margin: 0;
+}
+
+.state-inline .state-body {
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+  max-width: 68ch;
+  line-height: 1.55;
+}
+
+.state-inline .state-manifest {
+  background: transparent;
+}
+
+@media (max-width: 640px) {
+  .state.state-unavailable {
+    padding: var(--space-6) var(--space-4);
+  }
+}

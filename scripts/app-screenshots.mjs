@@ -27,13 +27,47 @@ const ROOT = path.resolve(__dirname, '..')
 const DIST = path.join(ROOT, 'dist')
 const OUT = path.join(ROOT, 'docs', 'screenshots', 'app')
 
-/* The exemplar pages redesigned in this pass. */
+/* The exemplar pages redesigned in this pass, plus every surface that renders
+ * an "unavailable" state. The unavailable routes need a signed-in user and a
+ * backend that answers the way the real one does — see API_STUB below. */
 const ROUTES = [
   { name: 'server-browser', path: '/servers',   label: 'Dense data — discovery' },
   { name: 'game-detail',    path: '/game/1',    label: 'Game-centric' },
   { name: 'login',          path: '/login',     label: 'Form / auth' },
   { name: 'pricing',        path: '/pricing',   label: 'Editorial' },
+
+  /* Unavailable / honest-failure states. */
+  { name: 'points-rewards',   path: '/points',                  label: 'Unavailable — rewards catalogue', auth: true, click: '#points-tab-rewards' },
+  { name: 'privacy-settings', path: '/settings/privacy',        label: 'Unavailable — export + delete account', auth: true },
+  { name: 'friends',          path: '/friends',                 label: 'Unavailable — game invites', auth: true },
+  { name: 'dev-marketplace',  path: '/developers/marketplace',  label: 'Unavailable — store/item deletion', auth: true },
+  { name: 'game-deploy',      path: '/developers/deploy',       label: 'Empty — no versions registered', auth: true },
+  { name: 'game-deploy-webhook', path: '/developers/deploy',    label: 'Unavailable — webhook secret generation', auth: true, click: 'button:has-text("Webhook Config")' },
+  { name: 'matchmaking',      path: '/matchmaking',             label: 'Nav — newly reachable route', auth: true },
 ]
+
+/**
+ * A stub of THIS node's real API surface: 200 for routes the Rust backend
+ * actually mounts, 404 for the ones it does not. Screenshotting against a dead
+ * origin would only ever show error states and would never exercise the
+ * unavailable states, which are the point of this pass.
+ */
+const MOUNTED = {
+  '/api/v1/auth/me':                 { id: 'u1', username: 'operator', email: 'op@example.com', role: 'admin' },
+  '/api/v1/points/balance':          { points: 1240, lifetime_points: 8300, rank: 42, season: { name: 'Season 1', tier: 'Silver', next_tier: 'Gold', progress: 40, points_needed: 760, ends_at: '2026-09-01T00:00:00Z' } },
+  '/api/v1/points/history':          { history: [] },
+  '/api/v1/points/leaderboard':      { entries: [] },
+  '/api/v1/friends':                 { friends: [] },
+  '/api/v1/friends/pending':         { requests: [] },
+  '/api/v1/friends/sent':            { requests: [] },
+  '/api/v1/marketplace/my-stores':   { stores: [{ id: 's1', name: 'Cosmetics', game_id: 'g1', game_title: 'Test Game', item_count: 0, revenue_usdc: 0 }] },
+  '/api/v1/marketplace/entitlements':{ entitlements: [] },
+  '/api/v1/marketplace/stores/s1/items': { items: [] },
+  '/api/v1/developer/games':         { games: [] },
+  '/api/v1/github/installations':    { installations: [] },
+  '/api/v1/games':                   { games: [] },
+  '/api/v1/matchmaking/status':      { status: 'not_in_queue' },
+}
 
 const THEMES = ['dark', 'light']
 const WIDTHS = [390, 768, 1280]
@@ -84,15 +118,61 @@ const main = async () => {
       const ctx = await browser.newContext({
         viewport: { width: 1280, height: 900 },
         deviceScaleFactor: 2,
+        /* The PWA service worker proxies fetches and would bypass page.route(),
+           turning every stubbed API call into a network failure. */
+        serviceWorkers: 'block',
       })
       // Set the theme the same way the app does, before first paint.
       await ctx.addInitScript((t) => {
         try { localStorage.setItem('theme', t) } catch (e) { /* storage disabled */ }
       }, theme)
 
+      if (route.auth) {
+        await ctx.addInitScript(() => {
+          try {
+            localStorage.setItem('token', 'screenshot-token')
+            localStorage.setItem('magnetite_user', JSON.stringify({
+              id: 'u1', username: 'operator', email: 'op@example.com', role: 'admin',
+            }))
+          } catch (e) { /* storage disabled */ }
+        })
+      }
+
       const page = await ctx.newPage()
+
+      /* Answer API calls the way the real node does. */
+      await page.route('**/api/**', async (r) => {
+        const url = new URL(r.request().url())
+        const hit = MOUNTED[url.pathname]
+        /* The app calls a different origin (VITE_API_URL), so the stub must
+           send CORS headers or the browser rejects the response and every call
+           looks like a network failure instead of a 404. */
+        const cors = {
+          'access-control-allow-origin': '*',
+          'access-control-allow-headers': '*',
+          'access-control-allow-methods': '*',
+        }
+        if (r.request().method() === 'OPTIONS') {
+          await r.fulfill({ status: 204, headers: cors })
+        } else if (hit) {
+          await r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(hit) })
+        } else {
+          await r.fulfill({
+            status: 404,
+            contentType: 'application/json',
+            headers: cors,
+            body: JSON.stringify({ message: 'Not Found' }),
+          })
+        }
+      })
+
       await page.goto(base + route.path, { waitUntil: 'networkidle' }).catch(() => {})
       await page.waitForTimeout(700)
+
+      if (route.click) {
+        await page.click(route.click).catch(() => {})
+        await page.waitForTimeout(400)
+      }
 
       const file = path.join(OUT, `${route.name}-${theme}.png`)
       await page.screenshot({ path: file, fullPage: true })

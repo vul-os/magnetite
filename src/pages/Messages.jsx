@@ -4,6 +4,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useCommsSocket } from '../hooks/useCommsSocket';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
+import { LoadError } from '../components/state/Unavailable';
 import { useTranslation } from '../i18n/useTranslation';
 import './Messages.css';
 
@@ -64,8 +65,13 @@ function PlusIcon(props) {
   );
 }
 
-// ── Mock DM threads (fallback) ────────────────────────────────────────────
-const MOCK_THREADS = [
+// ── Mock DM threads — ONLY when VITE_USE_MOCKS === 'true' ─────────────────
+// These were previously the unconditional initial state, so every user saw
+// three invented conversations with stock-photo avatars before (and instead of)
+// their real threads.
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+const MOCK_THREADS = USE_MOCKS ? [
   {
     id: '1',
     user: { id: '1', username: 'SpeedDemon', display_name: 'SpeedDemon', avatar: 'https://picsum.photos/seed/user1/100/100' },
@@ -87,7 +93,7 @@ const MOCK_THREADS = [
     unread: 1,
     updated_at: new Date(Date.now() - 86_400_000).toISOString(),
   },
-];
+] : [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function formatTime(iso) {
@@ -453,18 +459,33 @@ export default function Messages() {
     ),
   });
 
-  // Fetch real DM threads if API is available
-  useEffect(() => {
-    let cancelled = false;
-    api.messages?.listDMThreads?.()
-      .then((data) => {
-        if (!cancelled && Array.isArray(data) && data.length > 0) {
-          setThreads(data);
-        }
-      })
-      .catch(() => { /* use mock */ });
-    return () => { cancelled = true; };
+  const [threadsLoading, setThreadsLoading] = useState(!USE_MOCKS);
+  const [threadsError, setThreadsError] = useState(null);
+
+  /* Load the real DM threads. GET /api/v1/dms is mounted and returns the
+   * current user's threads. (The previous code called
+   * `api.messages.listDMThreads`, which does not exist — the optional call
+   * evaluated to undefined and threw, so threads never loaded and the mock
+   * list stayed on screen.) */
+  const loadThreads = useCallback(async () => {
+    setThreadsLoading(true);
+    setThreadsError(null);
+    try {
+      const data = await api.messages.dmThreads();
+      const list = Array.isArray(data) ? data : (data?.threads ?? data?.data ?? []);
+      setThreads(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setThreadsError(err.message || 'Failed to load conversations');
+    } finally {
+      setThreadsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    if (USE_MOCKS) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadThreads();
+  }, [loadThreads]);
 
   const activeThread = threads.find((th) => th.id === activeThreadId) ?? null;
 
@@ -506,7 +527,23 @@ export default function Messages() {
           />
         </div>
         <div className="dm-thread-list" role="list">
-          {filteredThreads.length === 0 ? (
+          {threadsLoading ? (
+            <div aria-busy="true" style={{ padding: 'var(--space-3)' }}>
+              <span className="sk sk-row" />
+              <span className="sk sk-row" />
+              <span className="sk sk-row" />
+            </div>
+          ) : threadsError ? (
+            <LoadError
+              headingLevel={3}
+              title="Could not load conversations"
+              detail={threadsError}
+              onRetry={loadThreads}
+            >
+              Direct messages are implemented on this node; this request simply
+              did not land.
+            </LoadError>
+          ) : filteredThreads.length === 0 ? (
             <div className="dm-empty-threads">
               <ChatBubbleIcon />
               <p>{t('messages.noConversations')}</p>

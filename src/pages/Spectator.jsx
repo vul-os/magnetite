@@ -97,11 +97,13 @@ export default function Spectator() {
     if (!gameId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setReplaysLoading(true);
+    // GET /api/v1/replays does not exist; replays are listed per game at
+    // GET /api/v1/games/:id/replays, which is what this page actually wants.
     const fetch = USE_MOCKS
       ? Promise.resolve(MOCK_REPLAYS)
-      : api.replays.list({ game_id: gameId, limit: 5 }).then((r) => r?.data ?? r);
+      : api.replays.listForGame(gameId, { limit: 5 }).then((r) => r?.data ?? r);
     fetch
-      .then(setReplays)
+      .then((r) => setReplays(Array.isArray(r) ? r : []))
       .catch(() => setReplays([]))
       .finally(() => setReplaysLoading(false));
   }, [gameId]);

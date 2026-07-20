@@ -80,7 +80,7 @@ function presenceDotClass(status) {
 const USER_MENU_ITEMS = [
   { path: '/profile',  labelKey: 'nav.profile',  icon: UsersIcon },
   { path: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
-  { path: '/earnings', labelKey: 'developer.earnings', icon: WalletIcon },
+  { path: '/developers/earnings', labelKey: 'developer.earnings', icon: WalletIcon },
 ];
 
 // Sample notifications — in production, these come from the notification API

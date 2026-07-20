@@ -6,7 +6,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Modal from '../../components/common/Modal';
 import DeploymentStatus from './DeploymentStatus';
-import BuildLogs from './BuildLogs';
+import { Unavailable, LoadError } from '../../components/state/Unavailable';
 import { getOAuthUrl, api } from '../../api/client';
 import './GameDeploy.css';
 
@@ -77,7 +77,7 @@ function normaliseDeploy(d) {
   return {
     id:        d.id,
     game_id:   d.game_id ?? null,
-    build_id:  d.build_id ?? d.id ?? null,
+    version_id: d.version_id ?? d.id ?? null,
     name:      d.name ?? d.game_title ?? 'Deployment',
     status,
     repo:      d.repo ?? d.github_repo ?? '',
@@ -92,8 +92,27 @@ function normaliseDeploy(d) {
       status === 'building' ? 60  :
       status === 'queued'   ? 10  : 0
     ),
-    logs:      d.logs ?? d.build_log ?? null,
   };
+}
+
+/**
+ * A registered `game_versions` row is the real deployable unit on this backend
+ * — there is no separate build-job record. `is_live` is the only status the
+ * backend actually knows, so that is the only status we claim.
+ */
+function versionToDeploy(version, game) {
+  return normaliseDeploy({
+    id:         version.id,
+    game_id:    version.game_id ?? game?.id ?? null,
+    version_id: version.id,
+    name:       game?.title ?? 'Game',
+    status:     version.is_live ? 'success' : 'built',
+    repo:       game?.github_repo ?? '',
+    commit:     version.commit_sha ?? '',
+    version:    version.version ?? '',
+    created_at: version.created_at,
+    progress:   100,
+  });
 }
 
 export default function GameDeploy() {
@@ -110,9 +129,8 @@ export default function GameDeploy() {
   const [deployError, setDeployError]   = useState(null);
   const [deployments, setDeployments]   = useState(MOCK_DEPLOYMENTS ?? []);
   const [deploymentsLoading, setDeploymentsLoading] = useState(!MOCK_DEPLOYMENTS);
+  const [deploymentsError, setDeploymentsError] = useState(null);
   const [showWebhookModal, setShowWebhookModal] = useState(false);
-  const [webhookSecret, setWebhookSecret] = useState('');
-  const [webhookLoading, setWebhookLoading] = useState(false);
 
   /* Check existing GitHub installations on mount */
   useEffect(() => {
@@ -170,95 +188,54 @@ export default function GameDeploy() {
     if (githubConnected) loadRepos();
   }, [githubConnected, loadRepos]);
 
-  /* Load recent deployments */
-  useEffect(() => {
-    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
-    async function loadDeployments() {
-      setDeploymentsLoading(true);
-      try {
-        const res = await authFetch('/api/developer/games');
-        if (res.ok) {
-          const data = await res.json();
-          const raw = data.games ?? data ?? [];
-          /* Map games with build statuses to deployment entries */
-          const builds = Array.isArray(raw)
-            ? raw.flatMap(g =>
-                (g.builds ?? []).map(b => normaliseDeploy({ ...b, name: g.title, repo: g.github_repo }))
-              )
-            : [];
-          if (builds.length > 0) setDeployments(builds);
-        }
-      } catch {
-        /* keep empty */
-      } finally {
-        setDeploymentsLoading(false);
-      }
+  /**
+   * Load the deployment history.
+   *
+   * The backend has no build-job collection; the deployable unit is a
+   * `game_versions` row, listed per game at
+   * GET /developer/games/:id/versions. So: list the developer's games, then
+   * ask each for its versions.
+   *
+   * A failure here is reported, not swallowed — the old code hid every error
+   * behind an empty list, which is what made this page look like it worked.
+   */
+  const loadDeployments = useCallback(async () => {
+    setDeploymentsLoading(true);
+    setDeploymentsError(null);
+    try {
+      const body  = await api.developer.games();
+      const games = body?.games ?? body?.data ?? body ?? [];
+      const list  = Array.isArray(games) ? games : [];
+
+      const perGame = await Promise.all(
+        list.map(async (game) => {
+          try {
+            const vBody = await api.developer.versions(game.id);
+            const versions = vBody?.data ?? vBody ?? [];
+            return (Array.isArray(versions) ? versions : []).map(v => versionToDeploy(v, game));
+          } catch {
+            // One game's versions failing must not blank the whole history.
+            return [];
+          }
+        })
+      );
+
+      setDeployments(
+        perGame.flat().sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+      );
+    } catch (err) {
+      setDeploymentsError(err.message || 'Failed to load deployments');
+    } finally {
+      setDeploymentsLoading(false);
     }
-    loadDeployments();
   }, []);
 
-  /* Poll in-progress deployments for status via the real builds API */
+  // Load the deployment history from the developer API (external system).
   useEffect(() => {
-    const inProgress = deployments.filter(d =>
-      d.status === 'building' || d.status === 'pending' || d.status === 'queued'
-    );
-    if (inProgress.length === 0) return;
-
-    const interval = setInterval(async () => {
-      for (const d of inProgress) {
-        // Prefer the game_id / build_id path via the new API
-        const gameId  = d.game_id ?? null;
-        const buildId = d.build_id ?? null;
-
-        if (gameId && buildId) {
-          try {
-            const body   = await api.developer.buildLogs(gameId, buildId);
-            const data   = body?.data ?? body;
-            const status = data?.status ?? null;
-            const logs   = data?.logs ?? data?.log ?? null;
-            if (status) {
-              setDeployments(prev => prev.map(dep =>
-                dep.id === d.id
-                  ? {
-                      ...dep,
-                      status,
-                      logs:     logs ?? dep.logs,
-                      progress: status === 'built'   ? 100 :
-                                status === 'building' ? 60  :
-                                status === 'queued'   ? 10  : dep.progress,
-                    }
-                  : dep
-              ));
-            }
-          } catch {
-            /* ignore poll errors */
-          }
-          continue;
-        }
-
-        // Fallback: GitHub webhook-based build-status endpoint
-        if (d.repo) {
-          try {
-            const parts = d.repo.split('/');
-            if (parts.length === 2) {
-              const res = await authFetch(`/api/github/repos/${parts[0]}/${parts[1]}/build-status`);
-              if (res.ok) {
-                const status = await res.json();
-                setDeployments(prev => prev.map(dep =>
-                  dep.id === d.id
-                    ? { ...dep, status: status.status ?? dep.status, progress: status.progress ?? dep.progress }
-                    : dep
-                ));
-              }
-            }
-          } catch {
-            /* ignore poll errors */
-          }
-        }
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [deployments]);
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadDeployments();
+  }, [loadDeployments]);
 
   const handleConnectGithub = async () => {
     setConnecting(true);
@@ -289,41 +266,16 @@ export default function GameDeploy() {
     }
   };
 
-  // ── Build log modal state ────────────────────────────────────────────────
-  const [logModalOpen, setLogModalOpen]   = useState(false);
+  // ── Build log modal ──────────────────────────────────────────────────────
+  // Build logs are NOT implemented on this node: nothing persists CI output and
+  // no route serves it. Rather than open an empty console that looks like it is
+  // still loading, the modal states the absence.
+  const [logModalOpen, setLogModalOpen]     = useState(false);
   const [logModalDeploy, setLogModalDeploy] = useState(null);
-  const [logModalLogs, setLogModalLogs]   = useState('');
-  const [logModalLoading, setLogModalLoading] = useState(false);
 
-  const handleViewLogs = useCallback(async (deployment) => {
+  const handleViewLogs = useCallback((deployment) => {
     setLogModalDeploy(deployment);
     setLogModalOpen(true);
-    setLogModalLogs('');
-
-    // The deployment entry may carry inline logs from the API
-    if (deployment.logs) {
-      setLogModalLogs(deployment.logs);
-      return;
-    }
-
-    // Try fetching via the real API: GET /developer/games/:gameId/builds/:buildId/logs
-    const gameId  = deployment.game_id ?? deployment.id;
-    const buildId = deployment.build_id ?? deployment.id;
-    if (!gameId || !buildId) {
-      setLogModalLogs('// No log endpoint available for this build.');
-      return;
-    }
-
-    setLogModalLoading(true);
-    try {
-      const body = await api.developer.buildLogs(gameId, buildId);
-      const data = body?.data ?? body;
-      setLogModalLogs(data?.logs ?? data?.log ?? '// No logs available yet.');
-    } catch {
-      setLogModalLogs('// Could not fetch build logs. The log endpoint may not be available yet (Bucket D — CI runner).');
-    } finally {
-      setLogModalLoading(false);
-    }
   }, []);
 
   const handleTriggerDeploy = async () => {
@@ -348,35 +300,11 @@ export default function GameDeploy() {
       const game = await res.json();
       const gameId = game.id ?? game.data?.id;
 
-      // Attempt to fetch builds for the new game (won't exist yet, so we get an empty list)
-      // and also try the scaffold trigger endpoint for a build job
-      let builds = [];
-      if (gameId) {
-        try {
-          const buildsBody = await api.developer.builds(gameId);
-          const raw = buildsBody?.data ?? buildsBody;
-          builds = Array.isArray(raw) ? raw : [];
-        } catch {
-          /* no builds yet — expected */
-        }
-      }
-
-      /* If we got a real build entry, show it; otherwise add an optimistic queued entry.
-       * Bucket D: the actual wasm-pack CI runner is not yet wired, so status = queued
-       * until the CI worker pushes a status update via webhook. */
-      const buildEntry = builds[0] ?? null;
-      const newDeployment = normaliseDeploy(buildEntry ?? {
-        id:         gameId ?? `local-${Date.now()}`,
-        game_id:    gameId,
-        name:       gameSettings.title,
-        status:     'queued',
-        repo:       selectedRepo,
-        branch:     selectedBranch,
-        commit:     '',
-        started_at: new Date().toISOString(),
-        progress:   0,
-      });
-      setDeployments(prev => [newDeployment, ...prev]);
+      /* The game record now exists. Re-read the real version history rather
+       * than inventing an optimistic "queued" row: until a version is
+       * registered there is genuinely nothing deployed, and saying otherwise
+       * would be a claim the backend cannot support. */
+      if (gameId) await loadDeployments();
     } catch (err) {
       setDeployError(err.message);
     } finally {
@@ -384,70 +312,43 @@ export default function GameDeploy() {
     }
   };
 
+  const [actionError, setActionError] = useState(null);
+
+  /* Promote — PUT /developer/games/:gameId/versions/:versionId/promote */
   const handlePromote = useCallback(async (deployment) => {
-    const gameId  = deployment.game_id ?? deployment.id;
-    const buildId = deployment.build_id ?? deployment.id;
-    if (!gameId || !buildId) {
-      alert('Cannot promote: missing game or build ID.');
+    const gameId    = deployment.game_id;
+    const versionId = deployment.version_id;
+    if (!gameId || !versionId) {
+      setActionError('Cannot promote: this entry has no game or version id.');
       return;
     }
+    setActionError(null);
     try {
-      await api.developer.promote(gameId, buildId);
-      // Refresh build list
-      const body = await api.developer.builds(gameId);
-      const raw  = (body?.data ?? body) ?? [];
-      if (Array.isArray(raw) && raw.length > 0) {
-        setDeployments(prev => {
-          const without = prev.filter(d => d.game_id !== gameId);
-          return [...raw.map(normaliseDeploy), ...without];
-        });
-      }
+      await api.developer.promote(gameId, versionId);
+      await loadDeployments();
     } catch (err) {
-      alert(`Promote failed: ${err.message}`);
+      setActionError(`Promote failed: ${err.message}`);
     }
-  }, []);
+  }, [loadDeployments]);
 
+  /* Rollback — PUT /developer/games/:gameId/versions/:versionId/rollback.
+   * The backend rolls back TO a version id, so the version being acted on is
+   * the target; there is no free-text version to prompt for. */
   const handleRollback = useCallback(async (deployment) => {
-    const gameId = deployment.game_id ?? deployment.id;
-    if (!gameId || !deployment.version) {
-      alert('Rollback requires a game ID and version. Manually redeploy an earlier version to roll back (Bucket D — CI runner required).');
+    const gameId    = deployment.game_id;
+    const versionId = deployment.version_id;
+    if (!gameId || !versionId) {
+      setActionError('Cannot roll back: this entry has no game or version id.');
       return;
     }
-    const targetVersion = window.prompt(`Roll back "${deployment.name}" to which version?`, deployment.version);
-    if (!targetVersion) return;
+    setActionError(null);
     try {
-      await api.developer.rollback(gameId, { version: targetVersion });
-      alert(`Rollback to ${targetVersion} queued. Build status will update when the CI runner completes.`);
+      await api.developer.rollback(gameId, versionId);
+      await loadDeployments();
     } catch (err) {
-      alert(`Rollback failed: ${err.message}`);
+      setActionError(`Rollback failed: ${err.message}`);
     }
-  }, []);
-
-  const handleCancelBuild = (deployId) => {
-    setDeployments(prev => prev.filter(d => d.id !== deployId));
-  };
-
-  const generateWebhookSecret = async () => {
-    setWebhookLoading(true);
-    try {
-      /* Request a webhook secret from the backend rather than generating client-side */
-      const res = await authFetch('/api/github/webhook-secret', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setWebhookSecret(data.secret ?? data.webhook_secret ?? '');
-      } else {
-        /* Backend endpoint may not exist yet — fall through to disabled state */
-        throw new Error('Webhook secret endpoint not available');
-      }
-    } catch {
-      /* TODO: implement POST /api/github/webhook-secret in backend to return a
-       * securely-generated secret stored server-side. For now show a notice. */
-      setWebhookSecret('');
-      alert('Webhook secret generation requires a backend endpoint (not yet implemented). Set GITHUB_WEBHOOK_SECRET in your environment instead.');
-    } finally {
-      setWebhookLoading(false);
-    }
-  };
+  }, [loadDeployments]);
 
   return (
     <Layout>
@@ -730,29 +631,51 @@ export default function GameDeploy() {
               </div>
             )}
 
-            {(deploymentsLoading || deployments.length > 0) && (
-              <div className="deployments-section">
-                <h3>Recent Deployments</h3>
-                {deploymentsLoading ? (
-                  <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }} aria-busy="true">
-                    <span className="spinner spinner-sm" aria-hidden="true" /> Loading deployments&hellip;
-                  </div>
-                ) : (
-                  <div className="deployments-list">
-                    {deployments.map(deployment => (
-                      <DeploymentStatus
-                        key={deployment.id}
-                        deployment={deployment}
-                        onRollback={handleRollback}
-                        onCancel={handleCancelBuild}
-                        onViewLogs={() => handleViewLogs(deployment)}
-                        onPromote={deployment.status === 'built' ? () => handlePromote(deployment) : null}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="deployments-section">
+              <h3>Deployed versions</h3>
+
+              {actionError && (
+                <p className="form-error" role="alert">{actionError}</p>
+              )}
+
+              {deploymentsLoading ? (
+                <div className="deployments-list" aria-busy="true">
+                  <span className="sk sk-row" />
+                  <span className="sk sk-row" />
+                </div>
+              ) : deploymentsError ? (
+                <LoadError
+                  headingLevel={4}
+                  title="Could not load deployed versions"
+                  detail={deploymentsError}
+                  onRetry={loadDeployments}
+                >
+                  The version history could not be read from this node. This is a
+                  failed request, not a missing feature — retrying may work.
+                </LoadError>
+              ) : deployments.length === 0 ? (
+                <div className="state state-empty">
+                  <h4 className="state-title">No versions registered yet</h4>
+                  <p className="state-body">
+                    A version appears here once a build is registered against one
+                    of your games. Push to a connected repository, or register a
+                    version with the CLI.
+                  </p>
+                </div>
+              ) : (
+                <div className="deployments-list">
+                  {deployments.map(deployment => (
+                    <DeploymentStatus
+                      key={deployment.id}
+                      deployment={deployment}
+                      onRollback={handleRollback}
+                      onViewLogs={() => handleViewLogs(deployment)}
+                      onPromote={deployment.status === 'built' ? () => handlePromote(deployment) : null}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="deploy-sidebar">
@@ -769,7 +692,7 @@ export default function GameDeploy() {
                   <strong>Build status</strong> updates via GitHub webhook callbacks
                 </li>
                 <li>
-                  <strong>Build logs</strong> are retained for 7 days
+                  <strong>Build logs</strong> are not stored by this node
                 </li>
               </ul>
             </div>
@@ -816,22 +739,17 @@ export default function GameDeploy() {
 
             <div className="webhook-section">
               <h4>Webhook Secret</h4>
-              <div className="webhook-secret-box">
-                <code>{webhookSecret || 'Click Generate to create a secure secret'}</code>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={generateWebhookSecret}
-                  isLoading={webhookLoading}
-                >
-                  Generate
-                </Button>
-              </div>
-              {webhookSecret && (
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', fontFamily: 'var(--font-mono)', marginTop: '0.5rem' }}>
-                  Copy this secret — set it as GITHUB_WEBHOOK_SECRET in your backend environment.
-                </p>
-              )}
+              <Unavailable
+                inline
+                headingLevel={5}
+                title="Secret generation is not built"
+                endpoints={['POST /api/v1/github/webhook-secret']}
+              >
+                This node cannot mint a webhook secret for you. Choose your own
+                (any high-entropy string), set it as{' '}
+                <code className="mono">GITHUB_WEBHOOK_SECRET</code> in the
+                backend environment, and paste the same value into GitHub.
+              </Unavailable>
             </div>
 
             <div className="webhook-section">
@@ -855,7 +773,7 @@ export default function GameDeploy() {
                 <li>Navigate to Settings &rarr; Webhooks &rarr; Add webhook</li>
                 <li>Paste the webhook URL above</li>
                 <li>Set content type to <code>application/json</code></li>
-                <li>Generate and copy the secret, then paste it here</li>
+                <li>Paste your <code>GITHUB_WEBHOOK_SECRET</code> value into GitHub&rsquo;s Secret field</li>
                 <li>Select &ldquo;Push&rdquo; events and save</li>
               </ol>
             </div>
@@ -869,51 +787,34 @@ export default function GameDeploy() {
           title={`Build Logs — ${logModalDeploy?.name ?? ''}`}
           size="lg"
         >
-          <div style={{ minHeight: '300px' }}>
-            {logModalLoading ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                <span className="spinner spinner-sm" aria-hidden="true" /> Loading logs&hellip;
+          <Unavailable
+            headingLevel={3}
+            title="Build logs are not kept on this node"
+            endpoints={['GET /api/v1/developer/games/:gameId/builds/:buildId/logs']}
+          >
+            Nothing on this backend stores CI output, so there are no logs to
+            show — for this build or any other. The version metadata below is
+            everything the node actually knows about it.
+          </Unavailable>
+
+          <dl className="deploy-facts">
+            {logModalDeploy?.version && (
+              <div>
+                <dt className="m-sm">Version</dt>
+                <dd className="mono">{logModalDeploy.version}</dd>
               </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                  {logModalDeploy?.status && (
-                    <span style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 'var(--text-xs)',
-                      padding: '2px 8px',
-                      borderRadius: '999px',
-                      background: logModalDeploy.status === 'built'    ? 'rgba(61,220,132,0.1)' :
-                                  logModalDeploy.status === 'building'  ? 'var(--color-amber-soft)' :
-                                  logModalDeploy.status === 'failed'    ? 'rgba(255,84,104,0.1)' :
-                                  'var(--color-bg-elevated)',
-                      color:      logModalDeploy.status === 'built'    ? 'var(--color-success)' :
-                                  logModalDeploy.status === 'building'  ? 'var(--color-amber)' :
-                                  logModalDeploy.status === 'failed'    ? 'var(--color-error)' :
-                                  'var(--color-text-muted)',
-                      border: '1px solid currentColor',
-                    }}>
-                      {logModalDeploy.status.toUpperCase()}
-                    </span>
-                  )}
-                  {logModalDeploy?.version && (
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                      v{logModalDeploy.version}
-                    </span>
-                  )}
-                  {logModalDeploy?.commit && (
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-accent)' }}>
-                      {logModalDeploy.commit.slice(0, 8)}
-                    </span>
-                  )}
-                </div>
-                <BuildLogs
-                  logs={logModalLogs || '// Waiting for build logs…\n// (Bucket D — CI runner not yet live)'}
-                  isBuilding={logModalDeploy?.status === 'building' || logModalDeploy?.status === 'queued'}
-                />
-              </>
             )}
-          </div>
+            {logModalDeploy?.commit && (
+              <div>
+                <dt className="m-sm">Commit</dt>
+                <dd className="mono break-key">{logModalDeploy.commit}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="m-sm">Live</dt>
+              <dd className="mono">{logModalDeploy?.status === 'success' ? 'yes' : 'no'}</dd>
+            </div>
+          </dl>
         </Modal>
       </div>
     </Layout>

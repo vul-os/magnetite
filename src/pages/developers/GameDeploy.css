@@ -63,12 +63,18 @@
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  /* The three steps plus their connectors are wider than a 390px viewport.
+     Let the strip scroll inside itself rather than scrolling the page
+     (DESIGN.md §9). */
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .step {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .step-number {

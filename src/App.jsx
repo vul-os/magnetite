@@ -49,6 +49,7 @@ const GameDeploy = lazy(() => import('./pages/developers/GameDeploy'));
 const GameAnalytics = lazy(() => import('./pages/GameAnalytics'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const GameStudio = lazy(() => import('./pages/GameStudio'));
+const Matchmaking = lazy(() => import('./pages/Matchmaking'));
 const Earnings = lazy(() => import('./pages/Earnings'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Security = lazy(() => import('./pages/Security'));
@@ -173,6 +174,7 @@ function App() {
                       <Route path="/play/:id" element={<Playground />} />
                       <Route path="/subscription" element={<Subscription />} />
                       <Route path="/game-access" element={<GameAccess />} />
+                      <Route path="/matchmaking" element={<Matchmaking />} />
                       <Route path="/lobby/:id" element={<GameLobby />} />
                       <Route path="/spectate/:id" element={<Spectator />} />
                       <Route path="/developers" element={<DeveloperDashboard />} />

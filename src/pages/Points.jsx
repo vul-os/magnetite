@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 import Skeleton from '../components/skeletons/Skeleton';
 import EmptyState from '../components/empty/EmptyState';
+import { Unavailable, LoadError } from '../components/state/Unavailable';
 import { usePoints } from '../hooks/usePoints';
 import './Points.css';
 
@@ -77,7 +78,17 @@ const TABS = [
 export default function Points() {
   const [tab, setTab]                 = useState('overview');
   const [redeemMsg, setRedeemMsg]     = useState(null);
-  const { balance, history, rewards, leaderboard, loading, redeeming, redeem } = usePoints();
+  const {
+    balance: rawBalance, history, rewards, leaderboard,
+    loading, error, redeeming, redeem, rewardsUnavailable,
+  } = usePoints();
+
+  /* `balance` is null until the node answers (and stays null if it never
+   * does). Every read below assumed an object, so this page threw on its first
+   * render for any real user and the error boundary rendered nothing at all.
+   * Nothing is invented here — the zeroes are only ever shown while `loading`
+   * is true or alongside the error state below. */
+  const balance = rawBalance ?? { points: 0, lifetime_points: 0, rank: null, season: null };
 
   async function handleRedeem(reward) {
     if (balance.points < reward.cost) {
@@ -107,6 +118,17 @@ export default function Points() {
           <p className="points-subtitle">Earn points by playing, competing, and engaging. Redeem for cosmetics and boosts.</p>
         </header>
 
+        {!loading && error && (
+          <LoadError
+            headingLevel={2}
+            title="Could not load your points"
+            detail={error}
+          >
+            The points economy is implemented on this node; this request did not
+            land. Nothing below has been filled in with made-up figures.
+          </LoadError>
+        )}
+
         {/* ── Balance hero ── */}
         <div className="points-balance-hero reveal-2" aria-label="Points balance">
           {loading ? (
@@ -117,11 +139,12 @@ export default function Points() {
                 <span className="points-hero-label">Current Balance</span>
                 <div className="points-hero-value">
                   <span className="points-coin" aria-hidden="true">⬡</span>
-                  <span className="points-hero-number">{balance.points.toLocaleString()}</span>
+                  <span className="points-hero-number">{(balance.points ?? 0).toLocaleString()}</span>
                   <span className="points-hero-unit">pts</span>
                 </div>
                 <span className="points-hero-lifetime">
-                  {balance.lifetime_points?.toLocaleString()} lifetime pts · Global #{balance.rank}
+                  {balance.lifetime_points?.toLocaleString() ?? '—'} lifetime pts
+                  {balance.rank != null && <> · Global #{balance.rank}</>}
                 </span>
               </div>
               <div className="points-season-card">
@@ -147,7 +170,9 @@ export default function Points() {
                   </div>
                   <span className="season-pts-needed">{season.points_needed?.toLocaleString()} pts to {season.next_tier}</span>
                 </div>
-                <span className="season-ends">Season ends {formatDate(season.ends_at)}</span>
+                {season.ends_at && (
+                  <span className="season-ends">Season ends {formatDate(season.ends_at)}</span>
+                )}
               </div>
             </>
           )}
@@ -185,7 +210,7 @@ export default function Points() {
               {[
                 { label: 'Balance',        value: formatPts(balance.points),           unit: 'pts'  },
                 { label: 'Lifetime Earned', value: formatPts(balance.lifetime_points), unit: 'pts'  },
-                { label: 'Global Rank',    value: `#${balance.rank}`,                  unit: ''     },
+                { label: 'Global Rank',    value: balance.rank != null ? `#${balance.rank}` : '—', unit: '' },
                 { label: 'Season',         value: season.tier,                          unit: ''     },
               ].map(({ label, value, unit }) => (
                 <div key={label} className="points-stat-card">
@@ -274,6 +299,23 @@ export default function Points() {
         {tab === 'rewards' && (
           <section id="points-panel-rewards" className="points-section reveal-4" role="tabpanel" aria-labelledby="points-tab-rewards" aria-label="Rewards shop">
             <h3 className="section-sub-heading">Redeem Rewards</h3>
+
+            {rewardsUnavailable ? (
+              <Unavailable
+                headingLevel={4}
+                title="There is no rewards catalogue on this node"
+                endpoints={[
+                  'GET  /api/v1/points/rewards',
+                  'POST /api/v1/points/redeem',
+                ]}
+              >
+                Redemption is not implemented here, so there is nothing to spend
+                points on yet. Everything else on this page is real: your balance,
+                your transaction history and the season leaderboard all come from
+                the node.
+              </Unavailable>
+            ) : (
+            <>
             <p className="section-desc">Spend your points on cosmetics, boosts, and currency credits.</p>
             <div className="rewards-grid" role="list">
               {loading ? (
@@ -309,6 +351,8 @@ export default function Points() {
                 );
               })}
             </div>
+            </>
+            )}
           </section>
         )}
 

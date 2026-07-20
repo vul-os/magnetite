@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/Layout';
 import Skeleton from '../components/skeletons/Skeleton';
 import EmptyState from '../components/empty/EmptyState';
+import { Unavailable } from '../components/state/Unavailable';
 import { useMarketplace } from '../hooks/useMarketplace';
 import './DevMarketplace.css';
 
@@ -35,17 +36,6 @@ function PencilIcon() {
   );
 }
 
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14H6L5 6" />
-      <path d="M10 11v6M14 11v6" />
-      <path d="M9 6V4h6v2" />
-    </svg>
-  );
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ITEM_TYPES = ['cosmetic', 'boost', 'bundle', 'currency', 'other'];
@@ -64,7 +54,7 @@ function formatCurrency(n) {
 export default function DevMarketplace() {
   const {
     stores, items, loading,
-    loadItems, createStore, addItem, updateItem, removeItem,
+    loadItems, createStore, addItem, updateItem,
   } = useMarketplace();
 
   const [selectedStoreId, setSelectedStoreId] = useState(null);
@@ -153,16 +143,8 @@ export default function DevMarketplace() {
     }
   }
 
-  async function handleRemoveItem(item) {
-    if (!activeStore) return;
-    if (!window.confirm(`Remove "${item.name}"?`)) return;
-    try {
-      await removeItem(activeStore.id, item.id);
-      flash('Item removed.');
-    } catch (err) {
-      flash(err.message || 'Failed to remove item.', 'error');
-    }
-  }
+  // Removing an item is not implemented on this backend (no delete route), so
+  // no delete control is rendered — see the notice above the item table.
 
   function openEditItem(item) {
     setEditingItem(item);
@@ -303,6 +285,23 @@ export default function DevMarketplace() {
                   </button>
                 </div>
 
+                {/* What this node cannot do. Stated once, above the table,
+                    rather than as controls that fail when clicked. */}
+                <Unavailable
+                  inline
+                  headingLevel={3}
+                  title="Some store actions are not built yet"
+                  endpoints={[
+                    'DELETE /api/v1/marketplace/stores/:id',
+                    'DELETE /api/v1/marketplace/items/:id',
+                  ]}
+                >
+                  A store and its items cannot be deleted on this node — no
+                  route exists for either. Creating a store, adding and editing
+                  items, revenue and purchases all work; set an item Inactive to
+                  take it off sale.
+                </Unavailable>
+
                 {/* Items table */}
                 {isLoadingItems ? (
                   <div className="devmp-items-loading">
@@ -360,13 +359,6 @@ export default function DevMarketplace() {
                             aria-label={`Edit ${item.name}`}
                           >
                             <PencilIcon />
-                          </button>
-                          <button
-                            className="icon-btn icon-btn-danger"
-                            onClick={() => handleRemoveItem(item)}
-                            aria-label={`Remove ${item.name}`}
-                          >
-                            <TrashIcon />
                           </button>
                         </div>
                       </div>

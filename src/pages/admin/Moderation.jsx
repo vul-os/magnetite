@@ -10,9 +10,11 @@
  *
  * Admin endpoints:
  *   GET  /api/v1/admin/review-reports       (reviewReports)
- *   POST /api/v1/admin/review-reports/:id/dismiss (dismissReport)
- *   POST /api/v1/admin/users/:id/warn       (warnUser)
- *   POST /api/v1/admin/users/:id/ban        (banUser)
+ *   POST /api/v1/admin/review-reports/:id/action  (actOnReport)
+ *
+ * All four verbs go through that one route: the backend accepts
+ * action = dismiss | remove_review | warn_user | ban_user. There is no separate
+ * /users/:id/warn route (the old code called one, which 404'd silently).
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -366,22 +368,16 @@ export default function Moderation() {
   }, []);
 
   const handleAction = useCallback(async (report, action) => {
-    const { id: reportId, reviewer_id: reviewerId } = report;
+    const { id: reportId } = report;
     setReportState(reportId, { actioning: action, msg: null });
 
     try {
       if (!USE_MOCKS) {
-        if (action === 'warn') {
-          // Warn user — separate endpoint
-          await api.admin.warnUser(reviewerId, `Review flagged: ${report.reason}`);
-          // Also dismiss the report
-          await api.admin.dismissReport(reportId, { action: 'dismiss' });
-        } else if (action === 'ban_user') {
-          await api.admin.dismissReport(reportId, { action: 'ban_user' });
-        } else {
-          // dismiss | remove_review
-          await api.admin.dismissReport(reportId, { action });
-        }
+        // One route, one call. 'warn' maps to the backend's 'warn_user'.
+        await api.admin.actOnReport(reportId, {
+          action: action === 'warn' ? 'warn_user' : action,
+          note: action === 'warn' ? `Review flagged: ${report.reason}` : undefined,
+        });
       }
 
       // Optimistic update

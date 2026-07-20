@@ -584,12 +584,25 @@
   border-left: 1px solid var(--color-border-strong);
   z-index: calc(var(--z-sticky) + 2);
   transform: translateX(100%);
-  transition: transform var(--t) var(--ease-out);
+  /* Closed: take the drawer out of the page entirely. `visibility: hidden`
+     stops it from contributing to horizontal scrollWidth (a translated fixed
+     element still counts) AND removes its links from the tab order, which is
+     what you want for a closed drawer. */
+  visibility: hidden;
+  transition:
+    transform var(--t) var(--ease-out),
+    visibility 0s linear var(--t);
   display: flex; flex-direction: column;
   overflow-y: auto;
 }
 
-.mobile-menu.open { transform: translateX(0); }
+.mobile-menu.open {
+  transform: translateX(0);
+  visibility: visible;
+  transition:
+    transform var(--t) var(--ease-out),
+    visibility 0s;
+}
 
 .mobile-menu-header {
   display: flex; align-items: center; justify-content: space-between;

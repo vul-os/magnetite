@@ -157,7 +157,7 @@ export default function DeveloperDashboard() {
             <Link to="/docs" className="btn btn-secondary">
               <span aria-hidden="true">📚</span> {t('dashboard.documentation')}
             </Link>
-            <Link to="/game-studio" className="btn btn-primary">
+            <Link to="/developers/studio" className="btn btn-primary">
               <span aria-hidden="true">+</span> {t('dashboard.newGame')}
             </Link>
           </div>
@@ -263,14 +263,14 @@ export default function DeveloperDashboard() {
             <div className="card games-table-card">
               <div className="card-header">
                 <h2>{t('dashboard.myGames')}</h2>
-                <Link to="/game-studio" className="view-all-link">{t('dashboard.viewAll')}</Link>
+                <Link to="/developers/studio" className="view-all-link">{t('dashboard.viewAll')}</Link>
               </div>
               {loading ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('dashboard.loadingGames')}</div>
               ) : games.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                   <p>{t('dashboard.noGames')}</p>
-                  <Link to="/game-studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>{t('dashboard.createFirstGame')}</Link>
+                  <Link to="/developers/studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>{t('dashboard.createFirstGame')}</Link>
                 </div>
               ) : (
               <table className="games-table" aria-label={t('dashboard.gamesTableLabel')}>
@@ -334,7 +334,7 @@ export default function DeveloperDashboard() {
             <div className="card quick-actions-card">
               <h2>{t('dashboard.quickActions')}</h2>
               <div className="quick-actions">
-                <Link to="/game-studio" className="quick-action-btn primary">
+                <Link to="/developers/studio" className="quick-action-btn primary">
                   <span className="action-icon" aria-hidden="true">🎮</span>
                   <span className="action-text">
                     <strong>{t('dashboard.createNewGame')}</strong>

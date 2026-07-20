@@ -311,7 +311,7 @@ export default function GameAnalytics() {
             ) : gamesBreakdown.length === 0 ? (
               <div className="analytics-empty">
                 <p>{t('analytics.noGamesData')}</p>
-                <Link to="/game-studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
+                <Link to="/developers/studio" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-block' }}>
                   {t('analytics.createFirstGame')}
                 </Link>
               </div>

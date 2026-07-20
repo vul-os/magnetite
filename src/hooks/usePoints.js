@@ -59,6 +59,14 @@ export function usePoints() {
   const [loading, setLoading]         = useState(!USE_MOCKS);
   const [error, setError]             = useState(null);
   const [redeeming, setRedeeming]     = useState(false);
+  /**
+   * The rewards catalogue and redemption are NOT implemented on this backend —
+   * the points router mounts balance / history / leaderboard / season / award /
+   * spend and nothing else. A 404 here is a missing capability, not a failed
+   * request, and the UI must say which. Mocks never set this, so a mock run
+   * still exercises the working path.
+   */
+  const [rewardsUnavailable, setRewardsUnavailable] = useState(false);
 
   useEffect(() => {
     if (USE_MOCKS) return;
@@ -93,6 +101,10 @@ export function usePoints() {
             setRewards(rewRes.value.rewards);
           } else if (rewRes.status === 'fulfilled' && Array.isArray(rewRes.value)) {
             setRewards(rewRes.value);
+          } else if (rewRes.status === 'rejected') {
+            // 404 = the route is not mounted. Anything else = a real failure.
+            setRewardsUnavailable(rewRes.reason?.notFound === true);
+            setRewards([]);
           }
 
           if (lbRes.status === 'fulfilled' && Array.isArray(lbRes.value?.entries)) {
@@ -132,5 +144,8 @@ export function usePoints() {
     }
   }, [rewards]);
 
-  return { balance, history, rewards, leaderboard, loading, error, redeeming, redeem };
+  return {
+    balance, history, rewards, leaderboard, loading, error,
+    redeeming, redeem, rewardsUnavailable,
+  };
 }

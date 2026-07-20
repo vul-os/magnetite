@@ -29,7 +29,20 @@ async function request(endpoint, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message);
+    const err = new Error(error.message || 'Request failed');
+    err.status = response.status;
+    // A 404 on a route the backend never mounted is not the same fact as a
+    // request that failed (DESIGN.md §7.2). Callers use this to choose between
+    // <LoadError> and <Unavailable>.
+    err.notFound = response.status === 404;
+    throw err;
+  }
+
+  // Several backend handlers answer 204 No Content (moderation actions, some
+  // deletes). Parsing an empty body as JSON throws and would surface a real
+  // success as a failure.
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return null;
   }
 
   return response.json();
@@ -245,6 +258,12 @@ export const api = {
     /** POST /api/v1/friends/request — send a friend request; body uses to_user_id per backend */
     addFriend: (userId) => request('/api/v1/friends/request', { method: 'POST', body: JSON.stringify({ to_user_id: userId }) }),
     removeFriend: (userId) => request(`/api/friends/${userId}`, { method: 'DELETE' }),
+    /** GET /api/v1/friends/blocked — users this account has blocked. */
+    blocked: () => request('/api/v1/friends/blocked'),
+    /** POST /api/v1/friends/block/:id */
+    blockUser: (userId) => request(`/api/v1/friends/block/${userId}`, { method: 'POST' }),
+    /** DELETE /api/v1/friends/block/:id */
+    unblockUser: (userId) => request(`/api/v1/friends/block/${userId}`, { method: 'DELETE' }),
     searchUsers: (q) => request(`/api/users/search?q=${encodeURIComponent(q)}`),
     invites: () => request('/api/invites'),
     sendInvite: (userId, gameId) => request('/api/invites', { method: 'POST', body: JSON.stringify({ user_id: userId, game_id: gameId }) }),
@@ -290,11 +309,32 @@ export const api = {
       return request(`/api/v1/admin/review-reports${qs ? `?${qs}` : ''}`);
     },
     /**
-     * POST /api/v1/admin/review-reports/:id/dismiss — dismiss a report or remove the review.
-     * data: { action: 'dismiss' | 'remove_review' | 'ban_user' }
+     * POST /api/v1/admin/review-reports/:id/action — act on a reported review.
+     * data: { action: 'dismiss' | 'remove_review' | 'warn_user' | 'ban_user', note? }
+     * Answers 204 No Content.
      */
+    actOnReport: (reportId, data) =>
+      request(`/api/v1/admin/review-reports/${reportId}/action`, { method: 'POST', body: JSON.stringify(data) }),
+    /** @deprecated alias of actOnReport — the backend route is /action, not /dismiss. */
     dismissReport: (reportId, data) =>
-      request(`/api/v1/admin/review-reports/${reportId}/dismiss`, { method: 'POST', body: JSON.stringify(data) }),
+      request(`/api/v1/admin/review-reports/${reportId}/action`, { method: 'POST', body: JSON.stringify(data) }),
+
+    /**
+     * GET /api/v1/admin/chat-flags — auto-flagged chat messages.
+     * params: { page?, limit?, status? }
+     */
+    chatFlags: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/admin/chat-flags${qs ? `?${qs}` : ''}`);
+    },
+    /**
+     * POST /api/v1/admin/chat-flags/:id/action
+     * data: { action: 'dismiss' | 'warn_user' | 'ban_user', note? }
+     */
+    actOnChatFlag: (flagId, data) =>
+      request(`/api/v1/admin/chat-flags/${flagId}/action`, { method: 'POST', body: JSON.stringify(data) }),
     /**
      * GET /api/v1/admin/users — list users (admin only).
      * params: { limit?, offset?, filter?, sort? }
@@ -305,32 +345,34 @@ export const api = {
       ).toString();
       return request(`/api/v1/admin/users${qs ? `?${qs}` : ''}`);
     },
-    /** POST /api/v1/admin/users/:id/ban — ban a user */
-    banUser: (userId, reason) =>
-      request(`/api/v1/admin/users/${userId}/ban`, { method: 'POST', body: JSON.stringify({ reason }) }),
-    /** POST /api/v1/admin/users/:id/unban — unban a user */
-    unbanUser: (userId) =>
-      request(`/api/v1/admin/users/${userId}/unban`, { method: 'POST' }),
     /**
-     * POST /api/v1/admin/transactions/:id/refund — initiate a refund for a transaction.
-     * data: { reason?: string }
-     * Returns a refund_records row: { id, transaction_id, user_id, amount, provider, status, ... }
+     * PUT /api/v1/admin/users/:id/ban — set a user's ban state.
+     * The backend route is PUT and takes { banned: bool, reason? }; both ban and
+     * unban go through it.
      */
+    banUser: (userId, reason) =>
+      request(`/api/v1/admin/users/${userId}/ban`, { method: 'PUT', body: JSON.stringify({ banned: true, reason }) }),
+    /** PUT /api/v1/admin/users/:id/ban with banned:false. */
+    unbanUser: (userId) =>
+      request(`/api/v1/admin/users/${userId}/ban`, { method: 'PUT', body: JSON.stringify({ banned: false }) }),
+
+    // ── Not mounted on this node ────────────────────────────────────────────
+    // The three calls below have no corresponding backend route. They are kept
+    // so callers keep their shape, but they will 404 — a caller must surface
+    // <Unavailable>, not <LoadError>. See src/components/state/Unavailable.jsx.
+
+    /** UNAVAILABLE — no POST /admin/transactions/:id/refund route exists. */
     refundTransaction: (transactionId, data = {}) =>
       request(`/api/v1/admin/transactions/${transactionId}/refund`, { method: 'POST', body: JSON.stringify(data) }),
-
     /**
-     * POST /api/v1/admin/users/:id/warn — issue a warning to a user.
-     * data: { reason: string }
+     * UNAVAILABLE — no POST /admin/users/:id/warn route exists.
+     * To warn the author of a reported review, use
+     * actOnReport(reportId, { action: 'warn_user' }), which IS implemented.
      */
     warnUser: (userId, reason) =>
       request(`/api/v1/admin/users/${userId}/warn`, { method: 'POST', body: JSON.stringify({ reason }) }),
-
-    /**
-     * GET /api/v1/admin/review-reports/:id — get a single report detail.
-     */
-    getReport: (reportId) =>
-      request(`/api/v1/admin/review-reports/${reportId}`),
+    /** UNAVAILABLE — no GET /admin/review-reports/:id detail route exists. */
+    getReport: (reportId) => request(`/api/v1/admin/review-reports/${reportId}`),
   },
 
   developer: {
@@ -355,6 +397,22 @@ export const api = {
       return request(`/api/v1/developer/games/${gameId}/analytics${qs ? `?${qs}` : ''}`);
     },
 
+    /**
+     * GET /api/v1/developer/games/:gameId/versions — the registered versions of
+     * a game, newest first. Each: { id, game_id, version, commit_sha,
+     * release_notes, is_live, created_at, updated_at }.
+     *
+     * This is the real deployment history. There is no separate "builds"
+     * collection on the backend — a version IS the deployable unit.
+     */
+    versions: (gameId) => request(`/api/v1/developer/games/${gameId}/versions`),
+
+    /**
+     * GET /api/v1/developer/games/:gameId/build-status — the build-status
+     * summary for a game's artifacts.
+     */
+    buildStatus: (gameId) => request(`/api/v1/developer/games/${gameId}/build-status`),
+
     // ── GDS: Game scaffold ───────────────────────────────────────────────────
     /**
      * POST /api/v1/developer/games/scaffold
@@ -365,30 +423,25 @@ export const api = {
       request('/api/v1/developer/games/scaffold', { method: 'POST', body: JSON.stringify(data) }),
 
     /**
-     * GET /api/v1/developer/games/:gameId/builds
-     * Returns list of build jobs: { id, status, version, commit_sha, started_at, logs_url }
-     */
-    builds: (gameId) => request(`/api/v1/developer/games/${gameId}/builds`),
-
-    /**
-     * GET /api/v1/developer/games/:gameId/builds/:buildId/logs
-     * Returns { logs: string, status, updated_at }
+     * UNAVAILABLE — there is no build-log store or route on this node. Nothing
+     * on the backend persists CI output, so there is nothing to fetch; the page
+     * must say so rather than show an empty log pane.
      */
     buildLogs: (gameId, buildId) => request(`/api/v1/developer/games/${gameId}/builds/${buildId}/logs`),
 
     /**
-     * POST /api/v1/developer/games/:gameId/builds/:buildId/promote
-     * Promotes this build to be the live version.
+     * PUT /api/v1/developer/games/:gameId/versions/:versionId/promote — make a
+     * version live (ownership-checked).
      */
-    promote: (gameId, buildId) =>
-      request(`/api/v1/developer/games/${gameId}/builds/${buildId}/promote`, { method: 'POST' }),
+    promote: (gameId, versionId) =>
+      request(`/api/v1/developer/games/${gameId}/versions/${versionId}/promote`, { method: 'PUT' }),
 
     /**
-     * POST /api/v1/developer/games/:gameId/rollback
-     * body: { version: string }
+     * PUT /api/v1/developer/games/:gameId/versions/:versionId/rollback —
+     * demote the current live version and promote this one.
      */
-    rollback: (gameId, data) =>
-      request(`/api/v1/developer/games/${gameId}/rollback`, { method: 'POST', body: JSON.stringify(data) }),
+    rollback: (gameId, versionId) =>
+      request(`/api/v1/developer/games/${gameId}/versions/${versionId}/rollback`, { method: 'PUT' }),
 
     // Payout recipients are GONE. Developers are paid wallet-to-wallet at
     // checkout (seam §3.6), so there is no bank account to register, no
@@ -421,8 +474,8 @@ export const api = {
     create: (data) => request('/api/communities', { method: 'POST', body: JSON.stringify(data) }),
     /** Join a community by invite code or id. */
     join: (id) => request(`/api/communities/${id}/join`, { method: 'POST' }),
-    /** Leave a community. */
-    leave: (id) => request(`/api/communities/${id}/leave`, { method: 'DELETE' }),
+    /** Leave a community. The backend mounts POST /:id/leave, not DELETE. */
+    leave: (id) => request(`/api/communities/${id}/leave`, { method: 'POST' }),
     /** List members of a community. */
     members: (id) => request(`/api/communities/${id}/members`),
   },
@@ -446,13 +499,19 @@ export const api = {
     /** Post a message to a channel. data: { content } */
     post: (channelId, data) =>
       request(`/api/channels/${channelId}/messages`, { method: 'POST', body: JSON.stringify(data) }),
-    /** List DM messages between the current user and another. */
+    /**
+     * List DM messages between the current user and another.
+     * Backend route is GET /dms/:other_user_id/messages — GET /dms/:id is not
+     * mounted (only POST is, to send).
+     */
     listDMs: (userId, params = {}) => {
       const qs = new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
       ).toString();
-      return request(`/api/dms/${userId}${qs ? `?${qs}` : ''}`);
+      return request(`/api/dms/${userId}/messages${qs ? `?${qs}` : ''}`);
     },
+    /** GET /api/v1/dms — the current user's DM threads. */
+    dmThreads: () => request('/api/dms'),
     /** Send a DM to another user. data: { content } */
     sendDM: (userId, data) =>
       request(`/api/dms/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
@@ -475,27 +534,29 @@ export const api = {
   streams: {
     /**
      * List live streams.
-     * communityId = 'global' → platform-wide listing (/api/v1/streams/live)
-     * communityId = specific id → community-scoped listing (/api/v1/communities/:id/streams)
-     * NOTE: community-scoped stream routes are being added by agent 2.
+     * communityId = 'global' → platform-wide listing (GET /api/v1/streams)
+     * communityId = specific id → GET /api/v1/communities/:id/streams
+     *
+     * There is no /streams/live route; GET /streams already lists only live
+     * streams. The old code called /streams/live and swallowed the 404 into a
+     * silent fallback, which hid the mistake.
      */
     list: (communityId) =>
       communityId === 'global'
-        ? request('/api/v1/streams/live').catch(() => request('/api/v1/streams'))
+        ? request('/api/v1/streams')
         : request(`/api/v1/communities/${communityId}/streams`),
 
-    /**
-     * Start streaming.
-     * Tries community-scoped endpoint first (being added by agent 2);
-     * falls back to /api/v1/streams for global/un-scoped streams.
-     */
+    /** Start streaming — community-scoped when given a community. */
     goLive: (communityId, data) =>
       communityId && communityId !== 'global'
         ? request(`/api/v1/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) })
         : request('/api/v1/streams', { method: 'POST', body: JSON.stringify(data) }),
 
-    /** Stop / end a stream by id. DELETE /api/v1/streams/:id */
-    end: (streamId) => request(`/api/v1/streams/${streamId}`, { method: 'DELETE' }),
+    /**
+     * Stop a stream. The backend mounts POST /streams/:id/stop; there is no
+     * DELETE /streams/:id — a stream is ended, not deleted.
+     */
+    end: (streamId) => request(`/api/v1/streams/${streamId}/stop`, { method: 'POST' }),
 
     /**
      * Get stream detail (title, status, etc). There is no /watch sub-route on the backend.
@@ -535,9 +596,13 @@ export const api = {
       ).toString();
       return request(`/api/points/leaderboard${qs ? `?${qs}` : ''}`);
     },
-    /** Redeemable rewards catalogue. */
+    /**
+     * UNAVAILABLE — there is no rewards catalogue on this node. The points
+     * router mounts balance / leaderboard / season / award / spend / history
+     * only; no /points/rewards and no /points/redeem.
+     */
     rewards: () => request('/api/points/rewards'),
-    /** Redeem a reward. data: { reward_id } */
+    /** UNAVAILABLE — no POST /points/redeem route exists. */
     redeem: (data) => request('/api/points/redeem', { method: 'POST', body: JSON.stringify(data) }),
   },
 
@@ -574,6 +639,10 @@ export const api = {
 
   replays: {
     /**
+     * UNAVAILABLE — GET /api/v1/replays is not mounted. The replays router
+     * owns POST / (store) and GET /:id (fetch one) only. Replays can be listed
+     * per game via listForGame() below, which IS mounted.
+     *
      * GET /api/v1/replays — list replay logs.
      * params: { game_id?, limit?, offset? }
      * Returns: { data: ReplaySummary[], total, page, per_page }
@@ -593,8 +662,17 @@ export const api = {
     get: (id) => request(`/api/v1/replays/${id}`),
 
     /**
-     * DELETE /api/v1/replays/:id — delete a replay (admin/owner only).
+     * GET /api/v1/games/:gameId/replays — replays for one game. This is the
+     * only replay listing the backend mounts.
      */
+    listForGame: (gameId, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
+      ).toString();
+      return request(`/api/v1/games/${gameId}/replays${qs ? `?${qs}` : ''}`);
+    },
+
+    /** UNAVAILABLE — there is no DELETE /api/v1/replays/:id route. */
     delete: (id) => request(`/api/v1/replays/${id}`, { method: 'DELETE' }),
   },
 
@@ -665,42 +743,63 @@ export const api = {
       }),
   },
 
+  /**
+   * Developer stores. Backend namespace is /api/v1/marketplace/* (mirrored at
+   * /api/v1/stores/* by `marketplace::stores_router`). Each entry below records
+   * whether the route is actually mounted — several are not, and the page must
+   * say so rather than fail silently.
+   */
   stores: {
     /**
-     * List all public stores. params: { game_id?, limit?, offset? }
-     * Backend namespace is /api/v1/marketplace/stores (not /api/stores).
+     * The stores owned by the current developer.
+     * GET /api/v1/marketplace/my-stores — mounted.
+     * (There is no public "list every store" route; the old `list()` called
+     * GET /marketplace/stores, which 404s.)
      */
+    mine: () => request('/api/v1/marketplace/my-stores'),
+    /** UNAVAILABLE — no GET /marketplace/stores route. Use mine(). */
     list: (params = {}) => {
       const qs = new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))
       ).toString();
       return request(`/api/v1/marketplace/stores${qs ? `?${qs}` : ''}`);
     },
-    /** Fetch a single store. */
+    /** GET /api/v1/marketplace/stores/:game_id — the store for a game. Mounted. */
     get: (storeId) => request(`/api/v1/marketplace/stores/${storeId}`),
-    /** Create a developer store. data: { name, game_id, description? } */
-    create: (data) => request('/api/v1/marketplace/stores', { method: 'POST', body: JSON.stringify(data) }),
-    /** Update store metadata. */
+    /**
+     * Create a store for a game. The backend mounts
+     * POST /marketplace/games/:game_id/store — a store belongs to a game, so
+     * the game id is in the path, not the body.
+     * data: { name, description? }
+     */
+    create: (gameId, data) =>
+      request(`/api/v1/marketplace/games/${gameId}/store`, { method: 'POST', body: JSON.stringify(data) }),
+    /** PUT /api/v1/marketplace/stores/:store_id — mounted. */
     update: (storeId, data) => request(`/api/v1/marketplace/stores/${storeId}`, { method: 'PUT', body: JSON.stringify(data) }),
-    /** Delete a store. */
+    /** UNAVAILABLE — no DELETE /marketplace/stores/:id route exists. */
     delete: (storeId) => request(`/api/v1/marketplace/stores/${storeId}`, { method: 'DELETE' }),
-    /** List items in a store. */
+    /** GET /api/v1/marketplace/stores/:store_id/items — mounted. */
     items: (storeId) => request(`/api/v1/marketplace/stores/${storeId}/items`),
-    /** Add an item to a store. data: { name, description, price_points, price_usd, item_type, metadata? } */
+    /** POST /api/v1/marketplace/stores/:store_id/items — mounted. */
     addItem: (storeId, data) =>
       request(`/api/v1/marketplace/stores/${storeId}/items`, { method: 'POST', body: JSON.stringify(data) }),
-    /** Update a store item. */
+    /** PUT /api/v1/marketplace/items/:item_id — items are addressed globally. */
     updateItem: (storeId, itemId, data) =>
-      request(`/api/v1/marketplace/stores/${storeId}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
-    /** Remove an item from a store. */
+      request(`/api/v1/marketplace/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    /** UNAVAILABLE — no delete-item route exists on the backend. */
     removeItem: (storeId, itemId) =>
-      request(`/api/v1/marketplace/stores/${storeId}/items/${itemId}`, { method: 'DELETE' }),
-    /** Purchase an item. data: { currency: 'points' | 'usd' } */
+      request(`/api/v1/marketplace/items/${itemId}`, { method: 'DELETE' }),
+    /** POST /api/v1/marketplace/items/:item_id/purchase — mounted. */
     purchase: (storeId, itemId, data) =>
-      request(`/api/v1/marketplace/stores/${storeId}/items/${itemId}/purchase`, { method: 'POST', body: JSON.stringify(data) }),
-    /** Current user's entitlements (purchased items). */
+      request(`/api/v1/marketplace/items/${itemId}/purchase`, { method: 'POST', body: JSON.stringify(data) }),
+    /** GET /api/v1/marketplace/entitlements — mounted. */
     entitlements: () => request('/api/v1/marketplace/entitlements'),
-    /** Developer sales summary for owned stores. */
-    sales: (storeId) => request(`/api/v1/marketplace/stores/${storeId}/sales`),
+    /**
+     * Revenue for a store. Backend route is /revenue, not /sales.
+     * GET /api/v1/marketplace/stores/:store_id/revenue — mounted.
+     */
+    revenue: (storeId) => request(`/api/v1/marketplace/stores/${storeId}/revenue`),
+    /** @deprecated alias of revenue(). */
+    sales: (storeId) => request(`/api/v1/marketplace/stores/${storeId}/revenue`),
   },
 };

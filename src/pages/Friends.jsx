@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
+import { Unavailable } from '../components/state/Unavailable';
 import { api } from '../api/client';
 import { usePresence } from '../hooks/usePresence';
 import { useTranslation } from '../i18n/useTranslation';
@@ -136,11 +137,11 @@ export default function Friends() {
     setSearchQuery('');
   }, []);
 
-  const handleInvite = useCallback(async (friend) => {
-    try {
-      await api.social.sendInvite(friend.id, null);
-    } catch { /* optimistic — invite queued locally */ }
-  }, []);
+  // Sending a game invite has no backend route on this node — POST /api/v1/invites
+  // is not mounted (the invites router serves GET / and accept/decline only).
+  // The old handler swallowed the 404 and pretended the invite was "queued
+  // locally", which it was not. There is no handler now, so FriendCard renders
+  // no Invite button; the panel says why once, at the top.
 
   const handleBlock = useCallback((friend) => {
     setFriends(prev => prev.filter(f => f.id !== friend.id));
@@ -297,6 +298,15 @@ export default function Friends() {
         <div className="tab-content reveal-4">
           {activeTab === 'friends' && (
             <div id="panel-friends" className="friends-list" role="tabpanel" aria-labelledby="tab-friends">
+              <Unavailable
+                inline
+                headingLevel={3}
+                title="Game invites are not built yet"
+                endpoints={['POST /api/v1/invites']}
+              >
+                You cannot invite a friend into a game from here — this node has
+                no route to send one. Friends, requests and blocking all work.
+              </Unavailable>
               {friends.length === 0
                 ? <p className="empty-state-inline">{t('friends.noFriends')}</p>
                 : friends.map(friend => {
@@ -308,7 +318,6 @@ export default function Friends() {
                       <FriendCard
                         key={friend.id}
                         friend={friendWithPresence}
-                        onInvite={handleInvite}
                         onBlock={handleBlock}
                       />
                     );

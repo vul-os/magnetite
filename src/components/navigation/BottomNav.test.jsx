@@ -57,8 +57,12 @@ describe('BottomNav', () => {
     renderAt('/home');
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home');
     expect(screen.getByRole('link', { name: 'Store' })).toHaveAttribute('href', '/marketplace');
-    expect(screen.getByRole('link', { name: 'Play' })).toHaveAttribute('href', '/play');
+    // /play alone is not a route (only /play/:id), so Play points at
+    // /matchmaking — the real "get into a game" destination.
+    expect(screen.getByRole('link', { name: 'Play' })).toHaveAttribute('href', '/matchmaking');
     expect(screen.getByRole('link', { name: 'Communities' })).toHaveAttribute('href', '/communities');
-    expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile');
+    // /profile alone is not a route (only /profile/:username). With no signed-in
+    // user the Profile tab sends you to sign in rather than to a 404.
+    expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/login');
   });
 });

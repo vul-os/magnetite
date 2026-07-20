@@ -5,7 +5,7 @@ import { useMarketplace } from './useMarketplace';
 vi.mock('../api/client', () => ({
   api: {
     stores: {
-      list: vi.fn(),
+      mine: vi.fn(),
       entitlements: vi.fn(),
       items: vi.fn(),
       create: vi.fn(),
@@ -23,7 +23,7 @@ describe('useMarketplace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: API unavailable → hook falls back to mock data.
-    api.stores.list.mockRejectedValue(new Error('no backend'));
+    api.stores.mine.mockRejectedValue(new Error('no backend'));
     api.stores.entitlements.mockRejectedValue(new Error('no backend'));
     api.stores.items.mockRejectedValue(new Error('no backend'));
     api.stores.create.mockRejectedValue(new Error('no backend'));
@@ -55,7 +55,7 @@ describe('useMarketplace', () => {
     const fakeStores = [
       { id: 'api-s1', name: 'API Store', game_id: 42, item_count: 5, revenue_usdc: 0, revenue_points: 0 },
     ];
-    api.stores.list.mockResolvedValue({ stores: fakeStores });
+    api.stores.mine.mockResolvedValue({ stores: fakeStores });
     api.stores.entitlements.mockRejectedValue(new Error('no backend'));
 
     const { result } = renderHook(() => useMarketplace());
@@ -118,7 +118,7 @@ describe('useMarketplace', () => {
     const fakeEntitlements = [
       { id: 'e1', item_id: 'i1', item_name: 'Plasma Rifle Skin', game_title: 'Cosmic Raiders', purchased_at: '2026-05-20T10:00:00Z', currency: 'points' },
     ];
-    api.stores.list.mockRejectedValue(new Error('no backend'));
+    api.stores.mine.mockRejectedValue(new Error('no backend'));
     api.stores.entitlements.mockResolvedValue({ entitlements: fakeEntitlements });
 
     const { result } = renderHook(() => useMarketplace());

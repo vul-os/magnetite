@@ -38,13 +38,18 @@ export default memo(function FriendCard({ friend, onInvite, onBlock, showActions
 
       {showActions && (
         <div className="friend-actions">
-          <button
-            onClick={() => onInvite?.(friend)}
-            className="btn btn-primary btn-sm"
-            aria-label={`Invite ${friend.username}`}
-          >
-            Invite
-          </button>
+          {/* The Invite button appears only when a caller can actually send an
+              invite. Sending game invites has no backend route, so Friends does
+              not pass onInvite and no dead button is rendered. */}
+          {onInvite && (
+            <button
+              onClick={() => onInvite(friend)}
+              className="btn btn-primary btn-sm"
+              aria-label={`Invite ${friend.username}`}
+            >
+              Invite
+            </button>
+          )}
           <button
             onClick={() => onBlock?.(friend)}
             className="btn btn-secondary btn-sm"

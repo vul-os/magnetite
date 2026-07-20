@@ -84,7 +84,7 @@ export function useMarketplace() {
       setError(null);
       try {
         const [storesRes, entRes] = await Promise.allSettled([
-          api.stores.list(),
+          api.stores.mine(),
           api.stores.entitlements(),
         ]);
 
@@ -132,9 +132,15 @@ export function useMarketplace() {
     }
   }, [items]);
 
-  const createStore = useCallback(async (data) => {
-    const result = await api.stores.create(data);
-    const newStore = result?.store ?? { id: `s${Date.now()}`, item_count: 0, revenue_usdc: 0, revenue_points: 0, ...data };
+  /**
+   * Create a store for a game. A store belongs to a game on this backend, so
+   * the game id goes in the path: POST /marketplace/games/:game_id/store.
+   */
+  const createStore = useCallback(async ({ game_id: gameId, ...data }) => {
+    if (!gameId) throw new Error('A game must be selected before creating a store.');
+    const result = await api.stores.create(gameId, data);
+    const newStore = result?.store ?? result?.data ?? null;
+    if (!newStore) throw new Error('The node did not return the created store.');
     setStores(s => [...s, newStore]);
     return newStore;
   }, []);
@@ -154,6 +160,12 @@ export function useMarketplace() {
     }));
   }, []);
 
+  /**
+   * UNAVAILABLE — the backend mounts no delete-item route, so an item cannot be
+   * removed from a store on this node. Consumers should read
+   * `capabilities.removeItem` and not render the control at all rather than
+   * offer a button that 404s. Kept callable so the shape is stable.
+   */
   const removeItem = useCallback(async (storeId, itemId) => {
     await api.stores.removeItem(storeId, itemId);
     setItems(prev => ({
@@ -161,6 +173,21 @@ export function useMarketplace() {
       [storeId]: (prev[storeId] ?? []).filter(i => i.id !== itemId),
     }));
   }, []);
+
+  /**
+   * What this node can actually do, verified against the mounted routes in
+   * backend/src/api/marketplace.rs. `false` means no route exists — a UI must
+   * say so plainly instead of rendering a control that silently fails.
+   */
+  const capabilities = {
+    listAllStores: false, // no public GET /marketplace/stores; only /my-stores
+    createStore:   true,
+    deleteStore:   false, // no DELETE /marketplace/stores/:id
+    addItem:       true,
+    updateItem:    true,
+    removeItem:    false, // no DELETE route for items
+    purchase:      true,
+  };
 
   /**
    * Wallet checkout. Funds move buyer wallet → developer wallet atomically and the
@@ -204,7 +231,7 @@ export function useMarketplace() {
   }, [entitlements]);
 
   return {
-    stores, items, entitlements, loading, error, purchasing,
+    stores, items, entitlements, loading, error, purchasing, capabilities,
     loadItems, createStore, addItem, updateItem, removeItem, purchase, hasEntitlement,
   };
 }

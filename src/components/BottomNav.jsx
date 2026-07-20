@@ -6,6 +6,7 @@
  * 44px touch targets, aria-current, safe-area insets.
  */
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import './BottomNav.css';
 
 /* ── Icons (inline SVG — no dependency on icon bundle) ────────────────────── */
@@ -65,10 +66,20 @@ function ProfileIcon() {
 
 /* ── Tab definitions ──────────────────────────────────────────────────────── */
 
+/**
+ * Tab destinations.
+ *
+ * `/play` and `/profile` used to be listed here and both 404'd: the router only
+ * has `/play/:id` (a specific game) and `/profile/:username`. Neither is
+ * reachable without an argument, so:
+ *   - Play    → `/matchmaking`, which is where you go to get into a game.
+ *   - Profile → `/profile/<your username>`, resolved per user at render, and
+ *               `/login` when signed out.
+ */
 const TABS = [
   { path: '/home',        label: 'Home',        Icon: HomeIcon },
   { path: '/marketplace', label: 'Store',       Icon: StoreIcon },
-  { path: '/play',        label: 'Play',        Icon: PlayIcon },
+  { path: '/matchmaking', label: 'Play',        Icon: PlayIcon },
   { path: '/communities', label: 'Communities', Icon: CommunitiesIcon },
   { path: '/profile',     label: 'Profile',     Icon: ProfileIcon },
 ];
@@ -77,12 +88,22 @@ const TABS = [
 
 export default function BottomNav() {
   const location = useLocation();
+  const { user } = useAuth();
+
+  /* `/profile` alone is not a route. Point at this user's own profile, or at
+     sign-in when there is nobody to show. */
+  const profileHref = user?.username
+    ? `/profile/${encodeURIComponent(user.username)}`
+    : '/login';
+
+  const hrefFor = (tabPath) => (tabPath === '/profile' ? profileHref : tabPath);
 
   /* Resolve the active tab: exact match first, then prefix match */
   function isActive(tabPath) {
     if (location.pathname === tabPath) return true;
-    // Special-case: /play/:id → highlight Play
-    if (tabPath === '/play' && location.pathname.startsWith('/play/')) return true;
+    // Special-case: /play/:id and /lobby/:id → highlight Play
+    if (tabPath === '/matchmaking' &&
+        (location.pathname.startsWith('/play/') || location.pathname.startsWith('/lobby/'))) return true;
     // Special-case: /home or / → highlight Home
     if (tabPath === '/home' && location.pathname === '/') return true;
     // Special-case: /profile/:username → highlight Profile
@@ -101,7 +122,7 @@ export default function BottomNav() {
         return (
           <Link
             key={path}
-            to={path}
+            to={hrefFor(path)}
             className={`bottom-nav-tab${active ? ' active' : ''}`}
             aria-current={active ? 'page' : undefined}
             aria-label={label}

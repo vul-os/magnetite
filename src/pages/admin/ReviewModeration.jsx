@@ -170,7 +170,7 @@ export default function ReviewModeration() {
     setActionMsg(null);
     try {
       if (!USE_MOCKS) {
-        await api.admin.dismissReport(reportId, { action });
+        await api.admin.actOnReport(reportId, { action });
       }
       setReports(prev =>
         prev.map(r => r.id === reportId ? { ...r, status: action === 'dismiss' ? 'dismissed' : 'actioned' } : r)
