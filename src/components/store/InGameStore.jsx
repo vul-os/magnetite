@@ -263,9 +263,13 @@ export function InGameStore({
     }
   }, [storeId, loadItems]);
 
+  // Mock items are dev-only. In a real build an unloaded/failed store shows a
+  // genuine empty state — never fabricated products a player might try to buy.
+  const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+  const fallbackItems = USE_MOCKS ? MOCK_FALLBACK_ITEMS : [];
   const storeItems = storeId
-    ? (items[storeId] ?? MOCK_FALLBACK_ITEMS)
-    : MOCK_FALLBACK_ITEMS;
+    ? (items[storeId] ?? fallbackItems)
+    : fallbackItems;
 
   const activeItems = storeItems.filter(i => i.active !== false);
   const types       = ['all', ...new Set(activeItems.map(i => i.item_type))];
