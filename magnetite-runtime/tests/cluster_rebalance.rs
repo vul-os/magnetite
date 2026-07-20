@@ -466,8 +466,12 @@ fn a_dead_peers_shards_are_reported_as_lost_not_recovered() {
     let msg = rep.lost[0].to_string();
     assert!(msg.contains("STATE LOST"), "loss message hedges: {msg}");
     assert!(
-        msg.contains("no state replication"),
+        msg.contains("Checkpoint recovery is not enabled"),
         "loss message hides why it is unrecoverable: {msg}"
+    );
+    assert!(
+        msg.contains("world is gone"),
+        "loss message hedges about the state: {msg}"
     );
 
     // And crucially: nothing quietly resurrected them. A did NOT take over
