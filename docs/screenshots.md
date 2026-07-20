@@ -20,9 +20,13 @@ Two surfaces are captured:
 | screenshots/app-servers-light.png / -dark.png | Server browser — discovered `SessionAd`s (game content hash, node, capacity, ping, price) and the bring-your-own-server framing |
 | screenshots/app-wallet-light.png / -dark.png | Non-custodial wallet — linked address, `custodial: false`, signed receipts |
 | screenshots/app-earnings-light.png / -dark.png | Developer revenue — receipt-backed, paid directly to the developer's wallet |
-| screenshots/app-marketplace-light.png / -dark.png | Game catalog — content-addressed games |
-| screenshots/app-game-light.png / -dark.png | Game detail |
-| screenshots/app-developers-light.png / -dark.png | Developer dashboard |
+| screenshots/app-game-light.png / -dark.png | Game detail — signed-build / replay provenance and non-custodial, no-platform-cut checkout |
+
+> The marketplace and developer-dashboard headers are mid-redesign (a
+> layered editorial title that currently collides at 1440px), so those two
+> app surfaces are intentionally omitted here rather than shipped broken. The
+> server browser, wallet, developer-revenue and game-detail surfaces above are
+> the current, honest captures.
 
 ## Static site
 

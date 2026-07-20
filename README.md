@@ -147,8 +147,8 @@ other Vulos product.
 | :---: | :---: |
 | **Server browser** — nodes self-advertise; discovery is a phonebook, never an authority | **Wallet** — non-custodial: an address you control plus signed receipts |
 | <img src="docs/screenshots/app-servers-dark.png" alt="Magnetite server browser — discovered sessions with game content hash, node, capacity, ping and price"> | <img src="docs/screenshots/app-wallet-dark.png" alt="Magnetite non-custodial wallet — linked address and signed receipts"> |
-| **Developer revenue** — receipt-backed, paid straight to your wallet | **Game catalog** — content-addressed games |
-| <img src="docs/screenshots/app-earnings-dark.png" alt="Magnetite developer revenue — signed receipts"> | <img src="docs/screenshots/app-marketplace-dark.png" alt="Magnetite game catalog"> |
+| **Developer revenue** — receipt-backed, paid straight to your wallet | **Game detail** — signed-build provenance; non-custodial checkout, no platform cut |
+| <img src="docs/screenshots/app-earnings-dark.png" alt="Magnetite developer revenue — signed receipts"> | <img src="docs/screenshots/app-game-dark.png" alt="Magnetite game detail — signed-build / replay provenance and non-custodial, wallet-to-wallet checkout"> |
 | **Architecture** — node / discovery / payment / comms diagram | **Comms** — pluggable Matrix / Jitsi / LiveKit integrations |
 | <img src="docs/screenshots/architecture-dark.png" alt="Magnetite architecture docs"> | <img src="docs/screenshots/comms-dark.png" alt="Magnetite comms docs"> |
 | **Hosting a server** — capacity-elastic node model | **Payments** — non-custodial crypto |

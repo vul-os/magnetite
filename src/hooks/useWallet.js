@@ -50,9 +50,9 @@ const MOCK_RECEIPTS = [
   },
   {
     id: 'rcpt_01HQ5MC2QD',
-    kind: 'tier',
-    subject: 'Pro tier · 30 days',
-    total: 999,
+    kind: 'wager',
+    subject: 'Ranked match wager · Cosmic Raiders',
+    total: 500,
     protocol_fee: 0,
     counterparty: 'b0561ea38c7d29f4013a8ce65b27d09f4e81a6c37d520fb98e14c7302a6db85f',
     rail_pubkey: '3ac9017e5fb2d846902ce15b7a4d3f80c6e1927b5d0af348e2c76b91045fd8a2',

@@ -34,15 +34,18 @@ Two surfaces are captured:
 |------|---------|--------|
 | screenshots/app-servers-light.png | App — Server browser (discovered SessionAds, bring-your-own-server) | populated |
 | screenshots/app-wallet-light.png | App — Non-custodial wallet (linked address + signed receipts) | populated |
-| screenshots/app-marketplace-light.png | App — Game catalog (content-addressed games) | populated |
 | screenshots/app-game-light.png | App — Game detail | populated |
-| screenshots/app-developers-light.png | App — Developer dashboard | populated |
 | screenshots/app-earnings-light.png | App — Developer revenue (receipt-backed) | populated |
 | screenshots/app-servers-dark.png | App — Server browser (discovered SessionAds, bring-your-own-server) | populated |
 | screenshots/app-wallet-dark.png | App — Non-custodial wallet (linked address + signed receipts) | populated |
-| screenshots/app-marketplace-dark.png | App — Game catalog (content-addressed games) | populated |
 | screenshots/app-game-dark.png | App — Game detail | populated |
-| screenshots/app-developers-dark.png | App — Developer dashboard | populated |
 | screenshots/app-earnings-dark.png | App — Developer revenue (receipt-backed) | populated |
+
+<!-- app-marketplace and app-developers are omitted: their headers are mid-redesign
+     (a layered editorial title that collides at 1440px) and the developer dashboard
+     additionally renders placeholder/aggregate figures. `npm run screenshotter` still
+     captures them into this folder — delete or drop them from APP_ROUTES until the
+     headers are fixed, rather than shipping them. -->
+
 
 To regenerate: `npm run screenshotter`
