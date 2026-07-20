@@ -108,6 +108,20 @@ pub struct GameServerConfig {
     /// Set this to `Some(anticheat)` to add game-specific validators (e.g.
     /// `AimbotSnap`, `PositionTeleport`) or tune kick/ban thresholds.
     pub anticheat: Option<Anticheat>,
+
+    /// Optional fleet wiring: makes player *sessions* follow migrated shards.
+    ///
+    /// With `Some(session)` this listener additionally:
+    /// - tracks each connected player against their shard, so the migration
+    ///   path knows who to redirect;
+    /// - delivers a [`crate::cluster::SignedRedirect`] on the player's live
+    ///   socket after a migration commits, then closes that connection;
+    /// - runs incoming `ClientNet::Follow` frames through
+    ///   [`crate::cluster::FollowAdmission`] before attaching the player.
+    ///
+    /// With `None` the server behaves exactly as before — single-node hosting
+    /// needs none of this.
+    pub fleet: Option<crate::follow::FleetSession>,
 }
 
 impl Default for GameServerConfig {
@@ -116,6 +130,7 @@ impl Default for GameServerConfig {
             bind_addr: "127.0.0.1:9000".to_string(),
             match_config: MatchConfig::auto(4),
             anticheat: None,
+            fleet: None,
         }
     }
 }
@@ -231,6 +246,7 @@ impl GameServer {
     ///     bind_addr: "127.0.0.1:9000".to_string(),
     ///     match_config: cfg,
     ///     anticheat: None,
+    ///     fleet: None,
     /// };
     /// GameServer::with_executor(Box::new(executor), server_cfg).await
     /// # }
@@ -262,7 +278,7 @@ impl GameServer {
 
     async fn serve_inner(
         executor: Box<dyn GameExecutor + 'static>,
-        config: GameServerConfig,
+        mut config: GameServerConfig,
         mut shutdown_rx: watch::Receiver<bool>,
         _shutdown_tx: watch::Sender<bool>,
     ) -> Result<(), ServerError> {
@@ -279,8 +295,11 @@ impl GameServer {
         let shard_mgr = ShardManager::new(config.match_config.topology.clone());
         let shard_mgr = std::sync::Arc::new(tokio::sync::Mutex::new(shard_mgr));
 
+        // Fleet wiring (optional).
+        let fleet = config.fleet.take();
+
         // Build the anticheat pipeline.
-        let anticheat = config.anticheat.unwrap_or_else(|| {
+        let anticheat = config.anticheat.take().unwrap_or_else(|| {
             Anticheat::new(
                 ValidatorChain::new()
                     .add(magnetite_sdk::authority::RateLimit::new(120))
@@ -299,6 +318,46 @@ impl GameServer {
             scheduler.run(tick_shutdown).await;
         });
 
+        // Spawn the redirect pump: when a shard migrates away from this node,
+        // the players who were on it get their signed redirect on the socket
+        // they are already using. The queue is only ever filled by the success
+        // arm of `migrate_shard`, past a verified CommitAck — a failed or
+        // rolled-back migration leaves nothing here to deliver.
+        if let Some(f) = fleet.clone() {
+            let pump_conn_mgr = conn_mgr.clone();
+            let mut pump_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(REDIRECT_PUMP_INTERVAL);
+                loop {
+                    tokio::select! {
+                        _ = ticker.tick() => {
+                            for r in f.drain_redirects() {
+                                let pid = PlayerId::new(r.player);
+                                let frame = match serde_json::to_value(&r) {
+                                    Ok(v) => ServerNet::Redirect { redirect: v },
+                                    Err(e) => {
+                                        error!(error = %e, "could not encode redirect");
+                                        continue;
+                                    }
+                                };
+                                info!(
+                                    %pid,
+                                    shard = r.shard,
+                                    epoch = r.epoch,
+                                    target = %r.target_key.to_hex(),
+                                    "delivering signed redirect — session follows the shard"
+                                );
+                                pump_conn_mgr.send_to(pid, frame).await;
+                            }
+                        }
+                        _ = pump_shutdown.changed() => {
+                            if *pump_shutdown.borrow() { break; }
+                        }
+                    }
+                }
+            });
+        }
+
         // Accept loop.
         loop {
             tokio::select! {
@@ -308,6 +367,7 @@ impl GameServer {
                             let conn_mgr_clone = conn_mgr.clone();
                             let shard_mgr_clone = std::sync::Arc::clone(&shard_mgr);
                             let match_config = config.match_config.clone();
+                            let fleet_clone = fleet.clone();
                             tokio::spawn(async move {
                                 handle_connection(
                                     stream,
@@ -315,6 +375,7 @@ impl GameServer {
                                     conn_mgr_clone,
                                     shard_mgr_clone,
                                     match_config,
+                                    fleet_clone,
                                 )
                                 .await;
                             });
@@ -341,6 +402,24 @@ impl GameServer {
 // Per-connection handler
 // ---------------------------------------------------------------------------
 
+/// How often the redirect pump drains freshly-minted redirects.
+const REDIRECT_PUMP_INTERVAL: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// What the inbound frame handler wants the connection loop to do next.
+enum Inbound {
+    /// Nothing further (the common input path).
+    Nothing,
+    /// Send this frame back to the client.
+    Reply(Box<ServerNet>),
+    /// The client presented a follow redirect that
+    /// [`crate::cluster::FollowAdmission`] accepted: adopt their original
+    /// player id on the named shard.
+    Followed { player: PlayerId, shard: crate::shard::ShardId },
+    /// The client presented a follow this node refused. Fail closed: the
+    /// connection is dropped rather than degraded to an anonymous session.
+    Refused(String),
+}
+
 /// Drive a single WebSocket connection.
 async fn handle_connection(
     stream: TcpStream,
@@ -348,6 +427,7 @@ async fn handle_connection(
     conn_mgr: ConnectionManager,
     shard_mgr: std::sync::Arc<tokio::sync::Mutex<ShardManager>>,
     match_config: MatchConfig,
+    fleet: Option<crate::follow::FleetSession>,
 ) {
     // WebSocket handshake.
     let ws_stream = match accept_async(stream).await {
@@ -359,8 +439,11 @@ async fn handle_connection(
     };
 
     // Register player.
-    let (player_id, mut outbound_rx) = conn_mgr.register().await;
-    let _shard = shard_mgr.lock().await.assign(player_id);
+    let (mut player_id, mut outbound_rx) = conn_mgr.register().await;
+    let mut shard = shard_mgr.lock().await.assign(player_id);
+    if let Some(f) = &fleet {
+        f.attach_player(shard, player_id.as_u64());
+    }
     info!(%peer_addr, %player_id, "player connected");
 
     // Send Welcome.
@@ -371,7 +454,7 @@ async fn handle_connection(
     };
     if let Err(e) = send_server_net(&mut ws_tx, &welcome).await {
         warn!(%player_id, error = %e, "failed to send Welcome");
-        cleanup(player_id, &conn_mgr, &shard_mgr).await;
+        cleanup(player_id, shard, &conn_mgr, &shard_mgr, &fleet).await;
         return;
     }
 
@@ -388,15 +471,29 @@ async fn handle_connection(
                     }
                     Some(Ok(Message::Close(_))) => break,
                     Some(Ok(Message::Text(text))) => {
-                        handle_client_message(
+                        let action = handle_client_message(
                             player_id,
                             text.as_bytes(),
                             &conn_mgr,
+                            &fleet,
                         )
                         .await;
+                        if !apply_inbound(
+                            action, &mut player_id, &mut shard, &mut outbound_rx,
+                            &mut ws_tx, &conn_mgr, &shard_mgr, &fleet, &match_config,
+                        ).await {
+                            break;
+                        }
                     }
                     Some(Ok(Message::Binary(bytes))) => {
-                        handle_client_message(player_id, &bytes, &conn_mgr).await;
+                        let action =
+                            handle_client_message(player_id, &bytes, &conn_mgr, &fleet).await;
+                        if !apply_inbound(
+                            action, &mut player_id, &mut shard, &mut outbound_rx,
+                            &mut ws_tx, &conn_mgr, &shard_mgr, &fleet, &match_config,
+                        ).await {
+                            break;
+                        }
                     }
                     Some(Ok(_)) => {} // Ping/Pong handled by tungstenite
                 }
@@ -407,8 +504,18 @@ async fn handle_connection(
                 match frame {
                     None => break, // channel closed (server shutdown)
                     Some(net_msg) => {
+                        // A redirect is terminal for this connection: the shard
+                        // this session was on now lives elsewhere, so there is
+                        // nothing left here to be authoritative about. Deliver
+                        // it, then close — the client reconnects to the target.
+                        let is_redirect = matches!(net_msg, ServerNet::Redirect { .. });
                         if let Err(e) = send_server_net(&mut ws_tx, &net_msg).await {
                             warn!(%player_id, error = %e, "WebSocket send error");
+                            break;
+                        }
+                        if is_redirect {
+                            let _ = ws_tx.send(Message::Close(None)).await;
+                            info!(%player_id, "session redirected — closing connection here");
                             break;
                         }
                     }
@@ -417,17 +524,81 @@ async fn handle_connection(
         }
     }
 
-    cleanup(player_id, &conn_mgr, &shard_mgr).await;
+    cleanup(player_id, shard, &conn_mgr, &shard_mgr, &fleet).await;
     info!(%player_id, "player disconnected");
 }
 
+/// Apply the outcome of an inbound frame. Returns `false` when the connection
+/// should be closed.
+#[allow(clippy::too_many_arguments)]
+async fn apply_inbound<S>(
+    action: Inbound,
+    player_id: &mut PlayerId,
+    shard: &mut crate::shard::ShardId,
+    outbound_rx: &mut tokio::sync::mpsc::Receiver<ServerNet>,
+    ws_tx: &mut S,
+    conn_mgr: &ConnectionManager,
+    shard_mgr: &std::sync::Arc<tokio::sync::Mutex<ShardManager>>,
+    fleet: &Option<crate::follow::FleetSession>,
+    match_config: &MatchConfig,
+) -> bool
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::fmt::Display,
+{
+    match action {
+        Inbound::Nothing => true,
+        Inbound::Reply(frame) => send_server_net(ws_tx, &frame).await.is_ok(),
+        Inbound::Refused(why) => {
+            warn!(%player_id, reason = %why, "refusing session follow — closing connection");
+            false
+        }
+        Inbound::Followed {
+            player: followed_id,
+            shard: followed_shard,
+        } => {
+            // Drop the provisional anonymous identity this connection was given
+            // on accept, and adopt the id the (verified) redirect was minted
+            // for. That is what makes the session continuous across the move.
+            let provisional = *player_id;
+            cleanup(provisional, *shard, conn_mgr, shard_mgr, fleet).await;
+
+            let Some(rx) = conn_mgr.register_as(followed_id).await else {
+                warn!(%followed_id, "follow refused: that player is already connected here");
+                return false;
+            };
+            *outbound_rx = rx;
+            *player_id = followed_id;
+            *shard = shard_mgr.lock().await.place(followed_id, followed_shard);
+            if let Some(f) = fleet {
+                f.attach_player(followed_shard, followed_id.as_u64());
+            }
+            info!(
+                %followed_id,
+                shard = followed_shard.0,
+                "session follow admitted — player attached with their original id"
+            );
+            let welcome = ServerNet::Welcome {
+                player_id: followed_id,
+                config: match_config.clone(),
+            };
+            send_server_net(ws_tx, &welcome).await.is_ok()
+        }
+    }
+}
+
 /// Deserialise and dispatch a raw client message.
-async fn handle_client_message(player_id: PlayerId, bytes: &[u8], conn_mgr: &ConnectionManager) {
+async fn handle_client_message(
+    player_id: PlayerId,
+    bytes: &[u8],
+    conn_mgr: &ConnectionManager,
+    fleet: &Option<crate::follow::FleetSession>,
+) -> Inbound {
     let net_msg: ClientNet = match serde_json::from_slice(bytes) {
         Ok(m) => m,
         Err(e) => {
             warn!(%player_id, error = %e, "failed to parse ClientNet frame");
-            return;
+            return Inbound::Nothing;
         }
     };
 
@@ -438,6 +609,39 @@ async fn handle_client_message(player_id: PlayerId, bytes: &[u8], conn_mgr: &Con
             input,
         } => {
             conn_mgr.push_input(player_id, seq, input).await;
+            Inbound::Nothing
+        }
+
+        // Prove which node key we hold, over a nonce the client chose. This is
+        // what lets a client pin a node key — including the `target_key` from a
+        // redirect it just verified — and refuse an impostor at the address.
+        ClientNet::Hello { nonce } => match fleet {
+            Some(f) => {
+                let key = f.node_key();
+                Inbound::Reply(Box::new(ServerNet::NodeIdentity {
+                    node_key: key.to_hex(),
+                    nonce: nonce.clone(),
+                    sig: f.sign_hello(&nonce),
+                }))
+            }
+            // A node with no fleet identity has no key to prove. Say nothing
+            // rather than something reassuring.
+            None => Inbound::Nothing,
+        },
+
+        // A player following a shard that migrated here. Every check lives in
+        // `FollowAdmission::admit`; this arm only routes the answer.
+        ClientNet::Follow { redirect } => {
+            let Some(f) = fleet else {
+                return Inbound::Refused("this node does not accept session follows".into());
+            };
+            match f.admit_follow_json(&redirect, crate::follow::now_secs()) {
+                Ok((player, shard)) => Inbound::Followed {
+                    player: PlayerId::new(player),
+                    shard,
+                },
+                Err(e) => Inbound::Refused(e.to_string()),
+            }
         }
     }
 }
@@ -458,11 +662,18 @@ where
 /// Remove the player from all shared state after disconnect.
 async fn cleanup(
     player_id: PlayerId,
+    shard: crate::shard::ShardId,
     conn_mgr: &ConnectionManager,
     shard_mgr: &std::sync::Arc<tokio::sync::Mutex<ShardManager>>,
+    fleet: &Option<crate::follow::FleetSession>,
 ) {
     conn_mgr.remove(player_id).await;
     shard_mgr.lock().await.remove(player_id);
+    // Stop tracking them for redirects: a session that is gone must not be
+    // minted a live follow credential by the next migration.
+    if let Some(f) = fleet {
+        f.detach_player(shard, player_id.as_u64());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -550,6 +761,7 @@ mod tests {
             bind_addr: "127.0.0.1:0".to_string(), // OS-assigned port
             match_config: cfg,
             anticheat: None,
+            fleet: None,
         };
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -580,6 +792,7 @@ mod tests {
             bind_addr: addr.to_string(),
             match_config: cfg.clone(),
             anticheat: None,
+            fleet: None,
         };
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -626,6 +839,7 @@ mod tests {
             bind_addr: addr.to_string(),
             match_config: cfg,
             anticheat: None,
+            fleet: None,
         };
 
         let handle = tokio::spawn(async move {
@@ -659,6 +873,7 @@ mod tests {
             bind_addr: "127.0.0.1:9000".to_string(),
             match_config: MatchConfig::auto(4),
             anticheat: Some(ac),
+        fleet: None,
         };
         // `anticheat` field is `Some` — assert it holds a value.
         assert!(cfg.anticheat.is_some());

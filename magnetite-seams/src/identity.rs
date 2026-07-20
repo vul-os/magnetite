@@ -256,6 +256,15 @@ impl RawKeypairAuth {
         PubKey(self.signing_key.verifying_key().to_bytes())
     }
 
+    /// The 32-byte secret seed backing this keypair.
+    ///
+    /// This is **private key material**: it exists so a node can persist its
+    /// identity across restarts (see `magnetite node --node-key-file`). Write it
+    /// only to owner-readable storage and never to a log, an ad, or the wire.
+    pub fn seed(&self) -> [u8; 32] {
+        self.signing_key.to_bytes()
+    }
+
     fn sign_bytes(&self, msg: &[u8]) -> Sig {
         Sig(self.signing_key.sign(msg).to_bytes())
     }
@@ -363,6 +372,17 @@ mod tests {
         fn sign(&self, msg: &[u8]) -> Sig {
             Sig(self.0.sign(msg).to_bytes())
         }
+    }
+
+    #[test]
+    fn seed_round_trips_so_a_node_identity_can_be_persisted() {
+        // A node writes `seed()` to its key file and reloads it on restart; the
+        // reloaded key must be the SAME identity, or every peer that pinned it
+        // and every tracker slot bound to it is orphaned.
+        let node = RawKeypairAuth::generate();
+        let reloaded = RawKeypairAuth::from_seed(node.seed());
+        assert_eq!(node.node_pubkey().0, reloaded.node_pubkey().0);
+        assert_eq!(node.seed(), reloaded.seed());
     }
 
     #[test]

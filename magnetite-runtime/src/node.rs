@@ -307,6 +307,15 @@ pub struct NodeConfig {
     pub region: Option<String>,
     /// Lease length to request, and therefore how often to renew (`lease / 2`).
     pub lease: Duration,
+    /// Optional cluster wiring: when `Some`, this node is a fleet member and
+    /// player sessions follow migrated shards (see [`crate::follow`]).
+    ///
+    /// **Deny-by-default.** `None` — the default — means this box hands shards
+    /// to nobody and admits follows from nobody; it is an ordinary standalone
+    /// node. A caller must construct a [`FleetSession`] over an explicit
+    /// [`ClusterMembership`](crate::cluster::ClusterMembership) to opt in, and
+    /// an empty membership still admits nobody.
+    pub fleet: Option<crate::follow::FleetSession>,
 }
 
 impl Default for NodeConfig {
@@ -321,6 +330,7 @@ impl Default for NodeConfig {
             operator: None,
             region: None,
             lease: Duration::from_secs(DEFAULT_LEASE_SECS),
+            fleet: None,
         }
     }
 }
@@ -417,6 +427,10 @@ pub async fn run_node<B: BlobStore, D: Discovery + Send + Sync + 'static>(
         bind_addr: cfg.bind_addr,
         match_config: prepared.match_config,
         anticheat: None,
+        // Cluster wiring is opt-in and deny-by-default: a standalone hosted node
+        // leaves this `None` (no membership, no migration transport, so no
+        // session follow). See `crate::follow`.
+        fleet: cfg.fleet,
     };
 
     let result = GameServer::with_executor(Box::new(executor), server_cfg)

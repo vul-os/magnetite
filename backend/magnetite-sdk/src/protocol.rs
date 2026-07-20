@@ -254,6 +254,31 @@ pub enum ClientNet {
         /// The raw input frame.
         input: Input,
     },
+
+    /// Optional first frame: ask the node to prove which node key it holds.
+    ///
+    /// The node answers with [`ServerNet::NodeIdentity`], signing the client's
+    /// `nonce`. A client that pinned a node key out of band (from a signed
+    /// discovery ad, or from a [`ServerNet::Redirect`]'s `target_key`) uses this
+    /// to refuse a node that cannot produce the matching signature — an address
+    /// is a hint, the key is the identity.
+    Hello {
+        /// Client-chosen random nonce, echoed back inside the node's signature.
+        nonce: String,
+    },
+
+    /// Present a signed session redirect at the **target** node after a shard
+    /// migrated, to be admitted to that shard with session continuity.
+    ///
+    /// `redirect` is the JSON body of the runtime's `cluster::SignedRedirect`
+    /// exactly as it arrived in [`ServerNet::Redirect`]. It is opaque here: the
+    /// SDK deliberately does not know how to validate it, because validation is
+    /// the target node's job (`cluster::FollowAdmission::admit`) and must not be
+    /// reimplemented anywhere else.
+    Follow {
+        /// Verbatim `SignedRedirect` JSON, including its embedded follow token.
+        redirect: serde_json::Value,
+    },
 }
 
 /// Messages from the authoritative server to game clients.
@@ -325,6 +350,35 @@ pub enum ServerNet {
         seq: u32,
         /// Why the input was rejected.
         reason: RejectReason,
+    },
+
+    /// The node's answer to [`ClientNet::Hello`]: its node key plus a signature
+    /// over the client's nonce, proving it holds the matching secret key.
+    ///
+    /// The client MUST compare `node_key` against the key it pinned and MUST
+    /// verify `sig`. Both hex-encoded; the signed bytes are
+    /// `b"magnetite-node-hello-v1" || nonce_bytes || node_key_bytes`.
+    NodeIdentity {
+        /// Hex-encoded Ed25519 node public key.
+        node_key: String,
+        /// The nonce from the client's `Hello`, echoed.
+        nonce: String,
+        /// Hex-encoded Ed25519 signature over the bytes described above.
+        sig: String,
+    },
+
+    /// "Your shard moved; reconnect here." Delivered on the still-authenticated
+    /// session immediately after a migration commits, and is the last frame the
+    /// node sends on that connection.
+    ///
+    /// `redirect` is the JSON body of the runtime's `cluster::SignedRedirect`.
+    /// The client MUST verify its issuer signature against the node key it is
+    /// already talking to, MUST refuse an expired one, and MUST pin
+    /// `target_key` on the new connection — a blindly-followed redirect is a
+    /// hijack onto an attacker's node.
+    Redirect {
+        /// Verbatim `SignedRedirect` JSON, including its embedded follow token.
+        redirect: serde_json::Value,
     },
 }
 

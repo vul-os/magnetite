@@ -251,6 +251,7 @@ async fn ws_round_trip_latency_bench() {
         bind_addr: addr.clone(),
         match_config: cfg,
         anticheat: None,
+        fleet: None,
     };
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);

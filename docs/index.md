@@ -77,7 +77,7 @@ There is no fiat on-ramp and nothing for the platform to hold or pay out. See
 - **A real chain rail.** `MockPaymentRail` signs receipts locally. `CHAIN_RPC_URL`, `CHAIN_ID`, and `STABLECOIN_ADDRESS` are placeholders.
 - **Cross-node shard handoff over the network.** The `HandoffTransport` seam and the loopback transport are real and tested; `NetworkHandoffTransport` fails closed with a documented TODO.
 - **Multi-tracker gossip.** A client queries the trackers it is configured with; there is no discovery-of-trackers.
-- **A persisted node keypair.** `MAGNETITE_NODE_SEED` (or a bind-address derivation) is a stopgap.
+- **Automatic cluster rebalancing from the CLI.** `magnetite node` can now join a cluster (`--cluster-peer`, `--handoff-addr`) and its node keypair is persisted (`~/.magnetite/node.key`), but driving migrations still means calling the scheduler/transport from code.
 
 ---
 

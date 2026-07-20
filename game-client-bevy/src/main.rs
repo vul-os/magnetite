@@ -17,8 +17,10 @@
 
 use magnetite_sdk::state::PlayerId;
 
-use game_client_bevy::app::{build_app, NetConfig};
-use game_client_bevy::net::NetConfig as _NetConfig;
+// `NetConfig` lives in `net` — `app` only imports it privately, so the bin
+// takes it from its defining module.
+use game_client_bevy::app::build_app;
+use game_client_bevy::net::NetConfig;
 
 fn main() {
     // In a real game the player id comes from the auth/matchmaking system.

@@ -1,0 +1,34 @@
+{
+  "expires_at": 1800000030,
+  "hello": {
+    "node_key": "511c34a1a2cb521df16bb246b8de8e7997ce235c7e76b22a3d7503a24819dd8a",
+    "nonce": "fixture-nonce",
+    "sig": "f2674f1e77a8f999c774ed61c3f625de1a8dfc75346a9cdbf8fdaeb0790bd57d9f02251c7f3560a9488bf78e4bc5d69437dae4975957fd9c8eb3608b47f0fd05"
+  },
+  "issued_at": 1800000000,
+  "issuer_key": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+  "player": 7,
+  "redirect": {
+    "addr": "10.0.0.11:7100",
+    "epoch": 5,
+    "expires_at": 1800000030,
+    "issued_at": 1800000000,
+    "issuer": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+    "player": 7,
+    "shard": 3,
+    "sig": "d492e5c68e4779600ca177130b3e7b50648cc50e670f066b736f0bdbeea30814ee071d88a6f114076a7eec4b16b7576c2707a7eb295060e929141cb031aafc00",
+    "target_key": "511c34a1a2cb521df16bb246b8de8e7997ce235c7e76b22a3d7503a24819dd8a",
+    "token": {
+      "epoch": 5,
+      "expires_at": 1800000030,
+      "issued_at": 1800000000,
+      "issuer": "66be7e332c7a453332bd9d0a7f7db055f5c5ef1a06ada66d98b39fb6810c473a",
+      "nonce": "4d2ab69a39dd70c04141b9c77f94de30b0f9cc70141e06be6bfe605802431567",
+      "player": 7,
+      "shard": 3,
+      "sig": "3dde202726c3a662b4ef896853ccadaf94a3708a162c779227e31f11f1869a4c9ad0c4cd5a3948364f81bdd7cb49966f58b4add214f2c4e0d905bb1a2d36a80b",
+      "target": "511c34a1a2cb521df16bb246b8de8e7997ce235c7e76b22a3d7503a24819dd8a"
+    }
+  },
+  "target_key": "511c34a1a2cb521df16bb246b8de8e7997ce235c7e76b22a3d7503a24819dd8a"
+}

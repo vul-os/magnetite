@@ -74,6 +74,37 @@ impl ConnectionManager {
         (id, rx)
     }
 
+    /// Register a connection under an **already-assigned** [`PlayerId`].
+    ///
+    /// Used by the session-follow path: a player that followed a migrated shard
+    /// to this node keeps the identity the redirect was minted for, so the
+    /// session is continuous rather than a fresh join. The id is only ever
+    /// supplied by a redirect that already passed
+    /// `cluster::FollowAdmission::admit`, so this is not a way to claim an
+    /// arbitrary id from the network.
+    ///
+    /// Returns `None` if that id is already connected here (never displace a
+    /// live session).
+    pub async fn register_as(&self, id: PlayerId) -> Option<mpsc::Receiver<ServerNet>> {
+        let mut inner = self.inner.lock().await;
+        if inner.connections.contains_key(&id) {
+            return None;
+        }
+        let (tx, rx) = mpsc::channel(OUTBOUND_QUEUE_CAPACITY);
+        inner.connections.insert(
+            id,
+            PlayerConn {
+                tx,
+                pending_input: None,
+                last_snapshot_tick: 0,
+            },
+        );
+        // Keep the auto-assign counter clear of adopted ids.
+        let next = id.as_u64().saturating_add(1);
+        self.next_player_id.fetch_max(next, Ordering::Relaxed);
+        Some(rx)
+    }
+
     /// Remove a player's connection (called on disconnect).
     pub async fn remove(&self, id: PlayerId) {
         self.inner.lock().await.connections.remove(&id);

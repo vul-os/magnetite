@@ -121,6 +121,7 @@ async fn start_anticheat_server() -> (String, watch::Sender<bool>) {
         bind_addr: addr.clone(),
         match_config: cfg,
         anticheat: Some(anticheat),
+        fleet: None,
     };
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);

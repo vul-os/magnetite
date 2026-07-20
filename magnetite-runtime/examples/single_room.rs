@@ -179,6 +179,7 @@ async fn main() -> Result<(), magnetite_runtime::ServerError> {
         bind_addr: "127.0.0.1:9000".to_string(),
         match_config,
         anticheat: Some(anticheat),
+        fleet: None,
     };
 
     GameServer::serve(executor, server_cfg).await

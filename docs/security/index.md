@@ -182,7 +182,7 @@ even a tracker restored from backup converges to whoever is actually up.
 - [ ] `POSTGRES_PASSWORD` is unique and not the default
 - [ ] GitHub App private key is stored as an environment variable, not a file in the repo
 - [ ] **There are no payment secrets to manage.** The `PaymentRail` seam is non-custodial: no provider key, no payout credential, nothing to fund. `OPERATOR_WALLET_PUBKEY` is a *public* key, not a secret
-- [ ] `MAGNETITE_NODE_SEED` (if set) is treated as a secret — it is the node's announce-signing identity. Note this is a **stopgap**; a persisted node keypair is not implemented
+- [ ] The node keypair is treated as a secret — it is the node's announce-signing **and** cluster identity. It is persisted at `~/.magnetite/node.key` (or `--node-key-file` / `$MAGNETITE_HOME`), written `0600` on first run; whoever reads it can impersonate the node. `MAGNETITE_NODE_SEED` (if set) overrides the file and is equally secret
 
 **Network**
 

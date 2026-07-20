@@ -76,9 +76,19 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use magnetite_seams::blobstore::Hash;
+use magnetite_seams::discovery::Capacity;
 use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth, Sig};
 
+use crate::cluster::{ClusterMembership, RouteDirectory, RouteRejection, Redirector, SignedRedirect};
 use crate::shard::{HandoffError, HandoffEvent, HandoffTransport, ShardId};
+
+/// Wall-clock unix seconds, used to stamp redirect/token lifetimes.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 // ---------------------------------------------------------------------------
 // Wire constants
@@ -177,6 +187,34 @@ pub enum Frame {
         epoch: u64,
         /// Target signature binding `(transcript, shard, epoch)`.
         sig: Sig,
+    },
+    /// **Read-only** query: "what do you own, and how much can you hold?"
+    ///
+    /// Answered only on an already mutually-authenticated channel, and only to a
+    /// peer that passed the inbound allowlist — i.e. to a cluster member. It
+    /// changes no authority, stages nothing, and can never be a step in a
+    /// handoff: it exists so [`crate::rebalance`] can see the real cluster
+    /// instead of guessing.
+    StatusRequest,
+    /// The answer to [`Frame::StatusRequest`].
+    ///
+    /// Deliberately **unsigned**: the whole frame already travels inside the
+    /// authenticated channel, so its authorship is exactly as proven as every
+    /// other post-handshake frame. It is also advisory — a peer that lies about
+    /// its capacity can only attract or repel shards it is already authorized to
+    /// hold, and every actual handoff to it is still epoch-fenced, two-phase and
+    /// membership-checked.
+    Status {
+        /// Shard ids this node is authoritative for right now.
+        shards: Vec<u32>,
+        /// Self-declared logical cores.
+        cpu_cores: u32,
+        /// Self-declared RAM in megabytes.
+        ram_mb: u64,
+        /// Self-declared shard ceiling (`0` ⇒ derive from hardware).
+        max_shards: u32,
+        /// Self-declared free player slots.
+        free_slots: u32,
     },
 }
 
@@ -709,7 +747,55 @@ fn frame_name(f: &Frame) -> &'static str {
         Frame::Reject { .. } => "Reject",
         Frame::Commit { .. } => "Commit",
         Frame::CommitAck { .. } => "CommitAck",
+        Frame::StatusRequest => "StatusRequest",
+        Frame::Status { .. } => "Status",
     }
+}
+
+/// A capacity that claims nothing. Used before a host publishes real numbers.
+pub(crate) fn unmeasured_capacity() -> Capacity {
+    Capacity {
+        cpu_cores: 0,
+        ram_mb: 0,
+        bandwidth_mbps: 0,
+        free_slots: 0,
+        max_shards: 0,
+    }
+}
+
+/// A cloneable handle that updates what a [`FleetNode`] reports to peers.
+///
+/// Purely advisory data — it cannot grant, revoke or move authority.
+#[derive(Debug, Clone)]
+pub struct CapacityPublisher {
+    inner: Arc<Mutex<Capacity>>,
+}
+
+impl CapacityPublisher {
+    /// Replace the advertised capacity. Takes effect on the next status query.
+    pub fn publish(&self, capacity: Capacity) {
+        match self.inner.lock() {
+            Ok(mut c) => *c = capacity,
+            Err(p) => *p.into_inner() = capacity,
+        }
+    }
+}
+
+/// What a peer answered to a [`Frame::StatusRequest`].
+///
+/// Everything in here is the peer's **own claim**, made over an authenticated
+/// channel. It is used for placement arithmetic only; it is never a substitute
+/// for membership, and acting on it still goes through the ordinary two-phase,
+/// epoch-fenced, membership-checked handoff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerStatus {
+    /// The peer's node key, as proven by the handshake (not as claimed in the
+    /// frame — the frame carries no key at all).
+    pub node: PubKey,
+    /// Shards the peer says it is authoritative for.
+    pub shards: Vec<ShardId>,
+    /// The peer's self-declared capacity.
+    pub capacity: Capacity,
 }
 
 // ---------------------------------------------------------------------------
@@ -728,6 +814,9 @@ pub struct FleetNode {
     addr: std::net::SocketAddr,
     shutdown: Arc<AtomicBool>,
     timeout: Duration,
+    /// What this node reports to peers that ask for its status. Shared with the
+    /// listener threads so [`Self::publish_capacity`] takes effect live.
+    capacity: Arc<Mutex<Capacity>>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -749,7 +838,13 @@ impl FleetNode {
             .map_err(|e| HandoffError::Transport(format!("local_addr failed: {e}")))?;
         let authority = ShardAuthority::new();
         let shutdown = Arc::new(AtomicBool::new(false));
+        // Until the host publishes its measured capacity, this node advertises
+        // ZERO headroom. That is the conservative direction: a node that has not
+        // said how big it is attracts no shards, rather than attracting a share
+        // it may not be able to hold.
+        let capacity = Arc::new(Mutex::new(unmeasured_capacity()));
 
+        let t_capacity = Arc::clone(&capacity);
         let t_identity = Arc::clone(&identity);
         let t_authority = authority.clone();
         let t_allowed = allowed.clone();
@@ -773,9 +868,15 @@ impl FleetNode {
                 let c_identity = Arc::clone(&t_identity);
                 let c_authority = t_authority.clone();
                 let c_allowed = t_allowed.clone();
+                let c_capacity = Arc::clone(&t_capacity);
                 std::thread::spawn(move || {
-                    if let Err(e) = serve_conn(&mut sock, &c_identity, &c_authority, c_allowed.as_ref())
-                    {
+                    if let Err(e) = serve_conn(
+                        &mut sock,
+                        &c_identity,
+                        &c_authority,
+                        c_allowed.as_ref(),
+                        &c_capacity,
+                    ) {
                         // Refusals are expected traffic (that is the point of a
                         // fail-closed door); log and drop the connection.
                         debug!("handoff connection ended: {e}");
@@ -791,8 +892,38 @@ impl FleetNode {
             addr: local,
             shutdown,
             timeout,
+            capacity,
             handle: Some(handle),
         })
+    }
+
+    /// Set what this node reports to peers that send a [`Frame::StatusRequest`].
+    ///
+    /// Advisory only, in both directions: nothing here grants or withholds
+    /// authority, it just lets the cluster's rebalancers size this box. Takes
+    /// effect on the next status query.
+    pub fn publish_capacity(&self, capacity: Capacity) {
+        match self.capacity.lock() {
+            Ok(mut c) => *c = capacity,
+            Err(p) => *p.into_inner() = capacity,
+        }
+    }
+
+    /// A detachable handle for [`Self::publish_capacity`], so a host that
+    /// measures its hardware somewhere else (or later) can update what peers see
+    /// without holding the node itself.
+    pub fn capacity_publisher(&self) -> CapacityPublisher {
+        CapacityPublisher {
+            inner: Arc::clone(&self.capacity),
+        }
+    }
+
+    /// The capacity currently advertised to peers.
+    pub fn published_capacity(&self) -> Capacity {
+        self.capacity
+            .lock()
+            .map(|c| c.clone())
+            .unwrap_or_else(|p| p.into_inner().clone())
     }
 
     /// The address this node is listening on (resolved, so `:0` is usable).
@@ -859,6 +990,7 @@ fn serve_conn(
     identity: &RawKeypairAuth,
     authority: &ShardAuthority,
     allowed: Option<&HashSet<PubKey>>,
+    capacity: &Arc<Mutex<Capacity>>,
 ) -> Result<(), HandoffError> {
     let chan = server_handshake(sock, identity, allowed)?;
     debug!(peer = %chan.peer.to_hex(), "handoff peer authenticated");
@@ -959,6 +1091,28 @@ fn serve_conn(
                     }
                 }
             }
+            // Read-only cluster status. No authority is read out that a peer
+            // could not already infer by trying a handoff, and nothing is
+            // mutated. Only reachable past `server_handshake`, which has
+            // already enforced the inbound allowlist.
+            Frame::StatusRequest => {
+                let cap = capacity
+                    .lock()
+                    .map(|c| c.clone())
+                    .unwrap_or_else(|p| p.into_inner().clone());
+                let mut shards: Vec<u32> = authority.owned_shards().iter().map(|s| s.0).collect();
+                shards.sort_unstable();
+                write_frame(
+                    sock,
+                    &Frame::Status {
+                        shards,
+                        cpu_cores: cap.cpu_cores,
+                        ram_mb: cap.ram_mb,
+                        max_shards: cap.max_shards,
+                        free_slots: cap.free_slots,
+                    },
+                )?;
+            }
             other => {
                 write_frame(
                     sock,
@@ -1009,6 +1163,19 @@ pub struct NetworkHandoffTransport {
     authority: ShardAuthority,
     routes: HashMap<u32, PeerRoute>,
     timeout: Duration,
+    /// Operator-authorized cluster membership. `None` keeps the pre-membership
+    /// behaviour (any pinned route may be used); `Some` refuses to hand a shard
+    /// to any key the operator did not authorize — including a hand-registered
+    /// route. See [`crate::cluster`].
+    membership: Option<ClusterMembership>,
+    /// Redirect minting, enabled by [`Self::with_redirects`]. Redirects are
+    /// produced **only** in the success path of a migration.
+    redirector: Option<Redirector>,
+    /// Players believed to be connected here, per shard — the set that gets
+    /// redirected when that shard moves.
+    shard_players: HashMap<u32, Vec<u64>>,
+    /// Redirects minted by committed migrations, awaiting delivery to clients.
+    pending_redirects: Vec<SignedRedirect>,
     /// Audit log of completed migrations: `(shard, epoch, bytes, peer hex)`.
     pub migrations: Vec<(ShardId, u64, usize, String)>,
 }
@@ -1021,14 +1188,104 @@ impl NetworkHandoffTransport {
             authority,
             routes: HashMap::new(),
             timeout: DEFAULT_TIMEOUT,
+            membership: None,
+            redirector: None,
+            shard_players: HashMap::new(),
+            pending_redirects: Vec::new(),
             migrations: Vec::new(),
         }
     }
 
     /// Register (or replace) the route for a shard.
+    ///
+    /// Registering a route is **not** authorization: with a membership attached
+    /// ([`Self::with_membership`]) a migration to a non-member key is still
+    /// refused at send time.
     pub fn add_route(&mut self, shard: ShardId, route: PeerRoute) -> &mut Self {
         self.routes.insert(shard.0, route);
         self
+    }
+
+    /// Gate every outbound migration on operator-authorized cluster membership.
+    ///
+    /// This is the enforcement point for the rule that discovery may supply
+    /// addresses but never membership: even a route derived from a perfectly
+    /// valid signed ad — or hand-registered — is refused unless the target's
+    /// **public key** is in this set.
+    pub fn with_membership(mut self, membership: ClusterMembership) -> Self {
+        self.membership = Some(membership);
+        self
+    }
+
+    /// The membership gating this transport, if any.
+    pub fn membership(&self) -> Option<&ClusterMembership> {
+        self.membership.as_ref()
+    }
+
+    /// Point `shard` at a cluster member using a route learned from **signed
+    /// discovery ads**, instead of hand-registering an address.
+    ///
+    /// Fails closed: a non-member, an unknown node, or a node whose lease has
+    /// lapsed yields a [`RouteRejection`] and leaves the routing table untouched.
+    pub fn route_from_directory(
+        &mut self,
+        shard: ShardId,
+        node_key: &PubKey,
+        dir: &RouteDirectory,
+        now: u64,
+    ) -> Result<PeerRoute, RouteRejection> {
+        let route = dir.route_for(node_key, now)?;
+        self.routes.insert(shard.0, route.clone());
+        Ok(route)
+    }
+
+    /// Emit signed client redirects when a migration commits.
+    pub fn with_redirects(mut self, redirector: Redirector) -> Self {
+        self.redirector = Some(redirector);
+        self
+    }
+
+    /// Record which players are connected here for `shard`. These are the
+    /// sessions that get redirected when the shard moves.
+    pub fn set_shard_players(&mut self, shard: ShardId, players: Vec<u64>) -> &mut Self {
+        self.shard_players.insert(shard.0, players);
+        self
+    }
+
+    /// Note that `player` is connected here on `shard`.
+    pub fn track_player(&mut self, shard: ShardId, player: u64) -> &mut Self {
+        let v = self.shard_players.entry(shard.0).or_default();
+        if !v.contains(&player) {
+            v.push(player);
+        }
+        self
+    }
+
+    /// Forget a player on `shard` — they disconnected, or they already followed
+    /// the shard elsewhere. A player we no longer serve must not be minted a
+    /// redirect: that would hand a live credential to a session that is gone.
+    pub fn untrack_player(&mut self, shard: ShardId, player: u64) -> &mut Self {
+        if let Some(v) = self.shard_players.get_mut(&shard.0) {
+            v.retain(|p| *p != player);
+        }
+        self
+    }
+
+    /// The players currently tracked on `shard`.
+    pub fn tracked_players(&self, shard: ShardId) -> Vec<u64> {
+        self.shard_players.get(&shard.0).cloned().unwrap_or_default()
+    }
+
+    /// Take the redirects minted by committed migrations, clearing the queue.
+    /// The caller ships each one down the affected player's existing (already
+    /// authenticated) connection.
+    pub fn take_redirects(&mut self) -> Vec<SignedRedirect> {
+        std::mem::take(&mut self.pending_redirects)
+    }
+
+    /// Redirects awaiting delivery, without consuming them.
+    pub fn pending_redirects(&self) -> &[SignedRedirect] {
+        &self.pending_redirects
     }
 
     /// Override the per-exchange socket timeout (tests use a short one).
@@ -1047,6 +1304,64 @@ impl NetworkHandoffTransport {
         self.routes.get(&shard.0)
     }
 
+    /// Ask a member peer what it owns and how big it is.
+    ///
+    /// Fails closed exactly like a migration would: membership is checked before
+    /// a socket is opened, the peer's key is **pinned** by the handshake, and any
+    /// error yields `Err` rather than a half-known peer. A probe never moves a
+    /// shard and never touches authority, so a failed probe costs only a stale
+    /// view — the caller ([`crate::rebalance`]) treats that as "do not place
+    /// work there".
+    pub fn probe_peer(&self, route: &PeerRoute) -> Result<PeerStatus, HandoffError> {
+        if let Some(m) = &self.membership {
+            if !m.contains(&route.pubkey) {
+                return Err(HandoffError::Auth(format!(
+                    "node {} is not an authorized member of this cluster",
+                    route.pubkey.to_hex()
+                )));
+            }
+        }
+        let addr = route
+            .addr
+            .to_socket_addrs()
+            .map_err(|e| HandoffError::Transport(format!("bad peer address: {e}")))?
+            .next()
+            .ok_or_else(|| HandoffError::Transport("peer address resolved to nothing".into()))?;
+        let mut sock = TcpStream::connect_timeout(&addr, self.timeout)
+            .map_err(|e| HandoffError::Transport(format!("connect to {addr}: {e}")))?;
+        sock.set_read_timeout(Some(self.timeout)).map_err(io_err)?;
+        sock.set_write_timeout(Some(self.timeout)).map_err(io_err)?;
+        sock.set_nodelay(true).ok();
+
+        // Same mutual handshake as a handoff: the peer must prove the PINNED key.
+        let _chan = client_handshake(&mut sock, &self.identity, &route.pubkey)?;
+        write_frame(&mut sock, &Frame::StatusRequest)?;
+        match read_frame(&mut sock)? {
+            Frame::Status {
+                shards,
+                cpu_cores,
+                ram_mb,
+                max_shards,
+                free_slots,
+            } => Ok(PeerStatus {
+                node: route.pubkey,
+                shards: shards.into_iter().map(ShardId).collect(),
+                capacity: Capacity {
+                    cpu_cores,
+                    ram_mb,
+                    bandwidth_mbps: 0,
+                    free_slots,
+                    max_shards,
+                },
+            }),
+            Frame::Reject { reason } => Err(HandoffError::Rejected(reason)),
+            other => Err(HandoffError::Rejected(format!(
+                "expected Status, got {}",
+                frame_name(&other)
+            ))),
+        }
+    }
+
     /// Migrate a shard this node owns to the node registered for it.
     ///
     /// On `Ok(epoch)` the target is the authoritative owner at `epoch` and this
@@ -1059,6 +1374,24 @@ impl NetworkHandoffTransport {
             .get(&shard.0)
             .cloned()
             .ok_or(HandoffError::NoRoute(shard))?;
+
+        // Membership is checked BEFORE we connect or serialize anything. A node
+        // that merely announced itself in the open discovery phonebook is not a
+        // cluster member, and is never handed a shard — no matter how the route
+        // got into the table.
+        if let Some(m) = &self.membership {
+            if !m.contains(&route.pubkey) {
+                warn!(
+                    shard = shard.0,
+                    peer = %route.pubkey.to_hex(),
+                    "refusing handoff: target is not an authorized cluster member"
+                );
+                return Err(HandoffError::Auth(format!(
+                    "node {} is not an authorized member of this cluster",
+                    route.pubkey.to_hex()
+                )));
+            }
+        }
 
         if !self.authority.owns(shard) {
             return Err(HandoffError::NotOwner(shard));
@@ -1074,6 +1407,11 @@ impl NetworkHandoffTransport {
                 self.authority.release(shard.0, epoch);
                 self.migrations
                     .push((shard, epoch, state.len(), route.pubkey.to_hex()));
+                // The session follows the shard — but ONLY now, past the verified
+                // CommitAck. Nothing below this line runs on a failed or
+                // rolled-back migration, so a redirect can never point players at
+                // a node that did not actually take the shard.
+                self.emit_redirects(shard, epoch, &route);
                 info!(
                     shard = shard.0,
                     epoch,
@@ -1096,6 +1434,32 @@ impl NetworkHandoffTransport {
                 Err(e)
             }
         }
+    }
+
+    /// Mint one redirect per player known to be connected here for `shard`.
+    ///
+    /// Called from exactly one place: the success arm of [`Self::migrate_shard`],
+    /// after the target has acknowledged the commit. The players are removed from
+    /// this node's tracking table, because they now belong to the target.
+    fn emit_redirects(&mut self, shard: ShardId, epoch: u64, route: &PeerRoute) {
+        let Some(redirector) = self.redirector.clone() else {
+            self.shard_players.remove(&shard.0);
+            return;
+        };
+        let players = self.shard_players.remove(&shard.0).unwrap_or_default();
+        if players.is_empty() {
+            return;
+        }
+        let now = now_secs();
+        let minted = redirector.redirects_for(&self.identity, &players, shard, epoch, route, now);
+        info!(
+            shard = shard.0,
+            epoch,
+            players = minted.len(),
+            peer = %route.pubkey.to_hex(),
+            "issuing signed session redirects — players follow the shard"
+        );
+        self.pending_redirects.extend(minted);
     }
 
     /// The wire half of a migration. Any error leaves authority untouched.
@@ -1222,6 +1586,10 @@ impl HandoffTransport for NetworkHandoffTransport {
         } else {
             self.authority.update_state(shard, player_state_blob.to_vec());
         }
+        // The migrating player is by definition affected: if the move commits,
+        // they get a signed redirect to the new owner. If it fails, `migrate_shard`
+        // returns Err and no redirect is minted.
+        self.track_player(shard, event.player.as_u64());
         self.migrate_shard(shard).map(|_| ())
     }
 }
@@ -1965,6 +2333,302 @@ mod tests {
         // The connection is dropped; nothing was staged.
         std::thread::sleep(Duration::from_millis(100));
         assert!(!node_b.authority().owns(ShardId(0)));
+    }
+
+    // ── 6. Cluster membership + discovery-driven routes ───────────────────
+
+    use crate::cluster::{
+        AdmitError, ClusterMembership, FollowAdmission, RouteDirectory, RouteRejection, Redirector,
+    };
+    use magnetite_seams::discovery::{
+        Capacity as AdCapacity, NodeAddr, SessionAd, SignedAd,
+    };
+
+    fn ad_at(id: &RawKeypairAuth, addr: &str, now: u64, ttl: u64) -> SignedAd {
+        SignedAd::sign(
+            id,
+            SessionAd {
+                game: Hash::of(b"snake"),
+                node: NodeAddr(addr.into()),
+                operator: None,
+                region: None,
+                capacity: AdCapacity {
+                    cpu_cores: 8,
+                    ram_mb: 16384,
+                    bandwidth_mbps: 1000,
+                    free_slots: 4,
+                    max_shards: 32,
+                },
+                ping_hint: 20,
+                price: None,
+                chat_room: None,
+                voice_room: None,
+            },
+            now,
+            ttl,
+        )
+    }
+    #[test]
+    fn a_route_derived_from_a_signed_ad_drives_a_real_migration() {
+        // No hand-registered addresses: the cluster configures itself from the
+        // phonebook, gated by operator-authorized membership.
+        let a = ident(140);
+        let b = ident(141);
+        let node_b = FleetNode::bind("127.0.0.1:0", Arc::clone(&b), None).unwrap();
+
+        let membership =
+            ClusterMembership::from_keys([a.node_pubkey(), node_b.pubkey()]);
+        let mut dir = RouteDirectory::new(membership.clone());
+        // B announces itself on the open phonebook, signing with its node key.
+        dir.observe(&ad_at(&b, &node_b.addr().to_string(), 1_000, 60), 1_000)
+            .expect("a member's ad becomes a route");
+
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership);
+        t.route_from_directory(ShardId(21), &node_b.pubkey(), &dir, 1_000)
+            .expect("route derived from discovery");
+        t.authority().claim(ShardId(21), b"self-configured".to_vec());
+
+        t.migrate_shard(ShardId(21)).expect("migration succeeds");
+        assert!(node_b.authority().owns(ShardId(21)));
+        assert_eq!(
+            node_b.authority().state_of(ShardId(21)).unwrap(),
+            b"self-configured".to_vec()
+        );
+    }
+
+    #[test]
+    fn an_unauthorized_node_that_announces_is_never_handed_a_shard() {
+        // The volunteer runs a REAL, willing listener and announces a REAL,
+        // correctly-signed ad. It must still receive nothing.
+        let a = ident(150);
+        let volunteer = ident(151);
+        let volunteer_node =
+            FleetNode::bind("127.0.0.1:0", Arc::clone(&volunteer), None).unwrap();
+
+        let membership = ClusterMembership::from_keys([a.node_pubkey()]);
+        let mut dir = RouteDirectory::new(membership.clone());
+        let err = dir
+            .observe(
+                &ad_at(&volunteer, &volunteer_node.addr().to_string(), 1_000, 60),
+                1_000,
+            )
+            .unwrap_err();
+        assert!(matches!(err, RouteRejection::NotAMember(_)));
+
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership);
+        // No route can be derived…
+        assert!(t
+            .route_from_directory(ShardId(22), &volunteer_node.pubkey(), &dir, 1_000)
+            .is_err());
+        // …and even hand-registering one does not help: membership is re-checked
+        // at migration time, before a single byte of state leaves this box.
+        t.add_route(ShardId(22), volunteer_node.route());
+        t.authority().claim(ShardId(22), b"do not exfiltrate".to_vec());
+        let err = t.migrate_shard(ShardId(22)).unwrap_err();
+        assert!(
+            matches!(err, HandoffError::Auth(ref m) if m.contains("not an authorized member")),
+            "volunteering must not make you eligible, got {err:?}"
+        );
+        assert!(t.authority().owns(ShardId(22)), "state stayed put");
+        assert!(!volunteer_node.authority().owns(ShardId(22)));
+    }
+
+    #[test]
+    fn an_ad_whose_key_differs_from_the_key_on_the_wire_is_rejected() {
+        // The ad is signed by a member, but the box actually listening at that
+        // address holds a different key. Key pinning must abort the handoff.
+        let a = ident(160);
+        let member = ident(161);
+        let impostor = ident(162);
+        let impostor_node = FleetNode::bind("127.0.0.1:0", Arc::clone(&impostor), None).unwrap();
+
+        let membership = ClusterMembership::from_keys([a.node_pubkey(), member.node_pubkey()]);
+        let mut dir = RouteDirectory::new(membership.clone());
+        // The member announces the impostor's ADDRESS (or the address was taken
+        // over). The pinned key is still the member's, from the signed ad.
+        let route = dir
+            .observe(
+                &ad_at(&member, &impostor_node.addr().to_string(), 1_000, 60),
+                1_000,
+            )
+            .unwrap();
+        assert_eq!(route.pubkey, member.node_pubkey());
+
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership);
+        t.route_from_directory(ShardId(23), &member.node_pubkey(), &dir, 1_000)
+            .unwrap();
+        t.authority().claim(ShardId(23), b"pinned".to_vec());
+        let err = t.migrate_shard(ShardId(23)).unwrap_err();
+        assert!(
+            matches!(err, HandoffError::Auth(ref m) if m.contains("mismatch")),
+            "the address is not the identity, got {err:?}"
+        );
+        assert!(t.authority().owns(ShardId(23)));
+        assert!(!impostor_node.authority().owns(ShardId(23)));
+    }
+
+    #[test]
+    fn a_lapsed_ad_is_not_routed_to() {
+        let a = ident(170);
+        let b = ident(171);
+        let node_b = FleetNode::bind("127.0.0.1:0", Arc::clone(&b), None).unwrap();
+        let membership = ClusterMembership::from_keys([a.node_pubkey(), node_b.pubkey()]);
+        let mut dir = RouteDirectory::new(membership.clone());
+        dir.observe(&ad_at(&b, &node_b.addr().to_string(), 1_000, 60), 1_000)
+            .unwrap();
+
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership);
+        assert!(matches!(
+            t.route_from_directory(ShardId(24), &node_b.pubkey(), &dir, 5_000),
+            Err(RouteRejection::Expired)
+        ));
+        t.authority().claim(ShardId(24), b"x".to_vec());
+        assert!(matches!(
+            t.migrate_shard(ShardId(24)),
+            Err(HandoffError::NoRoute(_))
+        ));
+    }
+
+    // ── 7. The player's session follows the shard ─────────────────────────
+
+    #[test]
+    fn a_committed_migration_redirects_the_connected_players_to_the_new_owner() {
+        let a = ident(180);
+        let b = ident(181);
+        let node_b = FleetNode::bind("127.0.0.1:0", Arc::clone(&b), None).unwrap();
+        let membership = ClusterMembership::from_keys([a.node_pubkey(), node_b.pubkey()]);
+
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership.clone())
+            .with_redirects(Redirector::new());
+        t.add_route(ShardId(30), node_b.route());
+        t.set_shard_players(ShardId(30), vec![7, 8]);
+        t.authority().claim(ShardId(30), b"world".to_vec());
+
+        let epoch = t.migrate_shard(ShardId(30)).unwrap();
+        let redirects = t.take_redirects();
+        assert_eq!(redirects.len(), 2, "both connected players are redirected");
+        assert!(t.take_redirects().is_empty(), "the queue drains");
+
+        let now = now_secs();
+        let mut door = FollowAdmission::new(node_b.pubkey(), membership);
+        for r in &redirects {
+            // Client side: the redirect came from the node it is talking to, and
+            // pins B's key.
+            let route = r.verify_for(&a.node_pubkey(), r.player, now).unwrap();
+            assert_eq!(route.pubkey, node_b.pubkey());
+            assert_eq!(route.addr, node_b.addr().to_string());
+            // Target side: B genuinely owns the shard at this epoch.
+            door.admit(
+                &r.token,
+                r.player,
+                ShardId(30),
+                node_b.authority().epoch_of(ShardId(30)),
+                now,
+            )
+            .unwrap();
+        }
+        assert_eq!(node_b.authority().epoch_of(ShardId(30)), Some(epoch));
+    }
+
+    #[test]
+    fn a_failed_migration_emits_no_redirect_at_all() {
+        // The rollback path must not leak a redirect pointing players at a node
+        // that never took the shard.
+        let a = ident(190);
+        let (addr, pk) = crash_after_handshake(ident(191));
+        let membership = ClusterMembership::from_keys([a.node_pubkey(), pk]);
+
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership)
+            .with_redirects(Redirector::new());
+        t.add_route(ShardId(31), PeerRoute::new(addr.to_string(), pk));
+        t.set_shard_players(ShardId(31), vec![7]);
+        t.authority().claim(ShardId(31), b"still here".to_vec());
+
+        assert!(t.migrate_shard(ShardId(31)).is_err());
+        assert!(
+            t.take_redirects().is_empty(),
+            "a rolled-back migration must never redirect anyone"
+        );
+        assert!(t.authority().owns(ShardId(31)), "and we keep the shard");
+    }
+
+    #[test]
+    fn a_redirect_from_a_superseded_migration_is_refused_by_the_new_owner() {
+        // A → B (epoch e1) issues a redirect; the shard then moves B → A (e2).
+        // A player who follows the stale redirect must be refused by B.
+        let a_ident = ident(200);
+        let b_ident = ident(201);
+        let node_a = FleetNode::bind("127.0.0.1:0", Arc::clone(&a_ident), None).unwrap();
+        let node_b = FleetNode::bind("127.0.0.1:0", Arc::clone(&b_ident), None).unwrap();
+        let membership = ClusterMembership::from_keys([node_a.pubkey(), node_b.pubkey()]);
+
+        let mut a_tx = NetworkHandoffTransport::new(Arc::clone(&a_ident), node_a.authority())
+            .with_timeout(short())
+            .with_membership(membership.clone())
+            .with_redirects(Redirector::new());
+        a_tx.add_route(ShardId(32), node_b.route());
+        a_tx.set_shard_players(ShardId(32), vec![5]);
+        node_a.authority().claim(ShardId(32), b"bouncing".to_vec());
+        a_tx.migrate_shard(ShardId(32)).unwrap();
+        let stale = a_tx.take_redirects().pop().unwrap();
+
+        // Now it bounces back to A, so B's ownership at the redirect's epoch ends.
+        let mut b_tx = NetworkHandoffTransport::new(Arc::clone(&b_ident), node_b.authority())
+            .with_timeout(short())
+            .with_membership(membership.clone());
+        b_tx.add_route(ShardId(32), node_a.route());
+        b_tx.migrate_shard(ShardId(32)).unwrap();
+
+        let mut door = FollowAdmission::new(node_b.pubkey(), membership);
+        let err = door
+            .admit(
+                &stale.token,
+                5,
+                ShardId(32),
+                node_b.authority().epoch_of(ShardId(32)),
+                now_secs(),
+            )
+            .unwrap_err();
+        assert!(
+            matches!(err, AdmitError::StaleEpoch { .. }),
+            "the epoch fence covers session-follow too, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn the_seam_path_redirects_the_migrating_player() {
+        let a = ident(210);
+        let node_b = FleetNode::bind("127.0.0.1:0", ident(211), None).unwrap();
+        let membership = ClusterMembership::from_keys([a.node_pubkey(), node_b.pubkey()]);
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short())
+            .with_membership(membership)
+            .with_redirects(Redirector::new());
+        t.add_route(ShardId(33), node_b.route());
+
+        let ev = HandoffEvent {
+            player: PlayerId::new(9),
+            from_shard: ShardId(1),
+            to_shard: ShardId(33),
+            target_addr: None,
+        };
+        t.transfer(&ev, b"blob").unwrap();
+        let rs = t.take_redirects();
+        assert_eq!(rs.len(), 1);
+        assert_eq!(rs[0].player, 9, "the player that crossed follows the shard");
+        assert_eq!(rs[0].target_key, node_b.pubkey());
     }
 
     #[test]
