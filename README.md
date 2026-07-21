@@ -16,8 +16,6 @@
 [![Decentralized](https://img.shields.io/badge/Decentralized-no%20cloud-ff4d9d)](DECENTRALIZATION.md)
 [![Self-hostable](https://img.shields.io/badge/Self--hostable-single%20node%20binary-7b61ff)](docs/hosting-a-server.md)
 
-<sub><img src="docs/assets/vulos-logo.png" height="14" alt="Vulos"> Part of <strong><a href="https://vulos.org">Vulos</a></strong> — the open, self-hostable web OS &amp; app suite. Runs perfectly standalone; no Vulos account required.</sub>
-
 <br/>
 
 <img src="docs/screenshots/landing-dark.png" alt="Magnetite — the decentralized, self-hostable Rust game platform" width="900">
@@ -366,3 +364,10 @@ Built as an alternative to Nakama, PlayFab, and Roblox — without the custody, 
 ---
 
 <sub><img src="docs/assets/vulos-logo.png" height="16" alt="Vulos"> · <strong>Built with purpose. Open by design.</strong></sub>
+
+---
+
+<p align="center">
+  <a href="https://vulos.org"><img src="docs/assets/vulos-logo.png" alt="vulos" height="20"></a><br>
+  <sub><a href="https://vulos.org"><b>vulos</b></a> — open by design</sub>
+</p>
