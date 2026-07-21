@@ -598,14 +598,197 @@
 }
 .skip-link:focus { transform: translateY(0); }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIVE INSTRUMENT LAYER
+   The "cold iron" restraint stays, but the surface is now alive: a lodestone
+   is an instrument that reacts to a field. Everything below is additive,
+   token-driven, and screenshot-safe (each animated utility resolves to its
+   settled visual under prefers-reduced-motion, so a static capture reads
+   correctly). Use deliberately — motion still carries meaning here.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Living atmosphere ────────────────────────────────────────────────────
+   A richer hero backdrop than .bg-atmosphere: two slowly-drifting field
+   glows (violet core + amber spec) over the magnetic grid. The drift is
+   near-subliminal — the room breathes, it does not pulse. */
+@keyframes im-field-drift {
+  0%   { transform: translate3d(0, 0, 0)      scale(1);    }
+  50%  { transform: translate3d(2%, -1.5%, 0) scale(1.06); }
+  100% { transform: translate3d(0, 0, 0)      scale(1);    }
+}
+@keyframes im-field-drift-2 {
+  0%   { transform: translate3d(0, 0, 0)       scale(1.04); }
+  50%  { transform: translate3d(-2.5%, 2%, 0)  scale(1);    }
+  100% { transform: translate3d(0, 0, 0)       scale(1.04); }
+}
+
+.bg-field {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+/* drifting field glows */
+.bg-field::before {
+  content: '';
+  position: absolute;
+  inset: -30% -10%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 44% at 24% 18%, var(--field-tint) 0%, transparent 60%),
+    radial-gradient(34% 40% at 82% 34%, var(--spec-tint) 0%, transparent 62%),
+    radial-gradient(48% 52% at 62% 88%, var(--field-tint) 0%, transparent 66%);
+  animation: im-field-drift 26s var(--ease-in-out) infinite;
+}
+/* the ruled magnetic grid, masked to fade toward the edges */
+.bg-field::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 60px 60px;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 24%, #000 34%, transparent 82%);
+          mask-image: radial-gradient(120% 100% at 50% 24%, #000 34%, transparent 82%);
+}
+.bg-field > * { position: relative; z-index: 1; }
+
+/* A second drifting glow layer you can drop in as an explicit element for
+   parallax (e.g. cursor-reactive heroes set --mx/--my on it). */
+.field-aura {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(30% 36% at calc(28% + var(--mx, 0px)) calc(30% + var(--my, 0px)), var(--field-tint) 0%, transparent 64%),
+    radial-gradient(28% 34% at calc(78% - var(--mx, 0px)) calc(64% - var(--my, 0px)), var(--spec-tint) 0%, transparent 66%);
+  transition: background .5s var(--ease-out);
+  animation: im-field-drift-2 32s var(--ease-in-out) infinite;
+}
+
+/* ─── Animated field-line motif (SVG stroke) ──────────────────────────────
+   Give an SVG path class .flowline and it becomes a current tracing the
+   loop — the visual proof that the field closes on itself (determinism). */
+@keyframes im-flow { to { stroke-dashoffset: -600; } }
+.flowline { stroke-dasharray: 4 10; animation: im-flow 20s linear infinite; }
+.flowline.fast { animation-duration: 9s; }
+
+/* ─── Animated gradient headline ink ──────────────────────────────────────
+   The field→boundary sweep, but breathing. For ONE accent word in a hero,
+   never a paragraph. Falls back to a solid violet fill with no clip support. */
+@keyframes im-ink-flow { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.ink-flow {
+  background: linear-gradient(100deg, var(--field-text) 0%, var(--boundary-text) 48%, var(--field-text) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--field-text);
+  animation: im-ink-flow 8s var(--ease-in-out) infinite;
+}
+
+/* ─── Sheen sweep ─────────────────────────────────────────────────────────
+   A single specular pass of light across a surface on hover — the look of
+   light catching machined metal. Put .sheen on a positioned, clipped box. */
+.sheen { position: relative; overflow: hidden; isolation: isolate; }
+.sheen::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -140%;
+  width: 60%; height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--ink) 10%, transparent) 50%, transparent 100%);
+  transform: skewX(-18deg);
+  transition: left .6s var(--ease-out);
+}
+.sheen:hover::after { left: 150%; }
+
+/* ─── Magnetic lift ───────────────────────────────────────────────────────
+   The canonical interactive-surface hover: draw toward the reader, warm the
+   border to field-violet, add the field glow. Compose onto cards/tiles. */
+.mag { transition: transform var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out), border-color var(--t) var(--ease-out); }
+.mag:hover { transform: translateY(-4px); border-color: var(--field-line); box-shadow: var(--shadow-lg), 0 0 0 1px var(--field-tint), var(--shadow-glow); }
+
+/* ─── Cursor spotlight ────────────────────────────────────────────────────
+   A soft violet light that follows the pointer across a surface. JS sets
+   --spot-x/--spot-y (see utils/motion.js). Idle state: invisible. */
+.spot { position: relative; isolation: isolate; }
+.spot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--t) var(--ease-out);
+  background: radial-gradient(240px circle at var(--spot-x, 50%) var(--spot-y, 0%), var(--field-tint) 0%, transparent 64%);
+}
+.spot:hover::before { opacity: 1; }
+.spot > * { position: relative; z-index: 1; }
+
+/* ─── Live pulse ──────────────────────────────────────────────────────────
+   A breathing halo for "currently true" indicators (online counts, live
+   nodes). Subtler and slower than the old onlinePulse opacity flicker. */
+@keyframes im-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--live-tint); }
+  50%      { box-shadow: 0 0 0 4px transparent; }
+}
+.pulse-live { animation: im-live-pulse 2.4s var(--ease-in-out) infinite; }
+
+/* ─── Scroll reveal ───────────────────────────────────────────────────────
+   Progressive, direction-aware entrance as content scrolls into frame.
+   ROBUST BY DEFAULT: a .sr element is fully visible with no JS and under
+   reduced motion. Only when utils/motion.js has confirmed motion is welcome
+   does it add `.js-motion` to <html>, arm the hidden state, and reveal on
+   intersa. Static captures (reduced motion) therefore show the settled page. */
+.sr { opacity: 1; }
+:root.js-motion .sr {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity .7s var(--ease-out), transform .7s var(--ease-out);
+  will-change: opacity, transform;
+}
+:root.js-motion .sr-left  { transform: translateX(-26px); }
+:root.js-motion .sr-right { transform: translateX(26px); }
+:root.js-motion .sr-scale { transform: scale(.965); }
+:root.js-motion .sr.is-visible {
+  opacity: 1;
+  transform: none;
+}
+/* stagger children of a .sr-group as they reveal together */
+:root.js-motion .sr-group.is-visible > * { animation: reveal-in .6s var(--ease-out) both; }
+:root.js-motion .sr-group.is-visible > *:nth-child(1) { animation-delay: 0ms; }
+:root.js-motion .sr-group.is-visible > *:nth-child(2) { animation-delay: 60ms; }
+:root.js-motion .sr-group.is-visible > *:nth-child(3) { animation-delay: 120ms; }
+:root.js-motion .sr-group.is-visible > *:nth-child(4) { animation-delay: 180ms; }
+:root.js-motion .sr-group.is-visible > *:nth-child(5) { animation-delay: 240ms; }
+:root.js-motion .sr-group.is-visible > *:nth-child(6) { animation-delay: 300ms; }
+
 /* ─── Reduced motion: disable the animations themselves ───────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .bg-atmosphere::after,
   .bg-grain::after { animation: none; }
 
+  .bg-field::before,
+  .field-aura,
+  .flowline,
+  .ink-flow,
+  .pulse-live { animation: none; }
+
+  .ink-flow { -webkit-text-fill-color: var(--field-text); }
+
+  .sheen::after { display: none; }
+
   .reveal,
   .reveal-1, .reveal-2, .reveal-3, .reveal-4,
-  .reveal-5, .reveal-6, .reveal-7, .reveal-8 {
+  .reveal-5, .reveal-6, .reveal-7, .reveal-8,
+  .sr {
     animation: none;
     opacity: 1;
     transform: none;
