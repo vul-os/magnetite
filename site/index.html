@@ -716,7 +716,7 @@
               </div>
               <div>
                 <p>A signature proves <b>authorship, not truth</b>. It stops one player forging events in another’s name and stops a relay editing them in flight. A cheater who signs their own fabricated numbers with their own genuine key passes every check — there is a test asserting exactly that, so the limit stays written down in code.</p>
-                <p style="margin-top:12px">The wire ingress is real: <a class="link" href="https://github.com/vul-os/wibbly" target="_blank" rel="noopener">wibbly</a> — a camera-gesture game built on magnetite, where your webcam is the controller — signs pose-derived events and a live magnetite node accepts them. <code style="font-family:var(--mono);font-size:.88em">attested_ack</code> comes back, pinned to a shared golden vector at both ends. That proves the seam carries traffic and nothing more: <b>no game in either repo consumes those events yet.</b> This is a validated transport, not gesture multiplayer. <a class="link" href="/products/magnetite/wibbly/play/" target="_top">Play it in your browser →</a></p>
+                <p style="margin-top:12px">The wire ingress is real: <a class="link" href="https://github.com/vul-os/wibbly" target="_blank" rel="noopener">wibbly</a> — a camera-gesture game built on magnetite, where your webcam is the controller — signs pose-derived events and a live magnetite node accepts them. <code style="font-family:var(--mono);font-size:.88em">attested_ack</code> comes back, pinned to a shared golden vector at both ends. That proves the seam carries traffic and nothing more: <b>no game in either repo consumes those events yet.</b> This is a validated transport, not gesture multiplayer. <a class="link" href="https://vulos.org/products/magnetite/wibbly/play/" target="_top">Play it in your browser →</a></p>
               </div>
             </div>
             <span class="chip bnd">Transport validated · no producer, no consumer</span>
@@ -790,6 +790,24 @@
                 <div class="frame-bar"><i></i><i></i><i></i><span>magnetite · /developers/earnings</span></div>
                 <img class="light" src="./shots/earnings-light.png" alt="magnetite developer revenue screen showing settled USDC received, signed receipt count and a zero-basis-point protocol fee, stating there is no custodial balance or payout queue" loading="lazy" decoding="async" width="2880" height="1800" />
                 <img class="dark" src="./shots/earnings-dark.png" alt="" aria-hidden="true" loading="lazy" decoding="async" width="2880" height="1800" />
+              </div>
+            </div>
+          </div>
+
+          <div class="shot">
+            <div>
+              <h3>wibbly — the wire ingress, live</h3>
+              <p><a class="link" href="https://github.com/vul-os/wibbly" target="_blank" rel="noopener">wibbly</a> is a camera-gesture game built on magnetite: the webcam is the controller, and pose-derived events are signed and carried over the real <code style="font-family:var(--mono);font-size:.88em">AttestedEvent</code> wire route from Seam 07. This is that client mid-session, talking to a live magnetite node.</p>
+              <div class="caveat">
+                <b>What this does not show</b>
+                Consumption. The signed event reaches the node and is acknowledged — that is the whole proof. No game in either repo drains the accepted-event queue, so nothing here is gesture multiplayer.
+              </div>
+            </div>
+            <div class="shot-media">
+              <div class="frame">
+                <div class="frame-bar"><i></i><i></i><i></i><span>wibbly · play</span></div>
+                <img class="light" src="./shots/wibbly-light.png" alt="wibbly camera-gesture client running against a live magnetite node, sending signed attested events over the InputProvider wire route" loading="lazy" decoding="async" width="2880" height="1800" />
+                <img class="dark" src="./shots/wibbly-dark.png" alt="" aria-hidden="true" loading="lazy" decoding="async" width="2880" height="1800" />
               </div>
             </div>
           </div>
