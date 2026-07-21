@@ -52,6 +52,13 @@ maxminddb = "0.24"
 # games by content hash. Pulls in no external service — offline defaults only.
 magnetite-seams = { path = "../magnetite-seams" }
 
+[features]
+default = []
+# Compile in the real SPL-USDC-on-Solana payment rail so `PAYMENT_RAIL=solana`
+# can select it. OFF by default: the offline mock rail stays the default and the
+# default build pulls in no chain dependencies and opens no sockets.
+solana = ["magnetite-seams/solana"]
+
 [dev-dependencies]
 tokio-test = "0.4"
 rust_decimal_macros = "1"

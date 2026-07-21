@@ -35,6 +35,9 @@ pub mod identity;
 pub mod keyname;
 pub mod naming;
 pub mod payment;
+/// Real SPL-USDC-on-Solana payment rail (`--features solana`).
+#[cfg(feature = "solana")]
+pub mod solana;
 
 pub use error::{Result, SeamError};
 
@@ -65,7 +68,8 @@ pub use comms::{BuiltinProvider, CommsProvider, JoinCred, RoomAddr, RoomScope};
 
 // Seam §3.6 — PaymentRail
 pub use payment::{
-    Channel, Escrow, MockPaymentRail, PayOut, PaymentRail, PaymentSplit, Receipt, Split, WagerTerms,
+    ChainBinding, Channel, Escrow, MockPaymentRail, PayOut, PaymentError, PaymentRail,
+    PaymentSplit, Receipt, Split, WagerTerms,
 };
 
 /// Current unix time in whole seconds. Used for token/challenge expiry.

@@ -42,6 +42,36 @@ pub struct PayOut {
     pub amount: u64,
 }
 
+/// Where a receipt is anchored on a real chain, and to what.
+///
+/// Present only for chain rails (see [`crate::solana`]). For the offline mock
+/// this is `None` and the receipt is worth exactly what the rail signature says.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainBinding {
+    /// Chain name, e.g. `"solana"`.
+    pub chain: String,
+    /// The on-chain transaction signature (base58 on Solana).
+    pub tx_signature: String,
+    /// The item this payment is redeemable for — and ONLY this item.
+    pub item: String,
+    /// The token mint that was transferred (base58 on Solana).
+    pub mint: String,
+    /// Hex `blake3("magnetite-pay-v1" || buyer || item)`; also carried on chain
+    /// (as a memo) so the binding is not merely asserted by the receipt.
+    pub reference: String,
+}
+
+/// A payment operation that a given rail cannot perform.
+#[derive(Debug, thiserror::Error)]
+pub enum PaymentError {
+    /// The rail has no implementation of this operation and will not fake one.
+    #[error("{0} is not supported on this payment rail")]
+    Unsupported(&'static str),
+    /// The rail tried and failed (RPC down, insufficient funds, ...).
+    #[error("payment rail error: {0}")]
+    Rail(String),
+}
+
 /// Signed proof of an atomic wallet→wallet purchase. This IS the entitlement.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Receipt {
@@ -59,10 +89,13 @@ pub struct Receipt {
     pub rail_pubkey: PubKey,
     /// Rail signature over `signing_bytes`.
     pub sig: Sig,
+    /// On-chain anchor, for rails that have one.
+    #[serde(default)]
+    pub binding: Option<ChainBinding>,
 }
 
 impl Receipt {
-    fn signing_bytes(&self) -> Vec<u8> {
+    pub(crate) fn signing_bytes(&self) -> Vec<u8> {
         let mut b = Vec::new();
         b.extend_from_slice(&self.buyer.0);
         b.extend_from_slice(&(self.payouts.len() as u32).to_le_bytes());
@@ -73,6 +106,13 @@ impl Receipt {
         b.extend_from_slice(&self.protocol_fee.to_le_bytes());
         b.extend_from_slice(&self.total.to_le_bytes());
         b.extend_from_slice(&self.nonce);
+        if let Some(c) = &self.binding {
+            b.extend_from_slice(c.chain.as_bytes());
+            b.extend_from_slice(c.tx_signature.as_bytes());
+            b.extend_from_slice(c.item.as_bytes());
+            b.extend_from_slice(c.mint.as_bytes());
+            b.extend_from_slice(c.reference.as_bytes());
+        }
         b
     }
 }
@@ -119,12 +159,36 @@ pub struct Escrow {
 pub trait PaymentRail {
     /// Atomic wallet→wallet purchase; returns a signed entitlement receipt.
     async fn checkout(&self, buyer: &PubKey, split: PaymentSplit) -> Receipt;
+    /// Checkout bound to a specific item, so the resulting receipt is
+    /// redeemable for that item and nothing else.
+    ///
+    /// The default implementation ignores `item` — correct for rails whose
+    /// receipts are bound by the caller's database (the mock). Chain rails
+    /// override it and put the binding on chain.
+    async fn checkout_for_item(
+        &self,
+        buyer: &PubKey,
+        _item: &str,
+        split: PaymentSplit,
+    ) -> Result<Receipt, PaymentError> {
+        Ok(self.checkout(buyer, split).await)
+    }
     /// Open a micro-payment channel to a peer (hosting fees).
-    async fn open_channel(&self, peer: &PubKey) -> Channel;
-    /// Lock a wager into escrow.
-    async fn escrow(&self, terms: WagerTerms) -> Escrow;
-    /// Verify a receipt's signature and internal arithmetic.
+    ///
+    /// Rails without an on-chain channel program MUST return
+    /// [`PaymentError::Unsupported`] rather than a stub that appears to work.
+    async fn open_channel(&self, peer: &PubKey) -> Result<Channel, PaymentError>;
+    /// Lock a wager into escrow. Same rule as [`Self::open_channel`].
+    async fn escrow(&self, terms: WagerTerms) -> Result<Escrow, PaymentError>;
+    /// Verify a receipt. **Must fail closed**: any doubt returns `false`.
     fn verify_receipt(&self, r: &Receipt) -> bool;
+    /// Verify a receipt AND that it is bound to `item`.
+    ///
+    /// Defaults to [`Self::verify_receipt`] for rails whose item binding lives
+    /// in the caller's database.
+    fn verify_receipt_for_item(&self, r: &Receipt, _item: &str) -> bool {
+        self.verify_receipt(r)
+    }
 }
 
 /// Deterministic, offline mock rail. Signs receipts with a fixed rail keypair.
@@ -214,24 +278,25 @@ impl PaymentRail for MockPaymentRail {
             nonce,
             rail_pubkey: self.rail_pubkey(),
             sig: Sig([0u8; 64]),
+            binding: None,
         };
         r.sig = self.rail.sign(&r.signing_bytes());
         r
     }
 
-    async fn open_channel(&self, peer: &PubKey) -> Channel {
+    async fn open_channel(&self, peer: &PubKey) -> Result<Channel, PaymentError> {
         let mut seed = Vec::new();
         seed.extend_from_slice(b"channel");
         seed.extend_from_slice(&self.rail_pubkey().0);
         seed.extend_from_slice(&peer.0);
-        Channel {
+        Ok(Channel {
             id: *blake3::hash(&seed).as_bytes(),
             peer: *peer,
             rail_pubkey: self.rail_pubkey(),
-        }
+        })
     }
 
-    async fn escrow(&self, terms: WagerTerms) -> Escrow {
+    async fn escrow(&self, terms: WagerTerms) -> Result<Escrow, PaymentError> {
         let locked = terms.stake.saturating_mul(terms.players.len() as u64);
         let mut seed = Vec::new();
         seed.extend_from_slice(b"escrow");
@@ -240,12 +305,12 @@ impl PaymentRail for MockPaymentRail {
             seed.extend_from_slice(&p.0);
         }
         seed.extend_from_slice(&terms.stake.to_le_bytes());
-        Escrow {
+        Ok(Escrow {
             id: *blake3::hash(&seed).as_bytes(),
             terms,
             locked,
             rail_pubkey: self.rail_pubkey(),
-        }
+        })
     }
 
     fn verify_receipt(&self, r: &Receipt) -> bool {
@@ -395,8 +460,8 @@ mod tests {
     async fn channel_and_escrow_are_deterministic_offline() {
         let rail = MockPaymentRail::new();
         let peer = PubKey([0x0B; 32]);
-        let c1 = rail.open_channel(&peer).await;
-        let c2 = rail.open_channel(&peer).await;
+        let c1 = rail.open_channel(&peer).await.unwrap();
+        let c2 = rail.open_channel(&peer).await.unwrap();
         assert_eq!(c1.id, c2.id);
         assert_eq!(c1.rail_pubkey, rail.rail_pubkey());
 
@@ -406,7 +471,7 @@ mod tests {
             currency: "USDC".into(),
             game: Hash::of(b"chess"),
         };
-        let e = rail.escrow(terms).await;
+        let e = rail.escrow(terms).await.unwrap();
         assert_eq!(e.locked, 200);
     }
 }

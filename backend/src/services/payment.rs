@@ -552,16 +552,18 @@ impl SubscriptionService {
 // The default rail is `MockPaymentRail` — deterministic, offline, zero external
 // services — selected by `PAYMENT_RAIL=mock` (the default).
 //
-// TODO(chain): implement a real `PaymentRail` (USDC on an L2, or Solana where the
-// Ed25519 identity key doubles as the wallet key) using `CHAIN_RPC_URL`,
-// `CHAIN_ID` and `STABLECOIN_ADDRESS`, and select it here when
-// `PAYMENT_RAIL != "mock"`. Nothing outside this module may name a chain type.
+// `PAYMENT_RAIL=solana` (requires `--features solana`) selects the real SPL-USDC
+// rail. Selection happens HERE and nowhere else: no module outside this one
+// names a chain type. Misconfiguration PANICS at startup rather than falling
+// back to the mock — a silent fallback in production would hand out every paid
+// item for free.
 
 use std::sync::OnceLock;
 
 pub use magnetite_seams::identity::{PubKey, Sig};
 pub use magnetite_seams::payment::{
-    Channel, MockPaymentRail, PayOut, PaymentRail, PaymentSplit, Receipt, Split,
+    ChainBinding, Channel, MockPaymentRail, PayOut, PaymentRail, PaymentSplit,
+    Receipt, Split,
 };
 
 /// Protocol fee in basis points. Default `0` (governance decides any real fee).
@@ -572,20 +574,120 @@ pub fn protocol_fee_bps() -> u16 {
         .unwrap_or(0)
 }
 
+/// Which rail `PAYMENT_RAIL` selects. Unknown values are FATAL.
+fn rail_kind() -> String {
+    std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string())
+}
+
 /// The process-wide payment rail. Default `mock` — fully offline.
-pub fn rail() -> &'static MockPaymentRail {
-    static RAIL: OnceLock<MockPaymentRail> = OnceLock::new();
-    RAIL.get_or_init(|| {
-        let kind = std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string());
-        if kind != "mock" {
-            tracing::warn!(
-                "PAYMENT_RAIL={} is not implemented yet; falling back to the offline mock rail. \
-                 See TODO(chain) in services/payment.rs",
-                kind
-            );
+///
+/// # Fail loud, never fall back
+///
+/// If `PAYMENT_RAIL` names a rail that is unknown, not compiled in, or
+/// misconfigured, this **panics**. It must not degrade to the mock: the mock
+/// signs receipts for free, so a production process that quietly fell back to it
+/// would give every paid item, paid room and hosted server away for nothing.
+pub fn rail() -> &'static dyn PaymentRail {
+    static RAIL: OnceLock<Box<dyn PaymentRail + Send + Sync>> = OnceLock::new();
+    RAIL.get_or_init(|| match rail_kind().as_str() {
+        "mock" => {
+            Box::new(MockPaymentRail::with_fee_bps(protocol_fee_bps())) as Box<dyn PaymentRail + Send + Sync>
         }
-        MockPaymentRail::with_fee_bps(protocol_fee_bps())
+        #[cfg(feature = "solana")]
+        "solana" => Box::new(solana_rail_from_env().unwrap_or_else(|e| {
+            panic!(
+                "PAYMENT_RAIL=solana is misconfigured: {e}. Refusing to start — falling \
+                 back to the mock rail would hand out paid items for free."
+            )
+        })) as Box<dyn PaymentRail + Send + Sync>,
+        #[cfg(not(feature = "solana"))]
+        "solana" => panic!(
+            "PAYMENT_RAIL=solana but this binary was built WITHOUT `--features solana`. \
+             Refusing to start rather than silently using the mock rail."
+        ),
+        other => panic!(
+            "PAYMENT_RAIL={other:?} is not a known payment rail (expected \"mock\" or \
+             \"solana\"). Refusing to start."
+        ),
     })
+    .as_ref()
+}
+
+/// Build the Solana rail from the environment, validating every field.
+///
+/// | env | meaning |
+/// |---|---|
+/// | `SOLANA_RPC_URL` | JSON-RPC endpoint (required) |
+/// | `SOLANA_CLUSTER` | `mainnet-beta` \| `devnet` \| `testnet` \| `localnet` (required) |
+/// | `SOLANA_COMMITMENT` | `confirmed` \| `finalized` (default `finalized`) |
+/// | `SOLANA_USDC_MINT` | base58 mint; defaults to the canonical mint for the cluster |
+/// | `SOLANA_FEE_WALLET` | base58; REQUIRED when `PROTOCOL_FEE_BPS > 0` |
+/// | `SOLANA_KEYPAIR_PATH` / `SOLANA_KEYPAIR` | optional signer (`chmod 600`); absent ⇒ verify-only |
+#[cfg(feature = "solana")]
+fn solana_rail_from_env(
+) -> std::result::Result<magnetite_seams::solana::SolanaPaymentRail, String> {
+    use magnetite_seams::solana::{
+        rpc::HttpRpc,
+        tx::{pubkey_from_base58, USDC_DEVNET_MINT, USDC_MAINNET_MINT},
+        Cluster, Commitment, SolanaConfig, SolanaPaymentRail,
+    };
+    use std::sync::Arc;
+
+    let rpc_url = std::env::var("SOLANA_RPC_URL")
+        .map_err(|_| "SOLANA_RPC_URL is not set".to_string())?;
+    if !rpc_url.starts_with("http://") && !rpc_url.starts_with("https://") {
+        return Err(format!("SOLANA_RPC_URL {rpc_url:?} is not an http(s) URL"));
+    }
+    let cluster = Cluster::parse(
+        &std::env::var("SOLANA_CLUSTER").map_err(|_| "SOLANA_CLUSTER is not set".to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let commitment = Commitment::parse(
+        &std::env::var("SOLANA_COMMITMENT").unwrap_or_else(|_| "finalized".to_string()),
+    )
+    .map_err(|e| e.to_string())?;
+
+    let default_mint = match cluster {
+        Cluster::MainnetBeta => USDC_MAINNET_MINT,
+        _ => USDC_DEVNET_MINT,
+    };
+    let usdc_mint = pubkey_from_base58(
+        &std::env::var("SOLANA_USDC_MINT").unwrap_or_else(|_| default_mint.to_string()),
+    )
+    .map_err(|e| format!("SOLANA_USDC_MINT: {e}"))?;
+
+    let fee_wallet = match std::env::var("SOLANA_FEE_WALLET") {
+        Ok(w) => Some(pubkey_from_base58(&w).map_err(|e| format!("SOLANA_FEE_WALLET: {e}"))?),
+        Err(_) => None,
+    };
+    if protocol_fee_bps() > 0 && fee_wallet.is_none() {
+        return Err("PROTOCOL_FEE_BPS > 0 but SOLANA_FEE_WALLET is not set".into());
+    }
+
+    // Key material: loaded, never logged, never persisted.
+    let signer = SolanaPaymentRail::signer_from_env().map_err(|e| e.to_string())?;
+
+    if cluster.is_mainnet() {
+        tracing::warn!(
+            "PAYMENT_RAIL=solana on MAINNET-BETA: this process moves REAL money. \
+             commitment={} signer={}",
+            commitment.as_str(),
+            if signer.is_some() { "present" } else { "none (verify-only)" }
+        );
+    }
+
+    let cfg = SolanaConfig {
+        rpc_url: rpc_url.clone(),
+        cluster,
+        commitment,
+        usdc_mint,
+        fee_wallet,
+    };
+    let mut rail = SolanaPaymentRail::new(cfg, Arc::new(HttpRpc::new(rpc_url)));
+    if let Some(s) = signer {
+        rail = rail.with_signer(s);
+    }
+    Ok(rail)
 }
 
 /// Verify a receipt against the active rail (signature + internal arithmetic).
@@ -660,8 +762,8 @@ pub async fn store_receipt(
         r#"
         INSERT INTO payment_receipts
             (id, kind, buyer_id, buyer_pubkey, purchase_id, item_id, game_id,
-             total, protocol_fee, payouts, nonce, rail_pubkey, sig, rail, voided, created_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,NOW())
+             total, protocol_fee, payouts, nonce, rail_pubkey, sig, rail, binding, voided, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,NOW())
         "#,
     )
     .bind(id)
@@ -677,7 +779,13 @@ pub async fn store_receipt(
     .bind(hex::encode(receipt.nonce))
     .bind(receipt.rail_pubkey.to_hex())
     .bind(hex::encode(receipt.sig.0))
-    .bind(std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string()))
+    .bind(rail_kind())
+    .bind(
+        receipt
+            .binding
+            .as_ref()
+            .map(|b| serde_json::json!(b)),
+    )
     .execute(pool)
     .await?;
 
@@ -706,7 +814,10 @@ pub async fn open_hosting_channel(
     operator: &PubKey,
     server_id: Option<Uuid>,
 ) -> Result<Channel> {
-    let channel = rail().open_channel(operator).await;
+    let channel = rail()
+        .open_channel(operator)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("cannot open a hosting channel: {e}")))?;
     sqlx::query(
         r#"
         INSERT INTO hosting_channels
@@ -787,10 +898,18 @@ pub async fn load_receipt(
     buyer_id: Uuid,
     item_id: Uuid,
 ) -> Result<Option<Receipt>> {
-    let row: Option<(String, i64, i64, serde_json::Value, String, String, String)> =
-        sqlx::query_as(
+    let row: Option<(
+        String,
+        i64,
+        i64,
+        serde_json::Value,
+        String,
+        String,
+        String,
+        Option<serde_json::Value>,
+    )> = sqlx::query_as(
             r#"
-            SELECT buyer_pubkey, total, protocol_fee, payouts, nonce, rail_pubkey, sig
+            SELECT buyer_pubkey, total, protocol_fee, payouts, nonce, rail_pubkey, sig, binding
               FROM payment_receipts
              WHERE buyer_id = $1
                AND item_id  = $2
@@ -804,7 +923,7 @@ pub async fn load_receipt(
         .fetch_optional(pool)
         .await?;
 
-    let Some((buyer, total, fee, payouts, nonce, rail_pk, sig)) = row else {
+    let Some((buyer, total, fee, payouts, nonce, rail_pk, sig, binding)) = row else {
         return Ok(None);
     };
 
@@ -842,6 +961,16 @@ pub async fn load_receipt(
         parsed.push(PayOut { wallet, amount: a });
     }
 
+    // A stored binding that will not parse back is a malformed row, not a
+    // receipt — drop it rather than returning a receipt missing its anchor.
+    let binding = match binding {
+        None | Some(serde_json::Value::Null) => None,
+        Some(v) => match serde_json::from_value::<ChainBinding>(v) {
+            Ok(b) => Some(b),
+            Err(_) => return Ok(None),
+        },
+    };
+
     Ok(Some(Receipt {
         buyer,
         payouts: parsed,
@@ -850,6 +979,7 @@ pub async fn load_receipt(
         nonce,
         rail_pubkey,
         sig: Sig(sig),
+        binding,
     }))
 }
 
@@ -972,8 +1102,8 @@ mod tests {
     #[tokio::test]
     async fn hosting_channel_id_is_deterministic() {
         let op = pk(0x0C);
-        let a = rail().open_channel(&op).await;
-        let b = rail().open_channel(&op).await;
+        let a = rail().open_channel(&op).await.unwrap();
+        let b = rail().open_channel(&op).await.unwrap();
         assert_eq!(a.id, b.id);
         assert_eq!(a.peer, op);
     }
