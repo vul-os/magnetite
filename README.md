@@ -10,7 +10,7 @@
 **Bring any server. It scales to your hardware. No cloud required.**<br>
 **Content-addressed games, deterministic WASM sandboxing, replay-verified anti-cheat, and non-custodial crypto payments.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-7b61ff.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-7b61ff.svg)](LICENSE-MIT)
 [![Rust](https://img.shields.io/badge/Rust-1.82+-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![WASM](https://img.shields.io/badge/WASM-wasmtime-654FF0?logo=webassembly&logoColor=white)](https://wasmtime.dev)
 [![Decentralized](https://img.shields.io/badge/Decentralized-no%20cloud-ff4d9d)](DECENTRALIZATION.md)
@@ -341,7 +341,10 @@ npm run screenshotter     # regenerate docs/screenshots/ (alias: npm run screens
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Platform, SDK, and game templates are all MIT.
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE) — © VulOS. Magnetite is a VulOS
+project; source and issues at
+[github.com/vul-os/magnetite](https://github.com/vul-os/magnetite). Platform, SDK,
+and game templates are all dual-licensed.
 
 ## Contributing
 
