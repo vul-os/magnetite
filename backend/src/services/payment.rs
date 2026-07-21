@@ -623,13 +623,19 @@ pub fn rail() -> &'static dyn PaymentRail {
 /// | `SOLANA_USDC_MINT` | base58 mint; defaults to the canonical mint for the cluster |
 /// | `SOLANA_FEE_WALLET` | base58; REQUIRED when `PROTOCOL_FEE_BPS > 0` |
 /// | `SOLANA_KEYPAIR_PATH` / `SOLANA_KEYPAIR` | optional signer (`chmod 600`); absent ⇒ verify-only |
+///
+/// The actual chain rail (tx construction, signing, RPC, on-chain
+/// verification) is `patala_solana::SolanaRail`; this only builds the config
+/// and hands it to `magnetite_seams::solana::SolanaPaymentRail`, the thin
+/// adapter that keeps magnetite's own `PaymentRail` seam on top of it (see
+/// that module's docs and `patala/PATALA.md` §7).
 #[cfg(feature = "solana")]
 fn solana_rail_from_env(
 ) -> std::result::Result<magnetite_seams::solana::SolanaPaymentRail, String> {
-    use magnetite_seams::solana::{
+    use magnetite_seams::solana::{Cluster, Commitment, SolanaConfig, SolanaPaymentRail};
+    use patala_solana::{
         rpc::HttpRpc,
         tx::{pubkey_from_base58, USDC_DEVNET_MINT, USDC_MAINNET_MINT},
-        Cluster, Commitment, SolanaConfig, SolanaPaymentRail,
     };
     use std::sync::Arc;
 
@@ -656,38 +662,43 @@ fn solana_rail_from_env(
     )
     .map_err(|e| format!("SOLANA_USDC_MINT: {e}"))?;
 
+    // `fee_wallet` stays a magnetite-level concept: `patala_core`'s seam has
+    // no multi-party split, so this is only consulted by `SolanaPaymentRail`
+    // to decide whether a split collapses to one payable recipient — see
+    // `magnetite_seams::solana::SolanaError::MultiPartySplit`.
     let fee_wallet = match std::env::var("SOLANA_FEE_WALLET") {
-        Ok(w) => Some(pubkey_from_base58(&w).map_err(|e| format!("SOLANA_FEE_WALLET: {e}"))?),
+        Ok(w) => Some(
+            pubkey_from_base58(&w)
+                .map(|pk| PubKey(pk.0))
+                .map_err(|e| format!("SOLANA_FEE_WALLET: {e}"))?,
+        ),
         Err(_) => None,
     };
     if protocol_fee_bps() > 0 && fee_wallet.is_none() {
         return Err("PROTOCOL_FEE_BPS > 0 but SOLANA_FEE_WALLET is not set".into());
     }
 
-    // Key material: loaded, never logged, never persisted.
-    let signer = SolanaPaymentRail::signer_from_env().map_err(|e| e.to_string())?;
-
     if cluster.is_mainnet() {
         tracing::warn!(
             "PAYMENT_RAIL=solana on MAINNET-BETA: this process moves REAL money. \
-             commitment={} signer={}",
+             commitment={}",
             commitment.as_str(),
-            if signer.is_some() { "present" } else { "none (verify-only)" }
         );
     }
 
     let cfg = SolanaConfig {
-        rpc_url: rpc_url.clone(),
-        cluster,
-        commitment,
-        usdc_mint,
+        inner: patala_solana::SolanaConfig {
+            rpc_url: rpc_url.clone(),
+            cluster,
+            commitment,
+            usdc_mint,
+        },
         fee_wallet,
     };
-    let mut rail = SolanaPaymentRail::new(cfg, Arc::new(HttpRpc::new(rpc_url)));
-    if let Some(s) = signer {
-        rail = rail.with_signer(s);
-    }
-    Ok(rail)
+    // Signer (if any) is loaded from SOLANA_KEYPAIR_PATH/SOLANA_KEYPAIR by
+    // `patala_solana::keys::Keypair::from_env` inside `from_env` below — never
+    // logged, never persisted.
+    SolanaPaymentRail::from_env(cfg, Arc::new(HttpRpc::new(rpc_url))).map_err(|e| e.to_string())
 }
 
 /// Verify a receipt against the active rail (signature + internal arithmetic).

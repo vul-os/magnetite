@@ -600,15 +600,13 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "blake3",
- "bs58",
- "curve25519-dalek",
  "ed25519-dalek",
  "hex",
+ "patala-core",
+ "patala-solana",
  "rand 0.8.7",
- "reqwest",
  "serde",
  "serde_json",
- "sha2",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -635,6 +633,35 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "patala-core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "patala-solana"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "bs58",
+ "curve25519-dalek",
+ "ed25519-dalek",
+ "hex",
+ "patala-core",
+ "rand 0.8.7",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tokio",
+]
 
 [[package]]
 name = "percent-encoding"

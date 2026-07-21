@@ -52,12 +52,19 @@ maxminddb = "0.24"
 # games by content hash. Pulls in no external service — offline defaults only.
 magnetite-seams = { path = "../magnetite-seams" }
 
+# `patala-solana` (path dep to the sibling `patala` repo — see `magnetite-seams`'s
+# Cargo.toml for the same note about a released build pinning a git tag instead)
+# is referenced directly by `solana_rail_from_env` below to build
+# `patala_solana::SolanaConfig` / `HttpRpc`. Optional, `solana`-feature-gated,
+# same posture as `magnetite-seams/solana`.
+patala-solana = { path = "../../patala/patala-solana", optional = true }
+
 [features]
 default = []
 # Compile in the real SPL-USDC-on-Solana payment rail so `PAYMENT_RAIL=solana`
 # can select it. OFF by default: the offline mock rail stays the default and the
 # default build pulls in no chain dependencies and opens no sockets.
-solana = ["magnetite-seams/solana"]
+solana = ["magnetite-seams/solana", "dep:patala-solana"]
 
 [dev-dependencies]
 tokio-test = "0.4"
