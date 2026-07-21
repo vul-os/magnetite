@@ -50,15 +50,27 @@ pub struct PayOut {
 pub struct ChainBinding {
     /// Chain name, e.g. `"solana"`.
     pub chain: String,
-    /// The on-chain transaction signature (base58 on Solana).
+    /// The on-chain transaction signature (base58 on Solana). Informational —
+    /// a best-effort peek at `rail_proof`, never used for verification.
     pub tx_signature: String,
     /// The item this payment is redeemable for — and ONLY this item.
     pub item: String,
-    /// The token mint that was transferred (base58 on Solana).
+    /// The token mint that was transferred (base58 on Solana). Informational,
+    /// same caveat as `tx_signature`.
     pub mint: String,
-    /// Hex `blake3("magnetite-pay-v1" || buyer || item)`; also carried on chain
-    /// (as a memo) so the binding is not merely asserted by the receipt.
+    /// Hex `blake3("magnetite-pay-v1" || buyer || item)`; magnetite's OWN
+    /// local item<->receipt consistency hash (distinct from, and checked in
+    /// addition to, whatever domain-separated binding the rail itself uses
+    /// on chain).
     pub reference: String,
+    /// The chain rail's own opaque proof blob (e.g.
+    /// `patala_core::Receipt::proof` for the Solana rail) — carried through
+    /// unmodified from charge time so verification can hand it back to the
+    /// rail exactly as issued. Opaque to everything except the rail that
+    /// produced it. Absent (empty) for rows written before this field existed
+    /// or for rails that do not use it.
+    #[serde(default)]
+    pub rail_proof: Vec<u8>,
 }
 
 /// A payment operation that a given rail cannot perform.
@@ -112,6 +124,7 @@ impl Receipt {
             b.extend_from_slice(c.item.as_bytes());
             b.extend_from_slice(c.mint.as_bytes());
             b.extend_from_slice(c.reference.as_bytes());
+            b.extend_from_slice(&c.rail_proof);
         }
         b
     }

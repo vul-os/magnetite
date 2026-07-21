@@ -3,7 +3,7 @@ name = "magnetite-seams"
 version = "0.1.0"
 edition = "2021"
 description = "The six pluggable seams for the decentralized Magnetite games platform — Identity/Auth, Naming, BlobStore, Discovery, CommsProvider, PaymentRail — as traits plus zero-external-service default implementations."
-license = "MIT"
+license = "MIT OR Apache-2.0"
 keywords = ["decentralized", "p2p", "games", "seams", "magnetite"]
 categories = ["game-development", "network-programming", "cryptography"]
 
@@ -24,14 +24,13 @@ keyname = []
 # Real SPL-USDC-on-Solana `PaymentRail` (`solana::SolanaPaymentRail`). OFF by
 # default: the offline `MockPaymentRail` stays the default rail, and with this
 # feature off the crate builds and tests with NO network and NO new deps.
-solana = [
-    "dep:bs58",
-    "dep:sha2",
-    "dep:curve25519-dalek",
-    "dep:serde_json",
-    "dep:tokio",
-    "dep:reqwest",
-]
+#
+# The actual transaction construction, Ed25519 signing, JSON-RPC and on-chain
+# verification used to live IN this crate (`src/solana/{mod,rpc,tx,tests}.rs`,
+# ~1760 lines). That code has MOVED to the sibling `patala` repo's
+# `patala-solana` crate (see `PATALA.md` §4/§7 there) — this feature now only
+# pulls in the thin adapter that delegates to it; see `src/solana/mod.rs`.
+solana = ["dep:tokio", "dep:serde_json", "dep:patala-solana"]
 
 [dependencies]
 ed25519-dalek = { version = "2", features = ["rand_core"] }
@@ -42,13 +41,21 @@ thiserror = "1"
 hex = "0.4"
 rand = "0.8"
 
+# patala-core is the tiny, offline, dependency-free seam (one trait + capability
+# model + mock rail — see `patala/PATALA.md` §3, §8). It carries no chain/network
+# deps of its own, so depending on it unconditionally does not compromise the
+# default build staying offline; only `patala-solana` (below) is feature-gated.
+patala-core = { path = "../../patala/patala-core" }
+
 # --- `solana` feature only (all optional, none in the default build) ---------
-bs58 = { version = "0.5", optional = true }
-sha2 = { version = "0.10", optional = true }
-curve25519-dalek = { version = "4", optional = true }
 serde_json = { version = "1", optional = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"], optional = true }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+# The real SPL-USDC-on-Solana rail (tx construction, signing, JSON-RPC, on-chain
+# verification) — PORTED OUT of this crate and into `patala-solana` (PATALA.md
+# §4/§7). Path dependency to the sibling repo checkout for now; a released
+# build should pin a git tag instead, e.g.:
+#   patala-solana = { git = "https://github.com/vul-os/patala", tag = "vX.Y.Z", optional = true }
+patala-solana = { path = "../../patala/patala-solana", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

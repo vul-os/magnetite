@@ -1,41 +1,71 @@
 //! Seam §3.6 — a **real** `PaymentRail`: SPL USDC on Solana.
 //!
-//! Behind the `solana` cargo feature; the offline [`MockPaymentRail`] stays the
-//! default so CI and self-hosting need no chain, no RPC and no money.
+//! Behind the `solana` cargo feature; the offline [`crate::payment::MockPaymentRail`]
+//! stays the default so CI and self-hosting need no chain, no RPC and no money.
 //!
-//! # Shape
+//! # This is now a THIN ADAPTER, not the rail itself
 //!
-//! * **checkout** builds ONE transaction containing one SPL `TransferChecked`
-//!   per party (developer, optional operator, optional protocol fee) plus a Memo
-//!   instruction carrying the `(buyer, item)` binding. Because it is a single
-//!   transaction, the split is atomic *by construction* — Solana either lands
-//!   every leg or none. No custom on-chain program is involved.
-//! * **verify_receipt** re-derives the binding and re-reads the transaction from
-//!   the cluster. It trusts nothing in the receipt except as a *claim* to be
-//!   checked against chain state.
-//! * **open_channel / escrow** are NOT implemented — they need real on-chain
-//!   programs. They return [`SolanaError::Unsupported`] rather than a
-//!   convincing-looking stub. See `docs/payments.md`.
+//! The actual transaction construction, Ed25519 signing, JSON-RPC client and
+//! on-chain verification used to live HERE (`mod.rs` + `rpc.rs` + `tx.rs` +
+//! `tests.rs`, ~1760 lines, 95 tests). That code has **moved** to the sibling
+//! `patala` repo's `patala-solana` crate (see `../../patala/PATALA.md` §4 and
+//! §7 — "magnetite switches from its in-crate `PaymentRail` seam to depending
+//! on `patala`"). This module now only:
+//!
+//! 1. keeps magnetite's OWN `PaymentRail` seam
+//!    (`checkout`/`checkout_for_item`/`open_channel`/`escrow`/`verify_receipt`/
+//!    `verify_receipt_for_item`) so backend code, and the shape of existing
+//!    `payment_receipts.binding` rows, do not change;
+//! 2. computes magnetite's split-into-payouts arithmetic (developer + optional
+//!    operator + optional protocol fee) — pure, local, no chain involved, same
+//!    as before;
+//! 3. maps a **single-recipient** split onto ONE `patala_core::PayRequest` /
+//!    `charge` / `verify` call against [`patala_solana::SolanaRail`].
+//!
+//! # The split does not generalize — and this rail says so, loudly
+//!
+//! `patala_core`'s seam has no multi-party split concept (`PATALA.md` §3): one
+//! `charge` moves money to exactly one destination. Magnetite's own
+//! `PaymentSplit` can in principle carry a real operator cut and/or a nonzero
+//! `protocol_fee_bps` — i.e. more than one non-zero payout. When that happens,
+//! [`SolanaPaymentRail::checkout_item`] does **not** silently drop a leg and it
+//! does **not** send several non-atomic charges pretending to be one purchase:
+//! it refuses with [`PaymentError::Unsupported`]. Every real caller in this
+//! codebase today (`backend/src/services/payment.rs`, `marketplace.rs`)
+//! collapses to exactly one leg — the developer — because hosting fees are a
+//! separate payment (§3.6b) and the protocol fee is `0` by default (governance
+//! decides any real fee later, `DECENTRALIZATION.md` §3.6) — so this is not a
+//! capability loss for anything actually wired up, only an honest refusal for
+//! the shape nothing here produces.
+//!
+//! # What is genuinely dropped, not merely moved
+//!
+//! The old rail also exposed `build_message` — build an unsigned transaction so
+//! an external wallet (a browser extension, a mobile signer) could sign it
+//! itself, then hand the signature back via `receipt_for_signature`. Nothing in
+//! this codebase ever called it (grep confirms it) and `patala_core::PaymentRail`
+//! has no such split — its `charge` always signs and sends with the rail's OWN
+//! configured signer (`PATALA.md` §6: the identity key doubles as the wallet
+//! key). That capability is genuinely gone, not merely relocated; see
+//! `docs/payments.md` for the client-wallet-signing path if it is ever built,
+//! which would need a different seam method entirely.
 //!
 //! # Money math
 //!
 //! USDC has 6 decimals. Every amount in this module is an integer count of
-//! smallest units (micro-USDC). There is no floating point anywhere in the money
-//! path, and [`SolanaPaymentRail::plan`] guarantees the parts sum exactly to the
-//! total.
+//! smallest units (micro-USDC). There is no floating point anywhere in the
+//! money path, and [`SolanaPaymentRail::plan`] guarantees the parts sum exactly
+//! to the total — unchanged from before, this arithmetic never touched chain
+//! code and did not need to move.
 //!
 //! # Keys
 //!
-//! The signing key is read from `SOLANA_KEYPAIR_PATH` (a solana-CLI JSON array
-//! of 64 bytes, which MUST be `chmod 600`) or `SOLANA_KEYPAIR` (base58 secret
-//! key). It is never logged, never serialized and never written anywhere.
-
-pub mod rpc;
-pub mod tx;
+//! The signing key is read from `SOLANA_KEYPAIR_PATH` / `SOLANA_KEYPAIR` by
+//! [`patala_solana::keys::Keypair::from_env`] — magnetite no longer has its own
+//! copy of that loader. It is never logged, never serialized and never written
+//! anywhere.
 
 use std::sync::Arc;
-
-use serde::{Deserialize, Serialize};
 
 use crate::identity::{Identity, PubKey, RawKeypairAuth, Sig};
 use crate::payment::{
@@ -43,136 +73,78 @@ use crate::payment::{
     WagerTerms,
 };
 
-use rpc::SolanaRpc;
-use tx::{pubkey_to_base58, USDC_DECIMALS};
+use patala_core::PaymentRail as PatalaPaymentRail;
+pub use patala_solana::{Cluster, Commitment};
+use patala_solana::{keys::Keypair, rpc::SolanaRpc, tx, SolanaRail};
 
 /// Everything that can go wrong on this rail. Every variant is a *refusal*:
 /// none of them ever results in an entitlement being granted.
 #[derive(Debug, thiserror::Error)]
 pub enum SolanaError {
-    /// The RPC endpoint was unreachable, slow, or answered with an error.
-    #[error("solana rpc: {0}")]
-    Rpc(String),
-    /// A base58 address failed to decode into 32 bytes.
-    #[error("not a valid solana address: {0}")]
-    BadAddress(String),
-    /// Program-derived-address search exhausted every bump (astronomically unlikely).
-    #[error("could not derive associated token address")]
-    Derivation,
-    /// Misconfiguration — missing mint, bad RPC URL, unusable keypair, ...
+    /// Misconfiguration — missing mint, bad RPC URL, unusable keypair, a
+    /// nonzero fee with no fee wallet, ...
     #[error("solana rail misconfigured: {0}")]
     Config(String),
-    /// The transaction is not on chain at the configured commitment.
-    #[error("transaction not confirmed at commitment {0}")]
-    Unconfirmed(String),
-    /// Chain state contradicts the receipt.
-    #[error("receipt does not match chain state: {0}")]
-    Mismatch(String),
-    /// The rail holds no key for this buyer, so it cannot sign for them.
-    #[error("this rail cannot sign for buyer {0} (non-custodial: build an unsigned tx instead)")]
+    /// The rail holds no key for this buyer, so it cannot sign for them
+    /// (non-custodial: this process does not custody arbitrary users' keys).
+    #[error("this rail cannot sign for buyer {0} (non-custodial: it can only spend for its own configured signer)")]
     NotOurKey(String),
     /// Payment channels / escrow need on-chain programs that do not exist yet.
-    #[error("{0} is not supported on the Solana USDC rail (no on-chain program deployed); \
-             see docs/payments.md")]
+    #[error(
+        "{0} is not supported on the Solana USDC rail (no on-chain program deployed); \
+         see docs/payments.md"
+    )]
     Unsupported(&'static str),
+    /// A split has more than one non-zero payout (a real operator cut and/or a
+    /// nonzero protocol fee). `patala_core::PaymentRail::charge` is
+    /// single-destination (`PATALA.md` §3) — this rail refuses rather than
+    /// dropping a leg or sending several non-atomic charges under one receipt.
+    #[error(
+        "split has {0} non-zero payouts (developer + operator + protocol fee); patala's Solana \
+         rail is single-destination and cannot pay several parties atomically in one \
+         transaction — collapse to one recipient (the common case: operator cuts are a \
+         separate hosting payment, §3.6b, and protocol_fee_bps defaults to 0), or perform \
+         separate sequential checkouts for each leg explicitly"
+    )]
+    MultiPartySplit(usize),
+    /// The underlying `patala-solana` rail refused or failed the operation.
+    #[error("patala solana rail: {0}")]
+    Patala(String),
 }
 
 impl From<SolanaError> for PaymentError {
     fn from(e: SolanaError) -> Self {
         match e {
-            SolanaError::Unsupported(what) => PaymentError::Unsupported(what),
+            SolanaError::Unsupported(w) => PaymentError::Unsupported(w),
+            SolanaError::MultiPartySplit(_) => {
+                PaymentError::Unsupported("multi-party split checkout")
+            }
             other => PaymentError::Rail(other.to_string()),
         }
     }
 }
 
-/// Which cluster the rail is pointed at. `MainnetBeta` moves **real money**.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Cluster {
-    /// Real funds. Real losses.
-    MainnetBeta,
-    /// Free test USDC.
-    Devnet,
-    /// Free test USDC.
-    Testnet,
-    /// `solana-test-validator` on localhost.
-    Localnet,
-}
-
-impl Cluster {
-    /// Parse a cluster name; unknown names are a hard error (never a default).
-    pub fn parse(s: &str) -> Result<Self, SolanaError> {
-        match s {
-            "mainnet-beta" | "mainnet" => Ok(Cluster::MainnetBeta),
-            "devnet" => Ok(Cluster::Devnet),
-            "testnet" => Ok(Cluster::Testnet),
-            "localnet" | "local" => Ok(Cluster::Localnet),
-            other => Err(SolanaError::Config(format!("unknown cluster {other:?}"))),
-        }
-    }
-    /// Does this cluster move real money?
-    pub fn is_mainnet(&self) -> bool {
-        matches!(self, Cluster::MainnetBeta)
+impl From<patala_core::Error> for SolanaError {
+    fn from(e: patala_core::Error) -> Self {
+        SolanaError::Patala(e.to_string())
     }
 }
 
-/// Confirmation level required before a receipt may be honoured.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Commitment {
-    /// Supermajority-voted. Reasonable for low-value goods.
-    Confirmed,
-    /// Rooted; cannot be rolled back. Correct for anything valuable.
-    Finalized,
-}
-
-impl Commitment {
-    /// Parse a commitment level. `processed` is deliberately REJECTED: it can be
-    /// rolled back, so honouring it would hand out goods for reverted payments.
-    pub fn parse(s: &str) -> Result<Self, SolanaError> {
-        match s {
-            "confirmed" => Ok(Commitment::Confirmed),
-            "finalized" => Ok(Commitment::Finalized),
-            "processed" => Err(SolanaError::Config(
-                "commitment 'processed' can be rolled back and is not accepted".into(),
-            )),
-            other => Err(SolanaError::Config(format!("unknown commitment {other:?}"))),
-        }
-    }
-    /// The wire string for JSON-RPC.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Commitment::Confirmed => "confirmed",
-            Commitment::Finalized => "finalized",
-        }
-    }
-}
-
-/// Static configuration for the rail. Built by the caller (the backend reads it
-/// from env and fails loudly if it is wrong).
+/// Magnetite-level rail configuration: patala's own rail config, plus the one
+/// thing `patala_core`'s seam does not model — where a protocol fee (if any)
+/// goes. See [`SolanaError::MultiPartySplit`] for what happens if this is
+/// actually used alongside a real payout.
 #[derive(Clone, Debug)]
 pub struct SolanaConfig {
-    /// JSON-RPC endpoint.
-    pub rpc_url: String,
-    /// Cluster the endpoint belongs to.
-    pub cluster: Cluster,
-    /// Commitment required for a receipt to verify.
-    pub commitment: Commitment,
-    /// The USDC mint. Anything paid in another mint is not a payment.
-    pub usdc_mint: PubKey,
+    /// Everything patala's Solana rail itself needs (RPC URL, cluster,
+    /// commitment, USDC mint).
+    pub inner: patala_solana::SolanaConfig,
     /// Where the protocol fee goes. Required whenever `protocol_fee_bps > 0`.
     pub fee_wallet: Option<PubKey>,
 }
 
-impl SolanaConfig {
-    /// The mint as base58.
-    pub fn mint_base58(&self) -> String {
-        pubkey_to_base58(&self.usdc_mint)
-    }
-}
-
-/// A concrete, integer-exact plan for one checkout.
+/// A concrete, integer-exact plan for one checkout. Pure arithmetic — no
+/// chain, no patala involved, unchanged from before.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Plan {
     /// Ordered payouts: developer, [operator], [protocol fee].
@@ -183,7 +155,11 @@ pub struct Plan {
     pub total: u64,
 }
 
-/// Domain-separated binding reference: `blake3("magnetite-pay-v1" || buyer || item)`.
+/// Domain-separated binding reference: `blake3("magnetite-pay-v1" || buyer ||
+/// item)`. Magnetite's OWN local item<->receipt consistency hash — distinct
+/// from (and checked in addition to) patala's own domain-separated binding,
+/// which uses a different tag so a receipt from one can never be mistaken for
+/// a receipt from the other (see `patala_solana::binding_reference`).
 pub fn binding_reference(buyer: &PubKey, item: &str) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     h.update(b"magnetite-pay-v1");
@@ -193,51 +169,68 @@ pub fn binding_reference(buyer: &PubKey, item: &str) -> [u8; 32] {
     *h.finalize().as_bytes()
 }
 
-/// The exact memo string a bound transaction must carry.
-pub fn binding_memo(buyer: &PubKey, item: &str) -> String {
-    format!("magnetite:v1:{}", hex::encode(binding_reference(buyer, item)))
+fn patala_pubkey(pk: &PubKey) -> patala_solana::keys::PubKey {
+    patala_solana::keys::PubKey(pk.0)
 }
 
-/// SPL-USDC-on-Solana payment rail.
+/// Best-effort peek at the rail's own opaque proof blob for a human-readable
+/// field (e.g. the on-chain tx signature), for storage/display only. **Never**
+/// used for verification — that always goes through
+/// [`patala_solana::SolanaRail::verify`] against the unmodified proof bytes.
+/// If patala's internal proof shape ever changes this silently degrades to
+/// `None` rather than breaking a charge.
+fn peek_proof_str(proof: &[u8], key: &str) -> Option<String> {
+    serde_json::from_slice::<serde_json::Value>(proof)
+        .ok()?
+        .get(key)?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// SPL-USDC-on-Solana payment rail — magnetite's seam, patala's crypto.
 pub struct SolanaPaymentRail {
     cfg: SolanaConfig,
-    rpc: Arc<dyn SolanaRpc>,
-    /// Optional signing key. Present only for wallets this process custodies
-    /// (e.g. a treasury). Never logged, never serialized.
-    signer: Option<RawKeypairAuth>,
-    /// Key that signs receipts (a self-consistency marker, NOT the security
-    /// boundary — chain state is).
+    /// The actual chain rail: tx construction, signing, RPC, verification.
+    inner: SolanaRail,
+    /// Key that signs magnetite's OWN receipt wrapper (a self-consistency
+    /// marker, NOT the security boundary — chain state, checked by `inner`,
+    /// is). Fixed seed, same as before the move to patala.
     rail: RawKeypairAuth,
-    runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl SolanaPaymentRail {
-    /// Build a rail over an arbitrary RPC implementation (the unit tests pass a
-    /// fake; production passes [`rpc::HttpRpc`]).
+    /// Build a rail over an arbitrary RPC implementation (unit tests pass a
+    /// fake; production passes [`patala_solana::rpc::HttpRpc`]). No signer —
+    /// verify-only until [`Self::with_signer`].
     pub fn new(cfg: SolanaConfig, rpc: Arc<dyn SolanaRpc>) -> Self {
+        let inner = SolanaRail::new(cfg.inner.clone(), rpc);
         Self {
             cfg,
-            rpc,
-            signer: None,
+            inner,
             rail: RawKeypairAuth::from_seed(*blake3::hash(b"magnetite-solana-rail").as_bytes()),
-            runtime: None,
         }
     }
 
     /// Attach a signing key so this rail can submit transactions itself.
-    pub fn with_signer(mut self, signer: RawKeypairAuth) -> Self {
-        self.signer = Some(signer);
+    pub fn with_signer(mut self, signer: Keypair) -> Self {
+        self.inner = self.inner.with_signer(signer);
         self
     }
 
-    /// Attach a runtime used to drive RPC from the *synchronous* `verify_receipt`.
-    /// Without one, a fresh current-thread runtime is created per verification.
-    pub fn with_runtime(mut self, rt: Arc<tokio::runtime::Runtime>) -> Self {
-        self.runtime = Some(rt);
-        self
+    /// Build a rail whose signer (if any) is loaded from
+    /// `SOLANA_KEYPAIR_PATH`/`SOLANA_KEYPAIR` (see
+    /// [`patala_solana::keys::Keypair::from_env`]).
+    pub fn from_env(cfg: SolanaConfig, rpc: Arc<dyn SolanaRpc>) -> Result<Self, SolanaError> {
+        let inner = SolanaRail::from_env(cfg.inner.clone(), rpc).map_err(SolanaError::from)?;
+        Ok(Self {
+            cfg,
+            inner,
+            rail: RawKeypairAuth::from_seed(*blake3::hash(b"magnetite-solana-rail").as_bytes()),
+        })
     }
 
-    /// The rail's receipt-signing public key.
+    /// The rail's receipt-signing public key (magnetite's own bookkeeping key,
+    /// see the `rail` field doc).
     pub fn rail_pubkey(&self) -> PubKey {
         self.rail.node_pubkey()
     }
@@ -249,49 +242,12 @@ impl SolanaPaymentRail {
 
     /// The wallet this rail can sign for, if any.
     pub fn signer_pubkey(&self) -> Option<PubKey> {
-        self.signer.as_ref().map(|s| s.node_pubkey())
+        self.inner.signer_pubkey().map(|pk| PubKey(pk.0))
     }
 
-    /// Load a signing key from `SOLANA_KEYPAIR_PATH` (solana-CLI JSON byte
-    /// array; `chmod 600`) or `SOLANA_KEYPAIR` (base58 secret key).
-    ///
-    /// Returns `Ok(None)` when neither is set — a verify-only rail, which is the
-    /// right posture for a server that never spends. The key material is never
-    /// logged and the error messages never quote it.
-    pub fn signer_from_env() -> Result<Option<RawKeypairAuth>, SolanaError> {
-        if let Ok(path) = std::env::var("SOLANA_KEYPAIR_PATH") {
-            let raw = std::fs::read_to_string(&path)
-                .map_err(|e| SolanaError::Config(format!("SOLANA_KEYPAIR_PATH {path}: {e}")))?;
-            let bytes: Vec<u8> = serde_json::from_str(&raw).map_err(|_| {
-                SolanaError::Config(format!("SOLANA_KEYPAIR_PATH {path}: not a JSON byte array"))
-            })?;
-            return Ok(Some(Self::keypair_from_bytes(&bytes)?));
-        }
-        if let Ok(b58) = std::env::var("SOLANA_KEYPAIR") {
-            let bytes = bs58::decode(b58.trim())
-                .into_vec()
-                .map_err(|_| SolanaError::Config("SOLANA_KEYPAIR: not base58".into()))?;
-            return Ok(Some(Self::keypair_from_bytes(&bytes)?));
-        }
-        Ok(None)
-    }
-
-    fn keypair_from_bytes(bytes: &[u8]) -> Result<RawKeypairAuth, SolanaError> {
-        // Solana keypairs are 64 bytes: 32-byte seed followed by the public key.
-        let seed: [u8; 32] = match bytes.len() {
-            64 => bytes[..32].try_into().unwrap(),
-            32 => bytes.try_into().unwrap(),
-            n => {
-                return Err(SolanaError::Config(format!(
-                    "keypair must be 32 or 64 bytes, got {n}"
-                )))
-            }
-        };
-        Ok(RawKeypairAuth::from_seed(seed))
-    }
-
-    /// Integer-exact split. The fee is taken **on top of** the subtotal, matching
-    /// the mock rail, and the parts are asserted to sum to the total.
+    /// Integer-exact split. The fee is taken **on top of** the subtotal,
+    /// matching the mock rail, and the parts are asserted to sum to the
+    /// total. Unchanged from before — pure arithmetic, no chain, no patala.
     pub fn plan(&self, split: &PaymentSplit) -> Result<Plan, SolanaError> {
         let dev = split.developer.amount;
         let op = split.operator.as_ref().map(|s| s.amount).unwrap_or(0);
@@ -340,80 +296,54 @@ impl SolanaPaymentRail {
         })
     }
 
-    /// Build the unsigned transaction message for a bound checkout.
-    ///
-    /// This is the non-custodial path: hand the bytes to the buyer's wallet, let
-    /// *them* sign and submit, then call [`Self::receipt_for_signature`].
-    pub async fn build_message(
-        &self,
-        buyer: &PubKey,
-        item: &str,
-        split: &PaymentSplit,
-    ) -> Result<(Vec<u8>, Plan), SolanaError> {
-        let plan = self.plan(split)?;
-        let blockhash = self
-            .rpc
-            .get_latest_blockhash(self.cfg.commitment.as_str())
-            .await?;
-        let bh: [u8; 32] = bs58::decode(&blockhash)
-            .into_vec()
-            .ok()
-            .and_then(|v| <[u8; 32]>::try_from(v).ok())
-            .ok_or_else(|| SolanaError::Rpc("blockhash is not 32 bytes".into()))?;
-
-        let source = tx::associated_token_address(buyer, &self.cfg.usdc_mint)?;
-        let mut ixs = vec![tx::memo(*buyer, &binding_memo(buyer, item))];
-        for p in &plan.payouts {
-            if p.amount == 0 {
-                continue;
-            }
-            let dest = tx::associated_token_address(&p.wallet, &self.cfg.usdc_mint)?;
-            ixs.push(tx::transfer_checked(
-                source,
-                self.cfg.usdc_mint,
-                dest,
-                *buyer,
-                p.amount,
-                USDC_DECIMALS,
-            ));
-        }
-        Ok((tx::serialize_message(buyer, &ixs, &bh), plan))
-    }
-
-    /// Build → sign → submit, then return the bound receipt.
+    /// Build → charge (via `patala_solana::SolanaRail::charge`) → return the
+    /// bound receipt.
     ///
     /// Only possible when this process holds `buyer`'s key; otherwise
-    /// [`SolanaError::NotOurKey`], because the rail is non-custodial and will not
-    /// pretend to spend money it cannot move.
+    /// [`SolanaError::NotOurKey`], because the rail is non-custodial and will
+    /// not pretend to spend money it cannot move. Only possible when the plan
+    /// collapses to exactly one non-zero payout; otherwise
+    /// [`SolanaError::MultiPartySplit`] — see the module docs.
     pub async fn checkout_item(
         &self,
         buyer: &PubKey,
         item: &str,
         split: PaymentSplit,
     ) -> Result<Receipt, SolanaError> {
-        let signer = self
-            .signer
-            .as_ref()
-            .filter(|s| s.node_pubkey() == *buyer)
-            .ok_or_else(|| SolanaError::NotOurKey(pubkey_to_base58(buyer)))?;
+        let signer_pk = self
+            .inner
+            .signer_pubkey()
+            .ok_or_else(|| SolanaError::NotOurKey(buyer.to_hex()))?;
+        if signer_pk.0 != buyer.0 {
+            return Err(SolanaError::NotOurKey(buyer.to_hex()));
+        }
 
-        let (message, plan) = self.build_message(buyer, item, &split).await?;
-        let sig = signer.sign(&message);
-        let wire = tx::wire_transaction(&sig.0, &message);
-        let signature = self.rpc.send_transaction(&b64(&wire)).await?;
+        let plan = self.plan(&split)?;
+        let legs: Vec<&PayOut> = plan.payouts.iter().filter(|p| p.amount > 0).collect();
+        let leg = match legs.as_slice() {
+            [one] => *one,
+            [] => return Err(SolanaError::Config("split has no non-zero payout".into())),
+            many => return Err(SolanaError::MultiPartySplit(many.len())),
+        };
 
-        Ok(self.receipt_for_signature(buyer, item, &plan, &signature))
+        let req = patala_core::PayRequest {
+            amount_minor: leg.amount,
+            currency: "USDC".to_string(),
+            destination: tx::pubkey_to_base58(&patala_pubkey(&leg.wallet)),
+            reference: item.to_string(),
+        };
+        let patala_receipt = self.inner.charge(&req).await.map_err(SolanaError::from)?;
+        Ok(self.wrap_receipt(buyer, item, &plan, &patala_receipt))
     }
 
-    /// Assemble the receipt for an already-submitted transaction. The receipt is
-    /// only a *claim*; [`Self::verify_receipt`] is what makes it worth anything.
-    pub fn receipt_for_signature(
+    fn wrap_receipt(
         &self,
         buyer: &PubKey,
         item: &str,
         plan: &Plan,
-        signature: &str,
+        p: &patala_core::Receipt,
     ) -> Receipt {
+        let tx_signature = peek_proof_str(&p.proof, "tx_signature").unwrap_or_default();
         let mut r = Receipt {
             buyer: *buyer,
             payouts: plan.payouts.clone(),
@@ -424,10 +354,11 @@ impl SolanaPaymentRail {
             sig: Sig([0u8; 64]),
             binding: Some(ChainBinding {
                 chain: "solana".to_string(),
-                tx_signature: signature.to_string(),
+                tx_signature,
                 item: item.to_string(),
-                mint: self.cfg.mint_base58(),
+                mint: self.cfg.inner.mint_base58(),
                 reference: hex::encode(binding_reference(buyer, item)),
+                rail_proof: p.proof.clone(),
             }),
         };
         r.sig = self.rail.sign(&r.signing_bytes());
@@ -437,305 +368,120 @@ impl SolanaPaymentRail {
     // ── Verification ─────────────────────────────────────────────────────────
 
     /// The full check, async. **Every** error path means "do not grant".
-    pub async fn verify_receipt_async(
-        &self,
-        r: &Receipt,
-        expect_item: Option<&str>,
-    ) -> Result<(), SolanaError> {
+    async fn verify_async(&self, r: &Receipt, expect_item: Option<&str>) -> Result<(), SolanaError> {
         let b = r
             .binding
             .as_ref()
-            .ok_or_else(|| SolanaError::Mismatch("receipt carries no chain binding".into()))?;
+            .ok_or_else(|| SolanaError::Config("receipt carries no chain binding".into()))?;
 
-        // 1. Right chain, right mint. A USDC receipt is not a receipt in some
-        //    other token the buyer happened to have.
+        // 1. Right chain, right mint (magnetite-local; patala's own verify
+        //    re-checks mint against ITS configured mint from the proof too —
+        //    this is a cheap, local, defense-in-depth duplicate of that same
+        //    fact, not a new claim).
         if b.chain != "solana" {
-            return Err(SolanaError::Mismatch(format!("chain {:?}", b.chain)));
+            return Err(SolanaError::Config(format!("chain {:?}", b.chain)));
         }
-        if b.mint != self.cfg.mint_base58() {
-            return Err(SolanaError::Mismatch("claimed mint is not the configured USDC mint".into()));
+        if b.mint != self.cfg.inner.mint_base58() {
+            return Err(SolanaError::Config(
+                "claimed mint is not the configured USDC mint".into(),
+            ));
         }
 
-        // 2. The binding must be the one derived from (buyer, item) — a receipt
-        //    cannot be re-pointed at a different item by editing a field.
+        // 2. The binding must be the one derived from (buyer, item) — a
+        //    receipt cannot be re-pointed at a different item by editing a
+        //    field. Magnetite-local, no chain needed.
         let expected_ref = hex::encode(binding_reference(&r.buyer, &b.item));
         if b.reference != expected_ref {
-            return Err(SolanaError::Mismatch("binding reference does not match (buyer, item)".into()));
+            return Err(SolanaError::Config(
+                "binding reference does not match (buyer, item)".into(),
+            ));
         }
-        // 3. ...and it must be the item the CALLER is asking about. This is what
-        //    stops a real, fully-valid receipt for a cheap item unlocking an
-        //    expensive one.
+        // 3. ...and it must be the item the CALLER is asking about. This is
+        //    what stops a real, fully-valid receipt for a cheap item
+        //    unlocking an expensive one.
         if let Some(item) = expect_item {
             if b.item != item {
-                return Err(SolanaError::Mismatch(format!(
+                return Err(SolanaError::Config(format!(
                     "receipt is bound to item {:?}, not {:?}",
                     b.item, item
                 )));
             }
         }
 
-        // 4. Internal arithmetic + rail signature (cheap, local).
-        let sum: u64 = r.payouts.iter().try_fold(0u64, |a, p| a.checked_add(p.amount))
-            .ok_or_else(|| SolanaError::Mismatch("payouts overflow".into()))?;
+        // 4. Internal arithmetic + magnetite's own rail signature (cheap,
+        //    local — a self-consistency marker, NOT the security boundary;
+        //    see the `rail` field doc and patala-solana's README).
+        let sum: u64 = r
+            .payouts
+            .iter()
+            .try_fold(0u64, |a, p| a.checked_add(p.amount))
+            .ok_or_else(|| SolanaError::Config("payouts overflow".into()))?;
         if sum != r.total {
-            return Err(SolanaError::Mismatch("payouts do not sum to total".into()));
+            return Err(SolanaError::Config("payouts do not sum to total".into()));
         }
         if !<RawKeypairAuth as Identity>::verify(&r.rail_pubkey, &r.signing_bytes(), &r.sig) {
-            return Err(SolanaError::Mismatch("receipt signature invalid".into()));
+            return Err(SolanaError::Config("receipt signature invalid".into()));
         }
 
-        // 5. Chain state. Unreachable RPC propagates as Err → caller denies.
-        let txn = self
-            .rpc
-            .get_transaction(&b.tx_signature, self.cfg.commitment.as_str())
-            .await?
-            .ok_or_else(|| SolanaError::Unconfirmed(self.cfg.commitment.as_str().to_string()))?;
-
-        // 6. The transaction must have SUCCEEDED. A landed-but-failed tx moved
-        //    nothing.
-        match txn.get("meta").and_then(|m| m.get("err")) {
-            None => return Err(SolanaError::Mismatch("no meta.err field".into())),
-            Some(e) if !e.is_null() => {
-                return Err(SolanaError::Mismatch(format!("transaction failed: {e}")))
-            }
-            _ => {}
-        }
-        // Some RPCs echo a confirmationStatus; if present it must be good enough.
-        if let Some(status) = txn.get("confirmationStatus").and_then(|v| v.as_str()) {
-            let ok = match self.cfg.commitment {
-                Commitment::Confirmed => status == "confirmed" || status == "finalized",
-                Commitment::Finalized => status == "finalized",
-            };
-            if !ok {
-                return Err(SolanaError::Unconfirmed(status.to_string()));
-            }
-        }
-
-        // 7. The buyer must have signed. Otherwise anyone could point a receipt
-        //    at someone else's payment.
-        let signed = txn
-            .get("transaction")
-            .and_then(|t| t.get("message"))
-            .and_then(|m| m.get("accountKeys"))
-            .and_then(|k| k.as_array())
-            .map(|keys| {
-                let want = pubkey_to_base58(&r.buyer);
-                keys.iter().any(|k| {
-                    k.get("pubkey").and_then(|v| v.as_str()) == Some(want.as_str())
-                        && k.get("signer").and_then(|v| v.as_bool()) == Some(true)
-                })
-            })
-            .unwrap_or(false);
-        if !signed {
-            return Err(SolanaError::Mismatch("buyer did not sign the transaction".into()));
-        }
-
-        // 8. The on-chain memo must be exactly the derived binding, so a
-        //    transaction is redeemable for one (buyer, item) and nothing else.
-        let want_memo = binding_memo(&r.buyer, &b.item);
-        if !memo_matches(&txn, &want_memo) {
-            return Err(SolanaError::Mismatch(
-                "transaction carries no memo binding it to this (buyer, item)".into(),
+        // 5. THE security boundary: delegate to patala for on-chain state —
+        //    chain/mint match, transaction success, commitment, the buyer's
+        //    real Ed25519 tx signature, the memo binding, and the exact
+        //    token-balance deltas (`PATALA.md` §3, §7). The opaque proof
+        //    bytes are carried through unmodified from charge time; patala
+        //    re-derives everything from them plus current chain state.
+        let patala_receipt = patala_core::Receipt {
+            rail_id: "solana".to_string(),
+            amount_minor: r.total,
+            currency: "USDC".to_string(),
+            reference: b.item.clone(),
+            proof: b.rail_proof.clone(),
+            settled_at_unix: 0,
+        };
+        let verified = self
+            .inner
+            .verify(&patala_receipt)
+            .await
+            .map_err(SolanaError::from)?;
+        if !verified {
+            return Err(SolanaError::Config(
+                "patala rail could not verify the on-chain payment".into(),
             ));
         }
-
-        // 9. The money. Net token-balance deltas for the configured mint must be
-        //    EXACTLY: buyer -total, and +amount for each claimed recipient. Using
-        //    balance deltas (rather than reading instructions) means a transfer
-        //    that is cancelled out by a hidden reverse transfer in the same
-        //    transaction cannot pass.
-        let deltas = mint_deltas(&txn, &self.cfg.mint_base58())?;
-        let buyer_b58 = pubkey_to_base58(&r.buyer);
-        let mut expected: Vec<(String, i128)> = Vec::new();
-        for p in &r.payouts {
-            if p.amount == 0 {
-                continue;
-            }
-            let who = pubkey_to_base58(&p.wallet);
-            if let Some(e) = expected.iter_mut().find(|e| e.0 == who) {
-                e.1 += p.amount as i128;
-            } else {
-                expected.push((who, p.amount as i128));
-            }
-        }
-        expected.push((buyer_b58.clone(), -(r.total as i128)));
-
-        for (who, want) in &expected {
-            let got = deltas
-                .iter()
-                .find(|(o, _)| o == who)
-                .map(|(_, d)| *d)
-                .unwrap_or(0);
-            if got != *want {
-                return Err(SolanaError::Mismatch(format!(
-                    "{who} received {got} micro-USDC, receipt claims {want}"
-                )));
-            }
-        }
-        // No unaccounted party may have gained or lost this mint in this tx.
-        for (who, d) in &deltas {
-            if *d != 0 && !expected.iter().any(|(e, _)| e == who) {
-                return Err(SolanaError::Mismatch(format!(
-                    "unaccounted balance change for {who}"
-                )));
-            }
-        }
         Ok(())
     }
 
-    fn block_on<F>(&self, fut: F) -> Result<F::Output, SolanaError>
-    where
-        F: std::future::Future + Send + 'static,
-        F::Output: Send + 'static,
-    {
-        // `verify_receipt` is synchronous by seam contract but this rail must do
-        // I/O. Drive the future on a runtime and wait on a channel: unlike
-        // `Handle::block_on` this does not panic when called from inside an
-        // async context.
-        match &self.runtime {
-            Some(rt) => {
-                let (tx, rx) = std::sync::mpsc::channel();
-                rt.spawn(async move {
-                    let _ = tx.send(fut.await);
-                });
-                rx.recv()
-                    .map_err(|_| SolanaError::Rpc("verification task dropped".into()))
-            }
-            None => std::thread::scope(|s| {
-                s.spawn(|| {
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .map_err(|e| SolanaError::Rpc(format!("runtime: {e}")))
-                        .map(|rt| rt.block_on(fut))
-                })
-                .join()
-                .map_err(|_| SolanaError::Rpc("verification thread panicked".into()))?
-            }),
-        }
-    }
-
+    /// Drive [`Self::verify_async`] from a synchronous caller
+    /// (`PaymentRail::verify_receipt` is sync by seam contract). Builds a
+    /// fresh current-thread runtime on its own OS thread so this never panics
+    /// when called from inside an already-running async context (the backend
+    /// calls `verify_receipt` from async handlers) — the same approach as
+    /// before the move to patala; this bridging is generic, not solana-specific,
+    /// and did not need to change.
     fn verify_blocking(&self, r: &Receipt, item: Option<String>) -> bool {
-        // Everything the async check needs, owned, so the future is 'static.
-        let rpc = self.rpc.clone();
-        let cfg = self.cfg.clone();
-        let rail_pubkey = self.rail.node_pubkey();
-        let receipt = r.clone();
-        let fut = async move {
-            let probe = SolanaPaymentRail {
-                cfg,
-                rpc,
-                signer: None,
-                rail: RawKeypairAuth::from_seed(
-                    *blake3::hash(b"magnetite-solana-rail").as_bytes(),
-                ),
-                runtime: None,
-            };
-            debug_assert_eq!(probe.rail.node_pubkey(), rail_pubkey);
-            probe.verify_receipt_async(&receipt, item.as_deref()).await
-        };
-        match self.block_on(fut) {
-            Ok(Ok(())) => true,
-            // Unreachable RPC, unconfirmed, mismatch, panic — all deny.
-            Ok(Err(_)) | Err(_) => false,
-        }
-    }
-}
-
-fn b64(bytes: &[u8]) -> String {
-    // Tiny, dependency-free base64 (standard alphabet, padded).
-    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for c in bytes.chunks(3) {
-        let b = [c[0], *c.get(1).unwrap_or(&0), *c.get(2).unwrap_or(&0)];
-        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
-        out.push(A[(n >> 18) as usize & 63] as char);
-        out.push(A[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 {
-            A[(n >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        out.push(if c.len() > 2 {
-            A[n as usize & 63] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
-
-/// Does any (top-level or inner) memo instruction carry exactly `want`?
-fn memo_matches(txn: &serde_json::Value, want: &str) -> bool {
-    fn scan(ixs: Option<&serde_json::Value>, want: &str) -> bool {
-        ixs.and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter().any(|ix| {
-                    ix.get("program").and_then(|v| v.as_str()) == Some("spl-memo")
-                        && ix.get("parsed").and_then(|v| v.as_str()) == Some(want)
-                })
+        let rpc_result = std::thread::scope(|s| {
+            s.spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| SolanaError::Config(format!("runtime: {e}")))
+                    .map(|rt| rt.block_on(self.verify_async(r, item.as_deref())))
             })
-            .unwrap_or(false)
-    }
-    let msg = txn.get("transaction").and_then(|t| t.get("message"));
-    if scan(msg.and_then(|m| m.get("instructions")), want) {
-        return true;
-    }
-    txn.get("meta")
-        .and_then(|m| m.get("innerInstructions"))
-        .and_then(|v| v.as_array())
-        .map(|groups| {
-            groups
-                .iter()
-                .any(|g| scan(g.get("instructions"), want))
-        })
-        .unwrap_or(false)
-}
-
-/// Net per-owner balance change for `mint`, in integer smallest units.
-fn mint_deltas(
-    txn: &serde_json::Value,
-    mint: &str,
-) -> Result<Vec<(String, i128)>, SolanaError> {
-    let meta = txn
-        .get("meta")
-        .ok_or_else(|| SolanaError::Mismatch("transaction has no meta".into()))?;
-    let mut deltas: Vec<(String, i128)> = Vec::new();
-
-    let mut apply = |list: Option<&serde_json::Value>, sign: i128| -> Result<(), SolanaError> {
-        let empty: Vec<serde_json::Value> = Vec::new();
-        for e in list.and_then(|v| v.as_array()).unwrap_or(&empty) {
-            if e.get("mint").and_then(|v| v.as_str()) != Some(mint) {
-                continue;
-            }
-            let owner = e
-                .get("owner")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| SolanaError::Mismatch("token balance without owner".into()))?;
-            let amount: i128 = e
-                .get("uiTokenAmount")
-                .and_then(|u| u.get("amount"))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| SolanaError::Mismatch("token balance without amount".into()))?
-                .parse()
-                .map_err(|_| SolanaError::Mismatch("token amount is not an integer".into()))?;
-            match deltas.iter_mut().find(|(o, _)| o == owner) {
-                Some(d) => d.1 += sign * amount,
-                None => deltas.push((owner.to_string(), sign * amount)),
-            }
+            .join()
+        });
+        match rpc_result {
+            Ok(Ok(Ok(()))) => true,
+            // Unreachable RPC, unconfirmed, mismatch, bad runtime, panic — all deny.
+            Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => false,
         }
-        Ok(())
-    };
-    apply(meta.get("preTokenBalances"), -1)?;
-    apply(meta.get("postTokenBalances"), 1)?;
-    Ok(deltas)
+    }
 }
 
 #[async_trait::async_trait]
 impl PaymentRail for SolanaPaymentRail {
     /// Unbound checkout. The Solana rail REQUIRES an item binding, so this
     /// returns a receipt with no binding — which by construction fails
-    /// verification. Use [`SolanaPaymentRail::checkout_item`].
+    /// verification. Use [`SolanaPaymentRail::checkout_item`] /
+    /// [`Self::checkout_for_item`]. Unchanged from before.
     async fn checkout(&self, buyer: &PubKey, split: PaymentSplit) -> Receipt {
         let plan = self.plan(&split).unwrap_or(Plan {
             payouts: Vec::new(),
