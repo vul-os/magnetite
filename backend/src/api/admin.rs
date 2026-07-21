@@ -88,11 +88,16 @@ pub struct FeatureGameRequest {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct RevenueDashboard {
-    pub total_platform_revenue: Decimal,
-    pub total_game_revenue: Decimal,
     /// Gross value SETTLED wallet-to-wallet, summed from verified receipts.
     /// Non-custodial: we never held this money, we only witnessed the transfers.
     pub total_settled_units: i64,
+    /// Sum of `payment_receipts.protocol_fee` — real, never fabricated. The
+    /// platform takes no cut by default (`PROTOCOL_FEE_BPS=0`), so this is 0
+    /// unless an operator has explicitly configured a nonzero fee.
+    pub total_protocol_fee_units: i64,
+    /// What actually reached developer (and operator) wallets: settled minus
+    /// whatever protocol fee rode on top.
+    pub total_developer_settled_units: i64,
     /// Receipts voided by a refund. There is no balance to claw back — voiding
     /// the signed receipt is what revokes the entitlement it granted.
     pub voided_receipts: i64,
@@ -100,17 +105,50 @@ pub struct RevenueDashboard {
     pub total_games: i64,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+/// A settled receipt, shaped for the admin Finance page's receipt table (it
+/// reads `payment_receipts`, the live-written non-custodial ledger — the
+/// legacy `transactions` table this endpoint used to read has had no writer
+/// since the payment pivot).
+#[derive(Debug, Serialize)]
 pub struct AdminTransaction {
     pub id: Uuid,
     pub user_id: Uuid,
     pub username: Option<String>,
     pub game_id: Option<Uuid>,
     pub game_title: Option<String>,
-    pub tx_type: String,
-    pub amount: Decimal,
-    pub status: String,
+    /// 'item_purchase' | 'subscription' | 'hosting'
+    pub kind: String,
+    /// Gross amount the rail settled, in dollars (converted from the receipt's
+    /// integer smallest-unit `total`).
+    pub total: Decimal,
+    /// Real `payment_receipts.protocol_fee`, in dollars — 0 unless an operator
+    /// has configured a nonzero `PROTOCOL_FEE_BPS`. Never fabricated.
+    pub protocol_fee: Decimal,
+    /// Hex wallet the sale was paid to (the developer, or operator for a
+    /// hosting-fee receipt) — the first entry of the receipt's `payouts`.
+    pub payee: Option<String>,
+    pub rail_pubkey: String,
+    pub voided: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Raw settled-cents row fetched from `payment_receipts`. Kept as `i64` through
+/// the query and only converted to `Decimal` once, at the edge — no float ever
+/// touches money here.
+#[derive(Debug, sqlx::FromRow)]
+struct AdminReceiptCentsRow {
+    id: Uuid,
+    user_id: Uuid,
+    username: Option<String>,
+    game_id: Option<Uuid>,
+    game_title: Option<String>,
+    kind: String,
+    total_cents: i64,
+    protocol_fee_cents: i64,
+    payee: Option<String>,
+    rail_pubkey: String,
+    voided: bool,
+    created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -393,24 +431,23 @@ pub async fn revenue_dashboard(
 ) -> Result<Json<RevenueDashboard>> {
     require_admin(&pool, user_id).await?;
 
-    let total_platform_revenue = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'platform_fee'",
-    )
-    .fetch_one(&pool)
-    .await?;
-
-    let total_game_revenue = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'game_fee'",
-    )
-    .fetch_one(&pool)
-    .await?;
-
-    // Settlement, not custody: sum what the rail actually moved.
+    // Settlement, not custody: sum what the rail actually moved. `payment_receipts`
+    // is the live-written ledger post payment-pivot — the legacy `transactions`
+    // table (`platform_fee` / `game_fee` rows) has had no writer since, so a query
+    // against it always returned zero.
     let total_settled_units = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(SUM(total), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
+
+    let total_protocol_fee_units = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(protocol_fee), 0)::bigint FROM payment_receipts WHERE voided = false",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let total_developer_settled_units = total_settled_units - total_protocol_fee_units;
 
     let voided_receipts =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payment_receipts WHERE voided = true")
@@ -427,9 +464,9 @@ pub async fn revenue_dashboard(
         .await?;
 
     Ok(Json(RevenueDashboard {
-        total_platform_revenue,
-        total_game_revenue,
         total_settled_units,
+        total_protocol_fee_units,
+        total_developer_settled_units,
         voided_receipts,
         active_users,
         total_games,
@@ -447,22 +484,41 @@ pub async fn list_transactions(
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let offset = (page - 1) * limit;
 
-    let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM transactions")
+    let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payment_receipts")
         .fetch_one(&pool)
         .await?;
 
-    let transactions = sqlx::query_as::<_, AdminTransaction>(
-        "SELECT t.id, t.user_id, u.username, t.game_id, g.title as game_title,
-                t.type as tx_type, t.amount, t.status, t.created_at
-         FROM transactions t
-         LEFT JOIN users u ON t.user_id = u.id
-         LEFT JOIN games g ON t.game_id = g.id
-         ORDER BY t.created_at DESC LIMIT $1 OFFSET $2",
+    let rows = sqlx::query_as::<_, AdminReceiptCentsRow>(
+        "SELECT r.id, r.buyer_id as user_id, u.username, r.game_id, g.title as game_title,
+                r.kind, r.total as total_cents, r.protocol_fee as protocol_fee_cents,
+                r.payouts->0->>'wallet' as payee, r.rail_pubkey, r.voided, r.created_at
+         FROM payment_receipts r
+         LEFT JOIN users u ON r.buyer_id = u.id
+         LEFT JOIN games g ON r.game_id = g.id
+         ORDER BY r.created_at DESC LIMIT $1 OFFSET $2",
     )
     .bind(limit)
     .bind(offset)
     .fetch_all(&pool)
     .await?;
+
+    let transactions: Vec<AdminTransaction> = rows
+        .into_iter()
+        .map(|r| AdminTransaction {
+            id: r.id,
+            user_id: r.user_id,
+            username: r.username,
+            game_id: r.game_id,
+            game_title: r.game_title,
+            kind: r.kind,
+            total: Decimal::new(r.total_cents, 2),
+            protocol_fee: Decimal::new(r.protocol_fee_cents, 2),
+            payee: r.payee,
+            rail_pubkey: r.rail_pubkey,
+            voided: r.voided,
+            created_at: r.created_at,
+        })
+        .collect();
 
     let total_pages = (total as f64 / limit as f64).ceil() as i64;
 
@@ -507,7 +563,9 @@ pub async fn get_metrics(
         .fetch_one(&pool)
         .await?;
 
-    let total_transactions = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM transactions")
+    // `payment_receipts` is the live-written ledger; the legacy `transactions`
+    // table has had no writer since the non-custodial payment pivot.
+    let total_transactions = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM payment_receipts")
         .fetch_one(&pool)
         .await?;
 
@@ -541,24 +599,61 @@ pub struct AnalyticsOverview {
     pub new_users_today: i64,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct RevenueTimeSeries {
     pub date: String,
-    pub platform_revenue: Decimal,
-    pub game_revenue: Decimal,
+    /// Real sum of `payment_receipts.protocol_fee` for the period — 0 unless an
+    /// operator has configured a nonzero `PROTOCOL_FEE_BPS`. Never fabricated.
+    pub protocol_fee: Decimal,
+    /// Settled to developer/operator wallets at checkout (never held by us).
+    pub developer_settled: Decimal,
     pub total_revenue: Decimal,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+/// Raw cents row for a `RevenueTimeSeries` bucket, fetched straight off
+/// `payment_receipts`. Kept as `i64` until the single conversion to `Decimal`
+/// below — no float touches money in this file.
+#[derive(Debug, sqlx::FromRow)]
+struct RevenueTimeSeriesCentsRow {
+    date: String,
+    total_cents: i64,
+    protocol_fee_cents: i64,
+}
+
+fn cents_rows_to_time_series(rows: Vec<RevenueTimeSeriesCentsRow>) -> Vec<RevenueTimeSeries> {
+    rows.into_iter()
+        .map(|r| RevenueTimeSeries {
+            date: r.date,
+            protocol_fee: Decimal::new(r.protocol_fee_cents, 2),
+            developer_settled: Decimal::new(r.total_cents - r.protocol_fee_cents, 2),
+            total_revenue: Decimal::new(r.total_cents, 2),
+        })
+        .collect()
+}
+
+#[derive(Debug, Serialize)]
 pub struct RevenueByGame {
     pub game_id: Uuid,
     pub game_title: String,
     pub developer_username: Option<String>,
     pub total_revenue: Decimal,
-    pub play_sessions: i64,
-    pub platform_fee: Decimal,
+    /// Count of settled (non-voided) receipts for this game.
+    pub receipt_count: i64,
+    /// Real `payment_receipts.protocol_fee` sum — 0 unless an operator has
+    /// configured a nonzero `PROTOCOL_FEE_BPS`. Never fabricated.
+    pub protocol_fee: Decimal,
     /// Settled to the developer's wallet at checkout (never held by us).
     pub developer_settled: Decimal,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct RevenueByGameCentsRow {
+    game_id: Uuid,
+    game_title: String,
+    developer_username: Option<String>,
+    total_cents: i64,
+    receipt_count: i64,
+    protocol_fee_cents: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -567,7 +662,9 @@ pub struct RevenueAnalytics {
     pub weekly: Vec<RevenueTimeSeries>,
     pub monthly: Vec<RevenueTimeSeries>,
     pub by_game: Vec<RevenueByGame>,
-    pub total_platform_revenue: Decimal,
+    /// Real sum of `payment_receipts.protocol_fee` across all games — 0 unless
+    /// an operator has configured a nonzero `PROTOCOL_FEE_BPS`.
+    pub total_protocol_fee: Decimal,
     pub total_developer_settled: Decimal,
 }
 
@@ -653,20 +750,25 @@ pub async fn analytics_overview(
         .fetch_one(&pool)
         .await?;
 
-    let total_play_sessions = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM transactions WHERE type = 'play_session'",
+    // `play_sessions` is written by POST /games/:id/sessions (sessions.rs) and is
+    // live data; the legacy `transactions` table (`type = 'play_session'`) never
+    // reflected real play activity and has had no writer since the payment pivot.
+    let total_play_sessions = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM play_sessions")
+        .fetch_one(&pool)
+        .await?;
+
+    // Gross value settled wallet-to-wallet through verified, non-voided receipts.
+    let total_revenue_cents = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(total), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
+    let total_revenue_usd = Decimal::new(total_revenue_cents, 2);
 
-    let total_revenue_usd = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type IN ('platform_fee', 'game_fee')",
-    )
-    .fetch_one(&pool)
-    .await?;
-
+    // Real activity proxy: distinct players who started a play session in the
+    // last 24h. `transactions` was never a real source for this either way.
     let active_users_24h = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(DISTINCT user_id) FROM transactions WHERE created_at > NOW() - INTERVAL '24 hours'",
+        "SELECT COUNT(DISTINCT user_id) FROM play_sessions WHERE started_at > NOW() - INTERVAL '24 hours'",
     )
     .fetch_one(&pool)
     .await?;
@@ -692,84 +794,105 @@ pub async fn analytics_revenue(
 ) -> Result<Json<RevenueAnalytics>> {
     require_admin(&pool, user_id).await?;
 
-    let daily = sqlx::query_as::<_, RevenueTimeSeries>(
-        "SELECT 
-            DATE(t.created_at) as date,
-            COALESCE(SUM(CASE WHEN t.type = 'platform_fee' THEN t.amount ELSE 0 END), 0) as platform_revenue,
-            COALESCE(SUM(CASE WHEN t.type = 'game_fee' THEN t.amount ELSE 0 END), 0) as game_revenue,
-            COALESCE(SUM(t.amount), 0) as total_revenue
-         FROM transactions t
-         WHERE t.created_at > NOW() - INTERVAL '30 days'
-         GROUP BY DATE(t.created_at)
+    // `payment_receipts` is the live-written non-custodial ledger. The legacy
+    // `transactions` table (`platform_fee` / `game_fee` rows) has had no writer
+    // since the payment pivot, so every query below used to return zero. There
+    // is also no platform cut to report any more: `protocol_fee` is real (0
+    // unless an operator sets `PROTOCOL_FEE_BPS`), never a fabricated split.
+    let daily_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
+        "SELECT
+            DATE(r.created_at)::text as date,
+            COALESCE(SUM(r.total), 0)::bigint as total_cents,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+         FROM payment_receipts r
+         WHERE r.created_at > NOW() - INTERVAL '30 days' AND r.voided = false
+         GROUP BY DATE(r.created_at)
          ORDER BY date DESC",
     )
     .fetch_all(&pool)
     .await?;
+    let daily = cents_rows_to_time_series(daily_rows);
 
-    let weekly = sqlx::query_as::<_, RevenueTimeSeries>(
-        "SELECT 
-            DATE_TRUNC('week', t.created_at)::date as date,
-            COALESCE(SUM(CASE WHEN t.type = 'platform_fee' THEN t.amount ELSE 0 END), 0) as platform_revenue,
-            COALESCE(SUM(CASE WHEN t.type = 'game_fee' THEN t.amount ELSE 0 END), 0) as game_revenue,
-            COALESCE(SUM(t.amount), 0) as total_revenue
-         FROM transactions t
-         WHERE t.created_at > NOW() - INTERVAL '12 weeks'
-         GROUP BY DATE_TRUNC('week', t.created_at)
+    let weekly_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
+        "SELECT
+            DATE_TRUNC('week', r.created_at)::date::text as date,
+            COALESCE(SUM(r.total), 0)::bigint as total_cents,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+         FROM payment_receipts r
+         WHERE r.created_at > NOW() - INTERVAL '12 weeks' AND r.voided = false
+         GROUP BY DATE_TRUNC('week', r.created_at)
          ORDER BY date DESC",
     )
     .fetch_all(&pool)
     .await?;
+    let weekly = cents_rows_to_time_series(weekly_rows);
 
-    let monthly = sqlx::query_as::<_, RevenueTimeSeries>(
-        "SELECT 
-            DATE_TRUNC('month', t.created_at)::date as date,
-            COALESCE(SUM(CASE WHEN t.type = 'platform_fee' THEN t.amount ELSE 0 END), 0) as platform_revenue,
-            COALESCE(SUM(CASE WHEN t.type = 'game_fee' THEN t.amount ELSE 0 END), 0) as game_revenue,
-            COALESCE(SUM(t.amount), 0) as total_revenue
-         FROM transactions t
-         WHERE t.created_at > NOW() - INTERVAL '12 months'
-         GROUP BY DATE_TRUNC('month', t.created_at)
+    let monthly_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
+        "SELECT
+            DATE_TRUNC('month', r.created_at)::date::text as date,
+            COALESCE(SUM(r.total), 0)::bigint as total_cents,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+         FROM payment_receipts r
+         WHERE r.created_at > NOW() - INTERVAL '12 months' AND r.voided = false
+         GROUP BY DATE_TRUNC('month', r.created_at)
          ORDER BY date DESC",
     )
     .fetch_all(&pool)
     .await?;
+    let monthly = cents_rows_to_time_series(monthly_rows);
 
-    let by_game = sqlx::query_as::<_, RevenueByGame>(
-        "SELECT 
+    let by_game_rows = sqlx::query_as::<_, RevenueByGameCentsRow>(
+        "SELECT
             g.id as game_id,
             g.title as game_title,
             u.username as developer_username,
-            COALESCE(SUM(t.amount), 0) as total_revenue,
-            COUNT(t.id) as play_sessions,
-            COALESCE(SUM(CASE WHEN t.type = 'platform_fee' THEN t.amount ELSE 0 END), 0) as platform_fee,
-            COALESCE(SUM(CASE WHEN t.type = 'game_fee' THEN t.amount ELSE 0 END), 0) as developer_settled
+            COALESCE(SUM(r.total), 0)::bigint as total_cents,
+            COUNT(r.id) as receipt_count,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
          FROM games g
-         LEFT JOIN transactions t ON g.id = t.game_id AND t.type IN ('platform_fee', 'game_fee')
+         LEFT JOIN payment_receipts r ON g.id = r.game_id AND r.voided = false
          LEFT JOIN users u ON g.developer_id = u.id
          GROUP BY g.id, g.title, u.username
-         ORDER BY total_revenue DESC",
+         ORDER BY total_cents DESC",
     )
     .fetch_all(&pool)
     .await?;
 
-    let total_platform_revenue = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'platform_fee'",
+    let by_game: Vec<RevenueByGame> = by_game_rows
+        .into_iter()
+        .map(|r| RevenueByGame {
+            game_id: r.game_id,
+            game_title: r.game_title,
+            developer_username: r.developer_username,
+            total_revenue: Decimal::new(r.total_cents, 2),
+            receipt_count: r.receipt_count,
+            protocol_fee: Decimal::new(r.protocol_fee_cents, 2),
+            developer_settled: Decimal::new(r.total_cents - r.protocol_fee_cents, 2),
+        })
+        .collect();
+
+    let total_protocol_fee_cents = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(protocol_fee), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
 
-    let total_developer_settled = sqlx::query_scalar::<_, Decimal>(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'game_fee'",
+    let total_settled_cents = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(total), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
+
+    let total_protocol_fee = Decimal::new(total_protocol_fee_cents, 2);
+    let total_developer_settled =
+        Decimal::new(total_settled_cents - total_protocol_fee_cents, 2);
 
     Ok(Json(RevenueAnalytics {
         daily,
         weekly,
         monthly,
         by_game,
-        total_platform_revenue,
+        total_protocol_fee,
         total_developer_settled,
     }))
 }

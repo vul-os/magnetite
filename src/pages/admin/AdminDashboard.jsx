@@ -72,7 +72,6 @@ function getActivityEmoji(type) {
 
 export default function AdminDashboard() {
   const [stats, setStats]     = useState(MOCK_STATS);
-  const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(!MOCK_STATS);
   const [error, setError]     = useState(null);
 
@@ -83,24 +82,22 @@ export default function AdminDashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [overviewRes, metricsRes] = await Promise.all([
-          authFetch('/api/admin/analytics/overview'),
-          authFetch('/api/admin/metrics'),
-        ]);
+        const overviewRes = await authFetch('/api/admin/analytics/overview');
 
         if (overviewRes.ok) {
           const data = await overviewRes.json();
           setStats({
-            totalUsers:     data.total_users    ?? 0,
-            totalGames:     data.total_games    ?? 0,
-            totalRevenue:   parseFloat(data.total_revenue ?? 0),
-            activeSessions: data.active_sessions ?? 0,
-            newUsersToday:  data.new_users_today ?? 0,
+            totalUsers:     data.total_users        ?? 0,
+            totalGames:     data.total_games        ?? 0,
+            // `total_revenue_usd` — gross value settled wallet-to-wallet through
+            // verified, non-voided payment receipts (non-custodial: the
+            // platform never holds this money, it only witnesses the transfer).
+            totalRevenue:   parseFloat(data.total_revenue_usd ?? 0),
+            // `active_users_24h` — distinct players with a play session in the
+            // last 24h. Real activity data, not a stand-in for "total users".
+            activeSessions: data.active_users_24h ?? 0,
+            newUsersToday:  data.new_users_today    ?? 0,
           });
-        }
-
-        if (metricsRes.ok) {
-          setMetrics(await metricsRes.json());
         }
       } catch (err) {
         setError(err.message || 'Failed to load dashboard');
@@ -117,7 +114,7 @@ export default function AdminDashboard() {
         { key: 'totalUsers',     label: 'Total Users',     icon: '👥', value: stats.totalUsers.toLocaleString(),                    warning: false },
         { key: 'totalGames',     label: 'Total Games',     icon: '⬡',  value: stats.totalGames,                                     warning: false },
         { key: 'totalRevenue',   label: 'Total Revenue',   icon: '$',  value: `$${stats.totalRevenue.toLocaleString()}`,             warning: false },
-        { key: 'activeSessions', label: 'Active Sessions', icon: '◉',  value: (metrics?.total_users ?? stats.activeSessions).toLocaleString(), warning: false },
+        { key: 'activeSessions', label: 'Active Users (24h)', icon: '◉',  value: stats.activeSessions.toLocaleString(), warning: false },
         { key: 'newUsersToday',  label: 'New Today',       icon: '↑',  value: stats.newUsersToday,                                  warning: false },
       ]
     : [];

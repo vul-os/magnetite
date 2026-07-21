@@ -1,4 +1,12 @@
 // Analytics service — platform surface area for developer dashboards, not yet wired.
+//
+// Source of truth for money: `payment_receipts` (seam §3.6, non-custodial). The
+// legacy `transactions` table (`type IN ('platform_fee', 'game_fee')`) has had no
+// writer since the payment pivot — every query in this file used to read it and
+// therefore always returned zero. There is also no platform cut to report: the
+// platform takes `PROTOCOL_FEE_BPS` (default 0, real if an operator sets it) and
+// nothing else, so "revenue" here means gross settled value and what actually
+// reached developer/operator wallets — never a fabricated split.
 #![allow(dead_code)]
 
 use chrono::{NaiveDate, Utc};
@@ -32,7 +40,10 @@ pub struct DailyStat {
 pub struct RevenueBreakdown {
     pub game_id: Uuid,
     pub total_revenue: Decimal,
-    pub platform_fees: Decimal,
+    /// Real sum of `payment_receipts.protocol_fee` — 0 unless PROTOCOL_FEE_BPS
+    /// is configured above its default. Never a fabricated percentage.
+    pub protocol_fees: Decimal,
+    /// Settled to the developer's (and any operator's) wallet at checkout.
     pub developer_earnings: Decimal,
     pub transaction_count: i64,
     pub revenue_by_day: Vec<DailyRevenue>,
@@ -42,7 +53,7 @@ pub struct RevenueBreakdown {
 pub struct DailyRevenue {
     pub date: NaiveDate,
     pub gross_revenue: Decimal,
-    pub platform_fees: Decimal,
+    pub protocol_fees: Decimal,
     pub developer_earnings: Decimal,
 }
 
@@ -97,15 +108,21 @@ struct DailyPlayStat {
     pub total_duration_secs: Option<f64>,
 }
 
+/// Raw settled-cents row from `payment_receipts`. Kept as `i64` (the rail's
+/// smallest unit) through every query and arithmetic step — only converted to
+/// `Decimal` once, at the edge, for display. No float ever touches money here.
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-struct TransactionSum {
-    pub total: Option<Decimal>,
+struct ReceiptCentsRow {
+    pub total_cents: Option<i64>,
+    pub protocol_fee_cents: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-struct DailyTransaction {
+struct DailyReceiptCents {
     pub date: NaiveDate,
-    pub total: Decimal,
+    pub total_cents: i64,
+    pub protocol_fee_cents: i64,
+    pub receipt_count: i64,
 }
 
 pub async fn get_game_analytics(
@@ -117,7 +134,7 @@ pub async fn get_game_analytics(
 
     let row = sqlx::query_as::<_, PlaySessionRow>(
         r#"
-        SELECT 
+        SELECT
             COUNT(*) as total_plays,
             COUNT(DISTINCT user_id) as unique_players,
             COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - started_at))), 0) as total_duration_secs
@@ -140,29 +157,30 @@ pub async fn get_game_analytics(
         0.0
     };
 
-    let total_revenue = sqlx::query_as::<_, TransactionSum>(
+    // Gross value settled wallet-to-wallet for this game's receipts. Voided
+    // receipts backed a refunded entitlement, so they are excluded.
+    let total_revenue_cents = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM transactions
-        WHERE game_id = $1 AND created_at >= $2 AND type IN ('platform_fee', 'game_fee')
+        SELECT COALESCE(SUM(total), 0)::bigint
+        FROM payment_receipts
+        WHERE game_id = $1 AND created_at >= $2 AND voided = false
         "#,
     )
     .bind(game_id)
     .bind(start_date)
     .fetch_one(db)
-    .await?
-    .total
-    .unwrap_or(Decimal::ZERO);
+    .await?;
+    let total_revenue = Decimal::new(total_revenue_cents, 2);
 
     let daily_stats_raw = sqlx::query_as::<_, DailyPlayStat>(
         r#"
         WITH new_players_per_day AS (
-            SELECT 
+            SELECT
                 DATE_TRUNC('day', ps.started_at) as date,
                 COUNT(DISTINCT ps.user_id) FILTER (
                     WHERE ps.user_id NOT IN (
-                        SELECT DISTINCT user_id 
-                        FROM play_sessions 
+                        SELECT DISTINCT user_id
+                        FROM play_sessions
                         WHERE game_id = $1 AND started_at < DATE_TRUNC('day', ps.started_at)
                     )
                 ) as new_players
@@ -170,7 +188,7 @@ pub async fn get_game_analytics(
             WHERE ps.game_id = $1 AND ps.started_at >= $2
             GROUP BY DATE_TRUNC('day', ps.started_at)
         )
-        SELECT 
+        SELECT
             DATE_TRUNC('day', ps.started_at)::date as date,
             COUNT(*) as plays,
             COALESCE(np.new_players, 0) as new_players,
@@ -187,15 +205,42 @@ pub async fn get_game_analytics(
     .fetch_all(db)
     .await?;
 
+    // Per-day settled revenue for this game, keyed by the same day buckets as
+    // the play stats above. Merged in Rust rather than a second GROUP BY on the
+    // play-session query so the two independent tables (`play_sessions`,
+    // `payment_receipts`) each get their own straightforward query.
+    let daily_revenue_raw = sqlx::query_as::<_, DailyReceiptCents>(
+        r#"
+        SELECT
+            DATE_TRUNC('day', created_at)::date as date,
+            COALESCE(SUM(total), 0)::bigint as total_cents,
+            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_cents,
+            COUNT(*) as receipt_count
+        FROM payment_receipts
+        WHERE game_id = $1 AND created_at >= $2 AND voided = false
+        GROUP BY DATE_TRUNC('day', created_at)
+        "#,
+    )
+    .bind(game_id)
+    .bind(start_date)
+    .fetch_all(db)
+    .await?;
+
+    let revenue_by_date: std::collections::HashMap<NaiveDate, i64> = daily_revenue_raw
+        .into_iter()
+        .map(|r| (r.date, r.total_cents))
+        .collect();
+
     let daily_stats: Vec<DailyStat> = daily_stats_raw
         .into_iter()
         .map(|row| {
             let plays_i32: i32 = row.plays.min(i32::MAX as i64) as i32;
+            let revenue_cents = revenue_by_date.get(&row.date).copied().unwrap_or(0);
             DailyStat {
                 date: row.date,
                 plays: plays_i32,
                 new_players: row.new_players.min(i32::MAX as i64) as i32,
-                revenue: Decimal::ZERO,
+                revenue: Decimal::new(revenue_cents, 2),
                 avg_duration_secs: if row.plays > 0 {
                     row.total_duration_secs.unwrap_or(0.0) / row.plays as f64
                 } else {
@@ -216,66 +261,47 @@ pub async fn get_game_analytics(
 }
 
 pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<RevenueBreakdown> {
-    let total_revenue = sqlx::query_as::<_, TransactionSum>(
+    let totals = sqlx::query_as::<_, ReceiptCentsRow>(
         r#"
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM transactions
-        WHERE game_id = $1 AND type IN ('platform_fee', 'game_fee')
-        "#,
-    )
-    .bind(game_id)
-    .fetch_one(db)
-    .await?
-    .total
-    .unwrap_or(Decimal::ZERO);
-
-    let platform_fees = sqlx::query_as::<_, TransactionSum>(
-        r#"
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM transactions
-        WHERE game_id = $1 AND type = 'platform_fee'
-        "#,
-    )
-    .bind(game_id)
-    .fetch_one(db)
-    .await?
-    .total
-    .unwrap_or(Decimal::ZERO);
-
-    let developer_earnings = sqlx::query_as::<_, TransactionSum>(
-        r#"
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM transactions
-        WHERE game_id = $1 AND type = 'game_fee'
-        "#,
-    )
-    .bind(game_id)
-    .fetch_one(db)
-    .await?
-    .total
-    .unwrap_or(Decimal::ZERO);
-
-    let transaction_count = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT COUNT(*)
-        FROM transactions
-        WHERE game_id = $1 AND type IN ('platform_fee', 'game_fee')
+        SELECT
+            COALESCE(SUM(total), 0)::bigint as total_cents,
+            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_cents
+        FROM payment_receipts
+        WHERE game_id = $1 AND voided = false
         "#,
     )
     .bind(game_id)
     .fetch_one(db)
     .await?;
 
-    let platform_percentage = Decimal::new(15, 2);
-    let developer_percentage = Decimal::ONE - platform_percentage;
+    let total_cents = totals.total_cents.unwrap_or(0);
+    let protocol_fee_cents = totals.protocol_fee_cents.unwrap_or(0);
+    let developer_cents = total_cents - protocol_fee_cents;
 
-    let revenue_by_day_raw = sqlx::query_as::<_, DailyTransaction>(
+    let total_revenue = Decimal::new(total_cents, 2);
+    let protocol_fees = Decimal::new(protocol_fee_cents, 2);
+    let developer_earnings = Decimal::new(developer_cents, 2);
+
+    let transaction_count = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT 
+        SELECT COUNT(*)
+        FROM payment_receipts
+        WHERE game_id = $1 AND voided = false
+        "#,
+    )
+    .bind(game_id)
+    .fetch_one(db)
+    .await?;
+
+    let revenue_by_day_raw = sqlx::query_as::<_, DailyReceiptCents>(
+        r#"
+        SELECT
             DATE_TRUNC('day', created_at)::date as date,
-            COALESCE(SUM(amount), 0) as total
-        FROM transactions
-        WHERE game_id = $1 AND type IN ('platform_fee', 'game_fee')
+            COALESCE(SUM(total), 0)::bigint as total_cents,
+            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_cents,
+            COUNT(*) as receipt_count
+        FROM payment_receipts
+        WHERE game_id = $1 AND voided = false
         GROUP BY DATE_TRUNC('day', created_at)
         ORDER BY date
         "#,
@@ -284,24 +310,23 @@ pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<R
     .fetch_all(db)
     .await?;
 
+    // Real per-day protocol fee / developer split — NOT a fabricated
+    // percentage (the previous implementation multiplied real revenue by a
+    // hardcoded 15%/85% split that no longer exists in the non-custodial model).
     let revenue_by_day: Vec<DailyRevenue> = revenue_by_day_raw
         .into_iter()
-        .map(|row| {
-            let platform_share = row.total * platform_percentage;
-            let dev_share = row.total * developer_percentage;
-            DailyRevenue {
-                date: row.date,
-                gross_revenue: row.total,
-                platform_fees: platform_share,
-                developer_earnings: dev_share,
-            }
+        .map(|row| DailyRevenue {
+            date: row.date,
+            gross_revenue: Decimal::new(row.total_cents, 2),
+            protocol_fees: Decimal::new(row.protocol_fee_cents, 2),
+            developer_earnings: Decimal::new(row.total_cents - row.protocol_fee_cents, 2),
         })
         .collect();
 
     Ok(RevenueBreakdown {
         game_id,
         total_revenue,
-        platform_fees,
+        protocol_fees,
         developer_earnings,
         transaction_count,
         revenue_by_day,
@@ -355,7 +380,7 @@ pub async fn get_player_retention(
             WHERE game_id = $1 AND started_at >= $2 AND started_at < $3
         ),
         daily_active AS (
-            SELECT 
+            SELECT
                 EXTRACT(DAY FROM (ps.started_at - $2::timestamp))::int as day_number,
                 COUNT(DISTINCT ps.user_id) as active_users
             FROM play_sessions ps
@@ -422,7 +447,7 @@ pub async fn get_dashboard_summary(
 
     let row = sqlx::query_as::<_, PlaySessionRow>(
         r#"
-        SELECT 
+        SELECT
             COUNT(*) as total_plays,
             COUNT(DISTINCT user_id) as unique_players,
             COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - started_at))), 0) as total_duration_secs
@@ -444,18 +469,17 @@ pub async fn get_dashboard_summary(
         0.0
     };
 
-    let total_revenue = sqlx::query_as::<_, TransactionSum>(
+    let total_revenue_cents = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM transactions
-        WHERE game_id = ANY($1) AND type IN ('platform_fee', 'game_fee')
+        SELECT COALESCE(SUM(total), 0)::bigint
+        FROM payment_receipts
+        WHERE game_id = ANY($1) AND voided = false
         "#,
     )
     .bind(&game_ids)
     .fetch_one(db)
-    .await?
-    .total
-    .unwrap_or(Decimal::ZERO);
+    .await?;
+    let total_revenue = Decimal::new(total_revenue_cents, 2);
 
     let top_game = get_top_performing_games(db, developer_id, 1)
         .await?
@@ -478,18 +502,28 @@ pub async fn get_top_performing_games(
     developer_id: Uuid,
     limit: i32,
 ) -> Result<Vec<GameStats>> {
-    let games = sqlx::query_as::<_, GameStats>(
+    #[derive(Debug, FromRow)]
+    struct GameStatsCents {
+        game_id: Uuid,
+        title: String,
+        total_plays: i64,
+        unique_players: i64,
+        total_revenue_cents: i64,
+        avg_session_duration_secs: f64,
+    }
+
+    let games = sqlx::query_as::<_, GameStatsCents>(
         r#"
-        SELECT 
+        SELECT
             g.id as game_id,
             g.title,
             COALESCE(ps.total_plays, 0) as total_plays,
             COALESCE(ps.unique_players, 0) as unique_players,
-            COALESCE(t.total_revenue, 0) as total_revenue,
+            COALESCE(r.total_revenue_cents, 0) as total_revenue_cents,
             COALESCE(ps.avg_duration, 0) as avg_session_duration_secs
         FROM games g
         LEFT JOIN (
-            SELECT 
+            SELECT
                 game_id,
                 COUNT(*) as total_plays,
                 COUNT(DISTINCT user_id) as unique_players,
@@ -498,15 +532,15 @@ pub async fn get_top_performing_games(
             GROUP BY game_id
         ) ps ON g.id = ps.game_id
         LEFT JOIN (
-            SELECT 
+            SELECT
                 game_id,
-                SUM(amount) as total_revenue
-            FROM transactions
-            WHERE type IN ('platform_fee', 'game_fee')
+                SUM(total)::bigint as total_revenue_cents
+            FROM payment_receipts
+            WHERE voided = false
             GROUP BY game_id
-        ) t ON g.id = t.game_id
+        ) r ON g.id = r.game_id
         WHERE g.developer_id = $1
-        ORDER BY t.total_revenue DESC NULLS LAST, ps.total_plays DESC NULLS LAST
+        ORDER BY r.total_revenue_cents DESC NULLS LAST, ps.total_plays DESC NULLS LAST
         LIMIT $2
         "#,
     )
@@ -515,5 +549,15 @@ pub async fn get_top_performing_games(
     .fetch_all(db)
     .await?;
 
-    Ok(games)
+    Ok(games
+        .into_iter()
+        .map(|g| GameStats {
+            game_id: g.game_id,
+            title: g.title,
+            total_plays: g.total_plays,
+            unique_players: g.unique_players,
+            total_revenue: Decimal::new(g.total_revenue_cents, 2),
+            avg_session_duration_secs: g.avg_session_duration_secs,
+        })
+        .collect())
 }
