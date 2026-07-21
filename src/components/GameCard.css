@@ -27,11 +27,26 @@
   cursor: pointer;
 }
 
-.game-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md), var(--shadow-glow);
-  border-color: color-mix(in srgb, var(--field) 30%, transparent);
+/* A hairline of field-violet light on the top edge — catches the eye and
+   separates the card from the near-black page without a heavy border. */
+.game-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  z-index: 4;
+  background: linear-gradient(90deg, transparent, var(--field-line), transparent);
+  opacity: 0;
+  transition: opacity var(--t) var(--ease-out);
+  pointer-events: none;
 }
+
+.game-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: color-mix(in srgb, var(--field) 40%, transparent);
+}
+.game-card:hover::before { opacity: 1; }
 
 /* ── Image ─────────────────────────────────────────────────────────────────── */
 .card-image-link {
@@ -333,35 +348,37 @@
   border-radius: var(--radius-sm);
 }
 
-/* ── Error state ───────────────────────────────────────────────────────────── */
-.card-image.error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-secondary);
+/* ── Branded fallback tile (no artwork) ────────────────────────────────────
+   A generated "field signature" — honest platform art, never a stock photo.
+   The field-lines are drawn in field-violet over a graphite gradient; the
+   game's initials sit as a debossed monogram. */
+.brand-tile {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 120% at 50% 0%, var(--color-bg-elevated) 0%, var(--color-bg-secondary) 62%, var(--sunk) 100%);
 }
-
-.card-image.error::before {
-  content: '';
+.brand-tile-field {
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    var(--color-bg-elevated) 10px,
-    var(--color-bg-elevated) 20px
-  );
-  opacity: 0.4;
+  width: 100%;
+  height: 100%;
+  color: var(--field);
+  opacity: 0.5;
 }
-
-.error-icon {
-  width: 40px;
-  height: 40px;
-  color: var(--color-text-muted);
-  opacity: 0.3;
+.game-card:hover .brand-tile-field { opacity: 0.72; }
+.brand-tile-mark {
+  position: relative;
   z-index: 1;
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 1;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  transition: color var(--t) var(--ease-out), transform var(--t) var(--ease-out);
 }
+.game-card:hover .brand-tile-mark { color: var(--field-text); transform: scale(1.04); }
 
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {

@@ -15,10 +15,12 @@ export default function HeroSection() {
   const particles = useMemo(() => PARTICLES, []);
 
   return (
-    <section className="hero-section bg-atmosphere" aria-labelledby="hero-heading">
+    <section className="hero-section bg-atmosphere" data-aura aria-labelledby="hero-heading">
       {/* Layered accent glows */}
       <div className="hero-glow-primary" aria-hidden="true" />
       <div className="hero-glow-secondary" aria-hidden="true" />
+      {/* Cursor-reactive field aura — the iron-filings-follow-a-magnet motif */}
+      <div className="field-aura" aria-hidden="true" />
 
       {/* Ambient particles */}
       <div className="hero-particles" aria-hidden="true">

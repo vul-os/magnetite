@@ -34,49 +34,28 @@
 /* ── Atmospheric header ───────────────────────────────────────────────────── */
 .marketplace-header {
   position: relative;
-  padding: 5.5rem 1.5rem 4rem;
+  padding: 6rem 1.5rem 4.25rem;
   text-align: center;
   overflow: hidden;
-  background: var(--gradient-hero);
+  background:
+    radial-gradient(120% 130% at 50% -20%, var(--surface-2) 0%, var(--void) 64%);
+  border-bottom: 1px solid var(--line);
 }
 
-/* Layered accent glows */
-.mkt-header-glow-primary {
+/* Flowing magnetic field-lines behind the copy */
+.mkt-field-lines {
   position: absolute;
-  top: -20%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(800px, 120vw);
-  height: 500px;
-  background: radial-gradient(ellipse 70% 55% at 50% 0%, var(--color-accent-soft) 0%, transparent 60%);
+  inset: -10% -5% auto -5%;
+  width: 110%;
+  height: 130%;
+  z-index: 0;
   pointer-events: none;
-}
-
-.mkt-header-glow-secondary {
-  position: absolute;
-  bottom: 10%;
-  right: 10%;
-  width: 400px;
-  height: 300px;
-  background: radial-gradient(ellipse at 80% 80%, var(--color-amber-soft) 0%, transparent 65%);
-  pointer-events: none;
-}
-
-/* Scan line for atmosphere */
-.marketplace-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-  animation: mkt-scan 6s ease-in-out infinite;
-  pointer-events: none;
-  opacity: 0;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 20%, #000 30%, transparent 82%);
+          mask-image: radial-gradient(120% 100% at 50% 20%, #000 30%, transparent 82%);
 }
 
 .header-content {
-  max-width: 660px;
+  max-width: 680px;
   margin: 0 auto;
   position: relative;
   z-index: 1;
@@ -97,6 +76,62 @@
   color: var(--color-text-secondary);
   margin: 0 0 2.25rem;
   line-height: 1.7;
+}
+
+/* ── Live catalogue stats ──────────────────────────────────────────────────── */
+.mkt-stats {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 1.75rem auto 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+.mkt-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0.75rem 1.5rem;
+  border-right: 1px solid var(--line);
+}
+.mkt-stat:last-child { border-right: 0; }
+.mkt-stat dt {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.mkt-stat dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1;
+}
+.mkt-stat-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--live-text);
+}
+.mkt-stat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--live);
+  flex: none;
+}
+@media (max-width: 480px) {
+  .mkt-stats { flex-wrap: wrap; }
+  .mkt-stat { padding: 0.625rem 1rem; }
+  .mkt-stat dd { font-size: var(--text-lg); }
 }
 
 /* Search bar */
@@ -238,8 +273,10 @@
 .filter-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  min-width: 160px;
+  gap: 6px;
+  flex: 0 0 auto;
+  width: 220px;
+  max-width: 100%;
 }
 
 .filter-label {
@@ -289,7 +326,7 @@
   font-weight: 500;
 }
 
-.price-slider {
+.mkt-price-slider {
   width: 100%;
   height: 4px;
   background: var(--color-border);
@@ -301,7 +338,7 @@
   min-height: 20px;
 }
 
-.price-slider::-webkit-slider-thumb {
+.mkt-price-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 18px;
   height: 18px;
@@ -312,9 +349,9 @@
   transition: transform var(--t-fast) var(--ease-out);
 }
 
-.price-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+.mkt-price-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
 
-.price-slider::-moz-range-thumb {
+.mkt-price-slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
   background: var(--color-accent);

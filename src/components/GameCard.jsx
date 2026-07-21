@@ -61,14 +61,46 @@ const GameCardSkeleton = memo(function GameCardSkeleton() {
   );
 });
 
-const ErrorState = memo(function ErrorState() {
+// A small, stable hash so the generated tile is deterministic per game — the
+// same title always draws the same field signature.
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/*
+ * BrandTile — the honest fallback when a game ships no artwork. NOT a stock
+ * photo and never presented as a screenshot: it is a generated "field
+ * signature" — a dipole of magnetic field-lines whose curvature and hue are
+ * derived from the game's own identity, plus its initials. It reads clearly as
+ * platform-generated art, which is exactly the honest thing to show for a game
+ * with no thumbnail (see DESIGN.md §7 / GameCard's no-stock-photo rule).
+ */
+const BrandTile = memo(function BrandTile({ seedText }) {
+  const h = hashString(seedText || 'magnetite');
+  const rot = h % 40 - 20;                 // field tilt
+  const spread = 60 + (h >> 5) % 80;       // arc spread
+  const cy = 90 + (h >> 9) % 40;           // core height
+  const initials = (seedText || '?')
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+
   return (
-    <div className="card-image error">
-      <svg className="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="M21 15l-5-5L5 21" />
+    <div className="card-image brand-tile" aria-hidden="true">
+      <svg className="brand-tile-field" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" fill="none">
+        <g stroke="currentColor" strokeLinecap="round" style={{ transform: `rotate(${rot}deg)`, transformOrigin: '160px 90px' }}>
+          <path d={`M40 ${cy} C 100 ${cy - spread}, 220 ${cy - spread}, 280 ${cy} C 220 ${cy + spread}, 100 ${cy + spread}, 40 ${cy}`} opacity="0.5" strokeWidth="1.1" />
+          <path d={`M40 ${cy} C 90 ${cy - spread * 0.62}, 230 ${cy - spread * 0.62}, 280 ${cy}`} opacity="0.34" strokeWidth="1" />
+          <path className="flowline" d={`M40 ${cy} C 100 ${cy - spread}, 220 ${cy - spread}, 280 ${cy}`} opacity="0.7" strokeWidth="1.4" />
+          <path d={`M40 ${cy} C 90 ${cy + spread * 0.62}, 230 ${cy + spread * 0.62}, 280 ${cy}`} opacity="0.34" strokeWidth="1" />
+          <circle cx="40" cy={cy} r="3.5" fill="currentColor" stroke="none" opacity="0.8" />
+          <circle cx="280" cy={cy} r="3.5" fill="currentColor" stroke="none" opacity="0.8" />
+        </g>
       </svg>
+      <span className="brand-tile-mark">{initials || '◈'}</span>
     </div>
   );
 });
@@ -97,7 +129,7 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
   const thumbnailSrc = imageError ? null : (game.thumbnail || null);
 
   return (
-    <article className="game-card" aria-label={game.title}>
+    <article className="game-card spot sheen" aria-label={game.title}>
       <Link to={`/game/${game.id}`} className="card-image-link" tabIndex={-1} aria-hidden="true">
         <div className="card-image">
           {thumbnailSrc ? (
@@ -108,7 +140,7 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
               onError={() => setImageError(true)}
             />
           ) : (
-            <ErrorState />
+            <BrandTile seedText={`${game.title || ''} ${game.developer || ''}`} />
           )}
           {isPopular && !imageError && <Badge type="Popular" />}
           {isNew && !imageError && <Badge type="New" />}

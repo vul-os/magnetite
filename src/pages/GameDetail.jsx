@@ -8,6 +8,21 @@ import { api } from '../api/client';
 import { formatUSDC } from '../utils/currency';
 import './GameDetail.css';
 
+// Deterministic field signature for a game with no cover art — generated
+// platform art (never a stock photo), keyed to the game's own identity so the
+// same title always draws the same figure. Mirrors GameCard's BrandTile.
+function fieldPlate(seedText) {
+  let h = 2166136261;
+  const s = seedText || 'magnetite';
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  const rot = (h % 40) - 20;
+  const spread = 70 + (h >> 5) % 90;
+  const cy = 130 + (h >> 9) % 60;
+  const initials = s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  return { rot, spread, cy, initials: initials || '◈' };
+}
+
 /*
  * GameDetail — "cold iron instrumentation".
  *
@@ -674,11 +689,28 @@ export default function GameDetail() {
         <div className="gd-shell">
           {/* ── Masthead ───────────────────────────────────────────────── */}
           <header className="gd-masthead reveal reveal-1" ref={heroRef}>
-            {game.thumbnail && (
+            {game.thumbnail ? (
               <div className="gd-plate">
                 <img src={game.thumbnail} alt={`Cover art for ${game.title}`} className="gd-plate-img" loading="eager" />
               </div>
-            )}
+            ) : (() => {
+              const fp = fieldPlate(`${game.title || ''} ${game.developer || ''}`);
+              return (
+                <div className="gd-plate gd-plate-field spot" aria-hidden="true">
+                  <svg className="gd-plate-field-svg" viewBox="0 0 400 260" preserveAspectRatio="xMidYMid slice" fill="none">
+                    <g stroke="currentColor" strokeLinecap="round" style={{ transform: `rotate(${fp.rot}deg)`, transformOrigin: '200px 130px' }}>
+                      <path d={`M40 ${fp.cy} C 130 ${fp.cy - fp.spread}, 270 ${fp.cy - fp.spread}, 360 ${fp.cy} C 270 ${fp.cy + fp.spread}, 130 ${fp.cy + fp.spread}, 40 ${fp.cy}`} opacity="0.5" strokeWidth="1.2" />
+                      <path d={`M40 ${fp.cy} C 120 ${fp.cy - fp.spread * 0.6}, 280 ${fp.cy - fp.spread * 0.6}, 360 ${fp.cy}`} opacity="0.32" strokeWidth="1" />
+                      <path className="flowline" d={`M40 ${fp.cy} C 130 ${fp.cy - fp.spread}, 270 ${fp.cy - fp.spread}, 360 ${fp.cy}`} opacity="0.72" strokeWidth="1.5" />
+                      <path d={`M40 ${fp.cy} C 120 ${fp.cy + fp.spread * 0.6}, 280 ${fp.cy + fp.spread * 0.6}, 360 ${fp.cy}`} opacity="0.32" strokeWidth="1" />
+                      <circle cx="40" cy={fp.cy} r="4" fill="currentColor" stroke="none" opacity="0.85" />
+                      <circle cx="360" cy={fp.cy} r="4" fill="currentColor" stroke="none" opacity="0.85" />
+                    </g>
+                  </svg>
+                  <span className="gd-plate-mark">{fp.initials}</span>
+                </div>
+              );
+            })()}
 
             <div className="gd-identity">
               <div className="gd-eyebrow">

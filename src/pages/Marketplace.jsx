@@ -123,6 +123,18 @@ export default function Marketplace() {
   const hasActiveFilters =
     category !== 'All' || search !== '' || priceRange[0] > 0 || priceRange[1] < 5;
 
+  // Honest, derived-from-the-catalogue stats — no invented numbers. Each is a
+  // fold over exactly the games the page is showing.
+  const catalogueStats = useMemo(() => {
+    const totalOnline = allGames.reduce((s, g) => s + (g.players_online ?? 0), 0);
+    const freeCount = allGames.filter((g) => {
+      const fee = Number(g.fee_per_session ?? g.feePerSession);
+      const paid = Number.isFinite(fee) && fee > 0 && !(g.is_free ?? g.isFree);
+      return !paid;
+    }).length;
+    return { games: allGames.length, online: totalOnline, free: freeCount };
+  }, [allGames]);
+
   const filteredGames = useMemo(() => {
     let games = allGames.filter(game => {
       const matchesSearch   = game.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -173,9 +185,16 @@ export default function Marketplace() {
     <Layout>
       <div className="marketplace">
         {/* ── Atmospheric header ─────────────────────────────────────────── */}
-        <header className="marketplace-header bg-atmosphere" aria-labelledby="marketplace-heading">
-          <div className="mkt-header-glow-primary" aria-hidden="true" />
-          <div className="mkt-header-glow-secondary" aria-hidden="true" />
+        <header className="marketplace-header bg-field" data-aura aria-labelledby="marketplace-heading">
+          <div className="field-aura" aria-hidden="true" />
+          <svg className="mkt-field-lines" viewBox="0 0 1440 520" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
+            <g stroke="var(--field)" strokeLinecap="round">
+              <path d="M-40 360 C 360 180, 1080 180, 1480 360" opacity=".16" strokeWidth="1.2" />
+              <path d="M-40 300 C 380 90, 1060 90, 1480 300" opacity=".12" strokeWidth="1.2" />
+              <path className="flowline" d="M-40 330 C 370 130, 1070 130, 1480 330" opacity=".4" strokeWidth="1.4" />
+              <path d="M-40 240 C 400 20, 1040 20, 1480 240" opacity=".08" strokeWidth="1.2" />
+            </g>
+          </svg>
 
           <div className="header-content reveal">
             <span className="kicker reveal-1">{t('store.marketplaceKicker')}</span>
@@ -228,6 +247,28 @@ export default function Marketplace() {
                 </button>
               ))}
             </nav>
+
+            {/* Live catalogue readout — every figure is folded from the games
+                actually loaded, never invented. */}
+            {!isLoading && !gamesError && catalogueStats.games > 0 && (
+              <dl className="mkt-stats reveal-6" aria-label="Catalogue at a glance">
+                <div className="mkt-stat">
+                  <dt>Titles</dt>
+                  <dd>{catalogueStats.games}</dd>
+                </div>
+                <div className="mkt-stat">
+                  <dt>Players online</dt>
+                  <dd className="mkt-stat-live">
+                    <span className="mkt-stat-dot pulse-live" aria-hidden="true" />
+                    {catalogueStats.online.toLocaleString()}
+                  </dd>
+                </div>
+                <div className="mkt-stat">
+                  <dt>Free to play</dt>
+                  <dd>{catalogueStats.free}</dd>
+                </div>
+              </dl>
+            )}
           </div>
         </header>
 
@@ -251,7 +292,7 @@ export default function Marketplace() {
                   step="0.25"
                   value={priceRange[1]}
                   onChange={(e) => setPriceRange([priceRange[0], parseFloat(e.target.value)])}
-                  className="price-slider"
+                  className="mkt-price-slider"
                   aria-label={t('store.priceAriaLabel')}
                 />
               </div>
@@ -334,7 +375,7 @@ export default function Marketplace() {
           ) : gamesError ? (
             <ErrorState message={gamesError} />
           ) : filteredGames.length > 0 ? (
-            <div className="game-grid">
+            <div className="game-grid sr sr-group">
               {filteredGames.map(game => (
                 <GameCard key={game.id} game={game} showPlayButton />
               ))}

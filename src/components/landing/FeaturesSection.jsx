@@ -50,7 +50,7 @@ export default function FeaturesSection() {
   return (
     <section className="features-section" aria-labelledby="features-heading">
       <div className="container">
-        <div className="section-header-centered">
+        <div className="section-header-centered sr">
           <span className="kicker">// PLATFORM CAPABILITIES</span>
           <h2 id="features-heading" className="section-heading">
             Everything you need to{' '}
@@ -62,9 +62,9 @@ export default function FeaturesSection() {
           </p>
         </div>
 
-        <div className="features-grid">
+        <div className="features-grid sr sr-group">
           {features.map(({ Icon, kicker, title, description }, index) => (
-            <div key={index} className="feature-card">
+            <div key={index} className="feature-card spot mag">
               <span className="feature-kicker">{kicker}</span>
               <div className="feature-icon-wrapper" aria-hidden="true">
                 <Icon className="feature-icon" />

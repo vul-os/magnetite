@@ -32,7 +32,7 @@ export default function HowItWorksSection() {
   return (
     <section className="how-it-works-section" aria-labelledby="how-heading">
       <div className="container">
-        <div className="section-header-centered">
+        <div className="section-header-centered sr">
           <span className="kicker">// WORKFLOW</span>
           <h2 id="how-heading" className="section-heading">
             From code to{' '}
@@ -44,9 +44,9 @@ export default function HowItWorksSection() {
           </p>
         </div>
 
-        <div className="steps-container">
+        <div className="steps-container sr sr-group">
           {steps.map(({ number, kicker, title, description, Icon }, index) => (
-            <div key={index} className="step-item">
+            <div key={index} className="step-item spot">
               <div className="step-number">{number}</div>
               <span className="step-kicker">{kicker}</span>
               <div className="step-icon-wrapper" aria-hidden="true">
