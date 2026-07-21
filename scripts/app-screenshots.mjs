@@ -68,7 +68,19 @@ const MOUNTED = {
   '/api/v1/marketplace/stores/s1/items': { items: [] },
   '/api/v1/developer/games':         { games: [] },
   '/api/v1/github/installations':    { installations: [] },
-  '/api/v1/games':                   { games: [] },
+  /* A small, deterministic catalogue so the marketplace shows its grid rather
+     than the empty state. Fixture data (not live), and it honours GameCard's
+     own honesty rules: no thumbnails (the branded fallback tile renders — never
+     a stock photo), one game left unrated (rating null, not zero), and free
+     games carry no price rather than "0 USDC". */
+  '/api/v1/games':                   { games: [
+    { id: 'g1', title: 'Voxel Frontier',  developer: 'Redshift Labs',   category: 'action',   is_free: true,  fee_per_session: 0,     players_online: 1240, rating: 4.6, is_new: true },
+    { id: 'g2', title: 'Nebula Drift',    developer: 'Orbital Studio',  category: 'racing',   is_free: false, fee_per_session: 0.05,  players_online: 830,  rating: 4.3, is_new: false },
+    { id: 'g3', title: 'Rune & Ruin',     developer: 'Hollow Forge',    category: 'rpg',      is_free: false, fee_per_session: 0.10,  players_online: 2100, rating: 4.8, is_new: false },
+    { id: 'g4', title: 'Grid Tactics',    developer: 'Iron Meridian',   category: 'strategy', is_free: true,  fee_per_session: 0,     players_online: 560,  rating: null, is_new: false },
+    { id: 'g5', title: 'Pixel Panic',     developer: 'Arcade Kernel',   category: 'arcade',   is_free: true,  fee_per_session: 0,     players_online: 3400, rating: 4.1, is_new: false },
+    { id: 'g6', title: 'Cipher Cascade',  developer: 'Latch & Key',     category: 'puzzle',   is_free: false, fee_per_session: 0.02,  players_online: 410,  rating: 4.5, is_new: true },
+  ] },
   '/api/v1/matchmaking/status':      { status: 'not_in_queue' },
   /* Fixed (non-random) 14-day series so the analytics dataviz screenshot is
      reproducible — not live data, just a deterministic capture fixture. */
@@ -149,6 +161,14 @@ const main = async () => {
         /* The PWA service worker proxies fetches and would bypass page.route(),
            turning every stubbed API call into a network failure. */
         serviceWorkers: 'block',
+        /* Resolve the staggered `.reveal` entrance animations to their final
+           state immediately. They run for up to ~900ms (600ms delay + duration)
+           and the capture waited only 700ms, so hero content was photographed
+           mid-animation — faded and mid-translate, which read as an overlapping,
+           greyed-out header. The app's own `prefers-reduced-motion` rules snap
+           `.reveal` to opacity:1 / transform:none, which is the settled look a
+           real visitor sees a second after load. */
+        reducedMotion: 'reduce',
       })
       // Set the theme the same way the app does, before first paint.
       await ctx.addInitScript((t) => {
