@@ -88,8 +88,8 @@ mod noncustodial_wallet_tests {
     #[tokio::test]
     async fn hosting_channel_is_deterministic_and_offline() {
         let operator = PubKey([0x0B; 32]);
-        let a = rail().open_channel(&operator).await;
-        let b = rail().open_channel(&operator).await;
+        let a = rail().open_channel(&operator).await.unwrap();
+        let b = rail().open_channel(&operator).await.unwrap();
         assert_eq!(a.id, b.id, "channel id must be deterministic");
         assert_eq!(a.peer, operator);
     }

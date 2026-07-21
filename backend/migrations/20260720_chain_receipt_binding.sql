@@ -1,0 +1,11 @@
+-- Chain-anchored receipts (seam §3.6, `PAYMENT_RAIL=solana`).
+--
+-- A receipt produced by a chain rail is only meaningful together with its
+-- on-chain binding: which transaction paid, for which item, in which mint. Store
+-- it verbatim so `load_receipt` can hand the rail back the exact receipt it
+-- issued. Without the binding a chain receipt fails verification (fail-closed),
+-- so this column is what makes the real rail usable at all — it is NOT a
+-- security boundary, the chain is.
+--
+-- Additive and idempotent. The mock rail leaves it NULL.
+ALTER TABLE payment_receipts ADD COLUMN IF NOT EXISTS binding JSONB;

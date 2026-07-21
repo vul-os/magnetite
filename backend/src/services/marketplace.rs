@@ -18,7 +18,6 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::services::payment;
-use crate::services::payment::PaymentRail as _;
 use crate::services::points::PointsService;
 
 // ─── Receipt (purchase + item detail joined) ──────────────────────────────────
@@ -636,9 +635,18 @@ impl MarketplaceService {
             return Ok(false);
         }
 
-        type Row = (String, i64, i64, String, String, String, serde_json::Value);
+        type Row = (
+            String,
+            i64,
+            i64,
+            String,
+            String,
+            String,
+            serde_json::Value,
+            Option<serde_json::Value>,
+        );
         let row = sqlx::query_as::<_, Row>(
-            "SELECT r.buyer_pubkey, r.total, r.protocol_fee, r.nonce, r.rail_pubkey, r.sig, r.payouts
+            "SELECT r.buyer_pubkey, r.total, r.protocol_fee, r.nonce, r.rail_pubkey, r.sig, r.payouts, r.binding
              FROM entitlements e
              JOIN payment_receipts r ON r.id = e.receipt_id
              WHERE e.user_id = $1 AND e.item_id = $2 AND r.voided = false",
@@ -648,7 +656,7 @@ impl MarketplaceService {
         .fetch_optional(&self.pool)
         .await?;
 
-        let Some((buyer, total, fee, nonce, rail_pk, sig, payouts)) = row else {
+        let Some((buyer, total, fee, nonce, rail_pk, sig, payouts, binding)) = row else {
             // No linked receipt => points purchase (off-chain) or legacy grant.
             return Ok(true);
         };
@@ -692,6 +700,15 @@ impl MarketplaceService {
             nonce: nonce_arr,
             rail_pubkey,
             sig: payment::Sig(sig_arr),
+            // Chain rails anchor the receipt on chain; a row whose binding will
+            // not parse is malformed, and a malformed row proves nothing.
+            binding: match binding {
+                None | Some(serde_json::Value::Null) => None,
+                Some(v) => match serde_json::from_value::<payment::ChainBinding>(v) {
+                    Ok(b) => Some(b),
+                    Err(_) => return Ok(false),
+                },
+            },
         };
 
         Ok(payment::verify_receipt(&receipt))
