@@ -23,22 +23,10 @@
 --
 -- Applied by sqlx::migrate! on a fresh database.
 
+SET check_function_bodies = false;
+
 -- ── Extensions ──────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
-
--- ── Functions ───────────────────────────────────────────────────────────────
-CREATE FUNCTION fn_sync_helpful_count() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = NEW.review_id;
-    ELSIF TG_OP = 'DELETE' THEN
-        UPDATE reviews SET helpful_count = GREATEST(helpful_count - 1, 0) WHERE id = OLD.review_id;
-    END IF;
-    RETURN NULL;
-END;
-$$;
 
 -- ── Sequences ───────────────────────────────────────────────────────────────
 CREATE SEQUENCE _migrations_id_seq
@@ -1256,6 +1244,69 @@ CREATE TABLE wishlists (
     CONSTRAINT wishlists_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- ── Functions ───────────────────────────────────────────────────────────────
+CREATE FUNCTION fn_sync_helpful_count() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = NEW.review_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE reviews SET helpful_count = GREATEST(helpful_count - 1, 0) WHERE id = OLD.review_id;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+-- ── Views ───────────────────────────────────────────────────────────────────
+CREATE VIEW purchase_receipts AS
+ SELECT sp.id AS purchase_id,
+    sp.user_id,
+    sp.item_id,
+    sp.store_id,
+    sp.game_id,
+    si.sku AS item_sku,
+    si.name AS item_name,
+    si.kind AS item_kind,
+    sp.price_paid,
+    sp.currency,
+    sp.developer_share,
+    sp.platform_fee,
+    sp.status,
+    sp.idempotency_key,
+    sp.metadata,
+    sp.created_at AS purchased_at,
+    sp.refunded_at,
+    sp.refunded_by,
+    sp.refund_reason
+   FROM (store_purchases sp
+     JOIN store_items si ON ((si.id = sp.item_id)));
+CREATE VIEW tournament_standings AS
+ SELECT tp.tournament_id,
+    tp.user_id,
+    u.username,
+    tp.seed,
+    tp.status AS participant_status,
+    count(
+        CASE
+            WHEN (tm.winner_id = tp.user_id) THEN 1
+            ELSE NULL::integer
+        END) AS wins,
+    count(
+        CASE
+            WHEN (((tm.status)::text = 'completed'::text) AND ((tm.player1_id = tp.user_id) OR (tm.player2_id = tp.user_id)) AND (tm.winner_id <> tp.user_id)) THEN 1
+            ELSE NULL::integer
+        END) AS losses,
+    (count(
+        CASE
+            WHEN (tm.winner_id = tp.user_id) THEN 1
+            ELSE NULL::integer
+        END) * 3) AS points
+   FROM ((tournament_participants tp
+     JOIN users u ON ((u.id = tp.user_id)))
+     LEFT JOIN tournament_matches tm ON (((tm.tournament_id = tp.tournament_id) AND ((tm.player1_id = tp.user_id) OR (tm.player2_id = tp.user_id)))))
+  GROUP BY tp.tournament_id, tp.user_id, u.username, tp.seed, tp.status;
+
 -- ── Indexes ─────────────────────────────────────────────────────────────────
 CREATE INDEX game_high_scores_season_idx ON game_high_scores USING btree (game_id, season_id, score DESC);
 CREATE INDEX idx_admin_actions_admin_id ON admin_actions USING btree (admin_id);
@@ -1490,60 +1541,4 @@ COMMENT ON COLUMN subscription_tiers.price_usdc IS 'Fiat USD price (was USDC; Ci
 COMMENT ON TABLE wallet_balances IS 'DEPRECATED (non-custodial migration 20260707): fiat/custody table. No writer remains; payments settle wallet-to-wallet via payment_receipts. Safe to DROP once no reader remains.';
 COMMENT ON TABLE wallet_transactions IS 'DEPRECATED (non-custodial migration 20260707): fiat/custody table. No writer remains; payments settle wallet-to-wallet via payment_receipts. Safe to DROP once no reader remains.';
 COMMENT ON TABLE wise_recipients IS 'DEPRECATED (non-custodial migration 20260707): fiat/custody table. No writer remains; payments settle wallet-to-wallet via payment_receipts. Safe to DROP once no reader remains.';
-
--- ── Carried through verbatim ───────────────────────────────────────────────
-\restrict Zbdlmm5ywEaeRFtfGRtSUZGS3jWJWcKnrMll2tkabbatblR1ieUYPcOyJUxzfXi
-
-
-
-
-SET statement_timeout = 0;
-CREATE VIEW public.purchase_receipts AS
- SELECT sp.id AS purchase_id,
-    sp.user_id,
-    sp.item_id,
-    sp.store_id,
-    sp.game_id,
-    si.sku AS item_sku,
-    si.name AS item_name,
-    si.kind AS item_kind,
-    sp.price_paid,
-    sp.currency,
-    sp.developer_share,
-    sp.platform_fee,
-    sp.status,
-    sp.idempotency_key,
-    sp.metadata,
-    sp.created_at AS purchased_at,
-    sp.refunded_at,
-    sp.refunded_by,
-    sp.refund_reason
-   FROM (public.store_purchases sp
-     JOIN public.store_items si ON ((si.id = sp.item_id)));
-CREATE VIEW public.tournament_standings AS
- SELECT tp.tournament_id,
-    tp.user_id,
-    u.username,
-    tp.seed,
-    tp.status AS participant_status,
-    count(
-        CASE
-            WHEN (tm.winner_id = tp.user_id) THEN 1
-            ELSE NULL::integer
-        END) AS wins,
-    count(
-        CASE
-            WHEN (((tm.status)::text = 'completed'::text) AND ((tm.player1_id = tp.user_id) OR (tm.player2_id = tp.user_id)) AND (tm.winner_id <> tp.user_id)) THEN 1
-            ELSE NULL::integer
-        END) AS losses,
-    (count(
-        CASE
-            WHEN (tm.winner_id = tp.user_id) THEN 1
-            ELSE NULL::integer
-        END) * 3) AS points
-   FROM ((public.tournament_participants tp
-     JOIN public.users u ON ((u.id = tp.user_id)))
-     LEFT JOIN public.tournament_matches tm ON (((tm.tournament_id = tp.tournament_id) AND ((tm.player1_id = tp.user_id) OR (tm.player2_id = tp.user_id)))))
-  GROUP BY tp.tournament_id, tp.user_id, u.username, tp.seed, tp.status;
-\unrestrict Zbdlmm5ywEaeRFtfGRtSUZGS3jWJWcKnrMll2tkabbatblR1ieUYPcOyJUxzfXi;
 
