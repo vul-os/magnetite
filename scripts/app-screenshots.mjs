@@ -84,6 +84,53 @@ const MOUNTED = {
     { id: 'g5', title: 'Pixel Panic',     developer: 'Arcade Kernel',   category: 'arcade',   is_free: true,  fee_per_session: 0,     players_online: 3400, rating: 4.1, is_new: false },
     { id: 'g6', title: 'Cipher Cascade',  developer: 'Latch & Key',     category: 'puzzle',   is_free: false, fee_per_session: 0.02,  players_online: 64,   rating: 4.5, is_new: true },
   ] },
+  /* Single game for the game-detail route (/game/1 → api.games.get('1') →
+     /api/games/1). Without it the page renders its "Could not load this game"
+     error state. Honest fixture: no stock-photo screenshots (empty gallery,
+     never invented art), empty reviews + leaderboard (no fabricated social
+     proof), and the determinism proof-state shown as verified — what a real
+     replay-verified, signed, playable build looks like, which is the platform's
+     whole value proposition. */
+  '/api/v1/games/1': {
+    id: '1',
+    title: 'Voxel Frontier',
+    developer: 'Redshift Labs',
+    developer_id: 'dev-redshift-labs',
+    category: 'action',
+    status: 'published',
+    description:
+      'A deterministic voxel arena — build, raid, and outlast, where every match is reproducible from its input log. Clients send inputs, never state; the simulation is server-authoritative Rust, browser-native via WASM, and identical for everyone in the room.',
+    is_free: true,
+    fee_per_session: 0,
+    rating: 4.6,
+    players_min: 1,
+    players_max: 16,
+    content_rating: 'everyone',
+    screenshots: [],
+    achievements: [
+      { id: 'a1', name: 'First Landing', description: 'Win your first match.' },
+      { id: 'a2', name: 'Architect', description: 'Place 1,000 blocks in a single match.' },
+      { id: 'a3', name: 'Last Standing', description: 'Take a 16-player free-for-all.' },
+    ],
+    sessions: [],
+    system_requirements: {
+      Browser: 'Any WebAssembly + WebGL2 browser',
+      Memory: '2 GB RAM',
+      Network: 'Broadband for multiplayer; solo play needs no server',
+    },
+    similar: [],
+    live_version: '1.4.2',
+    content_hash: '9f2c4a1e8b3d6f70a3f19c4e8b2d5a1c7e0f3b6d9a2c5e8f1b4d7a0c3e6f9b2d5',
+    artifact_type: 'wasm32-wasip1',
+    github: 'redshift-labs/voxel-frontier',
+    created_at: '2026-05-12T00:00:00Z',
+    tick_rate: 30,
+    replay_verified: true,
+    signature_valid: true,
+    has_playable_artifact: true,
+  },
+  '/api/v1/games/1/leaderboard': { entries: [] },
+  '/api/v1/games/1/reviews': { reviews: [] },
   '/api/v1/matchmaking/status':      { status: 'not_in_queue' },
   /* Fixed (non-random) 14-day series so the analytics dataviz screenshot is
      reproducible — not live data, just a deterministic capture fixture. */
