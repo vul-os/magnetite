@@ -430,11 +430,108 @@
   .d3 { animation-delay: .19s; } .d4 { animation-delay: .27s; } .d5 { animation-delay: .35s; }
   @keyframes fieldflow { to { stroke-dashoffset: -520; } }
   .flowline { stroke-dasharray: 3 9; animation: fieldflow 22s linear infinite; }
+  .flowline.f2 { animation-duration: 15s; }
+  .flowline.f3 { animation-duration: 30s; }
+
+  /* ── Live hero: the record breathes ────────────────────────────────────
+     The field is the product's metaphor; here it reacts. The whole field
+     group drifts toward the pointer (--px/--py, set in JS) like iron filings
+     leaning into a magnet, and a soft violet aura glows behind the core. */
+  .field-bg svg g { transition: transform .6s var(--ease); }
+  :root.motion .field-bg svg { transform: translate(-50%, -50%) translate(var(--px, 0px), var(--py, 0px)); }
+  .hero-aura {
+    position: absolute; z-index: 0; pointer-events: none;
+    top: 50%; right: 4%; width: 620px; height: 620px; transform: translateY(-50%);
+    background: radial-gradient(circle at 50% 50%, var(--field-tint) 0%, transparent 62%);
+    opacity: .9;
+  }
+  @media (max-width: 900px) { .hero-aura { display: none; } }
+  @keyframes corepulse { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+  .corepulse { transform-box: fill-box; transform-origin: center; animation: corepulse 3.4s var(--ease) infinite; }
+
+  /* drifting field particles — pure atmosphere, no data claim */
+  .hero-dust { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent 30%, #000 64%);
+            mask-image: linear-gradient(90deg, transparent 0, transparent 30%, #000 64%); }
+  @media (max-width: 900px) { .hero-dust { display: none; } }
+  .hero-dust i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: var(--field);
+    opacity: 0; box-shadow: 0 0 6px var(--field-line); animation: dustrise linear infinite; }
+  @keyframes dustrise {
+    0% { transform: translateY(20px); opacity: 0; }
+    12% { opacity: .8; }
+    88% { opacity: .8; }
+    100% { transform: translateY(-120px); opacity: 0; }
+  }
+
+  /* animated gradient on the one accent word */
+  @keyframes inkflow { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  .hero h1 em.live-ink {
+    background: linear-gradient(100deg, var(--field-text) 0%, var(--boundary-text) 50%, var(--field-text) 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    animation: inkflow 7s var(--ease) infinite;
+  }
+
+  /* buttons catch the light */
+  .btn { position: relative; overflow: hidden; }
+  .btn-primary::after {
+    content: ''; position: absolute; top: 0; left: -140%; width: 55%; height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.28), transparent);
+    transform: skewX(-18deg); transition: left .6s var(--ease); pointer-events: none;
+  }
+  .btn-primary:hover::after { left: 150%; }
+  .btn-primary:hover { box-shadow: 0 0 0 1px var(--field-line), 0 10px 30px -12px var(--field); }
+
+  /* ── Scroll reveal (progressive; visible by default & under reduced motion) */
+  :root.motion [data-reveal] { opacity: 0; transform: translateY(22px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+  :root.motion [data-reveal].in { opacity: 1; transform: none; }
+  :root.motion [data-reveal-d='1'] { transition-delay: .06s; }
+  :root.motion [data-reveal-d='2'] { transition-delay: .12s; }
+  :root.motion [data-reveal-d='3'] { transition-delay: .18s; }
+
+  /* seam & row hovers */
+  .seam { position: relative; }
+  .seam::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--field);
+    opacity: 0; transition: opacity .2s var(--ease); }
+  .seam:hover::before { opacity: .8; }
+  .shot .frame { transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
+  .shot .frame:hover { transform: translateY(-4px); box-shadow: var(--sh-2), 0 0 0 1px var(--field-line); }
+
+  /* ── Interactive re-simulation: the signature demo, playable ──────────── */
+  .resim-run {
+    display: inline-flex; align-items: center; gap: 8px; margin-left: auto;
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    padding: 6px 12px; border-radius: var(--r-sm); cursor: pointer;
+    color: var(--field-text); background: var(--field-tint); border: 1px solid var(--field-line);
+    transition: background .18s, border-color .18s, transform .12s;
+  }
+  .resim-run:hover { background: color-mix(in srgb, var(--field) 20%, transparent); border-color: var(--field); }
+  .resim-run:active { transform: translateY(1px); }
+  .resim-run svg { width: 12px; height: 12px; }
+  .resim-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .resim-foot .rf-text { flex: 1 1 320px; }
+  /* when armed for playback, rows step in one tick at a time */
+  :root.motion .resim.armed .rrow { opacity: .12; }
+  :root.motion .resim.armed .rrow.step { opacity: 1; animation: rowstep .45s var(--ease) both; }
+  :root.motion .resim.armed .rrow.mismatch.step { animation: rowflash .6s var(--ease) both; }
+  @keyframes rowstep { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  @keyframes rowflash {
+    0% { opacity: 0; transform: translateY(-4px); }
+    30% { opacity: 1; background: color-mix(in srgb, var(--boundary) 28%, transparent); }
+    100% { opacity: 1; transform: none; }
+  }
+  .rrow .h .cur { display: inline-block; width: 7px; height: 13px; margin-left: 1px; vertical-align: -2px;
+    background: var(--field-text); animation: curblink 1s steps(1) infinite; }
+  @keyframes curblink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     .rise { animation: none; }
     .flowline { animation: none; }
+    .corepulse, .hero-dust i, .hero h1 em.live-ink { animation: none; }
+    .hero h1 em.live-ink { -webkit-text-fill-color: var(--field-text); }
+    :root.motion [data-reveal] { opacity: 1; transform: none; }
+    :root.motion .resim.armed .rrow { opacity: 1; }
     *, *::before, *::after { transition-duration: .001ms !important; }
   }
 </style>
@@ -496,6 +593,8 @@
     <!-- The motif: a dipole field. Lines close on themselves — a loop you can
          trace all the way round, which is what determinism buys. One line is
          dashed and broken: attested sensor input, which cannot be traced back. -->
+    <div class="hero-aura" aria-hidden="true"></div>
+    <div class="hero-dust" aria-hidden="true"></div>
     <div class="field-bg" aria-hidden="true">
       <svg viewBox="0 0 1500 820" fill="none">
         <g stroke="var(--field)" stroke-linecap="round">
@@ -503,7 +602,9 @@
           <path d="M415 340 C 600 216, 880 250, 975 410 C 880 570, 600 604, 415 480" opacity=".24" stroke-width="1.4"/>
           <path d="M410 300 C 640 130, 1000 184, 1120 410 C 1000 636, 640 690, 410 520" opacity=".18" stroke-width="1.4"/>
           <path d="M405 258 C 680 44, 1120 118, 1265 410 C 1120 702, 680 776, 405 562" opacity=".12" stroke-width="1.4"/>
-          <path class="flowline" d="M415 340 C 600 216, 880 250, 975 410 C 880 570, 600 604, 415 480" opacity=".55" stroke-width="1.8"/>
+          <path class="flowline" d="M420 380 C 560 300, 760 316, 830 410 C 760 504, 560 520, 420 440" opacity=".55" stroke-width="1.8"/>
+          <path class="flowline f2" d="M415 340 C 600 216, 880 250, 975 410 C 880 570, 600 604, 415 480" opacity=".5" stroke-width="1.7"/>
+          <path class="flowline f3" d="M410 300 C 640 130, 1000 184, 1120 410 C 1000 636, 640 690, 410 520" opacity=".38" stroke-width="1.6"/>
         </g>
         <!-- the one broken line -->
         <g stroke="var(--boundary)" stroke-linecap="round" stroke-width="1.6">
@@ -512,14 +613,15 @@
           <circle cx="1400" cy="410" r="3.5" fill="var(--boundary)" stroke="none" opacity=".8"/>
         </g>
         <!-- the lodestone core: everything resolves through one point -->
-        <circle cx="400" cy="410" r="6" fill="var(--field)" opacity=".7"/>
+        <circle class="corepulse" cx="400" cy="410" r="15" fill="var(--field)" opacity=".16"/>
+        <circle cx="400" cy="410" r="6" fill="var(--field)" opacity=".85"/>
       </svg>
     </div>
 
     <div class="wrap">
       <span class="eyebrow m-sm rise d1"><span class="pip"></span>Mid-redesign · the core is real · the network layer is LAN-only</span>
 
-      <h1 class="rise d1">Anyone can <em>re-run</em> the match and check the result.</h1>
+      <h1 class="rise d1">Anyone can <em class="live-ink">re-run</em> the match and check the result.</h1>
 
       <p class="tagline rise d2">Clients send inputs, never state. A deterministic WASM sandbox steps the world. Every tick lands in a log that a stranger can re-simulate from scratch and compare.</p>
 
@@ -577,7 +679,7 @@
           <p class="lead">Most anti-cheat asks a server to guess whether a player is lying. magnetite makes the match reproducible instead, so a third party can re-run it and compare hashes. Same state, same ordered commands, same tick, same seed — same result, on any machine.</p>
         </div>
 
-        <div class="resim">
+        <div class="resim" data-resim>
           <div class="resim-head">
             <div class="m-xs">Tick</div>
             <div class="m-xs">Host — authoritative run</div>
@@ -592,7 +694,13 @@
               <div class="rrow"><div class="t">1045</div><div class="h">—</div><div class="h">halted: divergence at 1044</div></div>
             </div>
           </div>
-          <div class="resim-foot"><b>Tampering located</b> Not inferred from behaviour, not scored by a heuristic — the two runs disagree at a specific tick, and the log says which one. This is what <code>verify_replay</code> does.</div>
+          <div class="resim-foot">
+            <span class="rf-text"><b>Tampering located</b> Not inferred from behaviour, not scored by a heuristic — the two runs disagree at a specific tick, and the log says which one. This is what <code>verify_replay</code> does.</span>
+            <button class="resim-run" type="button" data-resim-run aria-label="Replay the verification">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg>
+              Re-run
+            </button>
+          </div>
         </div>
 
         <div class="two" style="margin-top: 40px;">
@@ -972,6 +1080,102 @@
         var y = el.getBoundingClientRect().top + window.pageYOffset - 74;
         window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
       });
+    });
+  })();
+
+  /* ── Live-instrument enhancements (progressive; guarded by reduced motion).
+        The page is fully legible and complete if none of this runs. ─────── */
+  (function () {
+    var reduceMql = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (reduceMql.matches) return;
+    var root = document.documentElement;
+    root.classList.add('motion');
+
+    /* 1. Magnetic parallax — the hero field leans toward the pointer. */
+    var field = document.querySelector('.field-bg svg');
+    var aura = document.querySelector('.hero-aura');
+    var raf = 0, lastX = 0, lastY = 0;
+    if (field) {
+      window.addEventListener('pointermove', function (e) {
+        lastX = e.clientX; lastY = e.clientY;
+        if (raf) return;
+        raf = requestAnimationFrame(function () {
+          raf = 0;
+          var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+          var dx = ((lastX - cx) / cx) * 20, dy = ((lastY - cy) / cy) * 16;
+          field.style.setProperty('--px', dx.toFixed(1) + 'px');
+          field.style.setProperty('--py', dy.toFixed(1) + 'px');
+          if (aura) aura.style.transform = 'translateY(-50%) translate(' + (dx * 0.6).toFixed(1) + 'px,' + (dy * 0.6).toFixed(1) + 'px)';
+        });
+      }, { passive: true });
+    }
+
+    /* 2. Drifting field dust — pure atmosphere, generated once. */
+    var dust = document.querySelector('.hero-dust');
+    if (dust) {
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < 22; i++) {
+        var d = document.createElement('i');
+        d.style.left = (36 + Math.random() * 60) + '%';
+        d.style.top = (Math.random() * 100) + '%';
+        d.style.animationDuration = (5 + Math.random() * 6).toFixed(2) + 's';
+        d.style.animationDelay = (-Math.random() * 8).toFixed(2) + 's';
+        frag.appendChild(d);
+      }
+      dust.appendChild(frag);
+    }
+
+    /* 3. Scroll reveal — auto-tag content blocks, reveal as they enter frame. */
+    if ('IntersectionObserver' in window) {
+      var targets = document.querySelectorAll(
+        '.sec-head, .resim, .ledger-scroll, .seam, .shot, .two > div, .steps li, .gaps li, .band'
+      );
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+        });
+      }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+      targets.forEach(function (el, i) {
+        el.setAttribute('data-reveal', '');
+        el.setAttribute('data-reveal-d', String((i % 3) + 1));
+        io.observe(el);
+      });
+    }
+
+    /* 4. Interactive re-simulation — step the hashes in one tick at a time,
+          matches settling green, the divergence flashing at 1044. This is a
+          visual of verify_replay, drawn from the same fixture already shown. */
+    var resim = document.querySelector('[data-resim]');
+    if (resim) {
+      var rows = Array.prototype.slice.call(resim.querySelectorAll('.rrow'));
+      var timers = [];
+      function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+      function play() {
+        clearTimers();
+        resim.classList.add('armed');
+        rows.forEach(function (r) { r.classList.remove('step'); });
+        // force reflow so re-adding .step restarts the animation
+        void resim.offsetWidth;
+        rows.forEach(function (r, i) {
+          timers.push(setTimeout(function () { r.classList.add('step'); }, 260 + i * 520));
+        });
+      }
+      var btn = resim.querySelector('[data-resim-run]');
+      if (btn) btn.addEventListener('click', play);
+      // Auto-play the first time it scrolls into view.
+      if ('IntersectionObserver' in window) {
+        var once = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (en.isIntersecting) { play(); once.unobserve(en.target); }
+          });
+        }, { threshold: 0.4 });
+        once.observe(resim);
+      }
+    }
+
+    /* Respect a mid-session switch to reduced motion. */
+    (reduceMql.addEventListener ? reduceMql.addEventListener.bind(reduceMql, 'change') : reduceMql.addListener.bind(reduceMql))(function () {
+      if (reduceMql.matches) { root.classList.remove('motion'); var r = document.querySelector('[data-resim]'); if (r) r.classList.remove('armed'); }
     });
   })();
 </script>
