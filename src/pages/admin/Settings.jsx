@@ -19,11 +19,12 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Defaults used if the platform settings endpoint returns no data or is unreachable.
- * The /api/platform/settings endpoint (platform.rs) is defined and mounted in main.rs. */
+ * The /api/platform/settings endpoint (platform.rs) is defined and mounted in main.rs.
+ * NON-CUSTODIAL: there is no platform fee percentage or payout minimum to configure
+ * here — the platform takes no cut (PROTOCOL_FEE_BPS defaults to 0) and holds no
+ * funds, so those controls were removed along with the rest of the custodial surface. */
 const DEFAULT_SETTINGS = {
   platformName:              'Magnetite',
-  platformFee:               15,
-  minimumPayout:             50,
   maintenanceMode:           false,
   registrationEnabled:       true,
   emailVerificationRequired: true,
@@ -35,8 +36,6 @@ const DEFAULT_SETTINGS = {
 function serverToLocal(d) {
   return {
     platformName:              d.platform_name              ?? DEFAULT_SETTINGS.platformName,
-    platformFee:               parseFloat(d.platform_fee   ?? DEFAULT_SETTINGS.platformFee),
-    minimumPayout:             parseInt(d.minimum_payout   ?? DEFAULT_SETTINGS.minimumPayout),
     maintenanceMode:           d.maintenance_mode           ?? DEFAULT_SETTINGS.maintenanceMode,
     registrationEnabled:       d.registration_enabled       ?? DEFAULT_SETTINGS.registrationEnabled,
     emailVerificationRequired: d.email_verification_required ?? DEFAULT_SETTINGS.emailVerificationRequired,
@@ -49,8 +48,6 @@ function serverToLocal(d) {
 function localToServer(s) {
   return {
     platform_name:               s.platformName,
-    platform_fee:                s.platformFee,
-    minimum_payout:              s.minimumPayout,
     maintenance_mode:            s.maintenanceMode,
     registration_enabled:        s.registrationEnabled,
     email_verification_required: s.emailVerificationRequired,
@@ -200,36 +197,10 @@ export default function AdminSettings() {
                 </div>
               </section>
 
-              {/* Fees & Payments */}
+              {/* Session Fees — non-custodial: the platform takes no cut (PROTOCOL_FEE_BPS
+                  defaults to 0); this is only a cap on what developers may charge. */}
               <section className="settings-section">
-                <h2>Fees &amp; Payments</h2>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="platformFee">Platform Fee (%)</label>
-                    <input
-                      id="platformFee"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={settings.platformFee}
-                      onChange={(e) => update('platformFee', parseFloat(e.target.value))}
-                    />
-                    <span className="helper-text">Percentage retained per transaction</span>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="minimumPayout">Minimum Payout ($)</label>
-                    <input
-                      id="minimumPayout"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.minimumPayout}
-                      onChange={(e) => update('minimumPayout', parseInt(e.target.value))}
-                    />
-                    <span className="helper-text">Minimum balance for payout requests</span>
-                  </div>
-                </div>
+                <h2>Session Fees</h2>
                 <div className="form-group">
                   <label htmlFor="maxGameSessionFee">Max Session Fee ($)</label>
                   <input

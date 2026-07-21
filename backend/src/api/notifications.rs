@@ -28,6 +28,8 @@ pub enum NotificationType {
     FriendRequest,
     /// A wallet-to-wallet payment settled and a signed receipt was issued.
     PaymentSettled,
+    /// Legacy: subscriptions were removed (the platform charges nothing). Kept
+    /// only so historical notification rows still parse.
     SubscriptionRenewal,
     System,
 }
@@ -396,21 +398,6 @@ impl NotificationService {
             notification_type: NotificationType::PaymentSettled.as_str().to_string(),
             title: "Payment Settled".to_string(),
             body: Some(format!("A payment of {} settled to your wallet", amount)),
-            data: None,
-        })
-        .await
-    }
-
-    pub async fn create_subscription_renewal_notification(
-        &self,
-        user_id: Uuid,
-        tier_name: &str,
-    ) -> Result<Option<Notification>> {
-        self.try_create_notification(&CreateNotificationRequest {
-            user_id,
-            notification_type: NotificationType::SubscriptionRenewal.as_str().to_string(),
-            title: "Subscription Renewed".to_string(),
-            body: Some(format!("Your {} subscription has been renewed", tier_name)),
             data: None,
         })
         .await

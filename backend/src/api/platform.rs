@@ -1,11 +1,16 @@
 // Platform settings API — admin-controlled config.
+//
+// NON-CUSTODIAL: the fee/payout/deposit/withdraw settings that used to live here
+// (platform_fee_percentage, min_payout_amount, max_deposit_amount,
+// max_withdraw_amount) were removed — there is no platform-held balance, no
+// deposit, no withdrawal and no payout to configure. What remains are the two
+// operational toggles that never described money.
 use axum::{
     extract::{Extension, State},
     middleware::from_fn_with_state,
     routing::{get, put},
     Json, Router,
 };
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -16,20 +21,12 @@ use crate::error::{AppError, Result};
 
 #[derive(Debug, Serialize)]
 pub struct PlatformSettings {
-    pub platform_fee_percentage: Decimal,
-    pub min_payout_amount: Decimal,
-    pub max_deposit_amount: Decimal,
-    pub max_withdraw_amount: Decimal,
     pub maintenance_mode: bool,
     pub registration_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdatePlatformSettings {
-    pub platform_fee_percentage: Option<Decimal>,
-    pub min_payout_amount: Option<Decimal>,
-    pub max_deposit_amount: Option<Decimal>,
-    pub max_withdraw_amount: Option<Decimal>,
     pub maintenance_mode: Option<bool>,
     pub registration_enabled: Option<bool>,
 }
@@ -55,26 +52,6 @@ async fn set_setting(pool: &PgPool, key: &str, value: &str) -> Result<()> {
 }
 
 pub async fn get_settings(State(pool): State<PgPool>) -> Result<Json<PlatformSettings>> {
-    let platform_fee_percentage = get_setting(&pool, "platform_fee_percentage")
-        .await?
-        .parse::<Decimal>()
-        .map_err(|_| AppError::BadRequest("Invalid platform_fee_percentage".to_string()))?;
-
-    let min_payout_amount = get_setting(&pool, "min_payout_amount")
-        .await?
-        .parse::<Decimal>()
-        .map_err(|_| AppError::BadRequest("Invalid min_payout_amount".to_string()))?;
-
-    let max_deposit_amount = get_setting(&pool, "max_deposit_amount")
-        .await?
-        .parse::<Decimal>()
-        .map_err(|_| AppError::BadRequest("Invalid max_deposit_amount".to_string()))?;
-
-    let max_withdraw_amount = get_setting(&pool, "max_withdraw_amount")
-        .await?
-        .parse::<Decimal>()
-        .map_err(|_| AppError::BadRequest("Invalid max_withdraw_amount".to_string()))?;
-
     let maintenance_mode = get_setting(&pool, "maintenance_mode")
         .await?
         .parse::<bool>()
@@ -86,10 +63,6 @@ pub async fn get_settings(State(pool): State<PgPool>) -> Result<Json<PlatformSet
         .map_err(|_| AppError::BadRequest("Invalid registration_enabled".to_string()))?;
 
     Ok(Json(PlatformSettings {
-        platform_fee_percentage,
-        min_payout_amount,
-        max_deposit_amount,
-        max_withdraw_amount,
         maintenance_mode,
         registration_enabled,
     }))
@@ -108,42 +81,6 @@ pub async fn update_settings(
 
     if !is_admin {
         return Err(AppError::Forbidden("Admin access required".to_string()));
-    }
-
-    if let Some(fee) = payload.platform_fee_percentage {
-        if fee < Decimal::ZERO || fee > Decimal::from(100) {
-            return Err(AppError::BadRequest(
-                "platform_fee_percentage must be between 0 and 100".to_string(),
-            ));
-        }
-        set_setting(&pool, "platform_fee_percentage", &fee.to_string()).await?;
-    }
-
-    if let Some(amount) = payload.min_payout_amount {
-        if amount < Decimal::ZERO {
-            return Err(AppError::BadRequest(
-                "min_payout_amount cannot be negative".to_string(),
-            ));
-        }
-        set_setting(&pool, "min_payout_amount", &amount.to_string()).await?;
-    }
-
-    if let Some(amount) = payload.max_deposit_amount {
-        if amount < Decimal::ZERO {
-            return Err(AppError::BadRequest(
-                "max_deposit_amount cannot be negative".to_string(),
-            ));
-        }
-        set_setting(&pool, "max_deposit_amount", &amount.to_string()).await?;
-    }
-
-    if let Some(amount) = payload.max_withdraw_amount {
-        if amount < Decimal::ZERO {
-            return Err(AppError::BadRequest(
-                "max_withdraw_amount cannot be negative".to_string(),
-            ));
-        }
-        set_setting(&pool, "max_withdraw_amount", &amount.to_string()).await?;
     }
 
     if let Some(mode) = payload.maintenance_mode {
