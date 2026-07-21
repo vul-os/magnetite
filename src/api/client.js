@@ -150,41 +150,6 @@ export const api = {
     leave: () => request('/api/matchmaking/leave', { method: 'DELETE' }),
     status: () => request('/api/matchmaking/status'),
   },
-  subscriptions: {
-    /** GET /api/v1/subscriptions — list available tiers/plans */
-    plans: () => request('/api/v1/subscriptions'),
-    /** GET /api/v1/subscriptions/me — current user's active subscription */
-    current: () => request('/api/v1/subscriptions/me'),
-    create: (data) => request('/api/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
-    /**
-     * DELETE /api/v1/subscriptions — drop back to the free tier.
-     * Note: nothing is "cancelled" in a billing sense — nobody holds a mandate
-     * against the user's wallet. A tier is a receipt-backed feature flag that
-     * lapses on its own; this just relinquishes it early.
-     */
-    cancel: () => request('/api/v1/subscriptions', { method: 'DELETE' }),
-    /**
-     * POST /api/v1/subscriptions/upgrade — switch tier.
-     * planId: target tier id.
-     * receiptId: id of the signed `payment_receipts` row that paid the operator
-     *   wallet for the new tier (omitted when moving to a cheaper/free tier).
-     * There is no proration charge: nothing is billed in arrears.
-     */
-    upgrade: (planId, receiptId) =>
-      request('/api/v1/subscriptions/upgrade', {
-        method: 'POST',
-        body: JSON.stringify({
-          plan_id: planId,
-          ...(receiptId ? { receipt_id: receiptId } : {}),
-        }),
-      }),
-    /**
-     * /hours and /usage have no backend implementation (AUDIT high).
-     * Kept here so the UI can display an honest error; will be implemented in a later wave.
-     */
-    hours: () => request('/api/v1/subscriptions/hours'),
-    usage: () => request('/api/v1/subscriptions/usage'),
-  },
   search: {
     /**
      * GET /api/v1/search — full-text game/user search.
@@ -452,20 +417,9 @@ export const api = {
     // checkout (seam §3.6), so there is no bank account to register, no
     // recipient to maintain and no payout to schedule. The developer's
     // destination is simply the wallet address linked via `api.wallet.link`.
-
-    // ── Payout request (D-PAY-4) ─────────────────────────────────────────
-    /**
-     * POST /api/v1/developer/payouts
-     * data: { amount: number }
-     * Creates a payout_requests row; processed async by the payout job via Wise.
-     */
-    requestPayout: (data) =>
-      request('/api/v1/developer/payouts', { method: 'POST', body: JSON.stringify(data) }),
-    /**
-     * GET /api/v1/developer/payouts — list payout requests with status.
-     * (Was /payout-status — that route does not exist; /payouts serves both create and history.)
-     */
-    payoutStatus: () => request('/api/v1/developer/payouts'),
+    // (There is no requestPayout/payoutStatus call any more — /api/v1/developer/payouts
+    // does not exist server-side; GET /api/v1/developer/earnings is the real,
+    // receipt-backed record of what a developer was paid.)
   },
 
   // ── Wave 6: Comms Core ────────────────────────────────────────────────────

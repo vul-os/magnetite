@@ -45,7 +45,6 @@ use crate::api::reviews;
 use crate::api::search;
 use crate::api::social;
 use crate::api::streaming;
-use crate::api::subscriptions;
 use crate::api::templates;
 use crate::api::tournaments;
 use crate::api::versioning;
@@ -60,7 +59,6 @@ use crate::middleware::cors_layer;
 use crate::middleware::logging::log_request;
 use crate::middleware::rate_limit::{create_rate_limiter, rate_limit_middleware, RateLimitConfig};
 use crate::middleware::request_metrics::record_request_metrics;
-use crate::services::payment::SubscriptionService;
 use crate::ws::comms as ws_comms;
 use crate::ws::game as ws_game;
 use crate::ws::gauges::WsGauges;
@@ -132,7 +130,6 @@ async fn main() {
         .nest("/friends", social::router(pool.clone()))
         .nest("/invites", social::invites_router(pool.clone()))
         .nest("/users", social::users_router(pool.clone()))
-        .nest("/subscriptions", subscriptions::router(pool.clone()))
         .nest("/notifications", notifications::router(pool.clone()))
         // Wave 8: points economy + developer marketplace
         .nest("/points", points::router(pool.clone()))
@@ -264,21 +261,9 @@ async fn main() {
 
     // No payout batch: payments are non-custodial and settle wallet→wallet at
     // point of sale, so nothing is ever accrued or disbursed by this node.
-
-    // Subscription renewal: process expired subscriptions every hour.
-    let renewal_pool = pool.clone();
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
-        loop {
-            ticker.tick().await;
-            let svc = SubscriptionService::new(renewal_pool.clone());
-            match svc.process_renewals().await {
-                Ok(n) if n > 0 => tracing::info!("Renewed {} subscriptions", n),
-                Ok(_) => {}
-                Err(e) => tracing::error!("Subscription renewal failed: {}", e),
-            }
-        }
-    });
+    // (No subscription-renewal job either: subscriptions were removed — the
+    // platform charges nothing; the only real checkout path is dev→player
+    // through magnetite-seams → patala-solana.)
 
     // Session + token cleanup: expire stale sessions, password-reset tokens,
     // matchmaking entries, and unverified accounts every hour (mirrors notification_cleanup).

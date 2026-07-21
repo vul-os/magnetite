@@ -296,8 +296,8 @@ describe('Analytics time-series', () => {
       session_duration_stats: { avg_duration_secs: 240, total_sessions: 100 },
       revenue_breakdown: {
         total_revenue: '1000.00',
-        platform_fee: '300.00',
-        developer_earnings: '700.00',
+        platform_fee: '0.00',
+        developer_earnings: '1000.00',
         session_count: 100,
       },
       daily_revenue: [
@@ -362,7 +362,9 @@ describe('Analytics time-series', () => {
     expect(typeof point.sessions).toBe('number');
   });
 
-  it('revenue_breakdown observes 70/30 split', async () => {
+  it('revenue_breakdown takes no platform cut — developer gets 100%', async () => {
+    // Non-custodial model (DECISIONS.md §"platform takes no cut"): the developer
+    // receives the whole subtotal; the platform fee is PROTOCOL_FEE_BPS, default 0.
     api.developer.analytics.mockResolvedValue({
       game_id: 'game-uuid-001',
       daily_revenue: [],
@@ -371,8 +373,8 @@ describe('Analytics time-series', () => {
       session_duration_stats: { avg_duration_secs: 0, total_sessions: 0 },
       revenue_breakdown: {
         total_revenue: '1000.00',
-        platform_fee: '300.00',
-        developer_earnings: '700.00',
+        platform_fee: '0.00',
+        developer_earnings: '1000.00',
         session_count: 100,
       },
     });
@@ -382,10 +384,9 @@ describe('Analytics time-series', () => {
     const fee = parseFloat(rb.platform_fee);
     const earnings = parseFloat(rb.developer_earnings);
 
-    // 30/70 split
     expect(fee + earnings).toBeCloseTo(total, 2);
-    expect(earnings / total).toBeCloseTo(0.7, 2);
-    expect(fee / total).toBeCloseTo(0.3, 2);
+    expect(fee).toBe(0);
+    expect(earnings).toBeCloseTo(total, 2);
   });
 
   it('analytics propagates error for unknown game id', async () => {

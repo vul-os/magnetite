@@ -60,10 +60,12 @@ describe('useTranslation — English resolution', () => {
   });
 
   it('resolves developer analytics labels', () => {
+    // Non-custodial model: the platform takes no cut (PROTOCOL_FEE_BPS defaults
+    // to 0), so these read 0%/100% rather than the old 30/70 split.
     const { result } = renderHook(() => useTranslation(), { wrapper: EnglishWrapper });
     expect(result.current.t('developer.dailyRevenue')).toBe('Daily revenue');
-    expect(result.current.t('developer.developerEarnings')).toBe('Your earnings (70%)');
-    expect(result.current.t('developer.platformFee')).toBe('Platform fee (30%)');
+    expect(result.current.t('developer.developerEarnings')).toBe('Your earnings (100%)');
+    expect(result.current.t('developer.platformFee')).toBe('Platform fee (0%)');
   });
 
   it('resolves admin labels (refund, reviewReports)', () => {

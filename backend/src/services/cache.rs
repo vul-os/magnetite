@@ -231,7 +231,6 @@ impl CacheKeys {
     pub const GAME_LIST: &'static str = "games:list";
     pub const LEADERBOARD: &'static str = "leaderboard";
     pub const USER_PROFILE: &'static str = "user:profile";
-    pub const PLATFORM_SETTINGS: &'static str = "platform:settings";
 }
 
 pub struct CacheTTL;
@@ -240,7 +239,6 @@ impl CacheTTL {
     pub const GAME_LIST: Duration = Duration::from_secs(300);
     pub const LEADERBOARD: Duration = Duration::from_secs(60);
     pub const USER_PROFILE: Duration = Duration::from_secs(300);
-    pub const PLATFORM_SETTINGS: Duration = Duration::from_secs(600);
 }
 
 pub async fn get_game_list_cached(cache: &Cache, db: &DbPool) -> Result<Vec<crate::services::games::Game>> {
@@ -297,22 +295,6 @@ pub async fn get_user_profile_cached(
     Ok(user)
 }
 
-pub async fn get_platform_settings_cached(
-    cache: &Cache,
-    db: &DbPool,
-) -> Result<crate::services::games::PlatformSettings> {
-    if let Some(cached) = cache.get(CacheKeys::PLATFORM_SETTINGS).await {
-        if let Ok(settings) = serde_json::from_str::<crate::services::games::PlatformSettings>(&cached) {
-            return Ok(settings);
-        }
-    }
-
-    let settings = crate::services::games::get_platform_settings(db).await?;
-    let json = serde_json::to_string(&settings).map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
-    cache.set(CacheKeys::PLATFORM_SETTINGS, json, Some(CacheTTL::PLATFORM_SETTINGS)).await;
-    Ok(settings)
-}
-
 pub async fn invalidate_game_cache(cache: &Cache) {
     cache.delete(CacheKeys::GAME_LIST).await;
 }
@@ -327,10 +309,6 @@ pub async fn invalidate_leaderboard_cache(cache: &Cache, game_id: uuid::Uuid) {
 pub async fn invalidate_user_profile_cache(cache: &Cache, user_id: uuid::Uuid) {
     let key = format!("{}:{}", CacheKeys::USER_PROFILE, user_id);
     cache.delete(&key).await;
-}
-
-pub async fn invalidate_platform_settings_cache(cache: &Cache) {
-    cache.delete(CacheKeys::PLATFORM_SETTINGS).await;
 }
 
 pub struct SessionCacheKeys;
