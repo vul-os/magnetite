@@ -295,6 +295,7 @@ canonical `AuthoritativeGame` reference implementation.
 |-------|------|
 | Overview | [docs/overview.md](docs/overview.md) |
 | Getting started | [docs/getting-started.md](docs/getting-started.md) |
+| Roadmap (reference games) | [ROADMAP.md](ROADMAP.md) |
 | Architecture (seams + planes, mermaid diagram) | [docs/architecture.md](docs/architecture.md) |
 | Hosting a server (capacity-elastic nodes) | [docs/hosting-a-server.md](docs/hosting-a-server.md) |
 | Payments (non-custodial crypto) | [docs/payments.md](docs/payments.md) |
