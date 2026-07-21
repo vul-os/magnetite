@@ -251,6 +251,21 @@ keyboard/gamepad queue that *refuses* attested events at runtime, so the class
 boundary is enforced rather than merely documented) and `AttestedEventInput`, a
 transport-agnostic host-side ingress for attested events.
 
+**Also built (LAN-only): a real wire route.** The seam used to be unreachable
+over a network — there was no attested variant on `ClientNet` and no server
+route, so a correctly signed event arriving over a socket was silently
+dropped. That gap is closed: `ClientNet::AttestedEvent` carries a
+`SignedAttestedEvent` to a per-connection `AttestedIngress`, which checks, in
+order, a connection-scoped rate limit, the signature, then the
+`PlausibilityGate`, before queuing — and replies explicitly with
+`ServerNet::AttestedAck`/`AttestedReject` rather than leaving the client to
+infer a drop from silence. Unsigned attested frames have no wire
+representation at all. Both ends are pinned to the same golden fixture as
+[wibbly](https://github.com/vul-os/wibbly)'s own wire test, so the two
+independent implementations are provably compatible. This has been exercised
+over real sockets, in-process and over a LAN — not across the open internet;
+see [Status](./docs.html#status).
+
 ### What is not built
 
 Anything that **produces** a gesture event. `AttestedEventInput` contains no
