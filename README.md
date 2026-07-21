@@ -360,11 +360,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 Built as an alternative to Nakama, PlayFab, and Roblox — without the custody, without the cloud lock-in.</sub>
 
 </div>
-
----
-
-<sub><img src="docs/assets/vulos-logo.png" height="16" alt="Vulos"> · <strong>Built with purpose. Open by design.</strong></sub>
-
 ---
 
 <p align="center">
