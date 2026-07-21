@@ -74,12 +74,15 @@ const MOUNTED = {
      a stock photo), one game left unrated (rating null, not zero), and free
      games carry no price rather than "0 USDC". */
   '/api/v1/games':                   { games: [
-    { id: 'g1', title: 'Voxel Frontier',  developer: 'Redshift Labs',   category: 'action',   is_free: true,  fee_per_session: 0,     players_online: 1240, rating: 4.6, is_new: true },
+    /* players_online > 100 earns a "Popular" badge and is_new earns a "New"
+       one; a game is realistically never both at once (a brand-new game has
+       not drawn a crowd yet), which also keeps the two badges from stacking. */
+    { id: 'g1', title: 'Voxel Frontier',  developer: 'Redshift Labs',   category: 'action',   is_free: true,  fee_per_session: 0,     players_online: 1240, rating: 4.6, is_new: false },
     { id: 'g2', title: 'Nebula Drift',    developer: 'Orbital Studio',  category: 'racing',   is_free: false, fee_per_session: 0.05,  players_online: 830,  rating: 4.3, is_new: false },
     { id: 'g3', title: 'Rune & Ruin',     developer: 'Hollow Forge',    category: 'rpg',      is_free: false, fee_per_session: 0.10,  players_online: 2100, rating: 4.8, is_new: false },
-    { id: 'g4', title: 'Grid Tactics',    developer: 'Iron Meridian',   category: 'strategy', is_free: true,  fee_per_session: 0,     players_online: 560,  rating: null, is_new: false },
+    { id: 'g4', title: 'Grid Tactics',    developer: 'Iron Meridian',   category: 'strategy', is_free: true,  fee_per_session: 0,     players_online: 88,   rating: null, is_new: false },
     { id: 'g5', title: 'Pixel Panic',     developer: 'Arcade Kernel',   category: 'arcade',   is_free: true,  fee_per_session: 0,     players_online: 3400, rating: 4.1, is_new: false },
-    { id: 'g6', title: 'Cipher Cascade',  developer: 'Latch & Key',     category: 'puzzle',   is_free: false, fee_per_session: 0.02,  players_online: 410,  rating: 4.5, is_new: true },
+    { id: 'g6', title: 'Cipher Cascade',  developer: 'Latch & Key',     category: 'puzzle',   is_free: false, fee_per_session: 0.02,  players_online: 64,   rating: 4.5, is_new: true },
   ] },
   '/api/v1/matchmaking/status':      { status: 'not_in_queue' },
   /* Fixed (non-random) 14-day series so the analytics dataviz screenshot is

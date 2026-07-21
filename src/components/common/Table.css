@@ -48,7 +48,13 @@
 .table-header.sortable:hover { color: var(--color-text-primary); }
 .table-header.sorted         { color: var(--color-accent); }
 
-.header-content { display: flex; align-items: center; gap: 5px; }
+/* Scoped to the table header cell. `.header-content` is a generic class name
+   also used by page headers (Marketplace, DeveloperDashboard, GameDeploy) that
+   want a normal block column — an unscoped `display: flex` here leaked into
+   them and laid their heading/subtitle/controls out in a row (the marketplace
+   hero rendered its title overlapping its subtitle). Keep the flex where it
+   belongs: the sort-label + sort-icon inside a `.table-header`. */
+.table-header .header-content { display: flex; align-items: center; gap: 5px; }
 .sort-icon { font-size: 11px; opacity: 0.4; transition: opacity var(--transition-fast); }
 .table-header.sortable:hover .sort-icon { opacity: 1; }
 .sort-icon-neutral      { opacity: 0.25; }
