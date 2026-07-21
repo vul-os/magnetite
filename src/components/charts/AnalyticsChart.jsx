@@ -1,8 +1,16 @@
 /**
- * AnalyticsChart — dual-series time-series chart for the Developer Analytics page.
- * Renders either revenue-over-time (USD) or playtime-over-time (minutes) from a flat
- * [{ date, value }] series.  Styled to the Industrial Magnetite dark palette.
+ * AnalyticsChart — single-series time-series chart for the Developer Analytics
+ * page. Renders either revenue-over-time (USD) or playtime-over-time (minutes)
+ * from a flat [{ date, value }] series.
+ *
+ * Themed via src/styles/tokens.css, not hardcoded. Recharts needs literal
+ * colour strings (SVG attributes don't resolve CSS custom properties), so this
+ * component reads the *computed* token values off <html> and re-reads them
+ * whenever data-theme flips — the same mechanism ThemeContext uses to publish
+ * the theme. It must never fall back to a baked-in dark palette, or the chart
+ * silently stops following the user's theme (the bug this replaced).
  */
+import { useEffect, useMemo, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -13,32 +21,71 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-/* ── Design tokens (match CSS custom properties) ─────────────────────────── */
-const C = {
-  amber:   '#f5a524',
-  cyan:    '#7b61ff',
-  grid:    '#23232e',
-  text:    '#6b6b78',
-  bg:      '#111319',
-  border:  '#23232e',
+const MONO_STACK = "'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
+
+/** One series identity per the four-token colour system in DESIGN.md §2. */
+const SERIES_VAR = {
+  amber: '--spec',
+  field: '--field',
 };
 
+/** Read the live computed value of a CSS custom property off <html>. */
+function readVar(name, fallback) {
+  if (typeof window === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+/**
+ * Re-render whenever data-theme changes on <html>, so recharts (which needs
+ * literal colour strings) stays in sync with the token layer instead of
+ * freezing at whatever theme was active on first mount.
+ */
+function useThemeTick() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver((mutations) => {
+      if (mutations.some((m) => m.attributeName === 'data-theme')) {
+        setTick((t) => t + 1);
+      }
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  return tick;
+}
+
+function useChartTokens() {
+  const tick = useThemeTick();
+  return useMemo(() => ({
+    amber:  readVar(SERIES_VAR.amber, '#FFB020'),
+    field:  readVar(SERIES_VAR.field, '#8B74FF'),
+    grid:   readVar('--line', '#1C212D'),
+    text:   readVar('--ink-3', '#6B7488'),
+    bg:     readVar('--elevated', '#161A24'),
+    border: readVar('--line-2', '#2E3646'),
+    ink:    readVar('--ink', '#E7EAF2'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [tick]);
+}
+
 /* ── Custom tooltip ──────────────────────────────────────────────────────── */
-function ChartTooltip({ active, payload, label, formatter }) {
+function ChartTooltip({ active, payload, label, formatter, tokens }) {
   if (!active || !payload || !payload.length) return null;
   const raw = payload[0]?.value ?? 0;
   return (
     <div style={{
-      background: C.bg,
-      border: `1px solid ${C.border}`,
+      background: tokens.bg,
+      border: `1px solid ${tokens.border}`,
       borderRadius: 8,
       padding: '10px 14px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
     }}>
-      <p style={{ margin: '0 0 6px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: C.text, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <p style={{ margin: '0 0 6px', fontFamily: MONO_STACK, fontSize: 11, color: tokens.text, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {label}
       </p>
-      <p style={{ margin: 0, fontFamily: 'JetBrains Mono, monospace', fontSize: 17, fontWeight: 700, color: payload[0]?.color ?? C.amber }}>
+      <p style={{ margin: 0, fontFamily: MONO_STACK, fontSize: 17, fontWeight: 700, color: payload[0]?.color ?? tokens.amber }}>
         {formatter ? formatter(raw) : raw}
       </p>
     </div>
@@ -56,20 +103,21 @@ function shortDate(str) {
 /* ── AnalyticsChart ──────────────────────────────────────────────────────── */
 export default function AnalyticsChart({
   data = [],           // [{ date: 'YYYY-MM-DD', value: number }]
-  color = 'amber',     // 'amber' | 'cyan'
+  color = 'amber',     // 'amber' (--spec) | 'field' (--field) — DESIGN.md §2 accents
   gradientId,          // unique id for the SVG gradient — must be unique per page
   yFormatter,          // (value) => string
   tooltipFormatter,    // (value) => string
   height = 260,
   emptyMessage = 'No data for this period.',
 }) {
-  const stroke = color === 'cyan' ? C.cyan : C.amber;
+  const tokens = useChartTokens();
+  const stroke = color === 'field' ? tokens.field : tokens.amber;
   const gId = gradientId ?? `grad-${color}`;
 
   if (!data || data.length === 0) {
     return (
       <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: C.text }}>
+        <p style={{ fontFamily: MONO_STACK, fontSize: 13, color: tokens.text }}>
           {emptyMessage}
         </p>
       </div>
@@ -85,27 +133,27 @@ export default function AnalyticsChart({
             <stop offset="95%" stopColor={stroke} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke={C.grid} vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke={tokens.grid} vertical={false} />
         <XAxis
           dataKey="date"
-          stroke={C.text}
-          tick={{ fill: C.text, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+          stroke={tokens.text}
+          tick={{ fill: tokens.text, fontSize: 11, fontFamily: MONO_STACK }}
           tickLine={false}
           axisLine={false}
           tickFormatter={shortDate}
           interval="preserveStartEnd"
         />
         <YAxis
-          stroke={C.text}
-          tick={{ fill: C.text, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+          stroke={tokens.text}
+          tick={{ fill: tokens.text, fontSize: 11, fontFamily: MONO_STACK }}
           tickLine={false}
           axisLine={false}
           tickFormatter={yFormatter ?? ((v) => v)}
           width={56}
         />
         <Tooltip
-          content={<ChartTooltip formatter={tooltipFormatter} />}
-          cursor={{ stroke: C.grid, strokeWidth: 1 }}
+          content={<ChartTooltip formatter={tooltipFormatter} tokens={tokens} />}
+          cursor={{ stroke: tokens.grid, strokeWidth: 1 }}
         />
         <Area
           type="monotone"
@@ -115,6 +163,7 @@ export default function AnalyticsChart({
           fill={`url(#${gId})`}
           dot={false}
           activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
+          isAnimationActive={typeof window !== 'undefined' && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches}
         />
       </AreaChart>
     </ResponsiveContainer>

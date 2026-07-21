@@ -4,6 +4,10 @@ import { useTranslation } from '../i18n/useTranslation';
 import './GameCard.css';
 
 const StarRating = memo(function StarRating({ rating }) {
+  // Honest absence, not an invented 0.0 — a game with no rating yet is
+  // unrated, not "rated zero". See DESIGN.md §7 (never invent a placeholder
+  // rating) and GameDetail's identical rule for the same widget.
+  if (typeof rating !== 'number' || Number.isNaN(rating) || rating <= 0) return null;
   const fullStars = Math.floor(rating);
   const hasHalfStar = rating % 1 >= 0.5;
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
@@ -81,6 +85,13 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
   const isPopular = playersOnline > 100;
   const isNew = game.is_new || false;
 
+  // Free vs paid is the only access model (see GameDetail's identical rule):
+  // a game is free unless its developer set a positive per-session fee.
+  // Showing "0 USDC" for a free game would misstate it as priced.
+  const feePerSession = Number(game.fee_per_session ?? game.feePerSession);
+  const isPaid = Number.isFinite(feePerSession) && feePerSession > 0
+    && !(game.is_free ?? game.isFree);
+
   // Real thumbnail only — never a random stock photo. When a game has no
   // artwork (or the image fails to load) the neutral ErrorState tile renders.
   const thumbnailSrc = imageError ? null : (game.thumbnail || null);
@@ -128,11 +139,15 @@ export default memo(function GameCard({ game, loading = false, showPlayButton = 
         </div>
 
         <div className="card-footer">
-          <span className="price" role="img" aria-label={`${game.fee_per_session} USD per session`}>
-            <span className="price-value" aria-hidden="true">{game.fee_per_session}</span>
-            <span className="price-currency" aria-hidden="true">USDC</span>
-            <span className="price-period" aria-hidden="true">/{t('games.sessions')}</span>
-          </span>
+          {isPaid ? (
+            <span className="price" role="img" aria-label={`${feePerSession} USD per session`}>
+              <span className="price-value" aria-hidden="true">{feePerSession}</span>
+              <span className="price-currency" aria-hidden="true">USDC</span>
+              <span className="price-period" aria-hidden="true">/{t('games.sessions')}</span>
+            </span>
+          ) : (
+            <span className="price price-free">Free to play</span>
+          )}
         </div>
       </div>
     </article>

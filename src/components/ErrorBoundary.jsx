@@ -1,5 +1,4 @@
 import { Component } from 'react';
-import { Link } from 'react-router-dom';
 import './ErrorBoundary.css';
 
 class ErrorBoundary extends Component {
@@ -43,9 +42,18 @@ class ErrorBoundary extends Component {
               <button onClick={this.handleRetry} className="btn btn-primary">
                 Try Again
               </button>
-              <Link to="/" className="btn btn-secondary">
+              {/* A plain <a>, not <Link>: this boundary sits ABOVE
+                  <BrowserRouter> in App.jsx precisely so it can catch a crash
+                  anywhere, including inside the router tree itself. If the
+                  router (or its context) is what crashed, <Link> would throw
+                  again trying to read Router context that no longer exists —
+                  masking the real error behind a second, more confusing one.
+                  A full navigation is also the more honest recovery here: it
+                  actually re-mounts the app instead of trusting client-side
+                  routing state that may be the thing that broke. */}
+              <a href="/" className="btn btn-secondary">
                 Go Home
-              </Link>
+              </a>
             </div>
             {import.meta.env.DEV && error && (
               <details className="error-boundary-details">

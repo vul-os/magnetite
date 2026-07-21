@@ -219,12 +219,13 @@ async function makeAppContext(browser, theme) {
     try {
       localStorage.setItem('theme', t)
       localStorage.setItem('token', 'mock.screenshot.token')
+      // No `subscription`/tier field — that model was deliberately removed
+      // (non-custodial, no platform-held plans). Don't reintroduce it here.
       localStorage.setItem('user', JSON.stringify({
         id: '00000000-0000-4000-8000-000000000001',
         username: 'operator',
         email: 'operator@node.local',
         role: 'developer',
-        subscription: { tier: 'pro' },
       }))
       // Suppress one-time overlays that would otherwise cover the screenshot.
       // These key names must match the components exactly — see

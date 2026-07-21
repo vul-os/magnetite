@@ -252,4 +252,6 @@ The usual culprits, and their fixes:
 10. Run `npm run test:run` and `npm run test:a11y`.
 
 **Exemplars to copy from:** `ServerBrowser` (dense data), `GameDetail`
-(game-centric), `Login` + `auth.css` (form/auth), `Pricing` (editorial).
+(game-centric), `Login` + `auth.css` (form/auth). There is no `Pricing`
+page — the subscription/tier model was deliberately removed (see §7); do not
+recreate a pricing/tier surface.
