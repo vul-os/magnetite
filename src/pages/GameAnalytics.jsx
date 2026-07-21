@@ -278,14 +278,14 @@ export default function GameAnalytics() {
                 <span className="kicker">// {t('analytics.engagementKicker')}</span>
                 <h2>{t('analytics.playtimeChart')}</h2>
               </div>
-              <span className="chart-badge cyan">{t('analytics.min')}</span>
+              <span className="chart-badge field">{t('analytics.min')}</span>
             </div>
             {loading ? (
               <Skeleton />
             ) : (
               <AnalyticsChart
                 data={playSeries}
-                color="cyan"
+                color="field"
                 gradientId="playGrad"
                 yFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v))}
                 tooltipFormatter={fmtMin}

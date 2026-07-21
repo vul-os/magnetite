@@ -31,10 +31,14 @@ const OUT = path.join(ROOT, 'docs', 'screenshots', 'app')
  * an "unavailable" state. The unavailable routes need a signed-in user and a
  * backend that answers the way the real one does — see API_STUB below. */
 const ROUTES = [
+  { name: 'home',           path: '/home',      label: 'Marketing surface — /home' },
   { name: 'server-browser', path: '/servers',   label: 'Dense data — discovery' },
   { name: 'game-detail',    path: '/game/1',    label: 'Game-centric' },
   { name: 'login',          path: '/login',     label: 'Form / auth' },
   { name: 'marketplace',    path: '/',          label: 'Editorial — catalogue' },
+  { name: 'game-lobby',     path: '/lobby/1',   label: 'Pre-game surface', auth: true },
+  { name: 'matchmaking',    path: '/matchmaking', label: 'Pre-game surface — queue' },
+  { name: 'game-analytics', path: '/developers/analytics/1', label: 'Dataviz — developer analytics', auth: true },
 
   /* Unavailable / honest-failure states. */
   { name: 'points-rewards',   path: '/points',                  label: 'Unavailable — rewards catalogue', auth: true, click: '#points-tab-rewards' },
@@ -43,7 +47,6 @@ const ROUTES = [
   { name: 'dev-marketplace',  path: '/developers/marketplace',  label: 'Unavailable — store/item deletion', auth: true },
   { name: 'game-deploy',      path: '/developers/deploy',       label: 'Empty — no versions registered', auth: true },
   { name: 'game-deploy-webhook', path: '/developers/deploy',    label: 'Unavailable — webhook secret generation', auth: true, click: 'button:has-text("Webhook Config")' },
-  { name: 'matchmaking',      path: '/matchmaking',             label: 'Nav — newly reachable route', auth: true },
 ]
 
 /**
@@ -67,6 +70,31 @@ const MOUNTED = {
   '/api/v1/github/installations':    { installations: [] },
   '/api/v1/games':                   { games: [] },
   '/api/v1/matchmaking/status':      { status: 'not_in_queue' },
+  /* Fixed (non-random) 14-day series so the analytics dataviz screenshot is
+     reproducible — not live data, just a deterministic capture fixture. */
+  '/api/v1/developer/games/1/analytics': {
+    game_id: '1',
+    game_title: 'Cosmic Raiders',
+    summary: { total_revenue: 6420, active_players: 2310, total_sessions: 15840 },
+    daily_revenue: [
+      { date: '2026-06-18', revenue: 380 }, { date: '2026-06-19', revenue: 410 },
+      { date: '2026-06-20', revenue: 395 }, { date: '2026-06-21', revenue: 460 },
+      { date: '2026-06-22', revenue: 505 }, { date: '2026-06-23', revenue: 470 },
+      { date: '2026-06-24', revenue: 430 }, { date: '2026-06-25', revenue: 445 },
+      { date: '2026-06-26', revenue: 480 }, { date: '2026-06-27', revenue: 520 },
+      { date: '2026-06-28', revenue: 495 }, { date: '2026-06-29', revenue: 455 },
+      { date: '2026-06-30', revenue: 470 }, { date: '2026-07-01', revenue: 505 },
+    ],
+    daily_playtime: [
+      { date: '2026-06-18', minutes: 9800 },  { date: '2026-06-19', minutes: 10200 },
+      { date: '2026-06-20', minutes: 9950 },  { date: '2026-06-21', minutes: 11100 },
+      { date: '2026-06-22', minutes: 11800 }, { date: '2026-06-23', minutes: 11400 },
+      { date: '2026-06-24', minutes: 10600 }, { date: '2026-06-25', minutes: 10850 },
+      { date: '2026-06-26', minutes: 11300 }, { date: '2026-06-27', minutes: 12100 },
+      { date: '2026-06-28', minutes: 11700 }, { date: '2026-06-29', minutes: 11050 },
+      { date: '2026-06-30', minutes: 11250 }, { date: '2026-07-01', minutes: 11900 },
+    ],
+  },
 }
 
 const THEMES = ['dark', 'light']

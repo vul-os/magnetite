@@ -48,7 +48,6 @@ export { default as LoadingSpinner } from './LoadingSpinner';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as LeaderboardRow } from './LeaderboardRow';
 export { default as AchievementCard } from './AchievementCard';
-export { default as PricingCard } from './PricingCard';
 export { default as LegalLayout } from './LegalLayout';
 
 export { default as AdminSidebar } from './admin/AdminSidebar';

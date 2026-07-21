@@ -98,9 +98,9 @@ export default function GameLobby() {
             </div>
             <div className="lobby-header-right">
               {/* Points HUD */}
-              <div className="lobby-points-hud" aria-label={t('game.lobbyPoints', { count: balance.points ?? 0 })}>
+              <div className="lobby-points-hud" aria-label={t('game.lobbyPoints', { count: balance?.points ?? 0 })}>
                 <span className="lobby-points-icon" aria-hidden="true">⬡</span>
-                <span className="lobby-points-value">{(balance.points ?? 0).toLocaleString()}</span>
+                <span className="lobby-points-value">{(balance?.points ?? 0).toLocaleString()}</span>
                 <span className="lobby-points-label">{t('game.pointsUnit')}</span>
               </div>
               {/* In-game store toggle */}
@@ -176,7 +176,7 @@ export default function GameLobby() {
                 storeId={_gameId ? `game-${_gameId}` : undefined}
                 gameTitle="Lobby Store"
                 onClose={() => setShowStore(false)}
-                pointBalance={balance.points ?? 0}
+                pointBalance={balance?.points ?? 0}
               />
             </div>
           )}

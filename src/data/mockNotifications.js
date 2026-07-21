@@ -22,8 +22,10 @@ export const mockNotifications = [
   {
     id: '3',
     type: 'payout',
-    title: 'Payout Processed',
-    message: 'Your withdrawal of 150 USDC has been processed',
+    title: 'Receipt settled',
+    // Non-custodial: there is no withdrawal or payout to process, only a
+    // wallet-to-wallet settlement that mints a signed receipt. See DESIGN.md §7.
+    message: 'A 150 USDC sale settled directly to your wallet',
     read: false,
     createdAt: '2026-05-19T02:00:00Z',
     link: '/wallet',

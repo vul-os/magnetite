@@ -10,7 +10,7 @@
   top: 0;
   z-index: var(--z-sticky);
   /* Glass: very dark with a whisper of blue tint */
-  background: rgba(8, 9, 12, 0.82);
+  background: color-mix(in srgb, var(--void) 82%, transparent);
   border-bottom: 1px solid var(--color-border);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
@@ -21,10 +21,10 @@
 }
 
 .navbar.scrolled {
-  background: rgba(8, 9, 12, 0.96);
+  background: color-mix(in srgb, var(--void) 96%, transparent);
   box-shadow:
     0 1px 0 var(--color-border-strong),
-    0 8px 32px rgba(0, 0, 0, 0.55);
+    0 8px 32px color-mix(in srgb, black 55%, transparent);
   border-bottom-color: var(--color-border-strong);
 }
 
@@ -56,18 +56,18 @@
   display: block;
   object-fit: contain;
   /* accent glow — restrained */
-  filter: drop-shadow(0 0 10px rgba(123, 97, 255, 0.35));
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--field) 35%, transparent));
   transition: filter var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
 .navbar-logo:hover .logo-icon {
-  filter: drop-shadow(0 0 16px rgba(123, 97, 255, 0.55));
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--field) 55%, transparent));
   transform: translateY(-1px);
 }
 
 .navbar-logo .logo-text {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 400; /* Instrument Serif ships 400 only — never bolden it */
   font-size: var(--text-base);
   letter-spacing: -0.02em;
   transition: color var(--t-fast) var(--ease-out);
@@ -207,7 +207,7 @@
 .search-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.16), var(--shadow-glow-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--field) 16%, transparent), var(--shadow-glow-focus);
 }
 
 .search-input::placeholder { color: var(--color-text-muted); }
@@ -229,7 +229,7 @@
 }
 
 .wallet-balance:hover {
-  border-color: rgba(245, 165, 36, 0.4);
+  border-color: color-mix(in srgb, var(--spec) 40%, transparent);
   box-shadow: var(--shadow-glow-amber);
   transform: translateY(-1px);
 }
@@ -272,13 +272,13 @@
   min-width: 15px; height: 15px;
   padding: 0 3px;
   background: var(--color-error);
-  color: #fff;
+  color: var(--on-danger);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   border-radius: var(--radius-full);
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 6px rgba(255, 84, 104, 0.5);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 50%, transparent);
   animation: badge-pulse 2.4s var(--ease-in-out) infinite;
 }
 
@@ -296,7 +296,7 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(123, 97, 255, 0.06);
+  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--field) 6%, transparent);
   z-index: var(--z-dropdown);
   overflow: hidden;
   animation: dropdown-appear var(--t-fast) var(--ease-out);
@@ -318,7 +318,7 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 400; /* Instrument Serif ships 400 only — never bolden it */
   color: var(--color-text-primary);
   letter-spacing: -0.01em;
 }
@@ -350,7 +350,7 @@
 
 .notification-item:last-child  { border-bottom: none; }
 .notification-item:hover        { background: var(--color-bg-secondary); }
-.notification-item.unread       { background: rgba(123, 97, 255, 0.04); }
+.notification-item.unread       { background: color-mix(in srgb, var(--field) 4%, transparent); }
 
 .notification-icon {
   width: 32px; height: 32px;
@@ -362,8 +362,8 @@
 
 .notification-icon svg            { width: 14px; height: 14px; }
 .notification-icon.achievement    { background: var(--color-accent-soft); color: var(--color-accent); }
-.notification-icon.invite         { background: rgba(91, 157, 255, 0.12); color: var(--color-info); }
-.notification-icon.payout         { background: rgba(61, 220, 132, 0.12); color: var(--color-success); }
+.notification-icon.invite         { background: color-mix(in srgb, var(--field) 12%, transparent); color: var(--color-info); }
+.notification-icon.payout         { background: color-mix(in srgb, var(--live) 12%, transparent); color: var(--color-success); }
 
 .notification-content  { flex: 1; min-width: 0; }
 .notification-title    { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); margin-bottom: 2px; }
@@ -405,12 +405,12 @@
   background: var(--gradient-primary);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: #000;
+  color: var(--on-field);
   font-weight: 800;
   font-family: var(--font-mono);
   font-size: 13px;
   flex-shrink: 0;
-  box-shadow: 0 0 10px rgba(123, 97, 255, 0.18);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--field) 18%, transparent);
 }
 
 .chevron {
@@ -431,7 +431,7 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(123, 97, 255, 0.04);
+  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--field) 4%, transparent);
   overflow: hidden;
   animation: dropdown-appear var(--t-fast) var(--ease-out);
   transform-origin: top right;
@@ -445,7 +445,7 @@
 
 .dropdown-username {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 400; /* Instrument Serif ships 400 only — never bolden it */
   font-size: var(--text-sm);
   color: var(--color-text-primary);
   margin-bottom: 3px;
@@ -475,7 +475,7 @@
 
 .dropdown-item:hover       { background: var(--color-bg-secondary); color: var(--color-text-primary); }
 .dropdown-item.logout      { color: var(--color-error); }
-.dropdown-item.logout:hover{ background: rgba(255, 84, 104, 0.07); }
+.dropdown-item.logout:hover{ background: color-mix(in srgb, var(--danger) 7%, transparent); }
 
 .dropdown-icon { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.7; }
 .dropdown-item:hover .dropdown-icon { opacity: 1; }
@@ -506,7 +506,7 @@
 
 .dm-nav-btn.active {
   background: var(--color-accent-soft);
-  border-color: rgba(123, 97, 255, 0.25);
+  border-color: color-mix(in srgb, var(--field) 25%, transparent);
   color: var(--color-accent);
 }
 
@@ -528,7 +528,7 @@
   display: block;
 }
 
-.presence-dot-online  { background: var(--color-success); box-shadow: 0 0 5px rgba(61, 220, 132, 0.5); }
+.presence-dot-online  { background: var(--color-success); box-shadow: 0 0 5px color-mix(in srgb, var(--live) 50%, transparent); }
 .presence-dot-idle    { background: var(--color-amber); }
 .presence-dot-dnd     { background: var(--color-error); }
 .presence-dot-offline { background: var(--color-text-muted); opacity: 0.55; }
@@ -564,7 +564,7 @@
 /* ── Mobile overlay ────────────────────────────────────────────────────────── */
 .mobile-overlay {
   position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.70);
+  background: color-mix(in srgb, black 70%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: calc(var(--z-sticky) + 1);
@@ -674,12 +674,12 @@
   background: var(--gradient-primary);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: #000;
+  color: var(--on-field);
   font-weight: 800;
   font-family: var(--font-mono);
   font-size: 15px;
   flex-shrink: 0;
-  box-shadow: 0 0 10px rgba(123, 97, 255, 0.2);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--field) 20%, transparent);
 }
 
 .mobile-user-details { flex: 1; min-width: 0; }
@@ -700,7 +700,7 @@
 
 .mobile-dropdown-item:hover       { background: var(--color-bg-card); color: var(--color-text-primary); }
 .mobile-dropdown-item.logout      { color: var(--color-error); }
-.mobile-dropdown-item.logout:hover{ background: rgba(255, 84, 104, 0.07); }
+.mobile-dropdown-item.logout:hover{ background: color-mix(in srgb, var(--danger) 7%, transparent); }
 .mobile-dropdown-icon             { width: 16px; height: 16px; flex-shrink: 0; }
 
 .mobile-auth-buttons { display: flex; flex-direction: column; gap: 0.625rem; }

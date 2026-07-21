@@ -21,6 +21,14 @@ html {
   font-size: 16px;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  /* Safety net for DESIGN.md §9 ("no horizontal page overflow"): a
+     position:fixed off-canvas element (e.g. the mobile nav drawer,
+     translateX(100%) + visibility:hidden when closed) can still inflate
+     document.documentElement.scrollWidth in some engines even though nothing
+     is visible past the edge. Clipping at the root is the standard guard —
+     internal scrollers (.table-wrap etc.) keep their own overflow-x: auto
+     and are unaffected. */
+  overflow-x: hidden;
 }
 
 body {
