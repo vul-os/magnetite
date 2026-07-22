@@ -1,0 +1,56 @@
+[package]
+name = "magnetite-solana-rail"
+version = "0.1.0"
+edition = "2021"
+description = "Real SPL-USDC-on-Solana PaymentRail adapter for magnetite-seams — the thin glue over the sibling `patala` repo's patala-core/patala-solana crates (see patala/PATALA.md §4/§7)."
+license = "MIT OR Apache-2.0"
+
+# WHY THIS IS A SEPARATE CRATE AND NOT A `--features solana` FLAG IN
+# `magnetite-seams` ITSELF
+# ---------------------------------------------------------------------------
+# `magnetite-seams`'s payment seam must build and test with ZERO knowledge of
+# the sibling `patala` repo (see that crate's Cargo.toml). Cargo optional
+# dependencies do NOT give that guarantee for path (or git) sources: an
+# `optional = true` dependency to a directory that does not exist breaks
+# `cargo build`/`cargo test` of the DEPENDING crate even when the gating
+# feature is off, because Cargo must resolve the complete dependency graph
+# (every optional edge, active or not) to produce a valid `Cargo.lock` —
+# see https://github.com/rust-lang/cargo/issues/10801 and friends. This was
+# verified empirically against this exact repo while making this change: with
+# `patala-core`/`patala-solana` declared `optional = true` behind a `solana`
+# feature (feature OFF, default build), `cargo build` sometimes succeeded and
+# `cargo test` immediately afterwards — with NOTHING else changed — failed
+# with "failed to read `../../patala/patala-core/Cargo.toml`: No such file or
+# directory", purely depending on Cargo's internal resolve/lock cache state.
+# That is not a fix, it is a coin flip.
+#
+# Putting the real chain adapter in its OWN crate, never referenced (not even
+# optionally) by `magnetite-seams/Cargo.toml`, is the only construction that
+# makes `magnetite-seams`'s default build/test graph provably free of
+# `../../patala` on every invocation, not just some.
+#
+# Building solana support today: `cd magnetite-solana-rail && cargo build`.
+[dependencies]
+magnetite-seams = { path = "../magnetite-seams" }
+# GIT dependencies (not `path`), pinned to a commit on patala's `main` branch,
+# not local `path = "../../patala/..."` deps. This is what lets `backend`'s
+# OPTIONAL edge to THIS crate resolve without `../../patala` on disk: once
+# `Cargo.lock` records a resolved git rev and that rev is cached under
+# `~/.cargo/git` (either from a prior successful build, or fetched fresh over
+# the network from this real, pushed, reachable repo — verified with
+# `git ls-remote https://github.com/vul-os/patala`), Cargo does NOT need the
+# original source location again for as long as the manifest is unchanged —
+# unlike a `path` dependency, which Cargo always re-reads from disk on every
+# invocation, optional or not (see the note above). Bump `rev` when patala
+# moves; regenerate `Cargo.lock` once (with the new rev reachable) after.
+patala-core = { git = "https://github.com/vul-os/patala", rev = "b4bcc868f27f66d58508b8ba9e2658649f01b283" }
+patala-solana = { git = "https://github.com/vul-os/patala", rev = "b4bcc868f27f66d58508b8ba9e2658649f01b283" }
+async-trait = "0.1"
+blake3 = "1"
+hex = "0.4"
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

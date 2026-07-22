@@ -106,11 +106,11 @@ fn cfg(fee_wallet: Option<PubKey>) -> SolanaConfig {
 
 fn split(dev: PubKey, dev_amt: u64, op: Option<(PubKey, u64)>, bps: u16) -> PaymentSplit {
     PaymentSplit {
-        developer: crate::payment::Split {
+        developer: magnetite_seams::payment::Split {
             wallet: dev,
             amount: dev_amt,
         },
-        operator: op.map(|(wallet, amount)| crate::payment::Split { wallet, amount }),
+        operator: op.map(|(wallet, amount)| magnetite_seams::payment::Split { wallet, amount }),
         protocol_fee_bps: bps,
     }
 }
@@ -353,7 +353,7 @@ fn channels_and_escrow_are_unsupported_not_faked() {
         players: vec![PubKey([1; 32])],
         stake: 1,
         currency: "USDC".into(),
-        game: crate::blobstore::Hash::of(b"chess"),
+        game: magnetite_seams::blobstore::Hash::of(b"chess"),
     }));
     assert!(matches!(e, Err(PaymentError::Unsupported(_))));
 }

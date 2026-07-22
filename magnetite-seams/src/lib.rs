@@ -12,7 +12,7 @@
 //! | 3.3 | BlobStore | [`BlobStore`] | [`LocalBlobStore`], [`HttpBlobStore`] |
 //! | 3.4 | Discovery | [`Discovery`] | [`LanDiscovery`], [`TrackerDiscovery`] |
 //! | 3.5 | CommsProvider | [`CommsProvider`] | [`BuiltinProvider`] |
-//! | 3.6 | PaymentRail | [`PaymentRail`] | [`MockPaymentRail`] |
+//! | 3.6 | PaymentRail | [`PaymentRail`] | [`MockPaymentRail`] (real rail: `magnetite-solana-rail`, separate crate) |
 //! | 3.7 | InputProvider | [`InputProvider`] | [`LocalDeviceInput`] |
 //!
 //! **§3.7 carries a caveat the others do not.** [`InputClass`] splits input into
@@ -22,14 +22,20 @@
 //! guarantee would silently hollow out `verify_replay`.
 //!
 //! **Every default works with zero external services** — no network, no chain,
-//! no homeserver — so CI runs fully offline. Provider-specific adapters live
-//! behind their own feature-gated modules and are never referenced by
-//! non-provider code.
+//! no homeserver — so CI runs fully offline. This crate itself depends on NO
+//! provider-specific / external-service SDK, not even optionally: a bare
+//! `cargo build`/`cargo test` never touches anything outside crates.io. A
+//! provider-specific `PaymentRail` adapter (real SPL-USDC-on-Solana, via the
+//! sibling `patala` repo's `patala-core`/`patala-solana` crates) exists as its
+//! own crate, `magnetite-solana-rail` — see that crate's docs for why it is a
+//! separate crate rather than a `--features solana` flag on this one.
 //!
-//! The one optional provider that exists today is [`keyname::KeyNameNaming`]
-//! (`--features keyname`), a second `Naming` implementation using word-based
-//! key-names. It adds no dependencies and exists to prove the `Naming` seam is
-//! genuinely swappable rather than hardwired to its default.
+//! The one optional provider that IS a feature flag on this crate is
+//! [`keyname::KeyNameNaming`] (`--features keyname`), a second `Naming`
+//! implementation using word-based key-names. It adds no dependencies (path,
+//! git, or otherwise) — it only enables an extra module — and exists to prove
+//! the `Naming` seam is genuinely swappable rather than hardwired to its
+//! default.
 //!
 //! The [`defaults`] module wires one working provider set for `magnetite dev`.
 
@@ -43,9 +49,6 @@ pub mod input;
 pub mod keyname;
 pub mod naming;
 pub mod payment;
-/// Real SPL-USDC-on-Solana payment rail (`--features solana`).
-#[cfg(feature = "solana")]
-pub mod solana;
 
 pub use error::{Result, SeamError};
 

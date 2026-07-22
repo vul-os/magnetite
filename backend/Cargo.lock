@@ -2341,10 +2341,10 @@ dependencies = [
  "lettre",
  "magnetite-sdk",
  "magnetite-seams",
+ "magnetite-solana-rail",
  "maxminddb",
  "metrics",
  "metrics-exporter-prometheus",
- "patala-solana",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "redis",
@@ -2386,10 +2386,21 @@ dependencies = [
  "blake3",
  "ed25519-dalek",
  "hex",
- "patala-core",
- "patala-solana",
  "rand 0.8.6",
  "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "magnetite-solana-rail"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "hex",
+ "magnetite-seams",
+ "patala-core",
+ "patala-solana",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
@@ -2720,6 +2731,7 @@ dependencies = [
 [[package]]
 name = "patala-core"
 version = "0.1.0"
+source = "git+https://github.com/vul-os/patala?rev=b4bcc868f27f66d58508b8ba9e2658649f01b283#b4bcc868f27f66d58508b8ba9e2658649f01b283"
 dependencies = [
  "async-trait",
  "serde",
@@ -2729,6 +2741,7 @@ dependencies = [
 [[package]]
 name = "patala-solana"
 version = "0.1.0"
+source = "git+https://github.com/vul-os/patala?rev=b4bcc868f27f66d58508b8ba9e2658649f01b283#b4bcc868f27f66d58508b8ba9e2658649f01b283"
 dependencies = [
  "async-trait",
  "blake3",

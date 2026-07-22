@@ -106,9 +106,12 @@ all.
 Solana is the first real rail: its Ed25519-native keys let a player's identity
 key double as their wallet key, so the seam needs no key-mapping table.
 
-It is compiled in **only** with `--features solana` and selected **only** by
-`PAYMENT_RAIL=solana`. With the feature off the default build pulls in no chain
-dependencies, opens no sockets, and every test runs offline.
+It lives in its own crate, `magnetite-solana-rail` (not a `magnetite-seams`
+feature — `magnetite-seams` itself has zero dependency, even optional, on the
+sibling `patala` repo, so its own `cargo build`/`cargo test` never touch it).
+`backend` compiles it in **only** with `--features solana` and selects it
+**only** by `PAYMENT_RAIL=solana`. With the feature off the default build
+pulls in no chain dependencies, opens no sockets, and every test runs offline.
 
 ### What is real
 
@@ -212,15 +215,15 @@ item, chain memo binding a different item, missing memo, unaccounted extra
 recipient, missing binding, tampered signature, and RPC error.
 
 ```sh
-cargo test -p magnetite-seams --features solana
+cd magnetite-solana-rail && cargo test   # requires ../../patala checked out
 ```
 
 An opt-in live test is `#[ignore]`d and additionally gated on an env var:
 
 ```sh
 solana-test-validator -r &          # or point at devnet
-MAGNETITE_SOLANA_LIVE_RPC=http://127.0.0.1:8899 \
-  cargo test -p magnetite-seams --features solana live_rpc -- --ignored --nocapture
+cd magnetite-solana-rail && MAGNETITE_SOLANA_LIVE_RPC=http://127.0.0.1:8899 \
+  cargo test live_rpc -- --ignored --nocapture
 ```
 
 **Honest status: this rail has been exercised offline only.** The verification

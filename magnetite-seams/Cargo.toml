@@ -13,24 +13,31 @@ categories = ["game-development", "network-programming", "cryptography"]
 # magnetite-sandbox, ...). It deliberately depends on NO other magnetite crate
 # and NO provider-specific / external-service SDK — only small, well-known
 # building blocks. All six seams ship a default that works fully offline.
+#
+# This crate has ZERO dependency (not even an optional/feature-gated one) on
+# the sibling `patala` repo. It used to carry `patala-core`/`patala-solana` as
+# `optional = true` path dependencies behind a `solana` feature, which LOOKS
+# safe but is not: Cargo must resolve every optional path/git dependency to
+# build a complete `Cargo.lock`, regardless of whether the gating feature is
+# active (https://github.com/rust-lang/cargo/issues/10801 and friends) —
+# verified empirically against this exact crate: with `../../patala` absent
+# and the `solana` feature OFF, `cargo build` sometimes succeeded and
+# `cargo test` run immediately after, with nothing else changed, FAILED
+# needing `../../patala/patala-core/Cargo.toml`, purely depending on Cargo's
+# internal resolve/lock cache state. That is not a working decoupling, it is a
+# coin flip that WILL come up tails on a fresh checkout / CI runner with no
+# warm cache. The real SPL-USDC-on-Solana `PaymentRail` now lives in its own
+# crate, `../magnetite-solana-rail` (see that crate's `Cargo.toml` for the
+# full explanation) — nothing here references it, so `cargo build`/`cargo
+# test` in this crate is provably `../../patala`-free on every invocation.
 
 [features]
 default = []
 # Optional word-based naming provider (`keyname::KeyNameNaming`). Adds NO
-# dependencies — it only enables an extra module — and exists so the Naming seam
-# has a second real implementation, proving the seam is not hardwired to its
-# default.
+# dependencies (path, git, or otherwise) — it only enables an extra module —
+# and exists so the Naming seam has a second real implementation, proving the
+# seam is not hardwired to its default.
 keyname = []
-# Real SPL-USDC-on-Solana `PaymentRail` (`solana::SolanaPaymentRail`). OFF by
-# default: the offline `MockPaymentRail` stays the default rail, and with this
-# feature off the crate builds and tests with NO network and NO new deps.
-#
-# The actual transaction construction, Ed25519 signing, JSON-RPC and on-chain
-# verification used to live IN this crate (`src/solana/{mod,rpc,tx,tests}.rs`,
-# ~1760 lines). That code has MOVED to the sibling `patala` repo's
-# `patala-solana` crate (see `PATALA.md` §4/§7 there) — this feature now only
-# pulls in the thin adapter that delegates to it; see `src/solana/mod.rs`.
-solana = ["dep:tokio", "dep:serde_json", "dep:patala-solana"]
 
 [dependencies]
 ed25519-dalek = { version = "2", features = ["rand_core"] }
@@ -40,22 +47,6 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 hex = "0.4"
 rand = "0.8"
-
-# patala-core is the tiny, offline, dependency-free seam (one trait + capability
-# model + mock rail — see `patala/PATALA.md` §3, §8). It carries no chain/network
-# deps of its own, so depending on it unconditionally does not compromise the
-# default build staying offline; only `patala-solana` (below) is feature-gated.
-patala-core = { path = "../../patala/patala-core" }
-
-# --- `solana` feature only (all optional, none in the default build) ---------
-serde_json = { version = "1", optional = true }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"], optional = true }
-# The real SPL-USDC-on-Solana rail (tx construction, signing, JSON-RPC, on-chain
-# verification) — PORTED OUT of this crate and into `patala-solana` (PATALA.md
-# §4/§7). Path dependency to the sibling repo checkout for now; a released
-# build should pin a git tag instead, e.g.:
-#   patala-solana = { git = "https://github.com/vul-os/patala", tag = "vX.Y.Z", optional = true }
-patala-solana = { path = "../../patala/patala-solana", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

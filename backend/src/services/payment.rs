@@ -97,17 +97,18 @@ pub fn rail() -> &'static dyn PaymentRail {
 ///
 /// The actual chain rail (tx construction, signing, RPC, on-chain
 /// verification) is `patala_solana::SolanaRail`; this only builds the config
-/// and hands it to `magnetite_seams::solana::SolanaPaymentRail`, the thin
-/// adapter that keeps magnetite's own `PaymentRail` seam on top of it (see
-/// that module's docs and `patala/PATALA.md` §7).
+/// and hands it to `magnetite_solana_rail::SolanaPaymentRail`, the thin
+/// adapter (a separate crate, not a `magnetite-seams` feature — see that
+/// crate's docs) that keeps magnetite's own `PaymentRail` seam on top of it
+/// (see `patala/PATALA.md` §7).
 #[cfg(feature = "solana")]
 fn solana_rail_from_env(
-) -> std::result::Result<magnetite_seams::solana::SolanaPaymentRail, String> {
-    use magnetite_seams::solana::{Cluster, Commitment, SolanaConfig, SolanaPaymentRail};
-    use patala_solana::{
+) -> std::result::Result<magnetite_solana_rail::SolanaPaymentRail, String> {
+    use magnetite_solana_rail::patala_solana::{
         rpc::HttpRpc,
         tx::{pubkey_from_base58, USDC_DEVNET_MINT, USDC_MAINNET_MINT},
     };
+    use magnetite_solana_rail::{Cluster, Commitment, SolanaConfig, SolanaPaymentRail};
     use std::sync::Arc;
 
     let rpc_url = std::env::var("SOLANA_RPC_URL")
@@ -136,7 +137,7 @@ fn solana_rail_from_env(
     // `fee_wallet` stays a magnetite-level concept: `patala_core`'s seam has
     // no multi-party split, so this is only consulted by `SolanaPaymentRail`
     // to decide whether a split collapses to one payable recipient — see
-    // `magnetite_seams::solana::SolanaError::MultiPartySplit`.
+    // `magnetite_solana_rail::SolanaError::MultiPartySplit`.
     let fee_wallet = match std::env::var("SOLANA_FEE_WALLET") {
         Ok(w) => Some(
             pubkey_from_base58(&w)
@@ -158,7 +159,7 @@ fn solana_rail_from_env(
     }
 
     let cfg = SolanaConfig {
-        inner: patala_solana::SolanaConfig {
+        inner: magnetite_solana_rail::patala_solana::SolanaConfig {
             rpc_url: rpc_url.clone(),
             cluster,
             commitment,

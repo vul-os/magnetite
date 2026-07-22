@@ -44,8 +44,9 @@ pub struct PayOut {
 
 /// Where a receipt is anchored on a real chain, and to what.
 ///
-/// Present only for chain rails (see [`crate::solana`]). For the offline mock
-/// this is `None` and the receipt is worth exactly what the rail signature says.
+/// Present only for chain rails (see the separate `magnetite-solana-rail`
+/// crate). For the offline mock this is `None` and the receipt is worth
+/// exactly what the rail signature says.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChainBinding {
     /// Chain name, e.g. `"solana"`.
@@ -107,7 +108,11 @@ pub struct Receipt {
 }
 
 impl Receipt {
-    pub(crate) fn signing_bytes(&self) -> Vec<u8> {
+    /// Public (not `pub(crate)`): the out-of-tree `magnetite-solana-rail`
+    /// crate needs this to compute/verify the rail signature over a receipt
+    /// it builds — see that crate's `Cargo.toml` for why the real Solana rail
+    /// is a separate crate rather than an in-tree module.
+    pub fn signing_bytes(&self) -> Vec<u8> {
         let mut b = Vec::new();
         b.extend_from_slice(&self.buyer.0);
         b.extend_from_slice(&(self.payouts.len() as u32).to_le_bytes());

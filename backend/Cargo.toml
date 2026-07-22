@@ -52,19 +52,34 @@ maxminddb = "0.24"
 # games by content hash. Pulls in no external service — offline defaults only.
 magnetite-seams = { path = "../magnetite-seams" }
 
-# `patala-solana` (path dep to the sibling `patala` repo — see `magnetite-seams`'s
-# Cargo.toml for the same note about a released build pinning a git tag instead)
-# is referenced directly by `solana_rail_from_env` below to build
-# `patala_solana::SolanaConfig` / `HttpRpc`. Optional, `solana`-feature-gated,
-# same posture as `magnetite-seams/solana`.
-patala-solana = { path = "../../patala/patala-solana", optional = true }
+# The real SPL-USDC-on-Solana `PaymentRail` — a SEPARATE crate
+# (`../magnetite-solana-rail`, itself an unconditional path dep on the sibling
+# `patala` repo's `patala-core`/`patala-solana`), not a `magnetite-seams`
+# feature. `solana_rail_from_env` below builds
+# `magnetite_solana_rail::SolanaConfig`/`SolanaPaymentRail` and reaches
+# `patala_solana` (RPC client, mint constants) through this crate's
+# `pub use patala_solana` re-export, rather than depending on `patala-solana`
+# directly — one seam to the sibling repo, not two.
+#
+# Optional, `solana`-feature-gated — same "off by default" posture as before.
+# NOTE: this is still a path dependency to a crate that itself unconditionally
+# needs `../../patala`, so — exactly as before this refactor — resolving even
+# this OPTIONAL, INACTIVE edge can require `../../patala` to exist depending on
+# Cargo's resolve/lock cache state (see `magnetite-seams/Cargo.toml`'s longer
+# note on why that dependency was moved out of that crate entirely). This
+# backend binary was not restructured the same way because doing so would mean
+# dropping `PAYMENT_RAIL=solana` support from this binary altogether — a
+# regression the task asked NOT to make. This residual fragility is
+# pre-existing (this dependency was already an optional path dep before this
+# change) and is called out explicitly in the fix's final report.
+magnetite-solana-rail = { path = "../magnetite-solana-rail", optional = true }
 
 [features]
 default = []
 # Compile in the real SPL-USDC-on-Solana payment rail so `PAYMENT_RAIL=solana`
 # can select it. OFF by default: the offline mock rail stays the default and the
 # default build pulls in no chain dependencies and opens no sockets.
-solana = ["magnetite-seams/solana", "dep:patala-solana"]
+solana = ["dep:magnetite-solana-rail"]
 
 [dev-dependencies]
 tokio-test = "0.4"

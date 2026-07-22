@@ -1,16 +1,21 @@
 //! Seam §3.6 — a **real** `PaymentRail`: SPL USDC on Solana.
 //!
-//! Behind the `solana` cargo feature; the offline [`crate::payment::MockPaymentRail`]
-//! stays the default so CI and self-hosting need no chain, no RPC and no money.
+//! A standalone crate (not a `magnetite-seams` feature — see this crate's
+//! `Cargo.toml` for why) implementing [`magnetite_seams::payment::PaymentRail`]
+//! on top of the sibling `patala` repo's `patala-core`/`patala-solana` crates.
+//! The offline [`magnetite_seams::payment::MockPaymentRail`] stays the default
+//! rail everywhere else; nothing in `magnetite-seams` or `backend`'s default
+//! build depends on this crate existing.
 //!
-//! # This is now a THIN ADAPTER, not the rail itself
+//! # This is a THIN ADAPTER, not the rail itself
 //!
 //! The actual transaction construction, Ed25519 signing, JSON-RPC client and
 //! on-chain verification used to live HERE (`mod.rs` + `rpc.rs` + `tx.rs` +
-//! `tests.rs`, ~1760 lines, 95 tests). That code has **moved** to the sibling
-//! `patala` repo's `patala-solana` crate (see `../../patala/PATALA.md` §4 and
-//! §7 — "magnetite switches from its in-crate `PaymentRail` seam to depending
-//! on `patala`"). This module now only:
+//! `tests.rs`, ~1760 lines, 95 tests, back when this was `magnetite-seams`'s
+//! own `src/solana` module). That code has **moved** to the sibling `patala`
+//! repo's `patala-solana` crate (see `../../patala/PATALA.md` §4 and §7 —
+//! "magnetite switches from its in-crate `PaymentRail` seam to depending on
+//! `patala`"). This crate now only:
 //!
 //! 1. keeps magnetite's OWN `PaymentRail` seam
 //!    (`checkout`/`checkout_for_item`/`open_channel`/`escrow`/`verify_receipt`/
@@ -67,13 +72,19 @@
 
 use std::sync::Arc;
 
-use crate::identity::{Identity, PubKey, RawKeypairAuth, Sig};
-use crate::payment::{
+use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth, Sig};
+use magnetite_seams::payment::{
     ChainBinding, Channel, Escrow, PayOut, PaymentError, PaymentRail, PaymentSplit, Receipt,
     WagerTerms,
 };
 
 use patala_core::PaymentRail as PatalaPaymentRail;
+/// Re-exported so callers (e.g. `backend`) that need lower-level
+/// `patala_solana`/`patala_core` types (RPC client, key loading, mint
+/// constants, ...) can reach them through this ONE crate, rather than taking
+/// their own direct dependency on the sibling `patala` repo.
+pub use patala_core;
+pub use patala_solana;
 pub use patala_solana::{Cluster, Commitment};
 use patala_solana::{keys::Keypair, rpc::SolanaRpc, tx, SolanaRail};
 
