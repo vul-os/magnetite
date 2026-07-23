@@ -132,13 +132,13 @@ pub struct DailyPlaytime {
 // Wise recipient request/response types
 // ---------------------------------------------------------------------------
 
-/// POST /api/v1/developer/wise-recipient body.
-///
-/// Exactly one of the payment-method groups must be populated:
-///   • Email: set `email`
-///   • IBAN (SEPA/international): set `iban`; optionally set `bic` for non-SEPA routes
-///   • US ACH: set `routing_number` + `account_number`
-/// Stored Wise recipient row returned to clients (no sensitive bank details).
+// POST /api/v1/developer/wise-recipient body.
+//
+// Exactly one of the payment-method groups must be populated:
+//   • Email: set `email`
+//   • IBAN (SEPA/international): set `iban`; optionally set `bic` for non-SEPA routes
+//   • US ACH: set `routing_number` + `account_number`
+// Stored Wise recipient row returned to clients (no sensitive bank details).
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------

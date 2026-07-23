@@ -46,6 +46,9 @@ impl NotificationType {
         }
     }
 
+    // Deliberately an enum-string parser returning Option, not std::str::FromStr
+    // (returns Result) — callers want a nullable lookup, not an error.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "ACHIEVEMENT_UNLOCKED" => Some(NotificationType::AchievementUnlocked),

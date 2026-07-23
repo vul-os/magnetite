@@ -10,6 +10,12 @@ use crate::error::{AppError, Result};
 
 pub struct FriendService;
 
+impl Default for FriendService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FriendService {
     pub fn new() -> Self {
         Self

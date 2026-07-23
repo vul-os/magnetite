@@ -3,10 +3,17 @@ on: [push, pull_request]
 jobs:
   rust:
     runs-on: ubuntu-latest
+    # The backend crate lives in backend/ (there is no root Cargo.toml), so
+    # every cargo step must run from there.
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
       - run: cargo build --tests
       - run: cargo test
       - run: cargo clippy -- -D warnings

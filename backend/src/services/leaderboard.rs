@@ -217,8 +217,7 @@ impl LeaderboardService {
         // Sanitise the label for use in a Redis key (replace spaces/colons/slashes).
         let safe_label = season_label
             .replace(' ', "_")
-            .replace(':', "-")
-            .replace('/', "-");
+            .replace([':', '/'], "-");
         let archive_key = Self::archive_key(game_id, &safe_label);
 
         let entries: Vec<(String, i64)> = conn

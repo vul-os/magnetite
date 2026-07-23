@@ -41,9 +41,8 @@ pub async fn log_request(mut req: Request<Body>, next: Next) -> Response {
 
     let log_level = if status_u16 >= 500 {
         "ERROR"
-    } else if status_u16 >= 400 {
-        "WARN"
     } else if status_u16 >= 300 {
+        // 3xx and 4xx both log as WARN.
         "WARN"
     } else {
         "INFO"

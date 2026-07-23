@@ -329,8 +329,8 @@ fn update_player_physics(player: &mut PlayerState) {
     player.velocity_y *= FRICTION;
     player.velocity_y += GRAVITY;
 
-    player.x = player.x.max(0.0).min(1000.0);
-    player.y = player.y.max(0.0).min(1000.0);
+    player.x = player.x.clamp(0.0, 1000.0);
+    player.y = player.y.clamp(0.0, 1000.0);
 }
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {

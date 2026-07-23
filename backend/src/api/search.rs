@@ -61,6 +61,7 @@ pub struct SearchResponse {
     pub offset: i32,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn search_games(
     pool: &PgPool,
     query: &str,

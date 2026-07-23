@@ -154,7 +154,7 @@ pub async fn store_replay(
 
     // 2. Validate replay_log shape and extract metadata.
     let (duration_ticks, state_hash_final) =
-        validate_replay_log(&payload.replay_log).map_err(|e| AppError::Validation(e))?;
+        validate_replay_log(&payload.replay_log).map_err(AppError::Validation)?;
 
     // 3. Insert.
     let replay_id = Uuid::new_v4();

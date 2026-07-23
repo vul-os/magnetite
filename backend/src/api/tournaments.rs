@@ -314,7 +314,7 @@ pub async fn create_tournament(
         .ok_or_else(|| AppError::NotFound("Game not found".to_string()))?;
 
     let max_players = payload.max_players.unwrap_or(8);
-    if max_players < 2 || max_players > 512 {
+    if !(2..=512).contains(&max_players) {
         return Err(AppError::Validation(
             "max_players must be between 2 and 512".to_string(),
         ));

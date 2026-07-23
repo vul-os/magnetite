@@ -198,6 +198,7 @@ pub fn generate_ingest_key() -> String {
 /// Create a new stream record in 'offline' status.  Returns the full owner
 /// view including the freshly-generated ingest_key so the broadcaster can
 /// configure their streaming software.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_stream(
     pool: &PgPool,
     streamer_id: Uuid,

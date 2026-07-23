@@ -46,7 +46,7 @@ impl RedisRateLimiter {
     }
 
     pub async fn check_rate_limit(&self, key: &str, limit: u32) -> bool {
-        if let Some(mut conn) = self.client.get_multiplexed_async_connection().await.ok() {
+        if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
             let _now = Instant::now();
             let window_ms = self.window.as_millis() as u64;
             let now_ms = SystemTime::now()
@@ -98,7 +98,7 @@ impl RedisRateLimiter {
     }
 
     pub async fn get_remaining(&self, key: &str, limit: u32) -> u32 {
-        if let Some(mut conn) = self.client.get_multiplexed_async_connection().await.ok() {
+        if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
             let _now = Instant::now();
             let window_ms = self.window.as_millis() as u64;
             let now_ms = SystemTime::now()
@@ -133,7 +133,7 @@ impl RedisRateLimiter {
     }
 
     pub async fn reset(&self, key: &str) {
-        if let Some(mut conn) = self.client.get_multiplexed_async_connection().await.ok() {
+        if let Ok(mut conn) = self.client.get_multiplexed_async_connection().await {
             let redis_key = format!("ratelimit:{}", key);
             let _: Result<(), _> = conn.del(&redis_key).await;
         }

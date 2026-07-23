@@ -195,7 +195,7 @@ pub async fn get_leaderboard(
     Path(game_id): Path<Uuid>,
     Query(query): Query<LeaderboardQuery>,
 ) -> Result<Json<crate::api::response::PaginatedResponse<LeaderboardEntry>>> {
-    let limit = query.limit.unwrap_or(100) as i32;
+    let limit = query.limit.unwrap_or(100);
 
     let entries = sqlx::query_as::<_, (Uuid, String, i64)>(
         "SELECT u.id, u.username, ghs.score

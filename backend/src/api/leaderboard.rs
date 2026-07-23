@@ -88,8 +88,8 @@ pub async fn get_leaderboard(
     Path(game_id): Path<Uuid>,
     Query(query): Query<LeaderboardQuery>,
 ) -> Result<Json<response::PaginatedResponse<LeaderboardEntryResponse>>> {
-    let limit = query.limit.unwrap_or(100).min(1000) as i32;
-    let offset = query.offset.unwrap_or(0) as i32;
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let offset = query.offset.unwrap_or(0);
     let timeframe = query.timeframe.as_deref().unwrap_or("alltime");
     let (timeframe_cond, _timeframe_name) = get_timeframe_filter(timeframe);
 

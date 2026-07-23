@@ -398,7 +398,7 @@ pub async fn update_review(
     }
 
     if let Some(rating) = payload.rating {
-        if rating < 1 || rating > 5 {
+        if !(1..=5).contains(&rating) {
             return Err(AppError::Validation(
                 "Rating must be between 1 and 5".to_string(),
             ));

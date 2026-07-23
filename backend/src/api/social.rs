@@ -566,7 +566,7 @@ pub async fn search_users(
     State(pool): State<PgPool>,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<response::PaginatedResponse<User>>> {
-    let limit = query.limit.unwrap_or(20).min(100) as i32;
+    let limit = query.limit.unwrap_or(20).min(100);
     let search_pattern = format!("%{}%", query.q);
 
     let users = sqlx::query_as::<_, User>(

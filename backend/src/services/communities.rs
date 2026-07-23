@@ -182,6 +182,7 @@ pub async fn list_user_communities(pool: &PgPool, user_id: Uuid) -> Result<Vec<C
     Ok(rows)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_community(
     pool: &PgPool,
     id: Uuid,

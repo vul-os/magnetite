@@ -426,8 +426,8 @@ impl LoginGuard {
 
     pub async fn record_success(&self, ip: &str) {
         if let Some(mut conn) = self.redis.clone() {
-            let _: Result<(), _> = conn.del(&format!("{FAIL_PREFIX}{ip}")).await;
-            let _: Result<(), _> = conn.del(&format!("{LOCK_PREFIX}{ip}")).await;
+            let _: Result<(), _> = conn.del(format!("{FAIL_PREFIX}{ip}")).await;
+            let _: Result<(), _> = conn.del(format!("{LOCK_PREFIX}{ip}")).await;
         } else {
             self.memory.lock().unwrap().remove(ip);
         }

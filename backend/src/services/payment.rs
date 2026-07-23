@@ -376,6 +376,7 @@ pub async fn has_hosting_access(pool: &PgPool, user_id: Uuid, server_id: Uuid) -
 /// Returns `Ok(None)` when there is no such receipt OR when the stored row is
 /// malformed — a row that cannot be parsed back into the receipt it claims to be
 /// is not a receipt.
+#[allow(clippy::type_complexity)]
 pub async fn load_receipt(
     pool: &PgPool,
     buyer_id: Uuid,
