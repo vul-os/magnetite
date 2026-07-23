@@ -36,7 +36,11 @@ jobs:
       - run: npm run build
 
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned, NOT ubuntu-latest: Playwright's bundled Chromium does not support
+    # Ubuntu 26+, so `install --with-deps` on a bumped ubuntu-latest would break.
+    # 22.04 is a Playwright-supported image (alternative: the mcr playwright
+    # Docker image).
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +49,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       # The Playwright config's webServer starts `npm run dev` itself (fresh in
-      # CI), and every spec stubs its own API, so no backend is needed. The
-      # game-studio spec is excluded via testIgnore pending a rewrite.
+      # CI) and every spec stubs its own API, so no backend is needed. All 8
+      # specs run (game-studio included since its rewrite).
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
