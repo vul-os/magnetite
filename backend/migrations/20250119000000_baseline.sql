@@ -1542,3 +1542,50 @@ COMMENT ON TABLE wallet_balances IS 'DEPRECATED (non-custodial migration 2026070
 COMMENT ON TABLE wallet_transactions IS 'DEPRECATED (non-custodial migration 20260707): fiat/custody table. No writer remains; payments settle wallet-to-wallet via payment_receipts. Safe to DROP once no reader remains.';
 COMMENT ON TABLE wise_recipients IS 'DEPRECATED (non-custodial migration 20260707): fiat/custody table. No writer remains; payments settle wallet-to-wallet via payment_receipts. Safe to DROP once no reader remains.';
 
+
+-- ============================================================================
+-- Reference-data seeds (restored 2026-07-23): the fold (53891c1) was schema-
+-- only, so these config/catalogue rows loaded by the pre-fold chain were
+-- dropped from the baseline. A fresh DB needs them: marketplace categories,
+-- platform settings, subscription tiers, active season. categories/tiers/
+-- seasons are verbatim from the original migrations; platform_settings is the
+-- 7-key end state (later migrations dropped the wallet/AML keys and the
+-- 'description' column), so it is reproduced from the chain's final rows.
+-- ============================================================================
+
+-- categories (20250126_categories)
+INSERT INTO categories (name, slug, icon, sort_order) VALUES
+('Action', 'action', '🎮', 1),
+('Adventure', 'adventure', '🗺️', 2),
+('Puzzle', 'puzzle', '🧩', 3),
+('Strategy', 'strategy', '♟️', 4),
+('RPG', 'rpg', '⚔️', 5),
+('Sports', 'sports', '⚽', 6),
+('Racing', 'racing', '🏎️', 7),
+('Simulation', 'simulation', '🎯', 8),
+('Multiplayer', 'multiplayer', '👥', 9);
+
+-- platform_settings (chain end state — 7 surviving keys)
+INSERT INTO platform_settings (key, value) VALUES 
+    ('default_subscription_tier', 'free'),
+    ('maintenance_mode', 'false'),
+    ('max_deposit_amount', '10000'),
+    ('max_withdraw_amount', '10000'),
+    ('min_payout_amount', '25'),
+    ('platform_fee_percentage', '30'),
+    ('registration_enabled', 'true')
+ON CONFLICT (key) DO NOTHING;
+
+-- subscription_tiers (20250130_subscription_model)
+INSERT INTO subscription_tiers (id, name, slug, price_usdc, price_zar, features, max_games) VALUES
+('00000000-0000-0000-0000-000000000001', 'Free', 'free', 0, 0, '{"access": ["free_games"], "hours": 0}', 0),
+('00000000-0000-0000-0000-000000000002', 'Basic', 'basic', 4.99, 99, '{"access": ["all_games"], "hours": 600}', 999),
+('00000000-0000-0000-0000-000000000003', 'Pro', 'pro', 9.99, 199, '{"access": ["all_games"], "hours": 3000}', 999),
+('00000000-0000-0000-0000-000000000004', 'Unlimited', 'unlimited', 19.99, 399, '{"access": ["all_games"], "hours": -1}', 999)
+ON CONFLICT (slug) DO NOTHING;
+
+-- seasons (20260531_economy)
+INSERT INTO seasons (name, starts_at, is_active)
+VALUES ('Season 1 — Launch', NOW(), true)
+ON CONFLICT DO NOTHING;
+
