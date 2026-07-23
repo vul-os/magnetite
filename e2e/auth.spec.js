@@ -30,9 +30,10 @@ test.describe('Auth', () => {
   });
 
   test('form validation — shows error on empty submit', async ({ page }) => {
-    // Submit button text is "Sign In"; error container has role="alert" and class auth-error
-    await page.click('button.auth-submit-btn');
-    await expect(page.locator('[role="alert"].auth-error')).toBeVisible();
+    // Submit button has class auth-submit; a rejected sign-in renders the
+    // error container <div class="auth-alert" role="alert">.
+    await page.click('button.auth-submit');
+    await expect(page.locator('[role="alert"].auth-alert')).toBeVisible();
   });
 
   test('sign-in button present', async ({ page }) => {

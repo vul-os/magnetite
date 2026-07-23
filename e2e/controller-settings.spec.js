@@ -31,12 +31,13 @@ test.describe('Controller Settings', () => {
   });
 
   test('binding rows are listed', async ({ page }) => {
-    await page.waitForTimeout(400);
-    const rows = await page
-      .locator('.cs-binding-row, [class*="binding-row"], [class*="binding"]')
-      .all();
-    // Expect at least some binding rows (14 default actions)
-    expect(rows.length).toBeGreaterThan(0);
+    // The binding editor lives under the "Input Bindings" tab; the default tab
+    // is "Gamepads", so switch first. Rows render for every ACTION_LABELS entry
+    // and need no connected gamepad.
+    await page.getByRole('tab', { name: 'Input Bindings' }).click();
+    const rows = page.locator('.binding-row');
+    await expect(rows.first()).toBeVisible();
+    expect(await rows.count()).toBeGreaterThan(0);
   });
 
   test('action labels are displayed in binding rows', async ({ page }) => {
@@ -65,17 +66,10 @@ test.describe('Controller Settings', () => {
   });
 
   test('no gamepad connected message shown when no controller attached', async ({ page }) => {
-    await page.waitForTimeout(400);
-    // The hook checks navigator.getGamepads; in Playwright no gamepad is connected.
-    const noController = page.locator(
-      'text=/No controller/i, text=/no gamepad/i, text=/connect/i, [class*="no-controller"], [class*="empty"]'
-    );
-    if (await noController.count() > 0) {
-      await expect(noController.first()).toBeVisible();
-    } else {
-      // Page still shows binding table even without a controller
-      await expect(page.locator('h1, h2').first()).toBeVisible();
-    }
+    // The default "Gamepads" tab renders .controller-no-gamepad when
+    // navigator.getGamepads reports none — which is always the case under
+    // Playwright (no controller attached).
+    await expect(page.locator('.controller-no-gamepad').first()).toBeVisible();
   });
 
   test('page has accessible buttons', async ({ page }) => {
@@ -85,47 +79,27 @@ test.describe('Controller Settings', () => {
 });
 
 test.describe('Controller Settings — binding interaction', () => {
-  test('clicking a Bind button enters listening state', async ({ page }) => {
+  test('clicking a Remap button enters listening state', async ({ page }) => {
     await page.goto('/settings/controller');
-    await page.waitForTimeout(500);
+    await page.getByRole('tab', { name: 'Input Bindings' }).click();
 
-    const bindBtn = page.locator('button:has-text("Bind"), button:has-text("Rebind"), button:has-text("Press"), [class*="listen-btn"]');
-    if (await bindBtn.count() === 0) {
-      test.skip();
-      return;
-    }
+    // Each binding row has a "Remap <action>" button; clicking it puts that row
+    // into the listening state (entering the state is client-side and needs no
+    // gamepad — only capturing the actual input does).
+    await page.getByRole('button', { name: /^Remap / }).first().click();
 
-    await bindBtn.first().click();
-    await page.waitForTimeout(200);
-
-    // After clicking, the button text or UI should indicate listening state.
-    const listening = page.locator('text=/listening/i, text=/press/i, text=/awaiting/i, [class*="listening"]');
-    if (await listening.count() > 0) {
-      await expect(listening.first()).toBeVisible();
-    } else {
-      // Even without explicit text, the page should remain stable
-      await expect(page.locator('h1, h2').first()).toBeVisible();
-    }
+    await expect(page.locator('.binding-row.binding-listening').first()).toBeVisible();
+    await expect(page.locator('.listening-badge')).toBeVisible();
   });
 
   test('Reset button restores defaults without crashing', async ({ page }) => {
     await page.goto('/settings/controller');
-    await page.waitForTimeout(500);
+    await page.getByRole('tab', { name: 'Input Bindings' }).click();
 
-    const resetBtn = page.locator('button:has-text("Reset"), button:has-text("Default")');
-    if (await resetBtn.count() === 0) {
-      test.skip();
-      return;
-    }
+    // "Reset all bindings to defaults" lives in the bindings toolbar.
+    await page.getByRole('button', { name: 'Reset all bindings to defaults' }).click();
 
-    await resetBtn.first().click();
-    await page.waitForTimeout(300);
-
-    // Page should still display binding rows after reset
-    const rows = await page
-      .locator('.cs-binding-row, [class*="binding-row"], [class*="binding"]')
-      .all();
-    expect(rows.length).toBeGreaterThanOrEqual(0); // no crash
-    await expect(page.locator('h1, h2').first()).toBeVisible();
+    // The binding editor still renders its rows after a reset (no crash).
+    await expect(page.locator('.binding-row').first()).toBeVisible();
   });
 });
