@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'dist-ssr', 'node_modules', '**/target/**', 'coverage', 'public/sw.js']),
+  // 'site/assets/vendor' holds third-party minified bundles (marked, mermaid)
+  // vendored for the CDN-free landing page — never our code to lint.
+  globalIgnores(['dist', 'dist-ssr', 'node_modules', '**/target/**', 'coverage', 'public/sw.js', 'site/assets/vendor']),
 
   // Application source (browser runtime)
   {
