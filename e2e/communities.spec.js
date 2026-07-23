@@ -16,10 +16,13 @@ const COMMUNITIES = [
   { id: 'c1', name: 'Rustaceans',   icon_url: null, description: 'Rust gamedev', member_count: 3 },
   { id: 'c2', name: 'Speedrunners', icon_url: null, description: 'Go fast',      member_count: 2 },
 ];
+// The backend serialises the channel type as `kind` (channels.kind), which is
+// what useChannels filters on to build textChannels — so the fixture must use
+// `kind`, not `type`, or the first-text-channel auto-select never fires.
 const CHANNELS = [
-  { id: 'ch1', name: 'general',      type: 'text' },
-  { id: 'ch2', name: 'off-topic',    type: 'text' },
-  { id: 'ch3', name: 'Voice Lounge', type: 'voice' },
+  { id: 'ch1', name: 'general',      kind: 'text',  community_id: 'c1', position: 0 },
+  { id: 'ch2', name: 'off-topic',    kind: 'text',  community_id: 'c1', position: 1 },
+  { id: 'ch3', name: 'Voice Lounge', kind: 'voice', community_id: 'c1', position: 2 },
 ];
 const MEMBERS = [
   { id: 'm1', username: 'alice', display_name: 'Alice', status: 'online',  roles: [] },
@@ -92,10 +95,9 @@ test.describe('Communities', () => {
     ).not.toHaveCount(0);
   });
 
-  test('message composer appears after selecting a text channel', async ({ page }) => {
-    // The layout opens on a "Select a channel" prompt; picking the first text
-    // channel activates it and reveals the MessageComposer (.message-composer).
-    await page.locator('.channel-item').first().click();
+  test('message composer is present on the auto-selected text channel', async ({ page }) => {
+    // The first text channel is auto-selected on load, which mounts the
+    // MessageComposer (.message-composer) — no manual channel click needed.
     await expect(page.locator('.message-composer')).toBeVisible();
   });
 
