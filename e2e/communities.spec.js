@@ -1,11 +1,60 @@
 import { test, expect } from '@playwright/test';
 import { CommunitiesPage } from './page-objects/communities.page.js';
 
+// The Discord-style layout only renders once communities data loads (otherwise
+// the page shows a "Join a community" empty state). CommsContext cascades:
+// communities → first community → its channels → first text channel → messages,
+// plus a per-community members fetch. Stub all of those (cross-origin, so CORS)
+// so the server rail, channel sidebar, member list and composer render without a
+// backend. Two communities let the rail-switch test click a second server.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': '*',
+};
+const COMMUNITIES = [
+  { id: 'c1', name: 'Rustaceans',   icon_url: null, description: 'Rust gamedev', member_count: 3 },
+  { id: 'c2', name: 'Speedrunners', icon_url: null, description: 'Go fast',      member_count: 2 },
+];
+const CHANNELS = [
+  { id: 'ch1', name: 'general',      type: 'text' },
+  { id: 'ch2', name: 'off-topic',    type: 'text' },
+  { id: 'ch3', name: 'Voice Lounge', type: 'voice' },
+];
+const MEMBERS = [
+  { id: 'm1', username: 'alice', display_name: 'Alice', status: 'online',  roles: [] },
+  { id: 'm2', username: 'bob',   display_name: 'Bob',   status: 'online',  roles: [] },
+  { id: 'm3', username: 'carol', display_name: 'Carol', status: 'offline', roles: [] },
+];
+const MESSAGES = [
+  { id: 'msg1', channel_id: 'ch1', content: 'Hey everyone!', created_at: '2026-07-23T10:00:00Z', author: { id: 'm1', username: 'alice', display_name: 'Alice' } },
+  { id: 'msg2', channel_id: 'ch1', content: 'Welcome in',    created_at: '2026-07-23T10:01:00Z', author: { id: 'm2', username: 'bob',   display_name: 'Bob' } },
+];
+
+async function stubComms(page) {
+  await page.route('**/api/v1/**', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS });
+      return;
+    }
+    const path = new URL(route.request().url()).pathname;
+    const json = (obj) =>
+      route.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+    if (path === '/api/v1/communities') return json({ communities: COMMUNITIES });
+    if (/\/api\/v1\/communities\/[^/]+\/channels$/.test(path)) return json({ channels: CHANNELS });
+    if (/\/api\/v1\/communities\/[^/]+\/members$/.test(path)) return json({ members: MEMBERS });
+    if (/\/api\/v1\/communities\/[^/]+\/voice-rooms$/.test(path)) return json({ rooms: [] });
+    if (/\/api\/v1\/channels\/[^/]+\/messages$/.test(path)) return json({ messages: MESSAGES });
+    return route.continue();
+  });
+}
+
 test.describe('Communities', () => {
   let communitiesPage;
 
   test.beforeEach(async ({ page }) => {
     communitiesPage = new CommunitiesPage(page);
+    await stubComms(page);
     await communitiesPage.navigate('/communities');
   });
 
@@ -43,13 +92,11 @@ test.describe('Communities', () => {
     ).not.toHaveCount(0);
   });
 
-  test('message composer is present', async ({ page }) => {
-    // MessageComposer renders a textarea or input for typing messages.
-    await expect(
-      page.locator(
-        '.message-composer, [placeholder*="Message" i], textarea[placeholder*="message" i], .composer-input'
-      )
-    ).not.toHaveCount(0);
+  test('message composer appears after selecting a text channel', async ({ page }) => {
+    // The layout opens on a "Select a channel" prompt; picking the first text
+    // channel activates it and reveals the MessageComposer (.message-composer).
+    await page.locator('.channel-item').first().click();
+    await expect(page.locator('.message-composer')).toBeVisible();
   });
 
   test('page is keyboard reachable — focusable elements present', async ({ page }) => {
@@ -62,6 +109,7 @@ test.describe('Communities', () => {
 
 test.describe('Communities — server rail interaction', () => {
   test('clicking a community icon in the rail switches the active server', async ({ page }) => {
+    await stubComms(page);
     await page.goto('/communities');
     // Wait for data to load from the API.
     await page.waitForTimeout(500);
