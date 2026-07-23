@@ -109,14 +109,28 @@ All payment variables are optional; the defaults need no external service.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PAYMENT_RAIL` | `mock` | Settlement rail. `mock` issues deterministic signed receipts fully offline — this is what CI and `magnetite dev` use |
+| `PAYMENT_RAIL` | `mock` | Settlement rail: `mock` or `solana`. `mock` issues deterministic signed receipts fully offline — this is what CI and `magnetite dev` use. `solana` selects the real SPL-USDC rail and requires building with `--features solana` (see the **Solana rail** section below); an unknown or not-compiled-in value is fatal at startup |
 | `PROTOCOL_FEE_BPS` | `0` | Protocol fee in basis points, taken **on top of** the subtotal. The developer receives the whole subtotal |
 | `OPERATOR_WALLET_PUBKEY` | — | Hex Ed25519 pubkey that receives hosting / paid-tier fees. Only needed if this node sells hosting or paid tiers |
-| `CHAIN_RPC_URL` | — | Placeholder. **Unused** by the mock rail; reserved for a future on-chain rail |
-| `CHAIN_ID` | — | Placeholder. **Unused** by the mock rail |
-| `STABLECOIN_ADDRESS` | — | Placeholder. **Unused** by the mock rail |
+| `CHAIN_RPC_URL` | — | Dormant generic-config field; the Solana rail below reads `SOLANA_RPC_URL` instead |
+| `CHAIN_ID` | — | Dormant generic-config field, unused by both rails |
+| `STABLECOIN_ADDRESS` | — | Dormant generic-config field, unused by both rails |
 
-No real on-chain rail is implemented yet.
+### Solana rail (`PAYMENT_RAIL=solana`, build with `--features solana`)
+
+A real, non-custodial SPL-USDC settlement rail on Solana
+(`magnetite-solana-rail` → `patala-solana`), off by default. When selected, the
+node validates every field at startup and refuses to boot on a misconfiguration
+(e.g. a mainnet cluster with `PROTOCOL_FEE_BPS > 0` but no fee wallet).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SOLANA_RPC_URL` | — | JSON-RPC endpoint (required); must be an `http(s)://` URL |
+| `SOLANA_CLUSTER` | — | `mainnet-beta` \| `devnet` \| `testnet` \| `localnet` (required) |
+| `SOLANA_COMMITMENT` | `finalized` | `confirmed` \| `finalized` |
+| `SOLANA_USDC_MINT` | canonical mint for the cluster | base58 USDC mint address |
+| `SOLANA_FEE_WALLET` | — | base58; **required when `PROTOCOL_FEE_BPS > 0`** |
+| `SOLANA_KEYPAIR_PATH` / `SOLANA_KEYPAIR` | — | Optional signer (`chmod 600`); absent ⇒ the rail is verify-only |
 
 ---
 
