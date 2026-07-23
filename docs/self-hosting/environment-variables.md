@@ -50,6 +50,8 @@ optional.
 | `RUST_LOG` | `info` | Log level: `error`, `warn`, `info`, `debug`, `trace` |
 | `APP_ENV` | `development` | `development` or `production` |
 | `APP_URL` | `http://localhost:8080` | Public base URL |
+| `TRUST_PROXY` | `false` | `true` trusts `X-Forwarded-For` when resolving the real client IP behind a reverse proxy — affects rate limiting, analytics, and the superadmin IP allowlist |
+| `TRUSTED_PROXY_COUNT` | `1` | Number of trusted reverse-proxy hops in front of the node (used with `TRUST_PROXY`) |
 
 ---
 
@@ -59,6 +61,24 @@ optional.
 |----------|---------|-------------|
 | `ACCESS_TOKEN_EXPIRY` | `900` | Access token lifetime in seconds (15 min) |
 | `REFRESH_TOKEN_EXPIRY` | `604800` | Refresh token lifetime in seconds (7 days) |
+
+---
+
+## Superadmin panel
+
+The operator console at `/superadmin`. It is **disabled unless both
+`SUPERADMIN_EMAIL` and a password/hash are set** — with neither configured the
+routes are never mounted.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SUPERADMIN_EMAIL` | — | Login email; required to enable the panel |
+| `SUPERADMIN_PASSWORD_HASH` | — | Argon2 PHC-string credential (**preferred**); takes precedence over `SUPERADMIN_PASSWORD` |
+| `SUPERADMIN_PASSWORD` | — | Plaintext credential fallback; logs a warning — use the hash in production |
+| `SUPERADMIN_IP_ALLOWLIST` | — (off) | Comma-separated IPs / CIDRs; when set, only these may reach the panel. Unset means no IP restriction |
+| `SUPERADMIN_SECURE_COOKIE` | `true` when `APP_ENV=production`, else `false` | Sets the `Secure` flag on the session cookie |
+| `SUPERADMIN_SESSION_TTL_SECS` | `7200` | Session lifetime in seconds (2 h) |
+| `SUPERADMIN_SESSION_BACKEND` | Redis if reachable, else in-memory | Set to `memory` to force in-memory session + lockout storage (ignores `REDIS_URL`) |
 
 ---
 
