@@ -615,9 +615,10 @@ fn cmd_dev(crate_path: &Path, port: u16, max_players: u32) -> Result<()> {
 
     println!("Loading `{}`…", wasm_path.display());
     println!();
+    let tick_hz = magnetite_runtime::MatchConfig::auto(max_players).tick_hz;
     println!("  Connect URL : {connect_url}");
     println!("  Topology    : SingleRoom (max {max_players} players)");
-    println!("  Tick rate   : 20 Hz");
+    println!("  Tick rate   : {tick_hz} Hz");
     println!();
     println!("Press Ctrl-C to stop.");
     println!();

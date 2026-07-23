@@ -239,7 +239,7 @@ can open directly:
   Connect URL : ws://127.0.0.1:54321
   Play URL    : http://localhost:54321/play?token=dev-token
   Topology    : SingleRoom (max 4 players)
-  Tick rate   : 20 Hz
+  Tick rate   : 60 Hz
 
 Press Ctrl-C to stop.
 ```
