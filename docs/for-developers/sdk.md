@@ -37,8 +37,12 @@ pub trait GameLogic {
     fn state(&self) -> &GameState;
     fn players(&self) -> Vec<PlayerId>;
     fn metadata(&self) -> GameMetadata;
+    fn snapshot(&self) -> Snapshot;
+    fn restore(&mut self, snapshot: Snapshot);
 }
 ```
+
+All eight methods are required — none have default implementations.
 
 | Method | Called by platform | Notes |
 |--------|--------------------|-------|
@@ -47,17 +51,25 @@ pub trait GameLogic {
 | `tick` | `metadata().tick_rate` Hz | Advance simulation |
 | `state` | after each tick | Return `&GameState` — platform reads it for broadcast |
 | `players` | on player join/leave | List of active `PlayerId`s |
-| `metadata` | session initialisation | Name, `max_players`, `tick_rate` |
+| `metadata` | session initialisation | Name, version, player counts, `tick_rate`, description |
+| `snapshot` | rollback / replay / cloud save | Capture full state as a `Snapshot` |
+| `restore` | rollback / replay resume | Rebuild state from a `Snapshot` |
 
 ### `GameMetadata`
 
 ```rust
 pub struct GameMetadata {
-    pub name: String,
-    pub max_players: usize,
-    pub tick_rate: u32,   // ticks per second
+    pub name:        String,   // human-readable display name
+    pub version:     String,   // semantic version, e.g. "1.2.3"
+    pub max_players: usize,    // max simultaneous players
+    pub min_players: usize,    // min players required to start
+    pub tick_rate:   u32,      // authoritative tick rate in Hz
+    pub description: String,   // storefront blurb (plain text, ≤ 200 chars)
 }
 ```
+
+`GameMetadata` implements `Default`, so you can fill only the fields you care
+about with `..GameMetadata::default()`.
 
 ---
 
@@ -69,9 +81,10 @@ The full snapshot of one player's controls at a single timestamp.
 
 ```rust
 pub struct Input {
-    pub keys: KeyState,
-    pub mouse: MouseState,
-    pub timestamp: u64,   // milliseconds since session start
+    pub keys:         KeyState,
+    pub mouse:        MouseState,
+    pub sequence:     u64,   // monotonically increasing frame counter (client-local)
+    pub timestamp_ms: u64,   // client wall-clock time in ms (for latency measurement)
 }
 ```
 
@@ -79,13 +92,16 @@ pub struct Input {
 
 ```rust
 pub struct KeyState {
-    pub forward:  bool,
-    pub backward: bool,
-    pub left:     bool,
-    pub right:    bool,
-    pub jump:     bool,
-    pub crouch:   bool,
-    pub attack:   bool,
+    pub forward:          bool,
+    pub backward:         bool,
+    pub left:             bool,
+    pub right:            bool,
+    pub jump:             bool,
+    pub crouch:           bool,
+    pub attack:           bool,
+    pub secondary_attack: bool,
+    pub interact:         bool,
+    pub sprint:           bool,
 }
 ```
 
@@ -104,7 +120,7 @@ pub struct MouseState {
 
 ### `KeyCode` (enum)
 
-`Forward | Backward | Left | Right | Jump | Crouch | Attack`
+`Forward | Backward | Left | Right | Jump | Crouch | Attack | SecondaryAttack | Interact | Sprint | Escape | Custom(u8)`
 
 ### `Action` (enum returned by `handle_input`)
 
@@ -259,31 +275,31 @@ WebSocket instead (handled by the platform's `ws/game.rs` module).
 
 ```rust
 use magnetite_sdk::{
-    GameLogic, GameMetadata, GameState, Input, Action, PlayerId,
-    state::{PlayerState, Position, Rotation},
+    export_game,
+    game::{GameLogic, GameMetadata},
+    input::{Action, Input},
+    state::{GameState, PlayerId, Snapshot},
 };
-use std::collections::HashMap;
 
 pub struct PongGame {
-    players: HashMap<PlayerId, PlayerState>,
-    tick: u64,
+    state: GameState,
 }
 
 impl GameLogic for PongGame {
     fn new() -> Self {
-        Self { players: HashMap::new(), tick: 0 }
+        Self { state: GameState::default() }
     }
 
     fn handle_input(&mut self, player_id: PlayerId, input: Input) -> Action {
-        if let Some(ps) = self.players.get_mut(&player_id) {
-            if input.keys.up { ps.position.y += 5.0; }
-            if input.keys.down { ps.position.y -= 5.0; }
+        if let Some(ps) = self.state.player_mut(player_id) {
+            if input.keys.forward  { ps.position.y += 5.0; }
+            if input.keys.backward { ps.position.y -= 5.0; }
         }
         Action::None
     }
 
     fn tick(&mut self) {
-        self.tick += 1;
+        self.state.tick += 1;
         // advance ball, detect collisions, update scores …
     }
 
@@ -291,12 +307,31 @@ impl GameLogic for PongGame {
         &self.state
     }
 
-    fn players(&self) -> Vec<PlayerId> { self.players.keys().cloned().collect() }
+    fn players(&self) -> Vec<PlayerId> {
+        self.state.players.iter().map(|p| p.id).collect()
+    }
 
     fn metadata(&self) -> GameMetadata {
-        GameMetadata { name: "pong".into(), max_players: 2, tick_rate: 60 }
+        GameMetadata {
+            name: "pong".into(),
+            max_players: 2,
+            min_players: 2,
+            tick_rate: 60,
+            description: "Two-player Pong".into(),
+            ..GameMetadata::default()
+        }
+    }
+
+    fn snapshot(&self) -> Snapshot {
+        Snapshot::new(self.state.tick, self.state.clone())
+    }
+
+    fn restore(&mut self, snapshot: Snapshot) {
+        self.state = snapshot.state;
     }
 }
+
+export_game!(PongGame);
 ```
 
 ---
