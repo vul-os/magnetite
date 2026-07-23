@@ -81,12 +81,12 @@ test.describe('Communities', () => {
   });
 
   test('channel items appear in the sidebar', async ({ page }) => {
-    // Wait briefly for data to load from the API.
-    await page.waitForTimeout(500);
-    const channels = await page
-      .locator('.channel-btn, .channel-item, [class*="channel-item"]')
-      .all();
-    expect(channels.length).toBeGreaterThan(0);
+    // Channels render once the community's channel list loads. Wait for the
+    // first item — .all() does not auto-wait, so a fixed timeout races the
+    // cascade under parallel load (the flake this replaces).
+    const channels = page.locator('.channel-item');
+    await expect(channels.first()).toBeVisible();
+    expect(await channels.count()).toBeGreaterThan(0);
   });
 
   test('member list panel is present', async ({ page }) => {
@@ -102,10 +102,10 @@ test.describe('Communities', () => {
   });
 
   test('page is keyboard reachable — focusable elements present', async ({ page }) => {
-    const focusable = await page
-      .locator('button, a, input, textarea, [tabindex="0"]')
-      .all();
-    expect(focusable.length).toBeGreaterThan(0);
+    await expect(page.locator('button').first()).toBeVisible();
+    expect(
+      await page.locator('button, a, input, textarea, [tabindex="0"]').count()
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -113,20 +113,15 @@ test.describe('Communities — server rail interaction', () => {
   test('clicking a community icon in the rail switches the active server', async ({ page }) => {
     await stubComms(page);
     await page.goto('/communities');
-    // Wait for data to load from the API.
-    await page.waitForTimeout(500);
 
-    const railItems = await page
-      .locator('.server-btn, .server-icon, [class*="server-btn"]')
-      .all();
+    // The rail populates with a home button plus one .server-icon per community.
+    const railItems = page.locator('.server-icon');
+    await expect(railItems.first()).toBeVisible();
+    expect(await railItems.count()).toBeGreaterThan(1);
 
-    if (railItems.length > 1) {
-      await railItems[1].click();
-      // After switching, channels should update (or at minimum the page stays intact).
-      await expect(page.locator('.channel-sidebar, .channels-panel, [class*="channel"]')).not.toHaveCount(0);
-    } else {
-      // Only one community in mock — page should still be usable.
-      expect(railItems.length).toBeGreaterThanOrEqual(1);
-    }
+    // Click a community icon (index 0 is the home/DMs button); the channel
+    // sidebar stays present after switching servers.
+    await railItems.nth(1).click();
+    await expect(page.locator('.channel-list')).toBeVisible();
   });
 });
