@@ -87,6 +87,10 @@ async function makeThemeContext(browser, theme) {
     viewport: VIEWPORT,
     deviceScaleFactor: 2,
     colorScheme: theme,
+    // Freeze the reveal/field-line animations to their settled state so
+    // captures are deterministic (mid-animation frames made every re-run
+    // differ), matching app-screenshots.mjs.
+    reducedMotion: 'reduce',
   })
   // The site has no explicit light/dark toggle (it's dark-only by design, like
   // magnetite's graphite theme), but we still drive both Playwright colorScheme
@@ -211,6 +215,10 @@ async function makeAppContext(browser, theme) {
     viewport: VIEWPORT,
     deviceScaleFactor: 2,
     colorScheme: theme,
+    // Freeze the reveal/field-line animations to their settled state so
+    // captures are deterministic (mid-animation frames made every re-run
+    // differ), matching app-screenshots.mjs.
+    reducedMotion: 'reduce',
   })
   // Seed before first paint: the theme the app reads (ThemeContext uses the
   // `theme` key), plus a signed-in user so authenticated chrome renders. The
