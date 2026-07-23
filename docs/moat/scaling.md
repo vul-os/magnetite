@@ -97,7 +97,7 @@ loopback, debug build, Apple M-series, 2026-06-03.
 | max | 24 557.0 μs |
 
 > The WS latency is dominated by the tokio async scheduler and the server's tick boundary
-> (default `tick_hz = 30` for SingleRoom → 33 ms per tick). The round-trip includes:
+> (default `tick_hz = 60` for SingleRoom → ~16.7 ms per tick). The round-trip includes:
 > client send → kernel TCP → server `ws.next()` poll → tick boundary → Ack serialise →
 > kernel TCP → client `ws.next()` poll. Pure network RTT on loopback is < 0.1 ms.
 >
