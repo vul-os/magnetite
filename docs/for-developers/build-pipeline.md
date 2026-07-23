@@ -27,7 +27,7 @@ Build workflow
   • cargo build --target wasm32-unknown-unknown --release
   • wasm-bindgen --target web --out-dir dist
   • Upload dist/ artifacts (WASM + JS bindings) to S3 / object store
-  • POST build status back to /api/v1/github/repos/{owner}/{repo}/build-status
+  • POST build result to /api/v1/github/builds/{build_id}/report
         │
         │  artifacts available
         ▼
@@ -66,9 +66,9 @@ Magnetite ships a GitHub App that provides two things:
 POST /api/v1/github/repos/register
 Authorization: Bearer <access_token>
 {
-  "owner": "your-gh-user",
-  "repo": "my-game",
-  "installation_id": "12345678"
+  "repository": "your-gh-user/my-game",
+  "title": "My Game",
+  "description": "A deterministic Rust game"
 }
 ```
 
