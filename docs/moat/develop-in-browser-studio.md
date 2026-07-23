@@ -1,7 +1,7 @@
 # In-Browser Studio Code Editor
 
-This document covers the **Game Studio** UI at `/studio` — the browser-based
-entry point for creating and deploying Magnetite games. It complements the
+This document covers the **Game Studio** UI at `/developers/studio` — the
+browser-based entry point for creating and deploying Magnetite games. It complements the
 lower-level [`develop-in-browser.md`](develop-in-browser.md), which covers the
 `magnetite dev` / `magnetite-web-client` runtime protocol in detail.
 
@@ -15,8 +15,9 @@ through three steps in the browser:
 1. **Choose a Template** — select from the registered game templates (fetched
    via `GET /api/v1/templates`).
 2. **Configure** — enter a game name and optional description.
-3. **Get Started** — registers the game (`POST /api/v1/games`) and returns CLI
-   commands plus a live in-browser preview panel.
+3. **Get Started** — registers the game
+   (`POST /api/v1/developer/games/scaffold`) and returns CLI commands plus a
+   live in-browser preview panel.
 
 No local toolchain is required to reach Step 3. The CLI commands shown
 (`magnetite install`, `magnetite build`, `magnetite dev`, `magnetite deploy`)
@@ -71,13 +72,13 @@ returns to Step 1.
 
 ### Step 3 — Get Started
 
-On submit the Studio calls `POST /api/v1/games` with:
+On submit the Studio calls `POST /api/v1/developer/games/scaffold` with:
 
 ```json
 {
-  "title": "My Game",
-  "description": "Optional description",
-  "category": "action"
+  "name": "My Game",
+  "template_id": "arena-shooter",
+  "description": "Optional description"
 }
 ```
 
@@ -151,7 +152,7 @@ for setup instructions.
 | `src/pages/GameStudio.jsx` | Studio page (template picker + configure + get-started) |
 | `src/components/GamePreview.jsx` | Embedded WS preview canvas |
 | `backend/src/api/templates.rs` | `GET /api/v1/templates` |
-| `backend/src/api/games.rs` | `POST /api/v1/games` (create game, returns game_id) |
+| `backend/src/api/developer.rs` | `POST /api/v1/developer/games/scaffold` (`scaffold_game`, returns game_id) |
 | `backend/src/api/github.rs` | GitHub App webhook + installation endpoints |
 | `magnetite-web-client/src/` | Browser WebSocket client (ServerNet/ClientNet protocol) |
 
