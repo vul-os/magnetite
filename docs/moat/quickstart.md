@@ -85,7 +85,7 @@ pub trait AuthoritativeGame: Send + 'static {
 | `validate` | Translate untrusted raw `Input` → 0+ authoritative `Command`s, or return `Err(RejectReason)` |
 | `step` | Advance state by one tick given the ordered (player, command) list; this is your game loop |
 | `snapshot` / `restore` | Full state serialisation (for replay, shard handoff, periodic broadcast) |
-| `delta` | Compact diff since a prior snapshot (broadcast every tick) |
+| `delta` | Compact diff since a prior snapshot, broadcast every tick. **Native servers only today** — the Wasm sandbox sends a full snapshot instead of calling your `delta` (a `mag_delta` export is deferred, see DECISIONS.md S3), so a browser game must still implement `delta` to compile but it is not yet invoked. |
 | `view_for` | Per-player interest-filtered view — **only this is sent to that player** |
 
 ### Minimal working example

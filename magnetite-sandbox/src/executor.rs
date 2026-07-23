@@ -469,7 +469,7 @@ impl GameExecutor for WasmExecutor {
     /// Returns the current cached snapshot as a conservative full-state delta.
     /// The runtime can diff against the baseline snapshot when a compact delta
     /// is needed.  A future `mag_delta` export path can be added when the trait
-    /// is updated to `&mut self` (tracked in DECISIONS.md as M8).
+    /// is updated to `&mut self` (tracked in DECISIONS.md as S3).
     ///
     /// # Determinism note
     ///
