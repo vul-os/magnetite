@@ -95,6 +95,32 @@ get a new pair without re-logging in.
 | `PUT` | `/:id` | required | Update game (owner only) |
 | `DELETE` | `/:id` | admin | Delete game |
 | `GET` | `/:id/leaderboard` | — | Top scores for a game |
+| `GET` | `/:id/play-metadata` | — | Play-page metadata: live version, playable-artifact availability, content rating |
+
+### Reviews & ratings
+
+Served under the same `/api/v1/games` prefix (the reviews router is merged in).
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/:id/rating` | — | Aggregate rating summary for a game |
+| `GET` | `/:id/reviews` | — | List a game's reviews |
+| `POST` | `/:id/reviews` | required | Create a review; body `{ rating, content? }` |
+| `PUT` | `/:id/reviews/:review_id` | required | Update your own review |
+| `DELETE` | `/:id/reviews/:review_id` | required | Delete your own review |
+| `POST` | `/:id/reviews/:review_id/helpful` | required | Toggle "helpful" on a review |
+| `POST` | `/:id/reviews/:review_id/report` | required | Report a review; body `{ reason }` |
+
+---
+
+## Contact — `/api/v1/contact`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/` | — | Submit a contact message; body `{ name, email, subject, message }` |
+
+Also reachable as `POST /api/v1/games/contact` (the reviews router's own mount);
+`/api/v1/contact` is the canonical path.
 
 ---
 
