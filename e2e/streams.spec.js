@@ -1,11 +1,41 @@
 import { test, expect } from '@playwright/test';
 import { StreamsPage } from './page-objects/streams.page.js';
 
+// The live-stream grid comes from GET /api/v1/streams (api.streams.list('global')),
+// called cross-origin (VITE_API_URL, default http://localhost:8080), so a fulfilled
+// response needs CORS headers. A small honest fixture lets cards render without a
+// live backend; on a real fetch error the page sets streams to [] (no cards).
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': '*',
+};
+const STREAMS = [
+  { id: 's1', title: 'Ranked grind to Diamond', game: 'Voxel Frontier', streamer: 'AliceRust', viewerCount: 1420, thumbnailUrl: null, liveAt: '2026-07-23T10:00:00Z' },
+  { id: 's2', title: 'Chill build session',     game: 'Grid Tactics',   streamer: 'BobBuilds', viewerCount: 340,  thumbnailUrl: null, liveAt: '2026-07-23T09:30:00Z' },
+  { id: 's3', title: 'Speedrun attempts',       game: 'Nebula Drift',   streamer: 'CarolFast', viewerCount: 88,   thumbnailUrl: null, liveAt: '2026-07-23T09:00:00Z' },
+];
+
+async function stubStreams(page) {
+  await page.route('**/api/v1/streams', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: { ...CORS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streams: STREAMS }),
+    });
+  });
+}
+
 test.describe('Streams Browse', () => {
   let streamsPage;
 
   test.beforeEach(async ({ page }) => {
     streamsPage = new StreamsPage(page);
+    await stubStreams(page);
     await streamsPage.navigate('/streams');
   });
 
@@ -57,61 +87,33 @@ test.describe('Streams Browse', () => {
   });
 
   test('viewer count labels are present on stream cards', async ({ page }) => {
-    await page.waitForTimeout(500);
-    // Stream cards show viewer counts from the API response
-    const viewerEls = page.locator('[class*="viewer"], text=/\\d+ viewer/i');
-    if (await viewerEls.count() > 0) {
-      await expect(viewerEls.first()).toBeVisible();
-    } else {
-      // Fallback: stream cards still present
-      expect(await page.locator('.stream-card, [class*="stream-card"]').count()).toBeGreaterThan(0);
-    }
+    // Each StreamCard renders a .stream-card__viewer-chip with the count.
+    await expect(page.locator('[class*="viewer"]').first()).toBeVisible();
   });
 });
 
 test.describe('Streams — Go Live panel', () => {
   test('Go Live panel appears when Go Live button is clicked', async ({ page }) => {
+    await stubStreams(page);
     await page.goto('/streams');
-    await page.waitForTimeout(500);
 
-    const goLiveBtn = page.locator('button:has-text("Go Live"), .go-live-btn');
-    if (await goLiveBtn.count() === 0) {
-      test.skip();
-      return;
-    }
-
-    await goLiveBtn.first().click();
-    await page.waitForTimeout(300);
-
-    // GoLivePanel overlay or modal should appear
-    await expect(
-      page.locator('.go-live-panel, [class*="go-live-panel"], [class*="golive"]')
-    ).toBeVisible();
+    // .streams-golive-btn is the header toggle specifically (the open panel adds
+    // its own "Go live" button, so match by class, not accessible name). The
+    // panel is #golive-panel, rendered only while open.
+    await page.locator('.streams-golive-btn').click();
+    await expect(page.locator('#golive-panel')).toBeVisible();
   });
 
   test('Go Live panel can be dismissed', async ({ page }) => {
+    await stubStreams(page);
     await page.goto('/streams');
-    await page.waitForTimeout(500);
 
-    const goLiveBtn = page.locator('button:has-text("Go Live"), .go-live-btn');
-    if (await goLiveBtn.count() === 0) {
-      test.skip();
-      return;
-    }
+    const toggle = page.locator('.streams-golive-btn');
+    await toggle.click();
+    await expect(page.locator('#golive-panel')).toBeVisible();
 
-    await goLiveBtn.first().click();
-    await page.waitForTimeout(300);
-
-    // Dismiss via Escape or a cancel/close button
-    const cancelBtn = page.locator('button:has-text("Cancel"), button:has-text("Close"), [aria-label*="close" i]');
-    if (await cancelBtn.count() > 0) {
-      await cancelBtn.first().click();
-    } else {
-      await page.keyboard.press('Escape');
-    }
-
-    await page.waitForTimeout(300);
-    // Panel should no longer be visible
-    await expect(page.locator('.go-live-panel')).not.toBeVisible();
+    // Clicking the same toggle again (now labelled "Cancel") closes the panel.
+    await toggle.click();
+    await expect(page.locator('#golive-panel')).toBeHidden();
   });
 });
