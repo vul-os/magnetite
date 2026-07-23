@@ -245,6 +245,22 @@ IAM role. The bucket region is taken from `BACKUP_S3_REGION` (not `AWS_REGION`).
 
 ---
 
+## Analytics & GeoIP
+
+The superadmin analytics pipeline (traffic, referrers, country breakdown). All
+optional — analytics runs by default with no external service, and GeoIP
+enrichment stays off until a database is provided.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANALYTICS_ENABLED` | `true` | Set to `false` to disable analytics collection entirely |
+| `ANALYTICS_SAMPLE_RATE` | `1.0` | Fraction of requests sampled, clamped to `0.0`–`1.0` |
+| `ANALYTICS_RETENTION_DAYS` | `90` | Days of analytics rows to keep before the cleanup job prunes them (must be > 0) |
+| `GEO_COUNTRY_HEADER` | `cf-ipcountry` | Request header carrying the visitor's country code (e.g. from Cloudflare); matched case-insensitively |
+| `GEOIP_DB_PATH` | — | Path to a MaxMind GeoIP database for country enrichment. Unset or unreadable simply disables enrichment (logged once) |
+
+---
+
 ## Frontend (Vite build-time)
 
 These variables are injected at build time by Vite and available as `import.meta.env.*`
