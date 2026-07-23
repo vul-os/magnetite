@@ -50,6 +50,8 @@ optional.
 | `RUST_LOG` | `info` | Log level: `error`, `warn`, `info`, `debug`, `trace` |
 | `APP_ENV` | `development` | `development` or `production` |
 | `APP_URL` | `http://localhost:8080` | Public base URL |
+| `API_BASE_URL` | — (empty) | Base URL used to build absolute stream watch URLs (`{API_BASE_URL}/api/v1/streams/{id}/hls`) |
+| `APP_BASE_URL` | `http://localhost:5173` | Frontend base URL used to build links in outbound emails (verification, password reset) |
 | `TRUST_PROXY` | `false` | `true` trusts `X-Forwarded-For` when resolving the real client IP behind a reverse proxy — affects rate limiting, analytics, and the superadmin IP allowlist |
 | `TRUSTED_PROXY_COUNT` | `1` | Number of trusted reverse-proxy hops in front of the node (used with `TRUST_PROXY`) |
 
@@ -199,6 +201,7 @@ is returned rather than silent no-op).
 |----------|---------|-------------|
 | `EMAIL_PROVIDER` | `resend` | `resend` or `ses` |
 | `EMAIL_FROM` | `Magnetite <noreply@magnetite.gg>` | Full sender address shown in the From header |
+| `CONTACT_NOTIFY_EMAIL` | — (empty) | Recipient for contact-form submissions. Empty (default) sends no notification |
 
 **Resend** (recommended — one API key, no SMTP setup):
 
@@ -225,6 +228,7 @@ Generate SES SMTP credentials in the AWS console under **IAM → SES SMTP creden
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MEDIA_SERVER_BASE_URL` | — | Base URL of an external MediaMTX (or equivalent) media server (e.g. `http://mediamtx:8888`). The backend proxies `/streams/:id/hls.m3u8` to this URL. Empty by default; if unset, the watch endpoint returns HTTP 503. Optional — the backend has no dependency on a media server, and in Docker Compose MediaMTX sits behind the `media` profile. Media is per-operator: a stream/room record carries its own `media_host`, which always wins. |
+| `UPLOADS_DIR` | `./uploads` | Directory where uploaded profile images are stored |
 
 ---
 
@@ -233,6 +237,7 @@ Generate SES SMTP credentials in the AWS console under **IAM → SES SMTP creden
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GAME_SERVER_WS_BASE` | `ws://localhost:8080` | WebSocket base URL used by matchmaking to set `server_endpoint` on new game sessions. In single-server dev mode this defaults to the backend's own host. **Bucket-D**: dedicated or auto-scaled game servers require a separate deployment and this URL. |
+| `RUNTIME_BIN_PATH` | — | Path to the compiled game-runtime binary. When set, the node can spawn a game server locally (dev); unset ⇒ the external runner seam is used |
 
 ---
 
