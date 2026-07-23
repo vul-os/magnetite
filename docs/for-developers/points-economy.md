@@ -68,18 +68,18 @@ CREATE TABLE point_balances (
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/points/balance` | User | Your current balance |
-| `GET` | `/api/points/balance/:user_id` | Public | Any user's balance |
-| `POST` | `/api/points/award` | Admin / Game server | Award points to a user |
-| `POST` | `/api/points/spend` | User | Spend your own points |
-| `GET` | `/api/points/history` | User | Paginated ledger history |
-| `GET` | `/api/points/leaderboard` | Public | Top balances (platform or per-game) |
-| `POST` | `/api/points/season-reset` | Admin | Close season, reset balances, start new season |
+| `GET` | `/api/v1/points/balance` | User | Your current balance |
+| `GET` | `/api/v1/points/balance/:user_id` | Public | Any user's balance |
+| `POST` | `/api/v1/points/award` | Admin / Game server | Award points to a user |
+| `POST` | `/api/v1/points/spend` | User | Spend your own points |
+| `GET` | `/api/v1/points/history` | User | Paginated ledger history |
+| `GET` | `/api/v1/points/leaderboard` | Public | Top balances (platform or per-game) |
+| `POST` | `/api/v1/points/season/reset` | Admin | Close season, reset balances, start new season |
 
 ### Award points (game server)
 
 ```http
-POST /api/points/award
+POST /api/v1/points/award
 Authorization: Bearer <server-jwt>
 Content-Type: application/json
 
@@ -95,7 +95,7 @@ Content-Type: application/json
 ### Spend points (user)
 
 ```http
-POST /api/points/spend
+POST /api/v1/points/spend
 Authorization: Bearer <user-jwt>
 Content-Type: application/json
 
@@ -172,7 +172,7 @@ fn on_lap_complete(&self, player_id: PlayerId, lap_time_ms: u64) {
 
 ## Points leaderboard
 
-The `/api/points/leaderboard` endpoint returns top balances for the current season.
+The `/api/v1/points/leaderboard` endpoint returns top balances for the current season.
 Pass `?game_id=<uuid>` to filter to points earned in a specific game.
 
 The Points dashboard page (`/points`) in the frontend shows the player's own balance,
@@ -183,7 +183,7 @@ recent history, and their rank in the global leaderboard.
 ## Season lifecycle
 
 1. A season is seeded automatically (`Season 1 — Launch`) on first migration.
-2. At the end of a competitive period, an admin calls `POST /api/points/season-reset`
+2. At the end of a competitive period, an admin calls `POST /api/v1/points/season/reset`
    with `new_season_name`. The service:
    - Closes the current season (`ended_at = NOW()`).
    - Zeroes all `point_balances` rows (records the old balance in the final ledger entry).
