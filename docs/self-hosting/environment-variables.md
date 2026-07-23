@@ -226,6 +226,25 @@ Generate SES SMTP credentials in the AWS console under **IAM → SES SMTP creden
 
 ---
 
+## Database backups
+
+The backup job dumps the database on a schedule and stores each dump either on
+local disk or in S3, selected by `BACKUP_STORAGE_TYPE` (an unknown value is a
+hard error at backup time).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKUP_STORAGE_TYPE` | `local` | `local` or `s3` |
+| `BACKUP_LOCAL_DIR` | `/var/lib/magnetite/backups` | Directory for `local` backups |
+| `BACKUP_S3_BUCKET` | — | Destination bucket; **required** when `BACKUP_STORAGE_TYPE=s3` |
+| `BACKUP_S3_REGION` | `us-east-1` | Bucket region for `s3` backups |
+
+For `s3`, AWS credentials come from the standard AWS provider chain —
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` in the environment, or an attached
+IAM role. The bucket region is taken from `BACKUP_S3_REGION` (not `AWS_REGION`).
+
+---
+
 ## Frontend (Vite build-time)
 
 These variables are injected at build time by Vite and available as `import.meta.env.*`
