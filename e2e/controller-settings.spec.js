@@ -73,8 +73,8 @@ test.describe('Controller Settings', () => {
   });
 
   test('page has accessible buttons', async ({ page }) => {
-    const buttons = await page.locator('button').all();
-    expect(buttons.length).toBeGreaterThan(0);
+    await expect(page.locator('button').first()).toBeVisible();
+    expect(await page.locator('button').count()).toBeGreaterThan(0);
   });
 });
 

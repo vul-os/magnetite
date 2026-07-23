@@ -50,40 +50,29 @@ test.describe('Streams Browse', () => {
   });
 
   test('stream cards are displayed', async ({ page }) => {
-    // Cards come from the real API; when the backend is unavailable an empty-state is shown.
-    await page.waitForTimeout(500);
-    const cards = await page.locator('.stream-card, [class*="stream-card"]').all();
-    expect(cards.length).toBeGreaterThan(0);
+    // Wait for the first card — .all()/.count() do not auto-wait, so a fixed
+    // timeout races the fetch+render under parallel load.
+    const cards = page.locator('.stream-card');
+    await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThan(0);
   });
 
   test('each stream card shows a streamer name or title', async ({ page }) => {
-    await page.waitForTimeout(500);
-    const cards = page.locator('.stream-card, [class*="stream-card"]');
-    const count = await cards.count();
-    expect(count).toBeGreaterThan(0);
-    // First card should contain visible text
+    const cards = page.locator('.stream-card');
     await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThan(0);
   });
 
   test('Go Live button is present', async ({ page }) => {
-    const goLiveBtn = page.locator('button:has-text("Go Live"), .go-live-btn, [aria-label*="Go Live" i]');
-    if (await goLiveBtn.count() > 0) {
-      await expect(goLiveBtn.first()).toBeVisible();
-    } else {
-      // Go Live may be accessible through a different label — just check buttons exist
-      const buttons = await page.locator('button').all();
-      expect(buttons.length).toBeGreaterThan(0);
-    }
+    // The header toggle is always present, regardless of stream data.
+    await expect(page.locator('.streams-golive-btn')).toBeVisible();
   });
 
   test('clicking a stream card does not crash the page', async ({ page }) => {
-    await page.waitForTimeout(500);
-    const cards = page.locator('.stream-card, [class*="stream-card"]');
-    if (await cards.count() > 0) {
-      await cards.first().click();
-      // After clicking, page should still contain content
-      await expect(page.locator('body')).not.toBeEmpty();
-    }
+    const card = page.locator('.stream-card').first();
+    await expect(card).toBeVisible();
+    await card.click();
+    await expect(page.locator('body')).not.toBeEmpty();
   });
 
   test('viewer count labels are present on stream cards', async ({ page }) => {

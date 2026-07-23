@@ -118,8 +118,8 @@ test.describe('Points Dashboard', () => {
   });
 
   test('page is accessible — no orphaned interactive elements', async ({ page }) => {
-    const buttons = await page.locator('button').all();
-    // Each button should be in the DOM — basic a11y check
-    expect(buttons.length).toBeGreaterThan(0);
+    // Basic a11y check — wait for the first button so the count doesn't race render.
+    await expect(page.locator('button').first()).toBeVisible();
+    expect(await page.locator('button').count()).toBeGreaterThan(0);
   });
 });
