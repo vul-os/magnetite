@@ -7,6 +7,10 @@ export default {
     // pointed the whole suite at a dead port — every spec failed before it began.
     baseURL: 'http://localhost:5174',
     headless: true,
+    // The PWA service worker proxies fetches and would bypass page.route(),
+    // turning every stubbed API call into an un-intercepted network request.
+    // Block it so specs can control the API (the app runs fine without the SW).
+    serviceWorkers: 'block',
   },
   // Start the dev server for the run instead of silently requiring one already
   // up on 5174. Locally an existing server is reused (fast iteration); in CI a
