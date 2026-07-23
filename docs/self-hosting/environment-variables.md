@@ -82,6 +82,16 @@ routes are never mounted.
 
 ---
 
+## Security & integrity
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TOTP_ENC_KEY` | — | 32-byte key as hex (64 chars) that encrypts stored TOTP 2FA secrets at rest. **Unset stores TOTP secrets in plaintext** (logged as a warning) — set it in production |
+| `GAME_WEBHOOK_SECRET` | — | HMAC secret the game-server webhook is verified against (`x-game-signature` header). The endpoint returns 500 when it is unset and 401 on a bad signature |
+| `ANTICHEAT_MAX_VELOCITY` | `50.0` | Player speed above which the anti-cheat flags a velocity violation |
+
+---
+
 ## OAuth providers
 
 Optional. Leave unused providers blank — keypair and password login still work.
