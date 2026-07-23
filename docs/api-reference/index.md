@@ -319,24 +319,16 @@ developer's behalf, so there is nothing to request.
 
 ---
 
-## Subscriptions — `/api/v1/subscriptions`
+## Subscriptions — removed
 
-Tiers are **receipt-backed feature flags**, not a recurring charge — see
-[Subscription Lifecycle](../subscriptions-lifecycle.md).
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/` | — | List active tiers |
-| `GET` | `/plans` | — | Alias of `/` |
-| `GET` | `/me` | required | Current subscription |
-| `GET` | `/current` | required | Alias of `/me` |
-| `POST` | `/` | required | Subscribe. Paid tiers require `payment_id` = a `payment_receipts` id owned by the caller |
-| `DELETE` | `/` | required | Cancel at period end |
-| `POST` | `/cancel` | required | Alias of `DELETE /` |
-| `POST` | `/upgrade` | required | Move to a higher tier (prorated delta must be receipt-covered) |
-| `POST` | `/downgrade` | required | Move to a lower tier |
-| `GET` | `/hours` | required | Included compute hours |
-| `GET` | `/usage` | required | Game-slot usage this period |
+The public `/api/v1/subscriptions` REST API — list tiers, subscribe, upgrade,
+downgrade, cancel, hours, usage — was **removed** with the off-thesis billing
+code. The platform charges nothing and exposes no recurring-subscription
+surface: the only real checkout path is dev→player, settled wallet-to-wallet
+through `magnetite-seams` → `patala-solana` and recorded as a signed
+`payment_receipts` row (see [Payments](../payments.md)). The
+`subscription_tiers` table still backs the operator's own tier bookkeeping in
+the superadmin console, but nothing serves it under `/api/v1`.
 
 ---
 
