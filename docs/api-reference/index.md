@@ -52,10 +52,21 @@ get a new pair without re-logging in.
 | `POST` | `/login` | — | Username + password login; returns `{ access_token, refresh_token, expires_at, user_id }` |
 | `POST` | `/register` | — | Create account; returns same token pair |
 | `POST` | `/refresh` | — | Exchange `refresh_token` for a new token pair |
+| `POST` | `/forgot-password` | — | Request a password-reset email; body `{ email }` |
+| `POST` | `/reset-password` | — | Complete a reset; body `{ token, new_password }` |
+| `POST` | `/verify-email` | — | Verify an email address; body `{ token }` |
 | `DELETE` | `/logout` | required | Revoke current session |
 | `DELETE` | `/logout-all` | required | Revoke all sessions for the user |
 | `GET` | `/sessions` | required | List active sessions |
 | `GET` | `/me` | required | Return current user `{ id, username, email, created_at }` |
+| `POST` | `/resend-verification` | required | Re-send the current user's email-verification message |
+| `PUT` | `/password` | required | Change password; body `{ current_password, new_password }` |
+| `GET` | `/linked-accounts` | required | List linked OAuth identities |
+| `POST` | `/linked-accounts` | required | Link an OAuth identity; body `{ provider, provider_id, email? }` |
+| `DELETE` | `/linked-accounts/:id` | required | Unlink an OAuth identity |
+| `POST` | `/api-keys` | required | Create an API key; body `{ name }` |
+| `GET` | `/api-keys` | required | List API keys (metadata only) |
+| `DELETE` | `/api-keys/:id` | required | Revoke an API key |
 
 ---
 
