@@ -297,10 +297,15 @@ developer's behalf, so there is nothing to request.
 |--------|------|------|-------------|
 | `GET` | `/` | required | List friends |
 | `POST` | `/request` | required | Send friend request |
+| `GET` | `/pending` | required | List received (pending) friend requests |
+| `GET` | `/sent` | required | List sent friend requests |
 | `POST` | `/accept/:id` | required | Accept request |
 | `POST` | `/reject/:id` | required | Reject request |
+| `DELETE` | `/request/:id` | required | Cancel a sent friend request |
 | `DELETE` | `/:id` | required | Remove friend |
 | `POST` | `/block/:id` | required | Block user |
+| `DELETE` | `/block/:id` | required | Unblock user |
+| `GET` | `/blocked` | required | List blocked users |
 
 ### Invites — `/api/v1/invites`
 
@@ -315,6 +320,7 @@ developer's behalf, so there is nothing to request.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/search` | — | Search users by username |
+| `GET` | `/by-username/:username` | — | Public profile lookup by username |
 | `GET` | `/:id` | — | Public user profile |
 
 ---
