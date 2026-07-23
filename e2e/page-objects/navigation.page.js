@@ -28,10 +28,15 @@ export class NavigationPage extends BasePage {
   }
 
   async getNavbarLinks() {
+    // .all() is a synchronous snapshot with no auto-wait, so wait for the navbar
+    // to render before counting — otherwise this races the SPA's first client
+    // render and returns an empty array.
+    await this.page.locator(this.navbarLinks).first().waitFor({ state: 'visible' });
     return this.page.locator(this.navbarLinks).all();
   }
 
   async getFooterLinks() {
+    await this.page.locator(this.footerLinks).first().waitFor({ state: 'visible' });
     return this.page.locator(this.footerLinks).all();
   }
 

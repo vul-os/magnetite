@@ -22,13 +22,16 @@ test.describe('Navigation', () => {
   });
 
   test('navbar logo visible', async ({ page }) => {
-    // Logo uses class .navbar-logo
-    await expect(page.locator('.navbar-logo')).toBeVisible();
+    // Two .navbar-logo links exist (desktop + mobile navs); the desktop one is
+    // first in the DOM and visible at the default 1280px viewport.
+    await expect(page.locator('.navbar-logo').first()).toBeVisible();
   });
 
-  test('marketplace link navigates', async ({ page }) => {
-    await navigationPage.clickNavbarLink('Marketplace');
-    await expect(page).toHaveURL(/marketplace/);
+  test('clicking a navbar link navigates', async ({ page }) => {
+    // "Marketplace" is the root route (/), so it can't be used to assert a URL
+    // change from /. Communities → /communities does change the URL.
+    await navigationPage.clickNavbarLink('Communities');
+    await expect(page).toHaveURL(/\/communities/);
   });
 
   test('home page has hero heading', async ({ page }) => {
