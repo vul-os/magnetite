@@ -350,6 +350,8 @@ Tiers are **receipt-backed feature flags**, not a recurring charge — see
 | `PUT` | `/:id/read` | required | Mark one as read |
 | `DELETE` | `/:id` | required | Delete notification |
 | `POST` | `/` | required | Create notification (internal / admin) |
+| `GET` | `/preferences` | required | Get notification preferences |
+| `PUT` | `/preferences` | required | Update notification preferences (per-category email / in-app / push toggles) |
 
 **WebSocket:** `GET /ws/notifications` — persistent push channel (JWT required via
 `Authorization: Bearer` header or `?token=` query parameter).
@@ -365,8 +367,12 @@ Tiers are **receipt-backed feature flags**, not a recurring charge — see
 | `GET` | `/repos` | required | List registered repositories |
 | `POST` | `/repos/register` | required | Register a repository |
 | `GET` | `/repos/:owner/:repo/build-status` | required | Build status for a repo |
+| `GET` | `/builds/pending` | runner token | List queued builds awaiting a runner |
+| `POST` | `/builds/:build_id/report` | runner token | Report a build result; body `{ outcome, artifact_url?, sha256_hash?, file_size_bytes?, log_output? }` |
 
 The webhook signature is verified against `GITHUB_WEBHOOK_SECRET` using `X-Hub-Signature-256`.
+The `/builds/*` endpoints authenticate the CI runner with its per-build
+`runner_token` as `Authorization: Bearer <runner_token>` (not a user JWT).
 
 ---
 
@@ -464,6 +470,7 @@ the signed receipt and revokes the entitlement — see [Refunds](../refunds.md).
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/` | — | List game categories |
+| `GET` | `/:slug/games` | — | List games in a category (by slug) |
 
 ---
 
