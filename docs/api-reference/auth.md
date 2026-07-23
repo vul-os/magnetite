@@ -1,6 +1,6 @@
 # Authentication Endpoints
 
-## POST /api/auth/register
+## POST /api/v1/auth/register
 
 Create a new user account.
 
@@ -10,8 +10,7 @@ Create a new user account.
 {
   "email": "player@example.com",
   "username": "player1",
-  "password": "securePassword123",
-  "referral_code": "REFERRAL123"
+  "password": "securePassword123"
 }
 ```
 
@@ -40,7 +39,6 @@ Create a new user account.
 | email | string | Yes | Valid email format |
 | username | string | Yes | 3-20 chars, alphanumeric |
 | password | string | Yes | Min 8 chars, 1 uppercase, 1 number |
-| referral_code | string | No | Valid referral code |
 
 ### Error Codes
 
@@ -48,11 +46,10 @@ Create a new user account.
 |------|---------|
 | EMAIL_TAKEN | Email already registered |
 | USERNAME_TAKEN | Username already taken |
-| INVALID_REFERRAL | Referral code does not exist |
 
 ---
 
-## POST /api/auth/login
+## POST /api/v1/auth/login
 
 Authenticate and receive access token.
 
@@ -60,10 +57,14 @@ Authenticate and receive access token.
 
 ```json
 {
-  "email": "player@example.com",
-  "password": "securePassword123"
+  "username": "player1",
+  "password": "securePassword123",
+  "totp_code": "123456"
 }
 ```
+
+`username` and `password` are required. `totp_code` is only required when the
+account has TOTP 2FA enabled; omit it otherwise.
 
 ### Response
 
@@ -92,7 +93,7 @@ Authenticate and receive access token.
 
 ---
 
-## POST /api/auth/refresh
+## POST /api/v1/auth/refresh
 
 Refresh expired access token.
 
@@ -119,7 +120,7 @@ Refresh expired access token.
 
 ---
 
-## GET /api/auth/me
+## GET /api/v1/auth/me
 
 Get current authenticated user.
 
@@ -154,7 +155,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-## POST /api/auth/logout
+## POST /api/v1/auth/logout
 
 Invalidate current session.
 
@@ -179,7 +180,7 @@ Invalidate current session.
 
 ---
 
-## POST /api/auth/verify-email
+## POST /api/v1/auth/verify-email
 
 Verify user email address.
 
@@ -187,7 +188,7 @@ Verify user email address.
 
 ```json
 {
-  "verification_code": "123456"
+  "token": "e3b0c44298fc1c149afbf4c8996fb924"
 }
 ```
 
