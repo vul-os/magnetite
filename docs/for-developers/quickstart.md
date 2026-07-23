@@ -243,16 +243,17 @@ approval is complete.
 ### Option C — API
 
 ```bash
-# 1. Register the game record (first time only)
+# 1. Register the game record (first time only). The game is tied to a GitHub
+#    repo, so github_repo is required; tick rate, player counts and the WASM
+#    artifact come from the build pipeline, not this call.
 curl -X POST https://api.magnetite.gg/api/v1/games \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
+    "github_repo": "your-org/my-game",
     "title": "My Game",
     "description": "…",
-    "max_players": 4,
-    "tick_rate": 60,
-    "wasm_artifact_url": "https://…/my_game.wasm"
+    "content_rating": "everyone"
   }'
 
 # 2. Submit for review (admin approves before going live)
