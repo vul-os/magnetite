@@ -280,9 +280,9 @@ curl -f http://localhost/health
 
 ```bash
 # Test login
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"testpassword"}'
+  -d '{"username":"testuser","password":"testpassword"}'
 
 # Test database connection
 docker-compose exec backend psql "$DATABASE_URL" -c "SELECT 1"
