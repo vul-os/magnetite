@@ -69,12 +69,6 @@ pub struct Config {
     pub node_signing_seed: Option<String>,
     pub email_provider: String,
     pub resend_api_key: Option<String>,
-    pub smtp_host: Option<String>,
-    pub smtp_username: Option<String>,
-    pub smtp_password: Option<String>,
-    pub aws_access_key_id: Option<String>,
-    pub aws_secret_access_key: Option<String>,
-    pub aws_region: String,
     pub app_name: String,
     pub app_env: String,
     pub app_url: String,
@@ -150,12 +144,6 @@ impl Config {
             node_signing_seed: env::var("NODE_SIGNING_SEED").ok(),
             email_provider: env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "resend".to_string()),
             resend_api_key: env::var("RESEND_API_KEY").ok(),
-            smtp_host: env::var("SMTP_HOST").ok(),
-            smtp_username: env::var("SMTP_USERNAME").ok(),
-            smtp_password: env::var("SMTP_PASSWORD").ok(),
-            aws_access_key_id: env::var("AWS_ACCESS_KEY_ID").ok(),
-            aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY").ok(),
-            aws_region: env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             app_name: env::var("APP_NAME").unwrap_or_else(|_| "Magnetite".to_string()),
             app_env,
             app_url: env::var("APP_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
@@ -227,7 +215,6 @@ mod tests {
                         assert_eq!(config.server_port, 8080);
                         assert_eq!(config.server_host, "0.0.0.0");
                         assert_eq!(config.email_provider, "resend");
-                        assert_eq!(config.aws_region, "us-east-1");
                         assert_eq!(config.app_name, "Magnetite");
                         assert_eq!(config.app_env, "development");
                     });
