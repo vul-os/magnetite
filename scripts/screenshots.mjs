@@ -101,9 +101,10 @@ async function makeThemeContext(browser, theme) {
   return ctx
 }
 
-async function capture(page, baseUrl, route, theme) {
+async function capture(page, baseUrl, route, theme, pageIssues = []) {
   const url = `${baseUrl}${route.path}`
   console.log(`  → [${theme}] ${route.description}`)
+  const issuesBefore = pageIssues.length
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 })
     if (route.waitFor) {
@@ -145,19 +146,23 @@ async function capture(page, baseUrl, route, theme) {
     const outPath = path.join(OUT, `${route.name}-${theme}.png`)
     await page.screenshot({ path: outPath, fullPage: false })
     console.log(`     saved ${path.relative(ROOT, outPath)}`)
-    return { name: route.name, theme, status: 'ok' }
+    return { name: route.name, theme, status: 'ok', issues: pageIssues.slice(issuesBefore) }
   } catch (err) {
     console.warn(`     FAILED: ${err.message}`)
-    return { name: route.name, theme, status: 'failed', error: err.message }
+    return { name: route.name, theme, status: 'failed', error: err.message, issues: pageIssues.slice(issuesBefore) }
   }
 }
 
 // ── React app routes (src/) — booted with mock data, no backend ───────────
 //
-// The app boots deterministically under VITE_USE_MOCKS=true: every hook has a
-// mock branch (see src/hooks/*.js), so there is no Postgres, no Redis, no wasm
-// build and no running backend involved. Auth-gated chrome is satisfied by
-// seeding localStorage before the first paint.
+// The app boots deterministically under VITE_USE_MOCKS=true: every data hook
+// has a mock branch (see src/hooks/*.js), so there is no Postgres, no Redis, no
+// wasm build and no running backend involved. The live comms WebSocket
+// (src/hooks/useWebSocket.js) is the one exception — it only swaps in its mock
+// under a SEPARATE flag, VITE_USE_MOCK_WS=true — so the dev server below sets
+// both. Without the second flag the app dials ws://localhost:8080 and floods
+// the console with connection errors even though no screenshot needs that
+// socket. Auth-gated chrome is satisfied by seeding localStorage before paint.
 //
 // NOTE: vite must be started with an explicit `--host 127.0.0.1`. Without it
 // vite binds to `::1`/localhost only, the readiness probe below (which polls
@@ -183,7 +188,7 @@ function startViteDevServer() {
       ['--port', String(DEV_PORT), '--strictPort', '--host', '127.0.0.1'],
       {
         cwd: ROOT,
-        env: { ...process.env, VITE_USE_MOCKS: 'true' },
+        env: { ...process.env, VITE_USE_MOCKS: 'true', VITE_USE_MOCK_WS: 'true' },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     )
@@ -270,10 +275,11 @@ async function captureReactApp(browser) {
     for (const theme of ['light', 'dark']) {
       const ctx = await makeAppContext(browser, theme)
       const page = await ctx.newPage()
-      page.on('console', () => {})
-      page.on('pageerror', () => {})
+      const pageIssues = []
+      page.on('pageerror', (err) => pageIssues.push({ type: 'pageerror', text: String(err?.message ?? err) }))
+      page.on('console', (msg) => { if (msg.type() === 'error') pageIssues.push({ type: 'console.error', text: msg.text() }) })
       for (const route of APP_ROUTES) {
-        results.push(await capture(page, DEV_BASE, route, theme))
+        results.push(await capture(page, DEV_BASE, route, theme, pageIssues))
       }
       await ctx.close()
     }
@@ -312,10 +318,13 @@ async function main() {
   for (const theme of ['light', 'dark']) {
     const context = await makeThemeContext(browser, theme)
     const page = await context.newPage()
-    page.on('console', () => {})
-    page.on('pageerror', () => {})
+    // Collect JS faults so a screenshot of a page that is actually throwing
+    // cannot masquerade as healthy; capture() attributes them per route.
+    const pageIssues = []
+    page.on('pageerror', (err) => pageIssues.push({ type: 'pageerror', text: String(err?.message ?? err) }))
+    page.on('console', (msg) => { if (msg.type() === 'error') pageIssues.push({ type: 'console.error', text: msg.text() }) })
     for (const route of ROUTES) {
-      results.push(await capture(page, baseUrl, route, theme))
+      results.push(await capture(page, baseUrl, route, theme, pageIssues))
     }
     await context.close()
   }
@@ -342,6 +351,26 @@ async function main() {
   if (failed.length > 0) {
     console.log('\nFailed routes:')
     for (const r of failed) console.log(`  ${r.name}-${r.theme}: ${r.error}`)
+  }
+
+  // JS-health guard. A saved screenshot proves a page painted, not that it ran
+  // cleanly — a route can throw uncaught exceptions or log console errors and
+  // still produce a plausible-looking image. Surface those so a broken page is
+  // never silently shipped as "captured". Loud but non-fatal, like the rest of
+  // this script.
+  const withIssues = results.filter((r) => r.issues && r.issues.length)
+  if (withIssues.length) {
+    const total = withIssues.reduce((n, r) => n + r.issues.length, 0)
+    console.warn(`\n  WARNING: ${total} console error(s)/uncaught exception(s) across ${withIssues.length} capture(s):`)
+    for (const r of withIssues) {
+      console.warn(`    [${r.theme}] ${r.name} — ${r.issues.length}:`)
+      for (const it of r.issues.slice(0, 3)) {
+        console.warn(`        ${it.type}: ${it.text.replace(/\s+/g, ' ').slice(0, 160)}`)
+      }
+    }
+    console.warn('  A clean-looking screenshot of a page that threw is a false positive.')
+  } else if (ok.length) {
+    console.log('  no console errors or uncaught exceptions during capture')
   }
 
   const allRoutes = [...ROUTES, ...APP_ROUTES]
