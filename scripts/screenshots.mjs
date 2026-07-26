@@ -227,14 +227,20 @@ async function makeAppContext(browser, theme) {
   })
   // Seed before first paint: the theme the app reads (ThemeContext uses the
   // `theme` key), plus a signed-in user so authenticated chrome renders. The
-  // token is inert — VITE_USE_MOCKS means no request is ever made with it.
+  // token is inert — VITE_USE_MOCKS means no request is ever made with it
+  // (useAuth's session restore short-circuits under mocks and trusts this
+  // stored user instead of validating it against /auth/me).
   await ctx.addInitScript((t) => {
     try {
       localStorage.setItem('theme', t)
       localStorage.setItem('token', 'mock.screenshot.token')
+      // The user key MUST be `magnetite_user` — that is useAuth's USER_KEY
+      // (src/hooks/useAuth.js), the only key its restoreSession reads. Seeding
+      // a bare `user` key (as this once did) is silently dead: the Navbar's
+      // `user ? …` gate stays false and every app shot renders logged-out.
       // No `subscription`/tier field — that model was deliberately removed
       // (non-custodial, no platform-held plans). Don't reintroduce it here.
-      localStorage.setItem('user', JSON.stringify({
+      localStorage.setItem('magnetite_user', JSON.stringify({
         id: '00000000-0000-4000-8000-000000000001',
         username: 'operator',
         email: 'operator@node.local',
