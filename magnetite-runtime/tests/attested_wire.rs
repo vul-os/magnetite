@@ -330,7 +330,10 @@ async fn an_unsigned_attested_frame_is_refused_explicitly() {
 
     match reply {
         ServerNet::AttestedReject { seq, reason } => {
-            assert_eq!(seq, 0, "nothing recoverable from a frame that did not parse");
+            assert_eq!(
+                seq, 0,
+                "nothing recoverable from a frame that did not parse"
+            );
             assert!(
                 reason.contains("malformed"),
                 "expected a malformed refusal, got {reason:?}"
@@ -350,9 +353,11 @@ async fn an_attested_flood_is_rate_limited_over_the_socket() {
         send_frame(&mut ws, &fresh(23, "swing", seq)).await;
     }
 
-    let limited = recv_until(&mut ws, Duration::from_secs(5), |m| {
-        matches!(m, ServerNet::AttestedReject { reason, .. } if reason.contains("exceed"))
-    })
+    let limited = recv_until(
+        &mut ws,
+        Duration::from_secs(5),
+        |m| matches!(m, ServerNet::AttestedReject { reason, .. } if reason.contains("exceed")),
+    )
     .await;
 
     assert!(

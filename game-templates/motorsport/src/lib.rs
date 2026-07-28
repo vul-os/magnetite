@@ -355,7 +355,7 @@ impl Vehicle {
     /// Spawn a vehicle at the start/finish grid position for the given slot.
     pub fn spawn(slot: usize) -> Self {
         // Grid: stagger cars 6 m apart, alternating left/right.
-        let offset_x = if slot % 2 == 0 { -3.0 } else { 3.0 };
+        let offset_x = if slot.is_multiple_of(2) { -3.0 } else { 3.0 };
         let offset_z = -(slot as f32 * 6.0);
         Self {
             position: Position {
@@ -715,6 +715,12 @@ impl GameLogic for RacingGame {
 #[wasm_bindgen]
 pub struct GameHandle {
     game: RacingGame,
+}
+
+impl Default for GameHandle {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
@@ -1419,8 +1425,7 @@ mod tests {
         game.tick();
 
         // Pass remaining gates 1..5 then gate 0 again
-        for i in 1..gates.len() {
-            let g = gates[i];
+        for &g in &gates[1..] {
             {
                 let v = game.world.vehicles.get_mut(&key).unwrap();
                 v.position.x = g.x;

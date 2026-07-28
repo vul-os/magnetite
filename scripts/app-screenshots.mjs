@@ -178,6 +178,11 @@ const MOUNTED = {
 const THEMES = ['dark', 'light']
 const WIDTHS = [390, 768, 1280]
 
+/* Floors for "this page actually rendered". The app shell alone (header, nav,
+   footer) is well past both on every route; a white screen is far below. */
+const MIN_ELEMENTS = 40
+const MIN_BODY_TEXT = 100
+
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -218,6 +223,10 @@ const main = async () => {
   const browser = await chromium.launch()
 
   const overflows = []
+  /* Fail-closed bookkeeping — see the assertions at the end of main(). */
+  const brokenRoutes = []
+  let measured = 0
+  const EXPECTED_MEASUREMENTS = ROUTES.length * THEMES.length * WIDTHS.length
 
   for (const theme of THEMES) {
     for (const route of ROUTES) {
@@ -280,12 +289,57 @@ const main = async () => {
         }
       })
 
-      await page.goto(base + route.path, { waitUntil: 'networkidle' }).catch(() => {})
+      /* A navigation failure USED to be swallowed here (`.catch(() => {})`).
+         That is the failure mode this gate must not have: a page that never
+         loaded renders an empty document, an empty document cannot overflow
+         horizontally, and the run reports "no overflow" — passing by measuring
+         nothing. A failed navigation is now a hard failure. */
+      /* NOT `waitUntil: 'networkidle'`. The signed-in app shell opens
+         /ws/comms and /ws/notifications and retries them for as long as the
+         page is open, so with no backend listening the network is never idle —
+         `networkidle` timed out after 30s on every authenticated route. The
+         wait that actually matters is "the SPA mounted", asserted directly
+         below and again after the settle delay. */
+      try {
+        const resp = await page.goto(base + route.path, { waitUntil: 'load', timeout: 30000 })
+        if (resp && !resp.ok()) {
+          brokenRoutes.push(`${route.name} [${theme}]: HTTP ${resp.status()} from ${route.path}`)
+        }
+        await page.waitForFunction(
+          (min) => (document.body ? document.body.querySelectorAll('*').length : 0) >= min,
+          MIN_ELEMENTS,
+          { timeout: 15000 },
+        )
+      } catch (e) {
+        brokenRoutes.push(`${route.name} [${theme}]: navigation failed — ${e.message.split('\n')[0]}`)
+      }
       await page.waitForTimeout(700)
 
       if (route.click) {
-        await page.click(route.click).catch(() => {})
+        /* Likewise: a selector that no longer exists silently skipped the
+           interaction, so the "unavailable state" routes were screenshotted in
+           their pre-click state and measured as if they were the real thing. */
+        try {
+          await page.click(route.click, { timeout: 5000 })
+        } catch (e) {
+          brokenRoutes.push(`${route.name} [${theme}]: click target ${route.click} not found`)
+        }
         await page.waitForTimeout(400)
+      }
+
+      /* The app must actually have mounted. A white screen (React crash, bad
+         base path, missing bundle) yields a near-empty <body>; measuring it
+         would produce a clean bill of health for a broken build. */
+      const rendered = await page.evaluate(() => ({
+        bodyText: (document.body?.innerText || '').trim().length,
+        elements: document.body ? document.body.querySelectorAll('*').length : 0,
+      }))
+      if (rendered.elements < MIN_ELEMENTS || rendered.bodyText < MIN_BODY_TEXT) {
+        brokenRoutes.push(
+          `${route.name} [${theme}]: page did not render ` +
+            `(${rendered.elements} elements, ${rendered.bodyText} chars of text; ` +
+            `need >=${MIN_ELEMENTS} and >=${MIN_BODY_TEXT})`,
+        )
       }
 
       const file = path.join(OUT, `${route.name}-${theme}.png`)
@@ -300,6 +354,7 @@ const main = async () => {
           scrollW: document.documentElement.scrollWidth,
           clientW: document.documentElement.clientWidth,
         }))
+        measured += 1
         // 1px of tolerance for sub-pixel rounding.
         if (res.scrollW > res.clientW + 1) {
           overflows.push(`${route.name} [${theme}] @${w}px: scrollWidth ${res.scrollW} > clientWidth ${res.clientW}`)
@@ -313,14 +368,46 @@ const main = async () => {
   await browser.close()
   server.close()
 
+  let failed = false
+
+  /* Coverage assertion. Without this, an empty ROUTES list, an exception that
+     skipped a theme, or a `continue` added later would all still print
+     "no overflow" and exit 0. State the expected count and check it. */
+  console.log('\n── Coverage ──')
+  console.log(
+    `measured ${measured}/${EXPECTED_MEASUREMENTS} viewport checks ` +
+      `(${ROUTES.length} routes x ${THEMES.length} themes x ${WIDTHS.length} widths)`,
+  )
+  if (measured !== EXPECTED_MEASUREMENTS) {
+    console.error(
+      `  ✗ FAIL: expected ${EXPECTED_MEASUREMENTS} viewport measurements, made ${measured}. ` +
+        'Not verified: the routes/themes/widths that were skipped.',
+    )
+    failed = true
+  }
+
+  console.log('\n── Page load ──')
+  if (brokenRoutes.length === 0) {
+    console.log(`all ${ROUTES.length * THEMES.length} route/theme pages navigated, interacted and rendered`)
+  } else {
+    brokenRoutes.forEach((b) => console.error('  ✗ ' + b))
+    console.error(
+      '  ✗ FAIL: the overflow numbers above are NOT a verification of these pages — ' +
+        'a page that did not load cannot overflow.',
+    )
+    failed = true
+  }
+
   console.log('\n── Horizontal overflow ──')
   if (overflows.length === 0) {
     console.log('none at 390 / 768 / 1280 across all routes and both themes')
   } else {
-    overflows.forEach((o) => console.log('  ✗ ' + o))
-    process.exitCode = 1
+    overflows.forEach((o) => console.error('  ✗ ' + o))
+    failed = true
   }
+
   console.log(`\nScreenshots: ${path.relative(ROOT, OUT)}`)
+  if (failed) process.exitCode = 1
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

@@ -1,61 +1,196 @@
+# Release: on a `v*` tag, build every artifact Magnetite publishes, write a
+# SHA256SUMS manifest over all of them, verify that manifest, and attach the
+# lot to a draft GitHub Release.
+#
+# ── What is published, and what is not ──────────────────────────────────────
+#   magnetite-<ver>-<os>            the node/dev CLI (`magnetite-cli`, bin name
+#                                   `magnetite`) — `magnetite dev`, `deploy`,
+#                                   `serve`. The thing an operator actually runs.
+#   magnetite-backend-<ver>-<os>    the platform backend (`backend`, bin name
+#                                   `magnetite-backend`).
+#   magnetite-web-<ver>.tar.gz      the built web client (`npm run build` →
+#                                   `dist/`), for dropping behind any static host.
+#   SHA256SUMS                      digests of all of the above.
+#
+#   Docker images are pushed by the `docker` job below and are NOT in
+#   SHA256SUMS: a registry image is already addressed by its own content
+#   digest (`docker pull magnetite/magnetite@sha256:...`), so a second,
+#   differently-shaped manifest would add nothing and could disagree.
+#
+# ── Why the build matrix looks like this ────────────────────────────────────
+# This workflow previously declared a cross-compile matrix
+# (`x86_64-unknown-linux-musl`, `x86_64-apple-darwin`, `aarch64-unknown-linux-musl`)
+# and ran every `cargo build` from the repo root. None of it could work: there
+# is no root `Cargo.toml` (see ci.yml — each crate is standalone, linked by
+# path deps, with its OWN `target/`), Apple targets do not link on an Ubuntu
+# runner without an SDK, and no cross toolchain was configured for the musl
+# targets. It also attached `dist/*` and `target/release/*` from a fresh
+# checkout in a job that built nothing, and named a `magnetite-frontend`
+# binary that exists in no crate in this repo. No `v*` tag has ever produced a
+# working downloadable binary.
+#
+# The matrix is therefore the set of platforms a GitHub runner builds
+# NATIVELY: linux-x86_64 (ubuntu-22.04) and macos-arm64 (macos-latest). Static
+# musl and aarch64-linux builds are a real want — they need `cross` or a
+# container toolchain, and until someone wires that up, publishing two working
+# targets beats declaring three broken ones.
+#
+# ── Signing (not configured) ────────────────────────────────────────────────
+# Assets ship unsigned. SHA256SUMS is an INTEGRITY manifest, not a signature:
+# it lets a downloader detect a corrupted or substituted asset against the
+# manifest they fetched alongside it. It does not prove a release came from
+# this project — that needs a signing key, which is not provisioned here. Do
+# not describe these releases as signed.
+
 name: Release
+
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get tag
-        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/*
-            target/release/magnetite-backend
-            target/release/magnetite-frontend
-          draft: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  # ── Rust binaries: the node CLI + the backend, per platform ───────────────
   build-binaries:
-    needs: create-release
-    runs-on: ubuntu-latest
+    name: Build binaries (${{ matrix.platform }})
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-musl
-          - x86_64-apple-darwin
-          - aarch64-unknown-linux-musl
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-22.04
+          - platform: macos-arm64
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-      - name: Build backend
-        run: cargo build --release --target ${{ matrix.target }} --bin magnetite-backend
-      - name: Build frontend
-        run: cargo build --release --target ${{ matrix.target }} --bin magnetite-frontend
-      - name: Upload binaries
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ env.TAG }}
-          files: |
-            target/${{ matrix.target }}/release/magnetite-backend
-            target/${{ matrix.target }}/release/magnetite-frontend
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check tag matches VERSION
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(tr -d '[:space:]' < VERSION)"
+          base="${tag%%-*}"   # v0.1.0-rc1 builds against base version 0.1.0
+          echo "tag=$tag base=$base VERSION=$ver"
+          [ "$base" = "$ver" ] || {
+            echo "::error::Tag $tag does not match VERSION ($ver) — bump VERSION before tagging"
+            exit 1
+          }
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Each crate has its own target/ (no root workspace), so cache them
+      # separately — same shape as ci.yml's `workspaces: backend`.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            backend
+            magnetite-cli
+
+      - name: Build magnetite (node/dev CLI)
+        working-directory: magnetite-cli
+        run: cargo build --release --bin magnetite
+
+      - name: Build magnetite-backend
+        working-directory: backend
+        run: cargo build --release --bin magnetite-backend
+
+      - name: Stage assets
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          mkdir -p staging
+          cp magnetite-cli/target/release/magnetite \
+             "staging/magnetite-${ver}-${{ matrix.platform }}"
+          cp backend/target/release/magnetite-backend \
+             "staging/magnetite-backend-${ver}-${{ matrix.platform }}"
+          ls -la staging
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.platform }}
+          path: staging/*
+          if-no-files-found: error
+
+  # ── Web client: the built static bundle ──────────────────────────────────
+  build-web:
+    name: Build web bundle
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+      - name: Stage asset
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          mkdir -p staging
+          tar -czf "staging/magnetite-web-${ver}.tar.gz" -C dist .
+          ls -la staging
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: staging/*
+          if-no-files-found: error
+
+  # ── Checksums + draft release ────────────────────────────────────────────
+  release:
+    name: Checksum and draft release
+    needs: [build-binaries, build-web]
+    runs-on: ubuntu-22.04
+    steps:
+      # Checked out only for scripts/release-checksums.sh — the assets come
+      # from the build jobs above, never from the checkout.
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-out
+          pattern: binaries-*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-out
+          name: web
+
+      - name: List assets
+        run: ls -la release-out
+
+      # Covers EVERY file staged above, and refuses to write a manifest for an
+      # empty directory — a release whose builds all silently produced nothing
+      # fails here rather than shipping a tidy, empty SHA256SUMS.
+      - name: Emit SHA256SUMS
+        run: bash scripts/release-checksums.sh emit release-out
+
+      # Fail-closed re-derivation: a missing manifest, a listed-but-unbuilt
+      # asset, a built-but-unlisted asset, or any digest mismatch is a red
+      # build. There is no skip switch and no "manifest absent ⇒ nothing to
+      # check" path — see the script header.
+      - name: Verify SHA256SUMS
+        run: bash scripts/release-checksums.sh verify release-out
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          name: Magnetite ${{ github.ref_name }}
+          files: release-out/*
+
+  # ── Container images ─────────────────────────────────────────────────────
+  # Independent of the asset pipeline above: registry images carry their own
+  # content digests and are not listed in SHA256SUMS.
   docker:
-    needs: create-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -181,7 +181,10 @@ mod refund_tests {
 
     impl MockReceipt {
         fn new(total_units: u64) -> Self {
-            Self { total_units, voided: false }
+            Self {
+                total_units,
+                voided: false,
+            }
         }
         fn void(&mut self) {
             self.voided = true;
@@ -200,7 +203,10 @@ mod refund_tests {
 
     impl MockEntitlement {
         fn new(item_id: Uuid) -> Self {
-            Self { item_id, revoked: false }
+            Self {
+                item_id,
+                revoked: false,
+            }
         }
         fn revoke(&mut self) {
             self.revoked = true;
@@ -770,7 +776,7 @@ mod entitlement_shape_tests {
         let ent = make_entitlement(false);
         let json = serde_json::to_string(&ent).unwrap();
         let back: Entitlement = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.revoked, false);
+        assert!(!back.revoked);
         assert_eq!(back.id, ent.id);
         assert_eq!(back.user_id, ent.user_id);
         assert_eq!(back.item_id, ent.item_id);

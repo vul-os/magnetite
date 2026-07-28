@@ -22,8 +22,7 @@
 use std::sync::OnceLock;
 
 use magnetite_seams::identity::{
-    Audience, AuthProvider, Challenge, LoginResponse, PubKey, RawKeypairAuth, Scope, Session,
-    Token,
+    Audience, AuthProvider, Challenge, LoginResponse, PubKey, RawKeypairAuth, Scope, Session, Token,
 };
 use serde::{Deserialize, Serialize};
 

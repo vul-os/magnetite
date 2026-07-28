@@ -130,8 +130,9 @@ struct Cluster {
 impl Cluster {
     /// B owns `shard` holding `state`, and has checkpointed it.
     fn with_checkpointed_shard(shard: u32, state: &[u8]) -> (Self, CheckpointRef) {
-        let ids: Vec<Arc<RawKeypairAuth>> =
-            (0..2).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+        let ids: Vec<Arc<RawKeypairAuth>> = (0..2)
+            .map(|_| Arc::new(RawKeypairAuth::generate()))
+            .collect();
         let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
         let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
         let b = Node::spawn_as(Arc::clone(&ids[1]), 4, &members);
@@ -218,7 +219,10 @@ fn a_dead_nodes_shard_is_restored_with_state_hash_continuity() {
     assert_eq!(rec.shard, ShardId(5));
     assert_eq!(rec.previous_owner, c.b_key);
     assert_eq!(rec.checkpoint, cp_ref.id);
-    assert_eq!(rec.checkpoint_tick, 1_234, "did not report the rolled-back tick");
+    assert_eq!(
+        rec.checkpoint_tick, 1_234,
+        "did not report the rolled-back tick"
+    );
 
     // Continuity: the restored world is the checkpointed world, byte for byte.
     assert_eq!(rec.state_hash, Hash::of(&state));
@@ -241,8 +245,14 @@ fn a_dead_nodes_shard_is_restored_with_state_hash_continuity() {
     // And it is never sold as loss-free.
     assert!(rec.loss_window_secs >= 5, "loss window under-reported");
     let msg = rec.to_string();
-    assert!(msg.contains("SIMULATION WAS LOST"), "recovery hedges: {msg}");
-    assert!(msg.contains("rollback"), "recovery reads as resurrection: {msg}");
+    assert!(
+        msg.contains("SIMULATION WAS LOST"),
+        "recovery hedges: {msg}"
+    );
+    assert!(
+        msg.contains("rollback"),
+        "recovery reads as resurrection: {msg}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,9 +300,9 @@ fn a_returning_zombie_owner_is_fenced_out() {
     let rep = r.tick(&mut t, &dir, &cap(4), now_unix(), Instant::now());
 
     assert!(
-        rep.fenced.iter().any(|(s, _, e, dropped)| s.0 == 5
-            && *e == zombie_epoch
-            && *dropped),
+        rep.fenced
+            .iter()
+            .any(|(s, _, e, dropped)| s.0 == 5 && *e == zombie_epoch && *dropped),
         "the stale claimant was not fenced: {:?}",
         rep.fenced
     );

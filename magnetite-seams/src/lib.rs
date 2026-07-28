@@ -54,15 +54,15 @@ pub use error::{Result, SeamError};
 
 // Seam §3.1 — Identity / Auth
 pub use identity::{
-    AuthProvider, Audience, Challenge, Identity, LoginResponse, PubKey, RawKeypairAuth, Scope,
+    Audience, AuthProvider, Challenge, Identity, LoginResponse, PubKey, RawKeypairAuth, Scope,
     Session, Sig, Token, TokenClaims,
 };
 
 // Seam §3.2 — Naming
-pub use naming::{HashNaming, Naming};
 /// Optional second Naming provider (`--features keyname`) — see [`keyname`].
 #[cfg(feature = "keyname")]
 pub use keyname::KeyNameNaming;
+pub use naming::{HashNaming, Naming};
 
 // Seam §3.3 — BlobStore
 pub use blobstore::{BlobFetcher, BlobStore, FsBlobStore, Hash, HttpBlobStore, LocalBlobStore};
@@ -70,8 +70,7 @@ pub use blobstore::{BlobFetcher, BlobStore, FsBlobStore, Hash, HttpBlobStore, Lo
 // Seam §3.4 — Discovery
 pub use discovery::{
     Capacity, Discovery, FanoutDiscovery, Filter, LanDiscovery, NodeAddr, Price, SessionAd,
-    SignedAd, SignedWithdraw,
-    TrackerClient, TrackerDiscovery, MAX_AD_TTL_SECS,
+    SignedAd, SignedWithdraw, TrackerClient, TrackerDiscovery, MAX_AD_TTL_SECS,
 };
 
 // Seam §3.5 — CommsProvider

@@ -285,7 +285,7 @@ impl TickScheduler {
             }
 
             // 5c. Full snapshot on cadence.
-            let send_snapshot = tick % u64::from(self.config.snapshot_every) == 0;
+            let send_snapshot = tick.is_multiple_of(u64::from(self.config.snapshot_every));
             if send_snapshot {
                 self.connection_mgr
                     .send_to(

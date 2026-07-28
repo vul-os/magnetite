@@ -264,8 +264,8 @@ pub fn spawn_point_for(player_id: PlayerId, state: &GameState) -> Position {
     SPAWN_POINTS
         .iter()
         .max_by(|a, b| {
-            let score_a = min_dist_to_enemies(*a, &enemies);
-            let score_b = min_dist_to_enemies(*b, &enemies);
+            let score_a = min_dist_to_enemies(a, &enemies);
+            let score_b = min_dist_to_enemies(b, &enemies);
             score_a
                 .partial_cmp(&score_b)
                 .unwrap_or(std::cmp::Ordering::Equal)

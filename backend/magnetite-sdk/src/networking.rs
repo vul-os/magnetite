@@ -287,7 +287,7 @@ impl TickLoop {
     /// Returns `true` when a snapshot should be broadcast this tick.
     pub fn should_snapshot(&self) -> bool {
         let interval = self.config.snapshot_interval;
-        interval > 0 && self.tick > 0 && self.tick % u64::from(interval) == 0
+        interval > 0 && self.tick > 0 && self.tick.is_multiple_of(u64::from(interval))
     }
 
     /// The current tick counter.

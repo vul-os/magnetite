@@ -291,7 +291,6 @@ impl EmailService {
         let html = render_welcome(username, &self.base_url);
         self.send_email(to, subject, &text, &html).await
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -483,5 +482,4 @@ mod tests {
         assert!(html.contains(&year));
         assert!(html.contains("content"));
     }
-
 }

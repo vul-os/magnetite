@@ -447,13 +447,9 @@ pub async fn announce(
     .fetch_optional(&pool)
     .await?;
 
-    let id = row
-        .map(|r| r.0)
-        .ok_or_else(|| {
-            AppError::Forbidden(
-                "this (game, node) slot is held by a different node key".to_string(),
-            )
-        })?;
+    let id = row.map(|r| r.0).ok_or_else(|| {
+        AppError::Forbidden("this (game, node) slot is held by a different node key".to_string())
+    })?;
 
     let expires_at = req.signed.expires_at as i64;
     Ok(response::success_response(AnnounceAck {
@@ -528,7 +524,10 @@ pub async fn sessions(
     // Resolve titles for the surviving hashes in one round trip. Unknown hashes
     // stay unknown — the client shows the content address, which is the real
     // identity anyway.
-    let mut hashes: Vec<String> = kept.iter().map(|(r, _)| r.game_hash.to_lowercase()).collect();
+    let mut hashes: Vec<String> = kept
+        .iter()
+        .map(|(r, _)| r.game_hash.to_lowercase())
+        .collect();
     hashes.sort();
     hashes.dedup();
     let identities = resolve_game_identities(&pool, &hashes).await;

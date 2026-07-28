@@ -79,7 +79,9 @@ use magnetite_seams::blobstore::Hash;
 use magnetite_seams::discovery::Capacity;
 use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth, Sig};
 
-use crate::cluster::{ClusterMembership, RouteDirectory, RouteRejection, Redirector, SignedRedirect};
+use crate::cluster::{
+    ClusterMembership, Redirector, RouteDirectory, RouteRejection, SignedRedirect,
+};
 use crate::shard::{HandoffError, HandoffEvent, HandoffTransport, ShardId};
 
 /// Wall-clock unix seconds, used to stamp redirect/token lifetimes.
@@ -487,8 +489,11 @@ impl ShardAuthority {
     /// shard id. Used to announce authority so a stale claim can be detected.
     pub fn owned_epochs(&self) -> Vec<(ShardId, u64)> {
         let g = self.inner.lock().unwrap();
-        let mut v: Vec<(ShardId, u64)> =
-            g.owned.iter().map(|(s, o)| (ShardId(*s), o.epoch)).collect();
+        let mut v: Vec<(ShardId, u64)> = g
+            .owned
+            .iter()
+            .map(|(s, o)| (ShardId(*s), o.epoch))
+            .collect();
         v.sort_by_key(|(s, _)| s.0);
         v
     }
@@ -510,7 +515,12 @@ impl ShardAuthority {
 
     /// The epoch at which this node owns `shard`, or `None` if it does not.
     pub fn epoch_of(&self, shard: ShardId) -> Option<u64> {
-        self.inner.lock().unwrap().owned.get(&shard.0).map(|o| o.epoch)
+        self.inner
+            .lock()
+            .unwrap()
+            .owned
+            .get(&shard.0)
+            .map(|o| o.epoch)
     }
 
     /// Whether this node currently holds authority over `shard`.
@@ -1225,8 +1235,7 @@ fn serve_conn(
                 match authority.commit(shard, epoch) {
                     Ok(()) => {
                         info!(shard, epoch, "shard authority adopted from peer");
-                        let ackb =
-                            msg_bytes(b"mg-commit-ack", &chan.transcript, shard, epoch, "");
+                        let ackb = msg_bytes(b"mg-commit-ack", &chan.transcript, shard, epoch, "");
                         write_frame(
                             sock,
                             &Frame::CommitAck {
@@ -1296,7 +1305,14 @@ fn serve_conn(
                          dropped — a higher epoch owns it elsewhere"
                     );
                 }
-                write_frame(sock, &Frame::FenceAck { shard, epoch, dropped })?;
+                write_frame(
+                    sock,
+                    &Frame::FenceAck {
+                        shard,
+                        epoch,
+                        dropped,
+                    },
+                )?;
             }
             other => {
                 write_frame(
@@ -1458,7 +1474,10 @@ impl NetworkHandoffTransport {
 
     /// The players currently tracked on `shard`.
     pub fn tracked_players(&self, shard: ShardId) -> Vec<u64> {
-        self.shard_players.get(&shard.0).cloned().unwrap_or_default()
+        self.shard_players
+            .get(&shard.0)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Take the redirects minted by committed migrations, clearing the queue.
@@ -1579,7 +1598,10 @@ impl NetworkHandoffTransport {
                 )));
             }
         }
-        let epoch = self.authority.epoch_of(shard).ok_or(HandoffError::NotOwner(shard))?;
+        let epoch = self
+            .authority
+            .epoch_of(shard)
+            .ok_or(HandoffError::NotOwner(shard))?;
         if epoch <= peer_epoch {
             return Err(HandoffError::Rejected(format!(
                 "refusing to fence shard {shard}: we hold epoch {epoch}, peer holds {peer_epoch} \
@@ -1845,7 +1867,8 @@ impl HandoffTransport for NetworkHandoffTransport {
         if !self.authority.owns(shard) {
             self.authority.claim(shard, player_state_blob.to_vec());
         } else {
-            self.authority.update_state(shard, player_state_blob.to_vec());
+            self.authority
+                .update_state(shard, player_state_blob.to_vec());
         }
         // The migrating player is by definition affected: if the move commits,
         // they get a signed redirect to the new owner. If it fails, `migrate_shard`
@@ -1912,9 +1935,9 @@ mod tests {
         }
         fn validate(&self, p: PlayerId, i: &Input, t: Tick) -> Result<Vec<Cmd>, RejectReason> {
             // Mix player, input, and tick so any lost/duplicated step shows up.
-            Ok(vec![Cmd(
-                p.as_u64() ^ (i.mouse.delta_x as i64 as u64).rotate_left(7) ^ t.rotate_left(19),
-            )])
+            Ok(vec![Cmd(p.as_u64()
+                ^ (i.mouse.delta_x as i64 as u64).rotate_left(7)
+                ^ t.rotate_left(19))])
         }
         fn step(&mut self, ctx: &mut StepCtx, cmds: &[(PlayerId, Cmd)]) {
             for (_, c) in cmds {
@@ -2246,8 +2269,8 @@ mod tests {
         let a = ident(70);
         let node_b = FleetNode::bind("127.0.0.1:0", ident(71), None).unwrap();
 
-        let mut t =
-            NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new()).with_timeout(short());
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short());
         t.add_route(ShardId(8), node_b.route());
         t.authority().claim(ShardId(8), b"first".to_vec());
         let epoch = t.migrate_shard(ShardId(8)).unwrap();
@@ -2349,7 +2372,10 @@ mod tests {
         .unwrap();
         match read_frame(&mut sock).unwrap() {
             Frame::Reject { reason } => assert!(reason.contains("hash mismatch"), "{reason}"),
-            other => panic!("tampered state must be rejected, got {}", frame_name(&other)),
+            other => panic!(
+                "tampered state must be rejected, got {}",
+                frame_name(&other)
+            ),
         }
         assert!(!node_b.authority().owns(ShardId(13)));
     }
@@ -2428,8 +2454,8 @@ mod tests {
         let mut src = exec();
         run_ticks(&mut src, 1, 6, &players);
         let (addr, pk) = crash_after_handshake(ident(96));
-        let mut t = NetworkHandoffTransport::new(ident(95), ShardAuthority::new())
-            .with_timeout(short());
+        let mut t =
+            NetworkHandoffTransport::new(ident(95), ShardAuthority::new()).with_timeout(short());
         t.add_route(ShardId(0), PeerRoute::new(addr.to_string(), pk));
         t.authority().claim(ShardId(0), src.snapshot());
         assert!(t.migrate_shard(ShardId(0)).is_err());
@@ -2520,11 +2546,11 @@ mod tests {
         let node_a = FleetNode::bind("127.0.0.1:0", Arc::clone(&a_ident), None).unwrap();
         let node_b = FleetNode::bind("127.0.0.1:0", Arc::clone(&b_ident), None).unwrap();
 
-        let mut a_tx =
-            NetworkHandoffTransport::new(Arc::clone(&a_ident), node_a.authority()).with_timeout(short());
+        let mut a_tx = NetworkHandoffTransport::new(Arc::clone(&a_ident), node_a.authority())
+            .with_timeout(short());
         a_tx.add_route(ShardId(1), node_b.route());
-        let mut b_tx =
-            NetworkHandoffTransport::new(Arc::clone(&b_ident), node_b.authority()).with_timeout(short());
+        let mut b_tx = NetworkHandoffTransport::new(Arc::clone(&b_ident), node_b.authority())
+            .with_timeout(short());
         b_tx.add_route(ShardId(1), node_a.route());
 
         node_a.authority().claim(ShardId(1), b"round trip".to_vec());
@@ -2555,8 +2581,8 @@ mod tests {
         // calls), not just `migrate_shard`.
         let a = ident(120);
         let node_b = FleetNode::bind("127.0.0.1:0", ident(121), None).unwrap();
-        let mut t =
-            NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new()).with_timeout(short());
+        let mut t = NetworkHandoffTransport::new(Arc::clone(&a), ShardAuthority::new())
+            .with_timeout(short());
         t.add_route(ShardId(2), node_b.route());
 
         let ev = HandoffEvent {
@@ -2599,11 +2625,9 @@ mod tests {
     // ── 6. Cluster membership + discovery-driven routes ───────────────────
 
     use crate::cluster::{
-        AdmitError, ClusterMembership, FollowAdmission, RouteDirectory, RouteRejection, Redirector,
+        AdmitError, ClusterMembership, FollowAdmission, Redirector, RouteDirectory, RouteRejection,
     };
-    use magnetite_seams::discovery::{
-        Capacity as AdCapacity, NodeAddr, SessionAd, SignedAd,
-    };
+    use magnetite_seams::discovery::{Capacity as AdCapacity, NodeAddr, SessionAd, SignedAd};
 
     fn ad_at(id: &RawKeypairAuth, addr: &str, now: u64, ttl: u64) -> SignedAd {
         SignedAd::sign(
@@ -2637,8 +2661,7 @@ mod tests {
         let b = ident(141);
         let node_b = FleetNode::bind("127.0.0.1:0", Arc::clone(&b), None).unwrap();
 
-        let membership =
-            ClusterMembership::from_keys([a.node_pubkey(), node_b.pubkey()]);
+        let membership = ClusterMembership::from_keys([a.node_pubkey(), node_b.pubkey()]);
         let mut dir = RouteDirectory::new(membership.clone());
         // B announces itself on the open phonebook, signing with its node key.
         dir.observe(&ad_at(&b, &node_b.addr().to_string(), 1_000, 60), 1_000)
@@ -2649,7 +2672,8 @@ mod tests {
             .with_membership(membership);
         t.route_from_directory(ShardId(21), &node_b.pubkey(), &dir, 1_000)
             .expect("route derived from discovery");
-        t.authority().claim(ShardId(21), b"self-configured".to_vec());
+        t.authority()
+            .claim(ShardId(21), b"self-configured".to_vec());
 
         t.migrate_shard(ShardId(21)).expect("migration succeeds");
         assert!(node_b.authority().owns(ShardId(21)));
@@ -2665,8 +2689,7 @@ mod tests {
         // correctly-signed ad. It must still receive nothing.
         let a = ident(150);
         let volunteer = ident(151);
-        let volunteer_node =
-            FleetNode::bind("127.0.0.1:0", Arc::clone(&volunteer), None).unwrap();
+        let volunteer_node = FleetNode::bind("127.0.0.1:0", Arc::clone(&volunteer), None).unwrap();
 
         let membership = ClusterMembership::from_keys([a.node_pubkey()]);
         let mut dir = RouteDirectory::new(membership.clone());
@@ -2688,7 +2711,8 @@ mod tests {
         // …and even hand-registering one does not help: membership is re-checked
         // at migration time, before a single byte of state leaves this box.
         t.add_route(ShardId(22), volunteer_node.route());
-        t.authority().claim(ShardId(22), b"do not exfiltrate".to_vec());
+        t.authority()
+            .claim(ShardId(22), b"do not exfiltrate".to_vec());
         let err = t.migrate_shard(ShardId(22)).unwrap_err();
         assert!(
             matches!(err, HandoffError::Auth(ref m) if m.contains("not an authorized member")),

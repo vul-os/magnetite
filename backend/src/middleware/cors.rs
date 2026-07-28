@@ -20,8 +20,14 @@ pub fn cors_layer() -> CorsLayer {
 /// The three shapes an allow-origin decision can take. Kept separate from the
 /// `AllowOrigin` mapping (which `tower_http` makes opaque) so the policy logic
 /// is unit-testable.
+///
+/// `pub` so integration tests can assert the REAL decision. `tests/mx1_tests.rs`
+/// used to carry a hand-written "mirror" of this logic and assert against the
+/// mirror; the mirror had drifted and claimed a blank `CORS_ALLOWED_ORIGINS`
+/// yields allow-any, which is the exact security footgun the code below
+/// deliberately does NOT have.
 #[derive(Debug, PartialEq, Eq)]
-enum OriginPolicy {
+pub enum OriginPolicy {
     /// Allow any origin (`*`) — only when explicitly requested.
     Any,
     /// Allow exactly this allowlist.
@@ -41,7 +47,11 @@ enum OriginPolicy {
 ///     if set, else deny-all. A declared-but-empty env var (a common
 ///     deploy mistake) must never silently become an any-origin free-for-all
 ///     in production.
-fn resolve_origin_policy(cors: Option<&str>, frontend: Option<&str>, is_debug: bool) -> OriginPolicy {
+pub fn resolve_origin_policy(
+    cors: Option<&str>,
+    frontend: Option<&str>,
+    is_debug: bool,
+) -> OriginPolicy {
     if let Some(raw) = cors {
         let origins: Vec<String> = raw
             .split(',')
@@ -102,7 +112,10 @@ mod tests {
 
     #[test]
     fn explicit_star_allows_any() {
-        assert_eq!(resolve_origin_policy(Some("*"), None, false), OriginPolicy::Any);
+        assert_eq!(
+            resolve_origin_policy(Some("*"), None, false),
+            OriginPolicy::Any
+        );
         assert_eq!(
             resolve_origin_policy(Some("http://a.com, *"), None, false),
             OriginPolicy::Any
@@ -121,9 +134,18 @@ mod tests {
     fn blank_cors_var_never_allows_any_in_production() {
         // The footgun this guards: leaving CORS_ALLOWED_ORIGINS="" must give
         // deny-all in production, never allow-any.
-        assert_eq!(resolve_origin_policy(Some(""), None, false), OriginPolicy::Deny);
-        assert_eq!(resolve_origin_policy(Some("   "), None, false), OriginPolicy::Deny);
-        assert_eq!(resolve_origin_policy(Some(", ,"), None, false), OriginPolicy::Deny);
+        assert_eq!(
+            resolve_origin_policy(Some(""), None, false),
+            OriginPolicy::Deny
+        );
+        assert_eq!(
+            resolve_origin_policy(Some("   "), None, false),
+            OriginPolicy::Deny
+        );
+        assert_eq!(
+            resolve_origin_policy(Some(", ,"), None, false),
+            OriginPolicy::Deny
+        );
     }
 
     #[test]
@@ -139,7 +161,10 @@ mod tests {
             OriginPolicy::List(vec!["http://a.com".into()]),
         );
         // A blank FRONTEND_URL is treated as unset → deny.
-        assert_eq!(resolve_origin_policy(None, Some("  "), false), OriginPolicy::Deny);
+        assert_eq!(
+            resolve_origin_policy(None, Some("  "), false),
+            OriginPolicy::Deny
+        );
     }
 
     #[test]

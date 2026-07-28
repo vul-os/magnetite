@@ -441,7 +441,11 @@ mod tests {
         let nodes = vec![NodeCapacity::new("only", cap(2, 65536, 3))]; // ceiling 3
         let p = SpreadScheduler.place(&shards, &nodes);
         assert_eq!(p.shards_on(&NodeId("only".into())).len(), 3);
-        assert_eq!(p.unplaced.len(), 7, "shards past capacity are reported unplaced");
+        assert_eq!(
+            p.unplaced.len(),
+            7,
+            "shards past capacity are reported unplaced"
+        );
     }
 
     /// A tiny spatial world exercising the Shardable contract.
@@ -455,10 +459,7 @@ mod tests {
     impl Shardable for World {
         type Entity = Ent;
         fn shard_of(&self, e: &Ent) -> ShardKey {
-            ShardKey::from_cell(
-                (e.x / self.cell_size) as u16,
-                (e.y / self.cell_size) as u16,
-            )
+            ShardKey::from_cell((e.x / self.cell_size) as u16, (e.y / self.cell_size) as u16)
         }
         fn shards(&self) -> Vec<ShardKey> {
             vec![ShardKey::from_cell(0, 0), ShardKey::from_cell(1, 0)]
@@ -472,9 +473,18 @@ mod tests {
     #[test]
     fn shardable_routes_entities_by_position() {
         let w = World { cell_size: 100.0 };
-        assert_eq!(w.shard_of(&Ent { x: 50.0, y: 10.0 }), ShardKey::from_cell(0, 0));
-        assert_eq!(w.shard_of(&Ent { x: 150.0, y: 10.0 }), ShardKey::from_cell(1, 0));
+        assert_eq!(
+            w.shard_of(&Ent { x: 50.0, y: 10.0 }),
+            ShardKey::from_cell(0, 0)
+        );
+        assert_eq!(
+            w.shard_of(&Ent { x: 150.0, y: 10.0 }),
+            ShardKey::from_cell(1, 0)
+        );
         assert_eq!(w.shards().len(), 2);
-        assert_eq!(w.neighbors(ShardKey::from_cell(0, 0)), vec![ShardKey::from_cell(1, 0)]);
+        assert_eq!(
+            w.neighbors(ShardKey::from_cell(0, 0)),
+            vec![ShardKey::from_cell(1, 0)]
+        );
     }
 }

@@ -81,7 +81,7 @@ async fn start_fullstack_server() -> (String, watch::Sender<bool>) {
     drop(listener);
 
     let cfg = MatchConfig {
-        seed: 0xC0FFEE_DEAD,
+        seed: 0xC0FFEEDEAD,
         // snapshot_every = 3: on ticks 1,2 the server sends the bootstrap
         // Snapshot (last_snap_tick == 0), then Delta on tick 2 (since
         // last_snap_tick != 0 and tick % 3 != 0), then Snapshot on tick 3, etc.
@@ -164,7 +164,7 @@ async fn drive_client(ws_url: &str) -> ClientObservation {
             input: Input::default(),
         };
         let text = serde_json::to_string(&frame).expect("serialise InputFrame");
-        ws.send(Message::Text(text.into()))
+        ws.send(Message::Text(text))
             .await
             .expect("client: send InputFrame");
 
@@ -203,8 +203,7 @@ async fn drive_client(ws_url: &str) -> ClientObservation {
                             // deliberately: those are the replay-verifiable
                             // path's counters, and a sensor claim does not
                             // belong in them.
-                            ServerNet::AttestedAck { .. }
-                            | ServerNet::AttestedReject { .. } => {}
+                            ServerNet::AttestedAck { .. } | ServerNet::AttestedReject { .. } => {}
                         }
                     }
                 }
@@ -343,7 +342,7 @@ async fn fullstack_ws_welcome_snapshot_delta_ack_and_replay_clean() {
 
     // ── 8. In-proc convergence — two independent runs must agree ─────────────
     let cfg = MatchConfig {
-        seed: 0xC0FFEE_DEAD,
+        seed: 0xC0FFEEDEAD,
         snapshot_every: 5,
         ..MatchConfig::auto(N_CLIENTS as u32)
     };

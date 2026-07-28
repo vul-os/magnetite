@@ -139,7 +139,7 @@ impl DeterministicRng {
 
 #[inline(always)]
 fn rotl(x: u64, k: u32) -> u64 {
-    (x << k) | (x >> (64 - k))
+    x.rotate_left(k)
 }
 
 // ---------------------------------------------------------------------------
@@ -879,6 +879,15 @@ impl ValidatorChain {
     }
 
     /// Append a validator to the chain.
+    //
+    // `clippy::should_implement_trait` fires on the name `add` and is wrong
+    // here. It is a consuming builder step (`ValidatorChain::new().add(a).add(b)`)
+    // that appends a `Box<dyn Validator>`; `std::ops::Add` cannot express it —
+    // that trait's `add` takes an `Rhs` type parameter, not an
+    // `impl Validator + 'static`, so no `impl Add` could accept the same
+    // arguments. Renaming would break `magnetite-runtime`, the examples and the
+    // rustdoc example twelve lines above for a purely nominal collision.
+    #[allow(clippy::should_implement_trait)]
     pub fn add(mut self, v: impl Validator + 'static) -> Self {
         self.validators.push(Box::new(v));
         self
@@ -1117,7 +1126,7 @@ mod tests {
         let mut rng = DeterministicRng::new(42);
         for _ in 0..1000 {
             let v = rng.next_f32();
-            assert!(v >= 0.0 && v < 1.0, "f32 {v} out of [0,1)");
+            assert!((0.0..1.0).contains(&v), "f32 {v} out of [0,1)");
         }
     }
 

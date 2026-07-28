@@ -1163,7 +1163,7 @@ mod tests {
 
     #[test]
     fn usd_prices_map_to_rail_units() {
-        assert_eq!(payment::units_from_usd(Decimal::new(100_00, 2)), 10_000);
+        assert_eq!(payment::units_from_usd(Decimal::new(10_000, 2)), 10_000);
         assert_eq!(payment::units_from_usd(Decimal::new(99, 2)), 99);
     }
 }

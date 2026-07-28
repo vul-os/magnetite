@@ -20,11 +20,10 @@
 //! ```
 
 use bevy::prelude::*;
-use tokio::sync::mpsc;
 
 use magnetite_sdk::{
     input::{Input as GameInput, KeyState, MouseState},
-    protocol::{ClientNet, ServerNet},
+    protocol::ServerNet,
     state::PlayerId,
     MatchConfig,
 };
@@ -196,16 +195,14 @@ fn handle_server_message(
             // the server would also include the player's authoritative view in
             // the Ack (or we derive it from the last Delta). For the reference
             // client we use the last predicted authoritative state.
-            let auth_view =
-                build_view_from_predicted(&predictor.authoritative, predictor.player_id);
+            let auth_view = build_view_from_predicted(&predictor.authoritative);
             predictor.reconcile_ack(seq, auth_view);
         }
 
         ServerNet::Reject { seq, reason } => {
             eprintln!("[client] input seq={seq} rejected: {reason}");
             // Force reconcile from the current authoritative state.
-            let auth_view =
-                build_view_from_predicted(&predictor.authoritative, predictor.player_id);
+            let auth_view = build_view_from_predicted(&predictor.authoritative);
             predictor.reconcile_ack(seq, auth_view);
         }
 
@@ -240,9 +237,12 @@ fn handle_server_message(
 }
 
 /// Build an [`ArenaView`] from a [`PredictedState`] for reconciliation.
+///
+/// No `player_id` parameter: `PredictedState::self_player` already IS the
+/// observing player's slice of the world, so the id was accepted and then
+/// ignored by every line of the body.
 fn build_view_from_predicted(
     state: &PredictedState,
-    player_id: PlayerId,
 ) -> game_template_authoritative::types::ArenaView {
     game_template_authoritative::types::ArenaView {
         self_state: state.self_player.clone(),

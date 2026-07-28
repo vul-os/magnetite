@@ -97,10 +97,7 @@ pub async fn load_verified_game<B: BlobStore>(
     let bytes = blobs.get(game).await.ok_or(NodeError::BlobMissing(*game))?;
     let got = Hash::of(&bytes);
     if got != *game {
-        return Err(NodeError::HashMismatch {
-            want: *game,
-            got,
-        });
+        return Err(NodeError::HashMismatch { want: *game, got });
     }
     Ok(bytes)
 }
@@ -137,7 +134,10 @@ pub fn build_session_ad(
 
 /// Announce a session to the phonebook. Replaces the central provisioning poll:
 /// the node tells discovery "I host game X with this capacity", clients query it.
-pub async fn announce<D: Discovery + ?Sized>(discovery: &D, ad: SessionAd) -> Result<(), NodeError> {
+pub async fn announce<D: Discovery + ?Sized>(
+    discovery: &D,
+    ad: SessionAd,
+) -> Result<(), NodeError> {
     discovery
         .announce(ad)
         .await
@@ -420,12 +420,9 @@ pub async fn run_node<B: BlobStore, D: Discovery + Send + Sync + 'static>(
 ) -> Result<(), NodeError> {
     let prepared = prepare_game(blobs, discovery.as_ref(), game, &cfg).await?;
 
-    let executor = WasmExecutor::from_bytes(
-        &prepared.bytes,
-        prepared.match_config.clone(),
-        cfg.limits,
-    )
-    .map_err(|e| NodeError::Server(ServerError(format!("wasm load error: {e}"))))?;
+    let executor =
+        WasmExecutor::from_bytes(&prepared.bytes, prepared.match_config.clone(), cfg.limits)
+            .map_err(|e| NodeError::Server(ServerError(format!("wasm load error: {e}"))))?;
 
     // Durability wiring. Wrapping the executor is what makes the simulated world
     // visible to the fleet layer at all: without it this node owns no shard, so
@@ -646,7 +643,11 @@ mod tests {
         d.announce(ad.clone()).await.unwrap();
         assert_eq!(d.live_count(), 1, "listed on the initial announce");
 
-        let hb = spawn_heartbeat(Arc::clone(&d) as Arc<dyn Discovery + Send + Sync>, ad, lease);
+        let hb = spawn_heartbeat(
+            Arc::clone(&d) as Arc<dyn Discovery + Send + Sync>,
+            ad,
+            lease,
+        );
 
         // Wait well past the ORIGINAL lease. Without renewal this ad is gone.
         tokio::time::sleep(Duration::from_millis(700)).await;

@@ -226,10 +226,7 @@ impl Checkpoint {
         }
         let got = self.id();
         if got != want_id {
-            return Err(RestoreError::Tampered {
-                want: want_id,
-                got,
-            });
+            return Err(RestoreError::Tampered { want: want_id, got });
         }
         if Hash::of(&self.state) != self.state_hash {
             return Err(RestoreError::StateHashMismatch {
@@ -523,8 +520,8 @@ impl CheckpointStore {
         if got != id {
             return Err(RestoreError::Tampered { want: id, got });
         }
-        let cp: Checkpoint = serde_json::from_slice(&bytes)
-            .map_err(|e| RestoreError::Undecodable(e.to_string()))?;
+        let cp: Checkpoint =
+            serde_json::from_slice(&bytes).map_err(|e| RestoreError::Undecodable(e.to_string()))?;
         cp.verify(id, shard)?;
         Ok(cp)
     }
@@ -1049,7 +1046,10 @@ mod tests {
             restore_shard(&auth, &s, &bad_ref, ShardId(9), owner(), 0),
             Err(RestoreError::WrongShard { .. })
         ));
-        assert!(!auth.owns(ShardId(9)), "a refused restore must claim nothing");
+        assert!(
+            !auth.owns(ShardId(9)),
+            "a refused restore must claim nothing"
+        );
     }
 
     #[test]
@@ -1100,7 +1100,10 @@ mod tests {
         cp.state_hash = Hash::of(b"not-the-real-state");
         let id = s.put(&cp);
         let err = s.get_verified(id, ShardId(3)).unwrap_err();
-        assert!(matches!(err, RestoreError::StateHashMismatch { .. }), "{err}");
+        assert!(
+            matches!(err, RestoreError::StateHashMismatch { .. }),
+            "{err}"
+        );
     }
 
     #[test]
@@ -1196,7 +1199,9 @@ mod tests {
         let made = cpr.checkpoint_due(&auth, 1, 0, t0);
         assert_eq!(made.len(), 1, "first pass always checkpoints");
         // Not due yet.
-        assert!(cpr.checkpoint_due(&auth, 2, 0, t0 + Duration::from_secs(3)).is_empty());
+        assert!(cpr
+            .checkpoint_due(&auth, 2, 0, t0 + Duration::from_secs(3))
+            .is_empty());
         // Due.
         assert_eq!(
             cpr.checkpoint_due(&auth, 3, 0, t0 + Duration::from_secs(11))
@@ -1205,9 +1210,7 @@ mod tests {
         );
         // A shard we do not own is never checkpointed — a non-owner must not
         // publish "durable" state it has no authority over.
-        assert!(cpr
-            .checkpoint_now(&auth, ShardId(99), 4, 0, t0)
-            .is_none());
+        assert!(cpr.checkpoint_now(&auth, ShardId(99), 4, 0, t0).is_none());
     }
 
     #[test]
@@ -1271,7 +1274,10 @@ mod tests {
         let mine = auth.epoch_of(ShardId(1)).expect("claimed");
 
         // A survivor restored it at a strictly higher epoch and fenced us.
-        assert!(auth.fence(ShardId(1), mine + 5), "fence must strip ownership");
+        assert!(
+            auth.fence(ShardId(1), mine + 5),
+            "fence must strip ownership"
+        );
         assert!(!auth.owns(ShardId(1)));
 
         // The game does not know it is dead and keeps simulating.

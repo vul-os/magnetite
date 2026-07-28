@@ -157,7 +157,7 @@ pub struct ShotResult {
 /// - `+X` → right
 /// - `+Y` → up
 /// - `-Z` → forward (camera look-at default)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct FpsGame {
     /// Canonical platform state (players, tick, world payload).
     state: GameState,
@@ -187,23 +187,14 @@ const JUMP_IMPULSE: f32 = 7.0;
 /// Headshot multiplier (also used by hitscan.rs).
 pub(crate) const HEADSHOT_MULT: f32 = 2.5;
 
-impl Default for FpsGame {
-    fn default() -> Self {
-        Self {
-            state: GameState::default(),
-            next_player_id: 0,
-            pending_shots: Vec::new(),
-            respawn_timers: HashMap::new(),
-        }
-    }
-}
-
 impl FpsGame {
     /// Spawn a new player at a spawn point defined in the level.
     fn spawn_player(&mut self, player_id: PlayerId) {
         let spawn = level::spawn_point_for(player_id, &self.state);
-        let mut custom = FpsPlayerCustom::default();
-        custom.grounded = true;
+        let custom = FpsPlayerCustom {
+            grounded: true,
+            ..FpsPlayerCustom::default()
+        };
 
         let mut ps = PlayerState {
             id: player_id,
@@ -562,6 +553,12 @@ impl GameLogic for FpsGame {
 #[wasm_bindgen]
 pub struct FpsGameHandle {
     game: FpsGame,
+}
+
+impl Default for FpsGameHandle {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]

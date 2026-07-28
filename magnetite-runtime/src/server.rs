@@ -414,7 +414,10 @@ enum Inbound {
     /// The client presented a follow redirect that
     /// [`crate::cluster::FollowAdmission`] accepted: adopt their original
     /// player id on the named shard.
-    Followed { player: PlayerId, shard: crate::shard::ShardId },
+    Followed {
+        player: PlayerId,
+        shard: crate::shard::ShardId,
+    },
     /// The client presented a follow this node refused. Fail closed: the
     /// connection is dropped rather than degraded to an anonymous session.
     Refused(String),
@@ -712,7 +715,7 @@ where
     S::Error: std::fmt::Display,
 {
     let text = serde_json::to_string(msg).map_err(|e| SendError(e.to_string()))?;
-    sink.send(Message::Text(text.into()))
+    sink.send(Message::Text(text))
         .await
         .map_err(|e| SendError(e.to_string()))?;
     Ok(())
@@ -932,7 +935,7 @@ mod tests {
             bind_addr: "127.0.0.1:9000".to_string(),
             match_config: MatchConfig::auto(4),
             anticheat: Some(ac),
-        fleet: None,
+            fleet: None,
         };
         // `anticheat` field is `Some` — assert it holds a value.
         assert!(cfg.anticheat.is_some());

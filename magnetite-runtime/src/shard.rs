@@ -635,8 +635,11 @@ impl std::error::Error for HandoffError {}
 /// remaining TODO (see [`NetworkHandoffTransport`]).
 pub trait HandoffTransport: Send {
     /// Transfer `player_state_blob` to wherever `event.to_shard` is hosted.
-    fn transfer(&mut self, event: &HandoffEvent, player_state_blob: &[u8])
-        -> Result<(), HandoffError>;
+    fn transfer(
+        &mut self,
+        event: &HandoffEvent,
+        player_state_blob: &[u8],
+    ) -> Result<(), HandoffError>;
 }
 
 /// In-process handoff transport — the working single-node path.

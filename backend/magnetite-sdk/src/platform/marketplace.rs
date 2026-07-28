@@ -1,9 +1,13 @@
 //! Platform marketplace — in-game store items, purchases, and entitlements.
 //!
 //! The Magnetite marketplace enables developers to run **in-game stores** with
-//! cosmetics, items, DLC, and season passes.  All purchases flow through the
-//! platform's payment rails (Paystack fiat on-ramp / platform points) with a
-//! 30% platform fee and revenue share paid out to the developer via Wise.
+//! cosmetics, items, DLC, and season passes.  Purchases settle over the
+//! `PaymentRail` seam (`magnetite-seams`, `DECENTRALIZATION.md` §3.6): an
+//! atomic, non-custodial wallet→wallet transfer whose signed receipt IS the
+//! entitlement.  There is no fiat on-ramp, no platform-held balance and no
+//! payout batch — the Paystack on-ramp, the Wise payout path and the 30%
+//! platform cut this module used to describe went out with the rest of
+//! custody (§2).
 //!
 //! # Concepts
 //!
@@ -184,13 +188,16 @@ pub struct PurchaseRequest {
 }
 
 /// Payment method for a purchase.
+///
+/// The `Paystack` variant is gone: that processor was ripped out with the rest
+/// of the fiat/custody stack (`DECENTRALIZATION.md` §2), so nothing on either
+/// end could honour it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PaymentMethod {
-    /// Pay with fiat USD from the player's platform wallet (funded via Paystack on-ramp).
+    /// Pay the item's USD price on the configured `PaymentRail` (USDC by
+    /// default) — wallet→wallet, settled by signed receipt.
     Usd,
-    /// Pay via Paystack directly (fiat on-ramp for supported regions).
-    Paystack,
     /// Pay with platform points (deducted from the player's balance).
     Points,
 }
@@ -690,11 +697,7 @@ mod tests {
 
     #[test]
     fn payment_method_all_variants_serde() {
-        let methods = [
-            PaymentMethod::Usd,
-            PaymentMethod::Paystack,
-            PaymentMethod::Points,
-        ];
+        let methods = [PaymentMethod::Usd, PaymentMethod::Points];
         for m in &methods {
             let json = serde_json::to_string(m).unwrap();
             let back: PaymentMethod = serde_json::from_str(&json).unwrap();

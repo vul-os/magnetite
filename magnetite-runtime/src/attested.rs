@@ -45,9 +45,9 @@
 
 use std::sync::Mutex;
 
-use magnetite_seams::SeamError;
 use magnetite_seams::identity::RawKeypairAuth;
 use magnetite_seams::input::{AttestedEventInput, PlausibilityLimits, SignedAttestedEvent};
+use magnetite_seams::SeamError;
 
 /// Connection-level ceiling on **received** attested frames per second.
 ///

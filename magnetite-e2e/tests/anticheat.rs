@@ -190,7 +190,7 @@ async fn anticheat_rejects_speedhack_and_escalates_trust_score() {
         },
     };
     let text = serde_json::to_string(&cheat_input).unwrap();
-    cheater_ws.send(Message::Text(text.into())).await.unwrap();
+    cheater_ws.send(Message::Text(text)).await.unwrap();
 
     // Collect server responses; expect at least one Reject for the cheat input.
     let mut found_reject = false;
@@ -285,7 +285,7 @@ async fn anticheat_allows_honest_client() {
         },
     };
     let text = serde_json::to_string(&clean_input).unwrap();
-    ws.send(Message::Text(text.into())).await.unwrap();
+    ws.send(Message::Text(text)).await.unwrap();
 
     // Collect responses; we must receive Ack(seq=42) and must NOT receive Reject(seq=42).
     let mut found_reject = false;

@@ -242,7 +242,10 @@ impl FleetSession {
 
     /// How many follow tokens this node has redeemed.
     pub fn redeemed_count(&self) -> usize {
-        self.admission.lock().map(|d| d.redeemed_count()).unwrap_or(0)
+        self.admission
+            .lock()
+            .map(|d| d.redeemed_count())
+            .unwrap_or(0)
     }
 }
 

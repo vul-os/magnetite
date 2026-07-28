@@ -373,6 +373,28 @@ async fn audit_event(
     .await;
 }
 
+/// Build a Redis connection for session + lockout storage when reachable.
+/// Honoured opt-out: `SUPERADMIN_SESSION_BACKEND=memory` forces in-memory.
+/// Otherwise uses `REDIS_URL` if a connection succeeds; falls back to in-memory.
+async fn build_session_redis() -> Option<redis::aio::ConnectionManager> {
+    if std::env::var("SUPERADMIN_SESSION_BACKEND").as_deref() == Ok("memory") {
+        return None;
+    }
+    let url = std::env::var("REDIS_URL")
+        .ok()
+        .filter(|u| !u.trim().is_empty())?;
+    let client = redis::Client::open(url).ok()?;
+    match redis::aio::ConnectionManager::new(client).await {
+        Ok(cm) => Some(cm),
+        Err(e) => {
+            tracing::warn!(
+                "super-admin: Redis session backend unavailable ({e}); using in-memory sessions"
+            );
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod route_tests {
     use super::*;
@@ -542,27 +564,5 @@ mod route_tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::SEE_OTHER);
         assert!(header(&resp, "location").contains("Invalid+credentials"));
-    }
-}
-
-/// Build a Redis connection for session + lockout storage when reachable.
-/// Honoured opt-out: `SUPERADMIN_SESSION_BACKEND=memory` forces in-memory.
-/// Otherwise uses `REDIS_URL` if a connection succeeds; falls back to in-memory.
-async fn build_session_redis() -> Option<redis::aio::ConnectionManager> {
-    if std::env::var("SUPERADMIN_SESSION_BACKEND").as_deref() == Ok("memory") {
-        return None;
-    }
-    let url = std::env::var("REDIS_URL")
-        .ok()
-        .filter(|u| !u.trim().is_empty())?;
-    let client = redis::Client::open(url).ok()?;
-    match redis::aio::ConnectionManager::new(client).await {
-        Ok(cm) => Some(cm),
-        Err(e) => {
-            tracing::warn!(
-                "super-admin: Redis session backend unavailable ({e}); using in-memory sessions"
-            );
-            None
-        }
     }
 }

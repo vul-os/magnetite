@@ -1,0 +1,16 @@
+[
+  { "name": "backend",          "dir": "backend",                       "flags": "" },
+  { "name": "sdk",              "dir": "backend/magnetite-sdk",         "flags": "--all-features" },
+  { "name": "seams",            "dir": "magnetite-seams",               "flags": "--all-features" },
+  { "name": "sandbox",          "dir": "magnetite-sandbox",             "flags": "" },
+  { "name": "anticheat",        "dir": "magnetite-anticheat",           "flags": "" },
+  { "name": "runtime",          "dir": "magnetite-runtime",             "flags": "" },
+  { "name": "e2e",              "dir": "magnetite-e2e",                 "flags": "" },
+  { "name": "solana-rail",      "dir": "magnetite-solana-rail",         "flags": "" },
+  { "name": "cli",              "dir": "magnetite-cli",                 "flags": "" },
+  { "name": "game-client-bevy", "dir": "game-client-bevy",              "flags": "", "apt": "libasound2-dev libudev-dev" },
+  { "name": "tpl-arcade",       "dir": "game-templates/arcade",         "flags": "" },
+  { "name": "tpl-authoritative","dir": "game-templates/authoritative",  "flags": "" },
+  { "name": "tpl-fps",          "dir": "game-templates/fps",            "flags": "" },
+  { "name": "tpl-motorsport",   "dir": "game-templates/motorsport",     "flags": "" }
+]

@@ -99,9 +99,9 @@ fn directory(
     members: &[PubKey],
     routes: &[PeerRoute],
 ) -> magnetite_runtime::cluster::RouteDirectory {
-    let mut dir = magnetite_runtime::cluster::RouteDirectory::new(
-        ClusterMembership::from_keys(members.iter().copied()),
-    );
+    let mut dir = magnetite_runtime::cluster::RouteDirectory::new(ClusterMembership::from_keys(
+        members.iter().copied(),
+    ));
     for r in routes {
         let _ = dir.admit_operator_route(r.clone());
     }
@@ -133,8 +133,9 @@ fn fast_policy() -> RebalancePolicy {
 #[test]
 fn shards_distribute_across_three_nodes_by_capacity() {
     // A is big (6 shards), B medium (3), C small (1). All 10 shards start on A.
-    let ids: Vec<Arc<RawKeypairAuth>> =
-        (0..3).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..3)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 6, &members);
     let b = Node::spawn_as(Arc::clone(&ids[1]), 3, &members);
@@ -173,7 +174,9 @@ fn shards_distribute_across_three_nodes_by_capacity() {
 
 #[test]
 fn convergence_then_zero_migrations() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..3).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..3)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
     let b = Node::spawn_as(Arc::clone(&ids[1]), 4, &members);
@@ -227,7 +230,9 @@ fn convergence_then_zero_migrations() {
 
 #[test]
 fn a_joining_node_takes_share() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..3).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..3)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
     let b = Node::spawn_as(Arc::clone(&ids[1]), 4, &members);
@@ -278,7 +283,9 @@ fn a_joining_node_takes_share() {
 
 #[test]
 fn a_shard_in_cooldown_is_not_moved_again() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..2).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..2)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
     let b = Node::spawn_as(Arc::clone(&ids[1]), 4, &members);
@@ -320,7 +327,9 @@ fn a_shard_in_cooldown_is_not_moved_again() {
 
 #[test]
 fn an_unreachable_peer_is_backed_off_not_hammered() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..2).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..2)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
 
@@ -366,7 +375,9 @@ fn an_unreachable_peer_is_backed_off_not_hammered() {
 
 #[test]
 fn a_failed_migration_leaves_the_source_owning_the_shard() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..2).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..2)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
     // B answers a probe, then dies before the handoff.
@@ -419,7 +430,9 @@ fn a_failed_migration_leaves_the_source_owning_the_shard() {
 
 #[test]
 fn a_dead_peers_shards_are_reported_as_lost_not_recovered() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..2).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..2)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
     let b = Node::spawn_as(Arc::clone(&ids[1]), 4, &members);
@@ -440,7 +453,10 @@ fn a_dead_peers_shards_are_reported_as_lost_not_recovered() {
 
     let first = r.tick(&mut t, &dir, &cap(4), now_unix(), Instant::now());
     assert!(first.lost.is_empty(), "mourned a live node");
-    assert!(first.migrated.is_empty(), "moved shards in a balanced cluster");
+    assert!(
+        first.migrated.is_empty(),
+        "moved shards in a balanced cluster"
+    );
 
     // B dies, taking shards 5..=8 and everything in them.
     let mut b = b;
@@ -492,7 +508,9 @@ fn a_dead_peers_shards_are_reported_as_lost_not_recovered() {
 
 #[test]
 fn a_lapsed_peer_stops_receiving_work() {
-    let ids: Vec<Arc<RawKeypairAuth>> = (0..2).map(|_| Arc::new(RawKeypairAuth::generate())).collect();
+    let ids: Vec<Arc<RawKeypairAuth>> = (0..2)
+        .map(|_| Arc::new(RawKeypairAuth::generate()))
+        .collect();
     let members: Vec<PubKey> = ids.iter().map(|i| i.node_pubkey()).collect();
     let a = Node::spawn_as(Arc::clone(&ids[0]), 4, &members);
     let b = Node::spawn_as(Arc::clone(&ids[1]), 4, &members);
@@ -512,7 +530,10 @@ fn a_lapsed_peer_stops_receiving_work() {
         assert!(rep.migrated.is_empty());
     }
     assert_eq!(a.owned(), vec![1, 2, 3, 4]);
-    assert!(b.owned().is_empty(), "work reached a node with no live route");
+    assert!(
+        b.owned().is_empty(),
+        "work reached a node with no live route"
+    );
 
     // Restore the route and it starts taking share again — the lapse was not
     // a permanent eviction, just an absence of a place to send work.
@@ -524,7 +545,10 @@ fn a_lapsed_peer_stops_receiving_work() {
             break;
         }
     }
-    assert!(!b.owned().is_empty(), "a recovered peer never got work back");
+    assert!(
+        !b.owned().is_empty(),
+        "a recovered peer never got work back"
+    );
 }
 
 // ---------------------------------------------------------------------------

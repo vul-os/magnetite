@@ -284,7 +284,7 @@ async fn ws_round_trip_latency_bench() {
         let text = serde_json::to_string(&frame).unwrap();
 
         let t0 = Instant::now();
-        ws.send(Message::Text(text.into())).await.unwrap();
+        ws.send(Message::Text(text)).await.unwrap();
 
         // Drain until we receive Ack{seq} or timeout (2 s per sample).
         let deadline = tokio::time::Instant::now() + Duration::from_secs(2);

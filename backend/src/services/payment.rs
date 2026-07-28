@@ -33,8 +33,7 @@ use std::sync::OnceLock;
 
 pub use magnetite_seams::identity::{PubKey, Sig};
 pub use magnetite_seams::payment::{
-    ChainBinding, Channel, MockPaymentRail, PayOut, PaymentRail, PaymentSplit,
-    Receipt, Split,
+    ChainBinding, Channel, MockPaymentRail, PayOut, PaymentRail, PaymentSplit, Receipt, Split,
 };
 
 /// Protocol fee in basis points. Default `0` (governance decides any real fee).
@@ -61,9 +60,8 @@ fn rail_kind() -> String {
 pub fn rail() -> &'static dyn PaymentRail {
     static RAIL: OnceLock<Box<dyn PaymentRail + Send + Sync>> = OnceLock::new();
     RAIL.get_or_init(|| match rail_kind().as_str() {
-        "mock" => {
-            Box::new(MockPaymentRail::with_fee_bps(protocol_fee_bps())) as Box<dyn PaymentRail + Send + Sync>
-        }
+        "mock" => Box::new(MockPaymentRail::with_fee_bps(protocol_fee_bps()))
+            as Box<dyn PaymentRail + Send + Sync>,
         #[cfg(feature = "solana")]
         "solana" => Box::new(solana_rail_from_env().unwrap_or_else(|e| {
             panic!(
@@ -102,8 +100,7 @@ pub fn rail() -> &'static dyn PaymentRail {
 /// crate's docs) that keeps magnetite's own `PaymentRail` seam on top of it
 /// (see `patala/PATALA.md` §7).
 #[cfg(feature = "solana")]
-fn solana_rail_from_env(
-) -> std::result::Result<magnetite_solana_rail::SolanaPaymentRail, String> {
+fn solana_rail_from_env() -> std::result::Result<magnetite_solana_rail::SolanaPaymentRail, String> {
     use magnetite_solana_rail::patala_solana::{
         rpc::HttpRpc,
         tx::{pubkey_from_base58, USDC_DEVNET_MINT, USDC_MAINNET_MINT},
@@ -111,8 +108,8 @@ fn solana_rail_from_env(
     use magnetite_solana_rail::{Cluster, Commitment, SolanaConfig, SolanaPaymentRail};
     use std::sync::Arc;
 
-    let rpc_url = std::env::var("SOLANA_RPC_URL")
-        .map_err(|_| "SOLANA_RPC_URL is not set".to_string())?;
+    let rpc_url =
+        std::env::var("SOLANA_RPC_URL").map_err(|_| "SOLANA_RPC_URL is not set".to_string())?;
     if !rpc_url.starts_with("http://") && !rpc_url.starts_with("https://") {
         return Err(format!("SOLANA_RPC_URL {rpc_url:?} is not an http(s) URL"));
     }
@@ -190,12 +187,11 @@ pub fn units_from_usd(price: Decimal) -> u64 {
 /// The wallet (Ed25519 pubkey) a user has linked, if any. Non-custodial: we only
 /// ever record an address, never hold funds.
 pub async fn wallet_of(pool: &PgPool, user_id: Uuid) -> Result<Option<PubKey>> {
-    let row = sqlx::query_as::<_, (Option<String>,)>(
-        "SELECT wallet_address FROM users WHERE id = $1",
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_as::<_, (Option<String>,)>("SELECT wallet_address FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
     Ok(row
         .and_then(|r| r.0)
         .and_then(|h| PubKey::from_hex(h.trim_start_matches("0x")).ok()))
@@ -377,11 +373,7 @@ pub async fn has_hosting_access(pool: &PgPool, user_id: Uuid, server_id: Uuid) -
 /// malformed — a row that cannot be parsed back into the receipt it claims to be
 /// is not a receipt.
 #[allow(clippy::type_complexity)]
-pub async fn load_receipt(
-    pool: &PgPool,
-    buyer_id: Uuid,
-    item_id: Uuid,
-) -> Result<Option<Receipt>> {
+pub async fn load_receipt(pool: &PgPool, buyer_id: Uuid, item_id: Uuid) -> Result<Option<Receipt>> {
     let row: Option<(
         String,
         i64,
@@ -392,7 +384,7 @@ pub async fn load_receipt(
         String,
         Option<serde_json::Value>,
     )> = sqlx::query_as(
-            r#"
+        r#"
             SELECT buyer_pubkey, total, protocol_fee, payouts, nonce, rail_pubkey, sig, binding
               FROM payment_receipts
              WHERE buyer_id = $1
@@ -401,11 +393,11 @@ pub async fn load_receipt(
              ORDER BY created_at DESC
              LIMIT 1
             "#,
-        )
-        .bind(buyer_id)
-        .bind(item_id)
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(buyer_id)
+    .bind(item_id)
+    .fetch_optional(pool)
+    .await?;
 
     let Some((buyer, total, fee, payouts, nonce, rail_pk, sig, binding)) = row else {
         return Ok(None);
@@ -538,9 +530,8 @@ mod tests {
     #[test]
     fn default_protocol_fee_is_zero() {
         // No PROTOCOL_FEE_BPS in the test env.
-        assert_eq!(
-            std::env::var("PROTOCOL_FEE_BPS").ok().is_none(),
-            true,
+        assert!(
+            std::env::var("PROTOCOL_FEE_BPS").is_err(),
             "test env must not set PROTOCOL_FEE_BPS"
         );
         assert_eq!(protocol_fee_bps(), 0);
@@ -562,7 +553,9 @@ mod tests {
     #[tokio::test]
     async fn tampered_receipt_does_not_grant_entitlement() {
         let buyer = pk(0xB1);
-        let mut r = rail().checkout(&buyer, sale_split(pk(0xD1), 500, None)).await;
+        let mut r = rail()
+            .checkout(&buyer, sale_split(pk(0xD1), 500, None))
+            .await;
         assert!(verify_receipt(&r));
         r.payouts[0].amount = 5_000_000;
         assert!(

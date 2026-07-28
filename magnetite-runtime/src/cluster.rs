@@ -323,10 +323,7 @@ impl RouteDirectory {
     /// established by actually reaching the node, not by an ad's expiry — see
     /// [`crate::rebalance`], which treats an unanswered peer as a place not to
     /// put work.
-    pub fn admit_operator_route(
-        &mut self,
-        route: PeerRoute,
-    ) -> Result<PeerRoute, RouteRejection> {
+    pub fn admit_operator_route(&mut self, route: PeerRoute) -> Result<PeerRoute, RouteRejection> {
         if !self.membership.contains(&route.pubkey) {
             return Err(RouteRejection::NotAMember(route.pubkey.to_hex()));
         }
@@ -632,7 +629,8 @@ impl FollowAdmission {
             return Err(AdmitError::IssuerNotAMember(token.issuer.to_hex()));
         }
         // 3. Authorship.
-        if !<RawKeypairAuth as Identity>::verify(&token.issuer, &token.signing_bytes(), &token.sig) {
+        if !<RawKeypairAuth as Identity>::verify(&token.issuer, &token.signing_bytes(), &token.sig)
+        {
             return Err(AdmitError::BadSignature);
         }
         // 4. Freshness.
@@ -1017,13 +1015,19 @@ mod tests {
         let mut dir = RouteDirectory::new(ClusterMembership::from_keys([member.node_pubkey()]));
 
         let err = dir
-            .observe(&signed(&volunteer, "attacker.example:7100", 1_000, 60), 1_000)
+            .observe(
+                &signed(&volunteer, "attacker.example:7100", 1_000, 60),
+                1_000,
+            )
             .unwrap_err();
         assert!(
             matches!(err, RouteRejection::NotAMember(_)),
             "announcing is not joining, got {err:?}"
         );
-        assert!(dir.is_empty(), "a rejected ad teaches the directory nothing");
+        assert!(
+            dir.is_empty(),
+            "a rejected ad teaches the directory nothing"
+        );
         assert!(matches!(
             dir.route_for(&volunteer.node_pubkey(), 1_000),
             Err(RouteRejection::NotAMember(_))
@@ -1171,7 +1175,8 @@ mod tests {
 
         // B admits, because it really does own shard 3 at epoch 5.
         let mut door = FollowAdmission::new(b.node_pubkey(), membership);
-        door.admit(&r.token, 42, ShardId(3), Some(5), 1_001).unwrap();
+        door.admit(&r.token, 42, ShardId(3), Some(5), 1_001)
+            .unwrap();
         assert_eq!(door.redeemed_count(), 1);
     }
 
@@ -1190,7 +1195,15 @@ mod tests {
         );
 
         // …and tampering with a genuine redirect to re-point it also fails.
-        let mut tampered = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&ident(11), "10.0.0.11:7100"), 1_000, 30);
+        let mut tampered = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&ident(11), "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         tampered.addr = "attacker.example:7100".into();
         tampered.target_key = attacker.node_pubkey();
         assert!(matches!(
@@ -1204,7 +1217,15 @@ mod tests {
         let a = ident(10);
         let b = ident(11);
         let membership = ClusterMembership::from_keys([a.node_pubkey(), b.node_pubkey()]);
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
 
         assert!(matches!(
             r.verify_for(&a.node_pubkey(), 42, 1_031),
@@ -1225,7 +1246,15 @@ mod tests {
         let membership = ClusterMembership::from_keys([a.node_pubkey(), b.node_pubkey()]);
         // A redirect from an OLD migration (epoch 5) replayed after the shard has
         // moved on to epoch 7.
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         let mut door = FollowAdmission::new(b.node_pubkey(), membership);
         assert_eq!(
             door.admit(&r.token, 42, ShardId(3), Some(7), 1_001),
@@ -1249,7 +1278,15 @@ mod tests {
         let a = ident(10);
         let b = ident(11);
         let membership = ClusterMembership::from_keys([a.node_pubkey(), b.node_pubkey()]);
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         let mut door = FollowAdmission::new(b.node_pubkey(), membership);
 
         assert_eq!(
@@ -1273,7 +1310,15 @@ mod tests {
         let a = ident(10);
         let b = ident(11);
         let membership = ClusterMembership::from_keys([a.node_pubkey(), b.node_pubkey()]);
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         let mut door = FollowAdmission::new(b.node_pubkey(), membership);
         assert_eq!(
             door.admit(&r.token, 42, ShardId(4), Some(5), 1_001),
@@ -1289,9 +1334,18 @@ mod tests {
         let a = ident(10);
         let b = ident(11);
         let membership = ClusterMembership::from_keys([a.node_pubkey(), b.node_pubkey()]);
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         let mut door = FollowAdmission::new(b.node_pubkey(), membership);
-        door.admit(&r.token, 42, ShardId(3), Some(5), 1_001).unwrap();
+        door.admit(&r.token, 42, ShardId(3), Some(5), 1_001)
+            .unwrap();
         assert_eq!(
             door.admit(&r.token, 42, ShardId(3), Some(5), 1_002),
             Err(AdmitError::Replayed)
@@ -1305,7 +1359,15 @@ mod tests {
         let c = ident(12);
         let membership =
             ClusterMembership::from_keys([a.node_pubkey(), b.node_pubkey(), c.node_pubkey()]);
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         // C is a perfectly legitimate cluster member — and still must not redeem
         // a ticket written for B.
         let mut door_c = FollowAdmission::new(c.node_pubkey(), membership);
@@ -1349,7 +1411,15 @@ mod tests {
         let a = ident(10);
         let b = ident(11);
         let attacker_target = ident(99);
-        let mut r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let mut r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         // Swap in a token that A also legitimately minted, but for a different
         // target. The envelope signature covers the token signature, so this dies.
         r.token = FollowToken::mint(
@@ -1371,7 +1441,15 @@ mod tests {
     fn redirects_serialize_over_the_wire() {
         let a = ident(10);
         let b = ident(11);
-        let r = SignedRedirect::mint(&a, 42, ShardId(3), 5, &route_of(&b, "10.0.0.11:7100"), 1_000, 30);
+        let r = SignedRedirect::mint(
+            &a,
+            42,
+            ShardId(3),
+            5,
+            &route_of(&b, "10.0.0.11:7100"),
+            1_000,
+            30,
+        );
         let json = serde_json::to_string(&r).unwrap();
         let back: SignedRedirect = serde_json::from_str(&json).unwrap();
         assert_eq!(back, r);
@@ -1383,9 +1461,14 @@ mod tests {
         let a = ident(10);
         let b = ident(11);
         let route = route_of(&b, "10.0.0.11:7100");
-        let rs = Redirector::new()
-            .with_ttl(15)
-            .redirects_for(&a, &[1, 2, 3], ShardId(3), 5, &route, 1_000);
+        let rs = Redirector::new().with_ttl(15).redirects_for(
+            &a,
+            &[1, 2, 3],
+            ShardId(3),
+            5,
+            &route,
+            1_000,
+        );
         assert_eq!(rs.len(), 3);
         for (i, r) in rs.iter().enumerate() {
             assert_eq!(r.player, i as u64 + 1);

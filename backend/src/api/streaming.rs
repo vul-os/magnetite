@@ -344,7 +344,11 @@ pub async fn media_host_for(pool: &PgPool, stream_id: Uuid) -> Option<String> {
             .await
             .ok()
             .flatten();
-    if let Some(host) = own.flatten().map(|h| h.trim().to_string()).filter(|h| !h.is_empty()) {
+    if let Some(host) = own
+        .flatten()
+        .map(|h| h.trim().to_string())
+        .filter(|h| !h.is_empty())
+    {
         return Some(host.trim_end_matches('/').to_string());
     }
     std::env::var("MEDIA_SERVER_BASE_URL")

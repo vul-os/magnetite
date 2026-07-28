@@ -741,15 +741,17 @@ impl InputMap {
                 }
 
                 // Trigger actions for driving games: emit Accelerate/Brake analogue.
-                if *axis == GamepadAxis::RightTrigger && value > self.dead_zone {
-                    if !actions.contains(&GameAction::Accelerate) {
-                        actions.push(GameAction::Accelerate);
-                    }
+                if *axis == GamepadAxis::RightTrigger
+                    && value > self.dead_zone
+                    && !actions.contains(&GameAction::Accelerate)
+                {
+                    actions.push(GameAction::Accelerate);
                 }
-                if *axis == GamepadAxis::LeftTrigger && value > self.dead_zone {
-                    if !actions.contains(&GameAction::Brake) {
-                        actions.push(GameAction::Brake);
-                    }
+                if *axis == GamepadAxis::LeftTrigger
+                    && value > self.dead_zone
+                    && !actions.contains(&GameAction::Brake)
+                {
+                    actions.push(GameAction::Brake);
                 }
             }
             // Release/connect/disconnect events do not produce positive actions.

@@ -213,10 +213,11 @@ impl InputMap {
             return FpsAction::Aim;
         }
 
-        // Reload (R key mapped to Custom(GAMEPAD_BTN_X) or secondary_attack).
-        // We map `secondary_attack` to reload here only when ADS is not pressed —
-        // the above branch handles ADS first, so we're safe.
-        // Reload is triggered by the X/West button on a gamepad.
+        // Reload — the X/West button on a gamepad. NOTE: this branch is
+        // currently unreachable, because an `Input` frame has no way to carry
+        // that button (see `gamepad_button`). It is kept, ahead of the other
+        // digital buttons, so the priority order is already correct when the
+        // SDK gains a transport for it.
         if Self::gamepad_button(input, GAMEPAD_BTN_X) {
             return FpsAction::Reload;
         }
@@ -301,25 +302,34 @@ impl InputMap {
     /// |---|---|
     /// | `GAMEPAD_BTN_A` (South / Jump) | `keys.jump` |
     /// | `GAMEPAD_BTN_B` (East / Crouch) | `keys.crouch` |
-    /// | `GAMEPAD_BTN_X` (West / Reload) | `keys.interact` |
     /// | `GAMEPAD_BTN_Y` (North / Interact) | `keys.interact` |
     /// | `GAMEPAD_BTN_RT` (Right trigger / Fire) | `keys.attack` |
     /// | `GAMEPAD_BTN_LT` (Left trigger / Aim) | `keys.secondary_attack` |
     /// | `GAMEPAD_BTN_LB` (Left bumper / Sprint) | `keys.sprint` |
     ///
-    /// Buttons without a named `KeyState` field (e.g. RB, Menu) return
-    /// `false` until the SDK adds a `custom_buttons` map.
+    /// Buttons without a named `KeyState` field — `GAMEPAD_BTN_X` (West /
+    /// Reload), RB, Menu — return `false` until the SDK adds a
+    /// `custom_buttons` map. `KeyState` has no `reload` field and
+    /// `KeyState::set` DISCARDS `KeyCode::Custom(_)`, so an `Input` frame
+    /// genuinely cannot carry them.
     fn gamepad_button(input: &Input, btn: u8) -> bool {
         match btn {
             GAMEPAD_BTN_A => input.keys.jump,
             GAMEPAD_BTN_B => input.keys.crouch,
-            // West (X) is bound to Reload; the Bevy integration writes it
-            // into `keys.interact` (shared with the keyboard Interact key).
-            GAMEPAD_BTN_X | GAMEPAD_BTN_Y => input.keys.interact,
+            GAMEPAD_BTN_Y => input.keys.interact,
             GAMEPAD_BTN_RT => input.keys.attack,
             GAMEPAD_BTN_LT => input.keys.secondary_attack,
             GAMEPAD_BTN_LB => input.keys.sprint,
-            // RB, Menu, and other buttons have no named KeyState field yet.
+            // GAMEPAD_BTN_X (Reload), RB, Menu, and other buttons have no
+            // named KeyState field yet.
+            //
+            // X was previously aliased onto `keys.interact`, the SAME field as
+            // GAMEPAD_BTN_Y and the keyboard Interact key. Because `resolve`
+            // tests Reload BEFORE Interact, that alias made
+            // `FpsAction::Interact` unreachable by any input: pressing E
+            // returned `Reload`. Aliasing two differently-bound buttons onto
+            // one field cannot be right in either direction, so X reports
+            // not-pressed (like RB and Menu) rather than stealing Interact.
             _ => false,
         }
     }
@@ -416,6 +426,27 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(InputMap::resolve(&input), FpsAction::Interact);
+    }
+
+    #[test]
+    fn interact_is_not_stolen_by_the_reload_branch() {
+        // Regression pin. `gamepad_button` used to map BOTH GAMEPAD_BTN_X
+        // (Reload) and GAMEPAD_BTN_Y (Interact) onto `keys.interact`, and
+        // `resolve` checks Reload first — so the keyboard Interact key
+        // resolved to `Reload` and `FpsAction::Interact` was unreachable.
+        let input = make(KeyState {
+            interact: true,
+            ..Default::default()
+        });
+        assert_ne!(InputMap::resolve(&input), FpsAction::Reload);
+        assert!(
+            !InputMap::gamepad_button(&input, GAMEPAD_BTN_X),
+            "GAMEPAD_BTN_X must not alias keys.interact",
+        );
+        assert!(
+            InputMap::gamepad_button(&input, GAMEPAD_BTN_Y),
+            "GAMEPAD_BTN_Y is the button bound to Interact",
+        );
     }
 
     #[test]

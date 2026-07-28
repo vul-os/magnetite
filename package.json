@@ -13,7 +13,8 @@
     "test:a11y": "vitest run --config vitest.a11y.config.js",
     "e2e": "playwright test",
     "screenshots": "node scripts/screenshots.mjs",
-    "screenshotter": "node scripts/screenshots.mjs"
+    "screenshotter": "node scripts/screenshots.mjs",
+    "screenshots:app": "node scripts/app-screenshots.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

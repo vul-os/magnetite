@@ -884,8 +884,7 @@ pub async fn analytics_revenue(
     .await?;
 
     let total_protocol_fee = Decimal::new(total_protocol_fee_cents, 2);
-    let total_developer_settled =
-        Decimal::new(total_settled_cents - total_protocol_fee_cents, 2);
+    let total_developer_settled = Decimal::new(total_settled_cents - total_protocol_fee_cents, 2);
 
     Ok(Json(RevenueAnalytics {
         daily,

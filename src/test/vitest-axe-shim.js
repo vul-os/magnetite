@@ -12,7 +12,17 @@
  * ({ toHaveNoViolations: fn }).  This shim re-exports `toHaveNoViolations` as
  * the object form so `expect.extend(toHaveNoViolations)` works correctly.
  */
-export { axe, configureAxe } from '../../node_modules/vitest-axe/dist/index.js';
+// `vitest-axe-real` is an alias (defined in vitest.config.js and
+// vitest.a11y.config.js) pointing at the real package's resolved entry point.
+// It cannot be spelled `vitest-axe` here — that name is aliased to THIS file,
+// so the import would resolve to itself — and it cannot be
+// `vitest-axe/dist/index.js` either, because the package's `exports` map
+// publishes only `.`, `./matchers` and `./extend-expect`, so the deep path is
+// not resolvable. The alias is the one spelling that is both non-recursive and
+// independent of where node_modules physically sits, which is what makes this
+// harness copyable into a repo with a different directory depth or a pnpm
+// store. See CONTRIBUTING.md → "Accessibility (axe) tests".
+export { axe, configureAxe } from 'vitest-axe-real';
 
 // Custom matcher that asserts no SERIOUS or CRITICAL axe violations — the a11y
 // suite's stated contract. Minor/moderate best-practice findings (e.g. an

@@ -78,15 +78,15 @@ use magnetite_seams::payment::{
     WagerTerms,
 };
 
-use patala_core::PaymentRail as PatalaPaymentRail;
 /// Re-exported so callers (e.g. `backend`) that need lower-level
 /// `patala_solana`/`patala_core` types (RPC client, key loading, mint
 /// constants, ...) can reach them through this ONE crate, rather than taking
 /// their own direct dependency on the sibling `patala` repo.
 pub use patala_core;
+use patala_core::PaymentRail as PatalaPaymentRail;
 pub use patala_solana;
-pub use patala_solana::{Cluster, Commitment};
 use patala_solana::{keys::Keypair, rpc::SolanaRpc, tx, SolanaRail};
+pub use patala_solana::{Cluster, Commitment};
 
 /// Everything that can go wrong on this rail. Every variant is a *refusal*:
 /// none of them ever results in an entitlement being granted.
@@ -379,7 +379,11 @@ impl SolanaPaymentRail {
     // ── Verification ─────────────────────────────────────────────────────────
 
     /// The full check, async. **Every** error path means "do not grant".
-    async fn verify_async(&self, r: &Receipt, expect_item: Option<&str>) -> Result<(), SolanaError> {
+    async fn verify_async(
+        &self,
+        r: &Receipt,
+        expect_item: Option<&str>,
+    ) -> Result<(), SolanaError> {
         let b = r
             .binding
             .as_ref()

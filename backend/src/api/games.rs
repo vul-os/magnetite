@@ -13,7 +13,14 @@ use crate::api::response::{self, PaginatedResponse};
 use crate::error::{AppError, Result};
 
 /// Valid content_rating values enforced at the DB level (games.content_rating CHECK constraint).
-const VALID_CONTENT_RATINGS: &[&str] = &["everyone", "teen", "mature"];
+///
+/// `pub` so `tests/mx1_tests.rs` can assert against THIS list rather than a
+/// hand-kept copy of it — the copy it used to carry ("Mirrors the private
+/// validate_content_rating logic") could not have detected a change here.
+pub const VALID_CONTENT_RATINGS: &[&str] = &["everyone", "teen", "mature"];
+
+/// The content_rating applied when a create-game request omits one.
+pub const DEFAULT_CONTENT_RATING: &str = "everyone";
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Game {
@@ -89,7 +96,10 @@ pub async fn create_game(
     Extension(developer_id): Extension<Uuid>,
     Json(payload): Json<CreateGameRequest>,
 ) -> Result<Json<crate::api::response::ApiResponse<Game>>> {
-    let content_rating = payload.content_rating.as_deref().unwrap_or("everyone");
+    let content_rating = payload
+        .content_rating
+        .as_deref()
+        .unwrap_or(DEFAULT_CONTENT_RATING);
     if !VALID_CONTENT_RATINGS.contains(&content_rating) {
         return Err(AppError::Validation(format!(
             "Invalid content_rating '{}'. Must be one of: everyone, teen, mature",

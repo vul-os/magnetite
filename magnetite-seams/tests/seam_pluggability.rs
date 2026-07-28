@@ -104,7 +104,10 @@ async fn a_provider_set_can_swap_its_naming_provider() {
     }
 
     // The two providers really are different code, not the same thing twice.
-    assert_ne!(default_set.naming.display(&pk), keyname_set.naming.display(&pk));
+    assert_ne!(
+        default_set.naming.display(&pk),
+        keyname_set.naming.display(&pk)
+    );
 
     // Both keep the substrate reachable: raw hex resolves through either.
     assert_eq!(default_set.naming.resolve(&pk.to_hex()).await, Some(pk));
@@ -175,9 +178,7 @@ mod foreign_auth {
 #[tokio::test]
 async fn identity_seam_accepts_a_foreign_auth_provider() {
     use foreign_auth::CounterAuth;
-    use magnetite_seams::{
-        AuthProvider, BuiltinProvider, CommsProvider, PubKey, RoomScope,
-    };
+    use magnetite_seams::{AuthProvider, BuiltinProvider, CommsProvider, PubKey, RoomScope};
 
     async fn login_flow(auth: &dyn AuthProvider, player: &PubKey) -> magnetite_seams::Challenge {
         auth.challenge(player).await
@@ -187,7 +188,11 @@ async fn identity_seam_accepts_a_foreign_auth_provider() {
     let player = PubKey([9u8; 32]);
     let ch = login_flow(&auth, &player).await;
     assert_eq!(ch.subject, player);
-    assert_eq!(auth.issued(), 1, "the foreign provider really served the call");
+    assert_eq!(
+        auth.issued(),
+        1,
+        "the foreign provider really served the call"
+    );
 
     // The generic comms adapter is parameterised over `A: AuthProvider`, so it
     // accepts the foreign provider with no change to its own code.

@@ -154,19 +154,28 @@ async fn a_forged_announce_is_refused_over_real_http() {
     let mut tampered = SignedAd::sign(&honest, sample_ad("box:9000"), now_unix(), 120);
     tampered.ad.price = None;
     let status = post_announce(&base, &serde_json::to_value(&tampered).unwrap()).await;
-    assert!(status.is_client_error(), "price edit accepted?! got {status}");
+    assert!(
+        status.is_client_error(),
+        "price edit accepted?! got {status}"
+    );
 
     // (b) The attacker's own ad, relabelled with the honest node's key.
     let mut spoofed = SignedAd::sign(&attacker, sample_ad("box:9000"), now_unix(), 120);
     spoofed.node_key = honest.pubkey();
     let status = post_announce(&base, &serde_json::to_value(&spoofed).unwrap()).await;
-    assert!(status.is_client_error(), "key relabel accepted?! got {status}");
+    assert!(
+        status.is_client_error(),
+        "key relabel accepted?! got {status}"
+    );
 
     // (c) Node-declared labels rewritten in flight by a relay.
     let mut relabelled = SignedAd::sign(&honest, sample_ad("box:9000"), now_unix(), 120);
     relabelled.ad.operator = Some("someone-else".into());
     let status = post_announce(&base, &serde_json::to_value(&relabelled).unwrap()).await;
-    assert!(status.is_client_error(), "operator edit accepted?! got {status}");
+    assert!(
+        status.is_client_error(),
+        "operator edit accepted?! got {status}"
+    );
 }
 
 #[tokio::test]
@@ -177,7 +186,10 @@ async fn an_expired_or_overlong_lease_is_refused_over_real_http() {
     // A lease that lapsed an hour ago.
     let stale = SignedAd::sign(&node, sample_ad("box:9000"), now_unix() - 7_200, 120);
     let status = post_announce(&base, &serde_json::to_value(&stale).unwrap()).await;
-    assert!(status.is_client_error(), "lapsed lease accepted?! got {status}");
+    assert!(
+        status.is_client_error(),
+        "lapsed lease accepted?! got {status}"
+    );
 
     // A lease longer than the protocol maximum — squatting the phonebook.
     let squat = SignedAd::sign(
@@ -187,7 +199,10 @@ async fn an_expired_or_overlong_lease_is_refused_over_real_http() {
         MAX_AD_TTL_SECS + 60,
     );
     let status = post_announce(&base, &serde_json::to_value(&squat).unwrap()).await;
-    assert!(status.is_client_error(), "over-long lease accepted?! got {status}");
+    assert!(
+        status.is_client_error(),
+        "over-long lease accepted?! got {status}"
+    );
 }
 
 #[tokio::test]
@@ -233,8 +248,7 @@ async fn a_forged_withdrawal_cannot_retract_another_nodes_ad() {
     let game = Hash::of(b"a content-addressed game");
 
     // The attacker signs a withdrawal, then relabels it as the honest node's.
-    let mut forged =
-        SignedWithdraw::sign(&attacker, game, NodeAddr("box:9000".into()), now_unix());
+    let mut forged = SignedWithdraw::sign(&attacker, game, NodeAddr("box:9000".into()), now_unix());
     forged.node_key = honest.pubkey();
 
     let status = reqwest::Client::new()
@@ -248,7 +262,10 @@ async fn a_forged_withdrawal_cannot_retract_another_nodes_ad() {
         status.is_client_error(),
         "nobody may retract another node's listing, got {status}"
     );
-    assert!(!reached_the_database(status), "refused before the delete runs");
+    assert!(
+        !reached_the_database(status),
+        "refused before the delete runs"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,9 +307,16 @@ async fn the_sessions_route_is_mounted_and_accepts_the_browser_query() {
         "{base}/sessions?game={}&max_ping=80&free_slots_only=true&free_only=false&limit=50",
         Hash::of(b"a content-addressed game").to_hex()
     );
-    let status = reqwest::get(&url).await.expect("the router answered").status();
+    let status = reqwest::get(&url)
+        .await
+        .expect("the router answered")
+        .status();
 
-    assert_ne!(status, reqwest::StatusCode::NOT_FOUND, "GET /sessions must be mounted");
+    assert_ne!(
+        status,
+        reqwest::StatusCode::NOT_FOUND,
+        "GET /sessions must be mounted"
+    );
     assert_ne!(
         status,
         reqwest::StatusCode::BAD_REQUEST,

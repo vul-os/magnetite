@@ -103,7 +103,7 @@ pub async fn run_simulated_client(
             input,
         };
         let text = serde_json::to_string(&frame).unwrap();
-        ws.send(Message::Text(text.into())).await.unwrap();
+        ws.send(Message::Text(text)).await.unwrap();
 
         // Drain any pending messages from the server within a short window.
         let deadline = tokio::time::Instant::now() + Duration::from_millis(80);

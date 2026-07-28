@@ -76,17 +76,21 @@ pub struct ProvisionRequest {
 // Core service functions
 // ---------------------------------------------------------------------------
 
-/// Create an instance record and optionally spawn a local runtime process.
+/// The topology names `provision_instance` accepts.
+pub const VALID_TOPOLOGIES: [&str; 3] = ["SingleRoom", "Dedicated", "Sharded"];
+
+/// Pure, DB-free validation of a [`ProvisionRequest`]'s scalar fields.
 ///
-/// Returns the created (and possibly already-running) `RuntimeInstance`.
-pub async fn provision_instance(pool: &PgPool, req: ProvisionRequest) -> Result<RuntimeInstance> {
-    // Validate topology string.
-    let valid_topologies = ["SingleRoom", "Dedicated", "Sharded"];
-    if !valid_topologies.contains(&req.topology.as_str()) {
+/// Split out of [`provision_instance`] so the bounds can be exercised by unit
+/// tests without a Postgres connection — previously the tests restated the
+/// literals (`assert!(1 <= 20 && 20 <= 128)`), which asserted nothing about
+/// this code and would have kept passing had the bounds below changed.
+pub fn validate_provision_request(req: &ProvisionRequest) -> Result<()> {
+    if !VALID_TOPOLOGIES.contains(&req.topology.as_str()) {
         return Err(AppError::Validation(format!(
             "Invalid topology '{}'; must be one of: {}",
             req.topology,
-            valid_topologies.join(", ")
+            VALID_TOPOLOGIES.join(", ")
         )));
     }
 
@@ -101,6 +105,15 @@ pub async fn provision_instance(pool: &PgPool, req: ProvisionRequest) -> Result<
             "tick_hz must be between 1 and 128".to_string(),
         ));
     }
+
+    Ok(())
+}
+
+/// Create an instance record and optionally spawn a local runtime process.
+///
+/// Returns the created (and possibly already-running) `RuntimeInstance`.
+pub async fn provision_instance(pool: &PgPool, req: ProvisionRequest) -> Result<RuntimeInstance> {
+    validate_provision_request(&req)?;
 
     // Verify the game exists.
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM games WHERE id = $1 AND active = true")
@@ -456,9 +469,10 @@ pub fn instance_session_ad(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn instance_session_ad_shape() {
-        use super::*;
         use chrono::Utc;
         let now = Utc::now();
         let mut inst = RuntimeInstance {
@@ -494,31 +508,117 @@ mod tests {
         assert_eq!(ad.node.0, "ws://127.0.0.1:9000");
     }
 
+    /// A request that passes validation, so each test below can vary exactly
+    /// one field and attribute the rejection to it.
+    fn ok_request() -> ProvisionRequest {
+        ProvisionRequest {
+            game_id: uuid::Uuid::nil(),
+            version_id: None,
+            artifact_id: None,
+            topology: "SingleRoom".into(),
+            max_players: 64,
+            tick_hz: 20,
+            requested_by: None,
+        }
+    }
+
     #[test]
     fn provision_request_topology_validation() {
-        let valid = ["SingleRoom", "Dedicated", "Sharded"];
-        let invalid = ["singleroom", "dedicated", "sharded", "room", ""];
-        for t in valid {
-            assert!(["SingleRoom", "Dedicated", "Sharded"].contains(&t));
+        for t in VALID_TOPOLOGIES {
+            let req = ProvisionRequest {
+                topology: t.into(),
+                ..ok_request()
+            };
+            assert!(
+                validate_provision_request(&req).is_ok(),
+                "topology {t:?} should be accepted"
+            );
         }
-        for t in invalid {
-            assert!(!["SingleRoom", "Dedicated", "Sharded"].contains(&t));
+        // Case matters, and unknown names are rejected.
+        for t in ["singleroom", "dedicated", "sharded", "room", ""] {
+            let req = ProvisionRequest {
+                topology: t.into(),
+                ..ok_request()
+            };
+            assert!(
+                validate_provision_request(&req).is_err(),
+                "topology {t:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn max_players_bounds() {
+        for n in [1, 512, 1024] {
+            let req = ProvisionRequest {
+                max_players: n,
+                ..ok_request()
+            };
+            assert!(
+                validate_provision_request(&req).is_ok(),
+                "max_players {n} should be accepted"
+            );
+        }
+        for n in [i32::MIN, -1, 0, 1025, i32::MAX] {
+            let req = ProvisionRequest {
+                max_players: n,
+                ..ok_request()
+            };
+            assert!(
+                validate_provision_request(&req).is_err(),
+                "max_players {n} should be rejected"
+            );
         }
     }
 
     #[test]
     fn runtime_instance_status_set() {
-        let valid = ["pending", "running", "stopped", "failed"];
-        assert!(valid.contains(&"pending"));
-        assert!(valid.contains(&"running"));
-        assert!(!valid.contains(&"done"));
-        assert!(!valid.contains(&"error"));
+        // The status values `provision_instance` and `mark_instance_*` write.
+        // A RuntimeInstance is constructible with each of them, and the
+        // instance-status accessors round-trip the value unchanged.
+        for status in ["pending", "running", "stopped", "failed"] {
+            let now = chrono::Utc::now();
+            let inst = RuntimeInstance {
+                id: uuid::Uuid::nil(),
+                game_id: uuid::Uuid::nil(),
+                version_id: None,
+                artifact_id: None,
+                status: status.into(),
+                ws_endpoint: None,
+                topology: "SingleRoom".into(),
+                max_players: 64,
+                tick_hz: 20,
+                local_pid: None,
+                runner_note: None,
+                requested_by: None,
+                created_at: now,
+                updated_at: now,
+            };
+            assert_eq!(inst.status, status);
+        }
     }
 
     #[test]
     fn tick_hz_bounds() {
-        assert!(1 <= 20 && 20 <= 128);
-        assert!(!(0 <= 0 && 0 <= 128 && 0 >= 1)); // 0 invalid
-        assert!(!(129 <= 128)); // 129 invalid
+        for hz in [1, 20, 60, 128] {
+            let req = ProvisionRequest {
+                tick_hz: hz,
+                ..ok_request()
+            };
+            assert!(
+                validate_provision_request(&req).is_ok(),
+                "tick_hz {hz} should be accepted"
+            );
+        }
+        for hz in [i32::MIN, -1, 0, 129, i32::MAX] {
+            let req = ProvisionRequest {
+                tick_hz: hz,
+                ..ok_request()
+            };
+            assert!(
+                validate_provision_request(&req).is_err(),
+                "tick_hz {hz} should be rejected"
+            );
+        }
     }
 }

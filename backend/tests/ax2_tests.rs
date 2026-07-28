@@ -322,7 +322,6 @@ mod search_ranking_tests {
 #[cfg(test)]
 mod notification_push_shape_tests {
     use magnetite_backend::api::notifications::{NotificationBroadcast, WsNotification};
-    use serde_json;
     use uuid::Uuid;
 
     fn make_ws_notification() -> WsNotification {

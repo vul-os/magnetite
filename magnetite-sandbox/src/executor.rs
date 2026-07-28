@@ -493,86 +493,66 @@ fn build_linker(engine: &Engine) -> Result<Linker<StoreState>, SandboxError> {
     let mut linker: Linker<StoreState> = Linker::new(engine);
 
     // clock_time_get — always returns ENOSYS (errno 38).
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "clock_time_get",
-            |_id: i32, _prec: i64, _ptr: i32| -> i32 { 38 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "clock_time_get",
+        |_id: i32, _prec: i64, _ptr: i32| -> i32 { 38 },
+    )?;
 
     // clock_res_get — always returns ENOSYS.
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "clock_res_get",
-            |_id: i32, _ptr: i32| -> i32 { 38 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "clock_res_get",
+        |_id: i32, _ptr: i32| -> i32 { 38 },
+    )?;
 
     // random_get — always returns ENOSYS.
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "random_get",
-            |_buf: i32, _len: i32| -> i32 { 38 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "random_get",
+        |_buf: i32, _len: i32| -> i32 { 38 },
+    )?;
 
     // fd_write — silently discards all output.
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "fd_write",
-            |_fd: i32, _iovs: i32, _iovs_len: i32, _nwritten: i32| -> i32 { 0 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "fd_write",
+        |_fd: i32, _iovs: i32, _iovs_len: i32, _nwritten: i32| -> i32 { 0 },
+    )?;
 
     // fd_read — always returns empty.
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "fd_read",
-            |_fd: i32, _iovs: i32, _iovs_len: i32, _nread: i32| -> i32 { 0 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "fd_read",
+        |_fd: i32, _iovs: i32, _iovs_len: i32, _nread: i32| -> i32 { 0 },
+    )?;
 
     // proc_exit — game code should never call this.
-    linker
-        .func_wrap("wasi_snapshot_preview1", "proc_exit", |_code: i32| {})
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap("wasi_snapshot_preview1", "proc_exit", |_code: i32| {})?;
 
     // environ_get / environ_sizes_get — no environment variables.
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "environ_get",
-            |_env: i32, _buf: i32| -> i32 { 0 },
-        )
-        .map_err(wasmtime::Error::from)?;
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "environ_sizes_get",
-            |_cnt: i32, _sz: i32| -> i32 { 0 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "environ_get",
+        |_env: i32, _buf: i32| -> i32 { 0 },
+    )?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "environ_sizes_get",
+        |_cnt: i32, _sz: i32| -> i32 { 0 },
+    )?;
 
     // args_get / args_sizes_get — no arguments.
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "args_get",
-            |_argv: i32, _buf: i32| -> i32 { 0 },
-        )
-        .map_err(wasmtime::Error::from)?;
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "args_sizes_get",
-            |_argc: i32, _sz: i32| -> i32 { 0 },
-        )
-        .map_err(wasmtime::Error::from)?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "args_get",
+        |_argv: i32, _buf: i32| -> i32 { 0 },
+    )?;
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "args_sizes_get",
+        |_argc: i32, _sz: i32| -> i32 { 0 },
+    )?;
 
     Ok(linker)
 }

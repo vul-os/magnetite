@@ -89,7 +89,7 @@ pub fn encode_inputs(inputs: &[(PlayerId, Input)]) -> Result<Vec<u8>, serde_json
         .iter()
         .map(|(pid, inp)| InputFrame {
             player_id: pid.as_u64(),
-            input: inp.clone(),
+            input: *inp,
         })
         .collect();
     serde_json::to_vec(&frames)

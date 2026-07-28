@@ -53,25 +53,26 @@ maxminddb = "0.24"
 magnetite-seams = { path = "../magnetite-seams" }
 
 # The real SPL-USDC-on-Solana `PaymentRail` — a SEPARATE crate
-# (`../magnetite-solana-rail`, itself an unconditional path dep on the sibling
-# `patala` repo's `patala-core`/`patala-solana`), not a `magnetite-seams`
-# feature. `solana_rail_from_env` below builds
+# (`../magnetite-solana-rail`), not a `magnetite-seams` feature.
+# `solana_rail_from_env` below builds
 # `magnetite_solana_rail::SolanaConfig`/`SolanaPaymentRail` and reaches
-# `patala_solana` (RPC client, mint constants) through this crate's
+# `patala_solana` (RPC client, mint constants) through that crate's
 # `pub use patala_solana` re-export, rather than depending on `patala-solana`
 # directly — one seam to the sibling repo, not two.
 #
-# Optional, `solana`-feature-gated — same "off by default" posture as before.
-# NOTE: this is still a path dependency to a crate that itself unconditionally
-# needs `../../patala`, so — exactly as before this refactor — resolving even
-# this OPTIONAL, INACTIVE edge can require `../../patala` to exist depending on
-# Cargo's resolve/lock cache state (see `magnetite-seams/Cargo.toml`'s longer
-# note on why that dependency was moved out of that crate entirely). This
-# backend binary was not restructured the same way because doing so would mean
-# dropping `PAYMENT_RAIL=solana` support from this binary altogether — a
-# regression the task asked NOT to make. This residual fragility is
-# pre-existing (this dependency was already an optional path dep before this
-# change) and is called out explicitly in the fix's final report.
+# Optional, `solana`-feature-gated: OFF by default.
+#
+# NOTE (corrected): this comment used to say the adapter crate was an
+# "unconditional PATH dep on the sibling `patala` repo", so that resolving even
+# this optional, inactive edge could require `../../patala` on disk. That is no
+# longer how it is wired. `../magnetite-solana-rail/Cargo.toml` now takes
+# `patala-core`/`patala-solana` as GIT dependencies pinned to a rev, and
+# `Cargo.lock` here records them as
+# `source = "git+https://github.com/vul-os/patala?rev=..."` — not as path
+# entries. A checkout of `../../patala` is therefore not a build input of this
+# binary at all. What the `solana` feature does still need is that pinned git
+# rev, from `~/.cargo/git` or the network; the default build (feature off)
+# needs neither, and no default-feature build in this repo references patala.
 magnetite-solana-rail = { path = "../magnetite-solana-rail", optional = true }
 
 [features]

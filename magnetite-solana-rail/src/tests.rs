@@ -76,10 +76,7 @@ impl SolanaRpc for FakeRpc {
         }
         Ok(self.tx.lock().unwrap().clone())
     }
-    async fn get_latest_blockhash(
-        &self,
-        _c: &str,
-    ) -> Result<String, patala_solana::SolanaError> {
+    async fn get_latest_blockhash(&self, _c: &str) -> Result<String, patala_solana::SolanaError> {
         if self.fail {
             return Err(patala_solana::SolanaError::Rpc("connection refused".into()));
         }
@@ -166,7 +163,12 @@ fn rt() -> tokio::runtime::Runtime {
 fn split_math_zero_fee_sums_exactly() {
     let rail = SolanaPaymentRail::new(cfg(None), FakeRpc::unconfirmed());
     let plan = rail
-        .plan(&split(PubKey([2; 32]), 1_000_000, Some((PubKey([3; 32]), 250_000)), 0))
+        .plan(&split(
+            PubKey([2; 32]),
+            1_000_000,
+            Some((PubKey([3; 32]), 250_000)),
+            0,
+        ))
         .unwrap();
     assert_eq!(plan.protocol_fee, 0);
     assert_eq!(plan.total, 1_250_000);
@@ -181,7 +183,12 @@ fn split_math_nonzero_fee_sums_exactly() {
     let rail = SolanaPaymentRail::new(cfg(Some(fee_wallet)), FakeRpc::unconfirmed());
     // 250 bps of 1_250_000 subtotal = 31_250 exactly.
     let plan = rail
-        .plan(&split(PubKey([2; 32]), 1_000_000, Some((PubKey([3; 32]), 250_000)), 250))
+        .plan(&split(
+            PubKey([2; 32]),
+            1_000_000,
+            Some((PubKey([3; 32]), 250_000)),
+            250,
+        ))
         .unwrap();
     assert_eq!(plan.protocol_fee, 31_250);
     assert_eq!(plan.total, 1_281_250);
@@ -221,7 +228,12 @@ fn multi_party_split_is_refused_not_dropped_or_sent_non_atomically() {
         .with_signer(Keypair::from_seed([1u8; 32]));
 
     // developer + operator + a real protocol fee: three non-zero legs.
-    let s = split(PubKey([0xD0; 32]), 1_000_000, Some((PubKey([0x0B; 32]), 250_000)), 250);
+    let s = split(
+        PubKey([0xD0; 32]),
+        1_000_000,
+        Some((PubKey([0x0B; 32]), 250_000)),
+        250,
+    );
     let result = rt().block_on(rail.checkout_for_item(&buyer, "game:chess", s));
     assert!(
         matches!(result, Err(PaymentError::Unsupported(_))),
@@ -265,12 +277,15 @@ fn single_recipient_checkout_round_trips_through_patala() {
     let txn = good_txn(
         &signer.pubkey(),
         &memo,
-        &[(&signer.pubkey(), -(amount as i128)), (&dev_patala, amount as i128)],
+        &[
+            (&signer.pubkey(), -(amount as i128)),
+            (&dev_patala, amount as i128),
+        ],
         MINT,
     );
     let rpc = FakeRpc::with(txn);
-    let rail = SolanaPaymentRail::new(cfg(None), rpc.clone())
-        .with_signer(Keypair::from_seed([1u8; 32]));
+    let rail =
+        SolanaPaymentRail::new(cfg(None), rpc.clone()).with_signer(Keypair::from_seed([1u8; 32]));
 
     let s = split(dev, amount, None, 0);
     let receipt = rt()
@@ -312,7 +327,10 @@ fn on_chain_mismatch_denies_via_patala_delegation() {
     let good = good_txn(
         &signer.pubkey(),
         &memo,
-        &[(&signer.pubkey(), -(amount as i128)), (&dev_patala, amount as i128)],
+        &[
+            (&signer.pubkey(), -(amount as i128)),
+            (&dev_patala, amount as i128),
+        ],
         MINT,
     );
     let charging_rail = SolanaPaymentRail::new(cfg(None), FakeRpc::with(good.clone()))
@@ -321,7 +339,10 @@ fn on_chain_mismatch_denies_via_patala_delegation() {
     let receipt = rt()
         .block_on(charging_rail.checkout_for_item(&buyer, item, s))
         .unwrap();
-    assert!(charging_rail.verify_receipt(&receipt), "sanity: the honest chain state verifies");
+    assert!(
+        charging_rail.verify_receipt(&receipt),
+        "sanity: the honest chain state verifies"
+    );
 
     let mut failed = good;
     failed["meta"]["err"] = json!({ "InstructionError": [0, "InsufficientFunds"] });
@@ -365,7 +386,10 @@ fn unbound_checkout_produces_an_unverifiable_receipt() {
     let s = split(PubKey([2; 32]), 5, None, 0);
     let r = rt().block_on(rail.checkout(&PubKey([1; 32]), s));
     assert!(r.binding.is_none());
-    assert!(!rail.verify_receipt(&r), "an unbound receipt grants nothing");
+    assert!(
+        !rail.verify_receipt(&r),
+        "an unbound receipt grants nothing"
+    );
 }
 
 #[test]
@@ -380,13 +404,18 @@ fn tampered_rail_signature_fails_closed() {
     let txn = good_txn(
         &signer.pubkey(),
         &memo,
-        &[(&signer.pubkey(), -(amount as i128)), (&dev_patala, amount as i128)],
+        &[
+            (&signer.pubkey(), -(amount as i128)),
+            (&dev_patala, amount as i128),
+        ],
         MINT,
     );
     let rail = SolanaPaymentRail::new(cfg(None), FakeRpc::with(txn))
         .with_signer(Keypair::from_seed([1u8; 32]));
     let s = split(dev, amount, None, 0);
-    let mut receipt = rt().block_on(rail.checkout_for_item(&buyer, item, s)).unwrap();
+    let mut receipt = rt()
+        .block_on(rail.checkout_for_item(&buyer, item, s))
+        .unwrap();
     assert!(rail.verify_receipt(&receipt));
 
     receipt.sig = Sig([0u8; 64]);
@@ -408,13 +437,18 @@ fn rejects_replay_for_another_item() {
     let txn = good_txn(
         &signer.pubkey(),
         &memo,
-        &[(&signer.pubkey(), -(amount as i128)), (&dev_patala, amount as i128)],
+        &[
+            (&signer.pubkey(), -(amount as i128)),
+            (&dev_patala, amount as i128),
+        ],
         MINT,
     );
     let rail = SolanaPaymentRail::new(cfg(None), FakeRpc::with(txn))
         .with_signer(Keypair::from_seed([1u8; 32]));
     let s = split(dev, amount, None, 0);
-    let receipt = rt().block_on(rail.checkout_for_item(&buyer, item, s)).unwrap();
+    let receipt = rt()
+        .block_on(rail.checkout_for_item(&buyer, item, s))
+        .unwrap();
 
     assert!(rail.verify_receipt_for_item(&receipt, "game:cheap"));
     assert!(

@@ -48,7 +48,7 @@ use game_template_authoritative::types::{
 ///
 /// This is derived from the last authoritative [`ArenaView`] received from the
 /// server, then advanced forward by re-simulating all unacked input frames.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PredictedState {
     /// The observing player's predicted position and stats.
     pub self_player: Option<ShooterPlayer>,
@@ -60,17 +60,6 @@ pub struct PredictedState {
     pub projectiles: Vec<Projectile>,
     /// The tick of the last authoritative state we reconciled from.
     pub authoritative_tick: Tick,
-}
-
-impl Default for PredictedState {
-    fn default() -> Self {
-        Self {
-            self_player: None,
-            other_players: Vec::new(),
-            projectiles: Vec::new(),
-            authoritative_tick: 0,
-        }
-    }
 }
 
 impl PredictedState {

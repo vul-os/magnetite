@@ -332,6 +332,12 @@ pub struct GameHandle {
     game: DotCollector,
 }
 
+impl Default for GameHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl GameHandle {
     /// Create a new game instance.
@@ -683,7 +689,7 @@ mod tests {
     #[test]
     fn snapshot_and_restore_rollback() {
         let mut game = DotCollector::new();
-        let player_id = game.players()[0];
+        let _player_id = game.players()[0];
 
         // Advance one tick and capture a snapshot.
         game.tick();

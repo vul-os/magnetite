@@ -155,7 +155,6 @@ pub async fn overview(
         .count();
     let an = analytics::overview(pool).await;
 
-
     let compliance_pill = if failing > 0 {
         pill("bad", &format!("{failing} failing"))
     } else if warning > 0 {
@@ -384,15 +383,14 @@ pub async fn user_detail(
 
     // Non-custodial: a user has a linked wallet ADDRESS (we hold no balance for
     // them) and a history of signed receipts (transfers we witnessed).
-    let linked_wallet = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT wallet_address FROM users WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten()
-    .flatten();
+    let linked_wallet =
+        sqlx::query_scalar::<_, Option<String>>("SELECT wallet_address FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten();
 
     let receipts = sqlx::query_as::<_, ReceiptRow>(
         "SELECT total, voided, kind, created_at FROM payment_receipts \

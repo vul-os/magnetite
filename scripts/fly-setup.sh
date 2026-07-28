@@ -15,8 +15,6 @@ echo "Setting OAuth secrets..."
 [ -n "$DISCORD_CLIENT_SECRET" ] && fly secrets set DISCORD_CLIENT_SECRET="$DISCORD_CLIENT_SECRET"
 [ -n "$GITHUB_CLIENT_ID" ] && fly secrets set GITHUB_CLIENT_ID="$GITHUB_CLIENT_ID"
 [ -n "$GITHUB_CLIENT_SECRET" ] && fly secrets set GITHUB_CLIENT_SECRET="$GITHUB_CLIENT_SECRET"
-[ -n "$PAYSTACK_SECRET_KEY" ] && fly secrets set PAYSTACK_SECRET_KEY="$PAYSTACK_SECRET_KEY"
-[ -n "$CIRCLE_API_KEY" ] && fly secrets set CIRCLE_API_KEY="$CIRCLE_API_KEY"
 
 echo "Creating PostgreSQL database..."
 fly postgres create --name magnetite-db --region jnb || echo "Postgres may already exist"

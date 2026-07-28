@@ -175,7 +175,9 @@ async fn protocol_fee_matches_configuration(pool: &PgPool) -> CheckResult {
     let c = count_check(
         pool,
         &format!("SELECT COUNT(*) {base}"),
-        &format!("SELECT COUNT(*) {base} AND ABS(platform_fee - ROUND(price_paid * {rate}, 6)) > 0.01"),
+        &format!(
+            "SELECT COUNT(*) {base} AND ABS(platform_fee - ROUND(price_paid * {rate}, 6)) > 0.01"
+        ),
     )
     .await;
     let off = offenders(
@@ -197,7 +199,10 @@ async fn protocol_fee_matches_configuration(pool: &PgPool) -> CheckResult {
         detail: if c.violations == 0 {
             format!("All {} sales took exactly {bps} bps.", c.checked)
         } else {
-            format!("{} of {} sales deviate from {bps} bps.", c.violations, c.checked)
+            format!(
+                "{} of {} sales deviate from {bps} bps.",
+                c.violations, c.checked
+            )
         },
         offenders: off,
     }
@@ -226,7 +231,8 @@ async fn paid_entitlements_are_receipt_backed(pool: &PgPool) -> CheckResult {
     .await;
     CheckResult {
         name: "Entitlements — receipt-backed".into(),
-        description: "Every paid entitlement must reference the signed receipt that granted it.".into(),
+        description: "Every paid entitlement must reference the signed receipt that granted it."
+            .into(),
         severity: verdict(c.checked, c.violations, Severity::Fail),
         checked: c.checked,
         violations: c.violations,
@@ -266,7 +272,8 @@ async fn receipt_arithmetic_balances(pool: &PgPool) -> CheckResult {
     .await;
     CheckResult {
         name: "Receipts — arithmetic balances".into(),
-        description: "A receipt's total must equal the sum of its payout legs plus the protocol fee.".into(),
+        description:
+            "A receipt's total must equal the sum of its payout legs plus the protocol fee.".into(),
         severity: verdict(c.checked, c.violations, Severity::Fail),
         checked: c.checked,
         violations: c.violations,
@@ -356,7 +363,10 @@ async fn voided_receipts_grant_nothing(pool: &PgPool) -> CheckResult {
         checked: c.checked,
         violations: c.violations,
         detail: if c.violations == 0 {
-            format!("All {} voided receipts have revoked entitlements.", c.checked)
+            format!(
+                "All {} voided receipts have revoked entitlements.",
+                c.checked
+            )
         } else {
             format!("{} entitlement(s) survive a voided receipt.", c.violations)
         },
@@ -434,9 +444,14 @@ async fn custody_is_dormant(pool: &PgPool) -> CheckResult {
     }
     CheckResult {
         name: "Custody — dormant".into(),
-        description: "Magnetite holds no funds: the legacy custodial tables must stay empty.".into(),
+        description: "Magnetite holds no funds: the legacy custodial tables must stay empty."
+            .into(),
         // Historical rows are a migration artefact, not a live breach.
-        severity: if violations == 0 { Severity::Ok } else { Severity::Warn },
+        severity: if violations == 0 {
+            Severity::Ok
+        } else {
+            Severity::Warn
+        },
         checked: 3,
         violations,
         detail: if violations == 0 {

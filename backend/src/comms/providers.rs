@@ -20,7 +20,9 @@
 // default build never contacts anything.
 
 use async_trait::async_trait;
-use magnetite_seams::comms::{BuiltinProvider as SeamBuiltin, CommsProvider, JoinCred, RoomAddr, RoomScope};
+use magnetite_seams::comms::{
+    BuiltinProvider as SeamBuiltin, CommsProvider, JoinCred, RoomAddr, RoomScope,
+};
 use magnetite_seams::identity::PubKey;
 use magnetite_seams::Result as SeamResult;
 use rand::rngs::OsRng;
@@ -217,8 +219,11 @@ impl Adapter for MatrixAdapter {
     fn render(&self, cred: &JoinCred, media_host: Option<&str>) -> ClientCred {
         let hs = media_host.unwrap_or(&self.homeserver).to_string();
         let mut out = ClientCred::seam_only("matrix", &cred.room.0, Some(hs), cred.token.clone());
-        out.token =
-            bridge::render_matrix_login_token(&cred.token, &self.homeserver, self.shared_secret.as_deref());
+        out.token = bridge::render_matrix_login_token(
+            &cred.token,
+            &self.homeserver,
+            self.shared_secret.as_deref(),
+        );
         out
     }
 }
@@ -391,11 +396,7 @@ impl OwncastAdapter {
 #[async_trait]
 impl CommsProvider for OwncastAdapter {
     async fn create_room(&self, scope: RoomScope) -> RoomAddr {
-        RoomAddr(format!(
-            "owncast://{}-{}",
-            scope_tag(&scope),
-            fresh_id()
-        ))
+        RoomAddr(format!("owncast://{}-{}", scope_tag(&scope), fresh_id()))
     }
     async fn issue_join_credential(&self, user: &PubKey, room: &RoomAddr) -> JoinCred {
         JoinCred {
@@ -417,7 +418,10 @@ impl Adapter for OwncastAdapter {
         Some(self.url.clone())
     }
     fn render(&self, cred: &JoinCred, media_host: Option<&str>) -> ClientCred {
-        let host = media_host.unwrap_or(&self.url).trim_end_matches('/').to_string();
+        let host = media_host
+            .unwrap_or(&self.url)
+            .trim_end_matches('/')
+            .to_string();
         let mut out = ClientCred::seam_only(
             "owncast",
             &cred.room.0,
@@ -438,7 +442,10 @@ impl Adapter for OwncastAdapter {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 fn non_empty(key: &str) -> Option<String> {
-    std::env::var(key).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(key)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 #[cfg(test)]
@@ -490,7 +497,10 @@ mod tests {
         let cred = j.issue_join_credential(&PubKey([3u8; 32]), &room).await;
 
         let default_host = j.render(&cred, None);
-        assert!(default_host.url.unwrap().starts_with("https://meet.default/"));
+        assert!(default_host
+            .url
+            .unwrap()
+            .starts_with("https://meet.default/"));
 
         // A room carrying its own media host wins — per-node media (§3.5).
         let own = j.render(&cred, Some("https://meet.operator.example"));

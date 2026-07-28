@@ -45,6 +45,17 @@ struct Cli {
     command: Commands,
 }
 
+// `clippy::large_enum_variant` fires here (the `Node` variant is ~236 bytes,
+// the enum ~240) and is genuinely wrong for this type. This is the clap
+// `Subcommand` enum: exactly ONE value of it is ever constructed, by
+// `Cli::parse()` at process start, and it is matched once. It is never stored
+// in a collection, cloned, sent across a channel, or put behind a `Result`, so
+// the per-variant size difference costs one stack frame's worth of bytes once
+// per process. Clippy's suggested remedy — `Box`ing individual fields such as
+// `checkpoint_dir: Box<Option<PathBuf>>` — would obscure the `#[arg]`
+// declarations that are this enum's entire purpose (they are the CLI's
+// documented surface) for no measurable gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 enum Commands {
     /// Scaffold a new authoritative game crate.
@@ -677,7 +688,9 @@ fn default_node_key_path() -> Option<PathBuf> {
             return Some(PathBuf::from(home).join("node.key"));
         }
     }
-    let home = std::env::var("HOME").ok().filter(|h| !h.trim().is_empty())?;
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.trim().is_empty())?;
     Some(PathBuf::from(home).join(".magnetite").join("node.key"))
 }
 
@@ -871,10 +884,7 @@ fn parse_cluster_peer(s: &str) -> Result<ClusterPeer> {
 /// silently skipping one would produce a membership an operator did not write,
 /// and a peer they believed authorized would be refused at handoff time with no
 /// hint why. An EMPTY result is a legitimate answer and means "no cluster".
-fn collect_cluster_peers(
-    flags: &[String],
-    file: Option<&Path>,
-) -> Result<Vec<ClusterPeer>> {
+fn collect_cluster_peers(flags: &[String], file: Option<&Path>) -> Result<Vec<ClusterPeer>> {
     let env_list = std::env::var("MAGNETITE_CLUSTER_PEERS").ok();
     let file = file.map(PathBuf::from).or_else(|| {
         std::env::var("MAGNETITE_CLUSTER_PEERS_FILE")
@@ -896,15 +906,13 @@ fn collect_cluster_peers_from(
     // De-dup on the KEY. A repeated key that carries an address upgrades the
     // entry: the operator naming a location is strictly more information than
     // the operator naming only a key, and it never widens who is authorized.
-    let mut push = |p: ClusterPeer| {
-        match out.iter_mut().find(|e| e.key.0 == p.key.0) {
-            Some(existing) => {
-                if existing.addr.is_none() {
-                    existing.addr = p.addr;
-                }
+    let mut push = |p: ClusterPeer| match out.iter_mut().find(|e| e.key.0 == p.key.0) {
+        Some(existing) => {
+            if existing.addr.is_none() {
+                existing.addr = p.addr;
             }
-            None => out.push(p),
         }
+        None => out.push(p),
     };
 
     for raw in flags {
@@ -928,9 +936,10 @@ fn collect_cluster_peers_from(
             if line.is_empty() {
                 continue;
             }
-            push(parse_cluster_peer(line).with_context(|| {
-                format!("{}:{}: invalid peer key", path.display(), i + 1)
-            })?);
+            push(
+                parse_cluster_peer(line)
+                    .with_context(|| format!("{}:{}: invalid peer key", path.display(), i + 1))?,
+            );
         }
     }
 
@@ -939,9 +948,9 @@ fn collect_cluster_peers_from(
 
 /// Default handoff bind address for a given game bind: the next port up.
 fn default_handoff_addr(host: &str, port: u16) -> Result<String> {
-    let next = port
-        .checked_add(1)
-        .ok_or_else(|| anyhow::anyhow!("--port {port} leaves no room for a handoff port; pass --handoff-addr"))?;
+    let next = port.checked_add(1).ok_or_else(|| {
+        anyhow::anyhow!("--port {port} leaves no room for a handoff port; pass --handoff-addr")
+    })?;
     Ok(format!("{host}:{next}"))
 }
 
@@ -1168,10 +1177,8 @@ fn cmd_node(
     // Step 4: cluster membership — DENY-BY-DEFAULT. An empty list is not "allow
     // anyone", it is "this node is not in a cluster": no handoff listener, no
     // migration transport, no session follow. Exactly today's single-box node.
-    let peers = collect_cluster_peers(
-        &cluster.cluster_peer,
-        cluster.cluster_peers_file.as_deref(),
-    )?;
+    let peers =
+        collect_cluster_peers(&cluster.cluster_peer, cluster.cluster_peers_file.as_deref())?;
     if peers.iter().any(|k| k.key.0 == node_pubkey.0) {
         eprintln!(
             "warning: this node's own key is in the membership list — harmless, \
@@ -1241,14 +1248,12 @@ fn cmd_node(
     //                        there is something to checkpoint at all;
     //   * the write loop   — actually calls the checkpointer on a cadence;
     //   * `with_recovery`  — lets the death path read what was written.
-    let checkpoint_cadence =
-        std::time::Duration::from_secs(cluster.checkpoint_interval.max(1));
+    let checkpoint_cadence = std::time::Duration::from_secs(cluster.checkpoint_interval.max(1));
     let checkpointing = match &cluster.checkpoint_dir {
         Some(dir) => {
             use magnetite_runtime::checkpoint::{CheckpointPolicy, CheckpointStore, Checkpointer};
-            let fs = magnetite_seams::blobstore::FsBlobStore::new(dir).map_err(|e| {
-                anyhow::anyhow!("--checkpoint-dir `{}`: {e}", dir.display())
-            })?;
+            let fs = magnetite_seams::blobstore::FsBlobStore::new(dir)
+                .map_err(|e| anyhow::anyhow!("--checkpoint-dir `{}`: {e}", dir.display()))?;
             let store = CheckpointStore::new(Arc::new(fs));
             let checkpointer = Checkpointer::new(
                 store.clone(),
@@ -1698,7 +1703,7 @@ fn validate_crate_name(name: &str) -> Result<()> {
 
 /// Convert a `kebab-case` or `snake_case` name to `PascalCase`.
 fn to_pascal_case(name: &str) -> String {
-    name.split(|c| c == '-' || c == '_')
+    name.split(['-', '_'])
         .filter(|s| !s.is_empty())
         .map(|s| {
             let mut chars = s.chars();
@@ -1951,8 +1956,7 @@ mod tests {
 
     #[test]
     fn peer_flag_parses_hex_key() {
-        let peers =
-            collect_cluster_peers_from(&[KEY_A.to_string()], None, None).unwrap();
+        let peers = collect_cluster_peers_from(&[KEY_A.to_string()], None, None).unwrap();
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].key.0, [0xaa; 32]);
         assert_eq!(peers[0].addr, None, "a bare key carries no address");
@@ -2080,10 +2084,17 @@ mod tests {
 
     #[test]
     fn env_and_flags_merge_and_dedupe() {
-        let peers =
-            collect_cluster_peers_from(&[KEY_A.to_string()], Some(&format!("{KEY_A},{KEY_B}")), None)
-                .unwrap();
-        assert_eq!(peers.len(), 2, "duplicates collapse, distinct keys accumulate");
+        let peers = collect_cluster_peers_from(
+            &[KEY_A.to_string()],
+            Some(&format!("{KEY_A},{KEY_B}")),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            peers.len(),
+            2,
+            "duplicates collapse, distinct keys accumulate"
+        );
     }
 
     #[test]
@@ -2095,11 +2106,7 @@ mod tests {
                 .unwrap_or_default()
                 .as_nanos()
         ));
-        std::fs::write(
-            &tmp,
-            format!("# node A\n{KEY_A}\n\n{KEY_B}  # node B\n"),
-        )
-        .unwrap();
+        std::fs::write(&tmp, format!("# node A\n{KEY_A}\n\n{KEY_B}  # node B\n")).unwrap();
         let peers = collect_cluster_peers_from(&[], None, Some(&tmp)).unwrap();
         let _ = std::fs::remove_file(&tmp);
         assert_eq!(peers.len(), 2);
@@ -2164,7 +2171,10 @@ mod tests {
 
     #[test]
     fn handoff_port_defaults_next_to_the_game_port() {
-        assert_eq!(default_handoff_addr("127.0.0.1", 9000).unwrap(), "127.0.0.1:9001");
+        assert_eq!(
+            default_handoff_addr("127.0.0.1", 9000).unwrap(),
+            "127.0.0.1:9001"
+        );
         assert!(default_handoff_addr("127.0.0.1", u16::MAX).is_err());
     }
 

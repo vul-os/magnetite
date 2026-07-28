@@ -8,8 +8,8 @@
 //   3. Block / unblock  — FriendService API shape; BlockedUser serialization.
 //   4. Analytics        — GameAnalytics / RevenueBreakdown / SessionStats / DailyPlayerData shapes;
 //                         time-series serialization round-trip; full-subtotal settlement math.
-//   5. CORS allowlist   — get_allowed_origins environment-variable branching (logic extracted
-//                         from cors.rs and tested without spinning up a server).
+//   5. CORS allowlist   — middleware::cors::resolve_origin_policy, called directly (it takes
+//                         its config as arguments, so no server and no env mutation).
 //   6. Session revocation — JWT Claims shape; session_id propagation; validate_token returns
 //                           an Err for malformed tokens.
 //   7. Rate limits      — get_rate_limit_config path matching uses /api/v1/ prefixes, not old
@@ -91,10 +91,14 @@ mod refund_tests {
 
 #[cfg(test)]
 mod content_rating_tests {
-    // The allowed ratings per the platform spec.
-    const VALID_RATINGS: &[&str] = &["everyone", "teen", "mature"];
+    // The REAL list the create/update handlers validate against, not a copy of
+    // it. `VALID_RATINGS` used to be a local `&["everyone", "teen", "mature"]`
+    // that "mirrors the private validate_content_rating logic" — so every
+    // assertion below was really an assertion about the mirror, and adding a
+    // fourth rating to `src/api/games.rs` would not have failed one of them.
+    use magnetite_backend::api::games::{DEFAULT_CONTENT_RATING, VALID_CONTENT_RATINGS};
+    const VALID_RATINGS: &[&str] = VALID_CONTENT_RATINGS;
 
-    // Mirrors the private `validate_content_rating` logic in the backend.
     fn check_rating(rating: &str) -> bool {
         VALID_RATINGS.contains(&rating)
     }
@@ -151,11 +155,13 @@ mod content_rating_tests {
 
     #[test]
     fn content_rating_default_is_everyone() {
-        // When content_rating is None, the backend defaults to "everyone".
-        let rating: Option<&str> = None;
-        let resolved = rating.unwrap_or("everyone");
-        assert_eq!(resolved, "everyone");
-        assert!(check_rating(resolved));
+        // `create_game` resolves an absent content_rating to
+        // `DEFAULT_CONTENT_RATING`. Assert the real constant, and that the
+        // default it falls back to is itself one the validator accepts — the
+        // previous body (`None::<&str>.unwrap_or("everyone")`) only asserted
+        // that `Option::unwrap_or` works.
+        assert_eq!(DEFAULT_CONTENT_RATING, "everyone");
+        assert!(check_rating(DEFAULT_CONTENT_RATING));
     }
 }
 
@@ -323,10 +329,7 @@ mod analytics_time_series_tests {
             dev_earnings, subtotal,
             "developer must receive 100% of the subtotal"
         );
-        assert!(
-            platform_fee.is_zero(),
-            "default protocol fee must be zero"
-        );
+        assert!(platform_fee.is_zero(), "default protocol fee must be zero");
 
         let ratio = dev_earnings / subtotal;
         assert_eq!(ratio, dec!(1), "developer share ratio is 1.0, not 0.7");
@@ -379,100 +382,116 @@ mod analytics_time_series_tests {
 
 #[cfg(test)]
 mod cors_allowlist_tests {
-    use std::env;
+    // These call the REAL policy function. Until now this module carried a
+    // hand-written `cors_policy_description()` described as a "Mirror of the
+    // get_allowed_origins logic from middleware/cors.rs" and asserted against
+    // the mirror, so:
+    //   * `empty_cors_env_returns_any` asserted CORS_ALLOWED_ORIGINS="" means
+    //     allow-any. The real `resolve_origin_policy` returns `Deny` for that
+    //     input in a release build — a declared-but-blank env var becoming an
+    //     any-origin free-for-all is precisely the footgun it guards against.
+    //     The test asserted the opposite of the shipped behaviour and passed.
+    //   * `production_without_frontend_url_returns_empty` wrapped its whole
+    //     body in `if !cfg!(debug_assertions)`, and tests build in debug, so it
+    //     executed zero assertions on every run it has ever had.
+    // `resolve_origin_policy` takes its inputs as arguments rather than reading
+    // the environment, so none of this needs (or does) any `env::set_var`
+    // racing against other tests.
+    use magnetite_backend::middleware::cors::{resolve_origin_policy, OriginPolicy};
 
-    /// Mirror of the `get_allowed_origins` logic from middleware/cors.rs:
-    /// returns "any" | "list" | "empty" describing the origin policy.
-    fn cors_policy_description() -> &'static str {
-        if let Ok(origins) = env::var("CORS_ALLOWED_ORIGINS") {
-            if origins.is_empty() {
-                return "any";
-            }
-            if origins.split(',').any(|o| o.trim() == "*") {
-                return "any";
-            }
-            return "list";
-        }
-        if cfg!(debug_assertions) {
-            return "list"; // localhost allowlist in debug builds
-        }
-        if env::var("FRONTEND_URL").is_ok() {
-            return "list";
-        }
-        "empty"
-    }
+    const RELEASE: bool = false;
+    const DEBUG: bool = true;
 
     #[test]
     fn no_env_vars_in_release_returns_empty_or_debug_list() {
-        // In a test (debug build), the expected result is "list" (localhost).
-        // In a release build without FRONTEND_URL it would be "empty".
-        let policy = cors_policy_description();
-        // Debug builds always get a localhost allowlist — not "any".
-        if cfg!(debug_assertions) {
-            assert_ne!(policy, "any", "debug build should never return any");
-        }
+        // Debug builds get a localhost allowlist — never allow-any.
+        assert_eq!(
+            resolve_origin_policy(None, None, DEBUG),
+            OriginPolicy::List(vec![
+                "http://localhost:5173".to_string(),
+                "http://localhost:3000".to_string(),
+            ]),
+        );
+        // Release builds with nothing configured deny outright.
+        assert_eq!(
+            resolve_origin_policy(None, None, RELEASE),
+            OriginPolicy::Deny
+        );
     }
 
     #[test]
     fn wildcard_in_cors_env_returns_any() {
-        // We cannot mutate env vars safely in parallel tests, so we check
-        // the logic directly: if origins contains "*", policy must be "any".
-        let origins = "*";
-        let policy = if origins.split(',').any(|o| o.trim() == "*") {
-            "any"
-        } else {
-            "list"
-        };
-        assert_eq!(policy, "any");
+        assert_eq!(
+            resolve_origin_policy(Some("*"), None, RELEASE),
+            OriginPolicy::Any
+        );
+        // A `*` anywhere in the list wins.
+        assert_eq!(
+            resolve_origin_policy(Some("https://magnetite.gg, *"), None, RELEASE),
+            OriginPolicy::Any,
+        );
     }
 
     #[test]
     fn explicit_domain_cors_env_returns_list() {
-        let origins = "https://magnetite.gg,https://staging.magnetite.gg";
-        let policy = if origins.split(',').any(|o| o.trim() == "*") {
-            "any"
-        } else {
-            "list"
-        };
-        assert_eq!(policy, "list");
+        assert_eq!(
+            resolve_origin_policy(
+                Some("https://magnetite.gg,https://staging.magnetite.gg"),
+                None,
+                RELEASE,
+            ),
+            OriginPolicy::List(vec![
+                "https://magnetite.gg".to_string(),
+                "https://staging.magnetite.gg".to_string(),
+            ]),
+        );
+        // An explicit allowlist beats FRONTEND_URL.
+        assert_eq!(
+            resolve_origin_policy(
+                Some("https://magnetite.gg"),
+                Some("https://other.example"),
+                RELEASE,
+            ),
+            OriginPolicy::List(vec!["https://magnetite.gg".to_string()]),
+        );
     }
 
     #[test]
-    fn empty_cors_env_returns_any() {
-        // Empty string means allow all (same as absent in current impl).
-        let origins = "";
-        let policy = if origins.is_empty() {
-            "any"
-        } else if origins.split(',').any(|o| o.trim() == "*") {
-            "any"
-        } else {
-            "list"
-        };
-        assert_eq!(policy, "any");
+    fn empty_cors_env_does_not_return_any() {
+        // The security-critical case, asserted the right way round: a blank or
+        // whitespace-only CORS_ALLOWED_ORIGINS must NOT mean allow-any.
+        for blank in ["", "   ", ", ,"] {
+            assert_eq!(
+                resolve_origin_policy(Some(blank), None, RELEASE),
+                OriginPolicy::Deny,
+                "blank CORS_ALLOWED_ORIGINS {blank:?} must deny, never allow-any",
+            );
+            // In debug it falls back to localhost — still not allow-any.
+            assert_ne!(
+                resolve_origin_policy(Some(blank), None, DEBUG),
+                OriginPolicy::Any,
+                "blank CORS_ALLOWED_ORIGINS {blank:?} must never allow-any",
+            );
+        }
     }
 
     #[test]
     fn production_without_frontend_url_returns_empty() {
-        // Simulates a production build (release) without any env vars.
-        // In debug mode this is always "list"; we document the release behavior here.
-        if !cfg!(debug_assertions) {
-            let saved = env::var("CORS_ALLOWED_ORIGINS").ok();
-            let saved_furl = env::var("FRONTEND_URL").ok();
-            unsafe {
-                env::remove_var("CORS_ALLOWED_ORIGINS");
-                env::remove_var("FRONTEND_URL");
-            }
-            let policy = cors_policy_description();
-            assert_eq!(policy, "empty");
-            unsafe {
-                if let Some(v) = saved {
-                    env::set_var("CORS_ALLOWED_ORIGINS", v);
-                }
-                if let Some(v) = saved_furl {
-                    env::set_var("FRONTEND_URL", v);
-                }
-            }
-        }
+        // Release build, nothing configured at all → deny-all.
+        assert_eq!(
+            resolve_origin_policy(None, None, RELEASE),
+            OriginPolicy::Deny
+        );
+        // A blank FRONTEND_URL counts as unset.
+        assert_eq!(
+            resolve_origin_policy(None, Some("  "), RELEASE),
+            OriginPolicy::Deny
+        );
+        // A real FRONTEND_URL is the single permitted origin.
+        assert_eq!(
+            resolve_origin_policy(None, Some("https://app.example"), RELEASE),
+            OriginPolicy::List(vec!["https://app.example".to_string()]),
+        );
     }
 }
 

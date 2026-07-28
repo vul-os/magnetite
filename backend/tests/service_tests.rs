@@ -13,7 +13,7 @@
 #[cfg(test)]
 mod noncustodial_payment_tests {
     use magnetite_backend::services::payment::{
-        rail, sale_split, units_from_usd, verify_receipt, PaymentRail, PubKey,
+        rail, sale_split, units_from_usd, verify_receipt, PubKey,
     };
     use rust_decimal_macros::dec;
 
@@ -55,7 +55,10 @@ mod noncustodial_payment_tests {
     #[tokio::test]
     async fn fresh_receipt_verifies() {
         let receipt = rail()
-            .checkout(&PubKey([0xB2; 32]), sale_split(PubKey([0xD2; 32]), 4200, None))
+            .checkout(
+                &PubKey([0xB2; 32]),
+                sale_split(PubKey([0xD2; 32]), 4200, None),
+            )
             .await;
         assert!(verify_receipt(&receipt));
     }
@@ -63,7 +66,10 @@ mod noncustodial_payment_tests {
     #[tokio::test]
     async fn inflated_total_fails_verification() {
         let mut receipt = rail()
-            .checkout(&PubKey([0xB3; 32]), sale_split(PubKey([0xD3; 32]), 4200, None))
+            .checkout(
+                &PubKey([0xB3; 32]),
+                sale_split(PubKey([0xD3; 32]), 4200, None),
+            )
             .await;
         receipt.total = 1;
         assert!(!verify_receipt(&receipt), "must fail closed");

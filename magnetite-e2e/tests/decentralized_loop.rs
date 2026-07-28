@@ -317,8 +317,7 @@ async fn decentralized_loop_end_to_end_offline() {
         "an un-renewed ad must expire on its own"
     );
     // And a withdrawal must be signed by the owner.
-    let mut forged_withdraw =
-        SignedWithdraw::sign(&attacker, game, prepared.ad.node.clone(), NOW);
+    let mut forged_withdraw = SignedWithdraw::sign(&attacker, game, prepared.ad.node.clone(), NOW);
     forged_withdraw.node_key = node_key.pubkey();
     assert!(
         tracker.withdraw(forged_withdraw, NOW).is_err(),
@@ -482,7 +481,9 @@ fn run_multishard_world(base: MatchConfig, drift: f64) -> (Vec<(ShardId, u64)>, 
     };
     let mut rt = ShardedRuntime::new(
         cfg.clone(),
-        Box::new(move |_shard, config| Box::new(NativeExecutor::<ArenaShooter>::new(config.clone()))),
+        Box::new(move |_shard, config| {
+            Box::new(NativeExecutor::<ArenaShooter>::new(config.clone()))
+        }),
     );
 
     let players: Vec<PlayerId> = (1..=5).map(PlayerId::new).collect();
@@ -533,7 +534,12 @@ async fn two_nodes_advertise_the_same_build_and_the_client_chooses() {
 
     for (seed, addr, ping, price) in [
         ([0x41u8; 32], "cheap-far.example:9000", 180u32, None),
-        ([0x42u8; 32], "pricey-near.example:9000", 12u32, Some(seat_price())),
+        (
+            [0x42u8; 32],
+            "pricey-near.example:9000",
+            12u32,
+            Some(seat_price()),
+        ),
     ] {
         let d = TrackedDiscovery {
             tracker: &tracker,

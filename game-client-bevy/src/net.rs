@@ -127,7 +127,7 @@ mod native {
             token: config.token.clone(),
         });
         if let Ok(bytes) = connect.encode() {
-            let _ = ws_write.send(Message::Binary(bytes.into())).await;
+            let _ = ws_write.send(Message::Binary(bytes)).await;
         }
 
         loop {
@@ -136,7 +136,7 @@ mod native {
                 Some(msg) = task_ch.rx_from_bevy.recv() => {
                     match serde_json::to_vec(&msg) {
                         Ok(bytes) => {
-                            let _ = ws_write.send(Message::Binary(bytes.into())).await;
+                            let _ = ws_write.send(Message::Binary(bytes)).await;
                         }
                         Err(e) => tracing_log(&format!("serialize error: {e}")),
                     }

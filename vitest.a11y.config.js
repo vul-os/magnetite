@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { createRequire } from 'node:module';
 import { resolve } from 'path';
+
+const require = createRequire(import.meta.url);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dedicated config for the page-level axe accessibility suite.
@@ -19,11 +22,18 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
+    // Array form (not object) so `find` can be an anchored regex — a plain
+    // string alias would also capture `vitest-axe/matchers`.
+    alias: [
       // Same shim the main config uses so `import { axe, toHaveNoViolations }
       // from 'vitest-axe'` resolves to the serious/critical-filtering matcher.
-      'vitest-axe': resolve(__dirname, 'src/test/vitest-axe-shim.js'),
-    },
+      {
+        find: /^vitest-axe$/,
+        replacement: resolve(__dirname, 'src/test/vitest-axe-shim.js'),
+      },
+      // The shim's non-recursive way back to the real package (see its header).
+      { find: /^vitest-axe-real$/, replacement: require.resolve('vitest-axe') },
+    ],
   },
   test: {
     globals: true,

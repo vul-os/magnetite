@@ -53,9 +53,12 @@ fn sharded_cfg(cell_size: f32) -> MatchConfig {
 
 /// Build a fresh [`ShardedRuntime`] backed by [`NativeExecutor<ArenaShooter>`].
 fn make_runtime(cfg: MatchConfig) -> ShardedRuntime {
-    ShardedRuntime::new(cfg.clone(), Box::new(move |_shard_id, config| {
-        Box::new(NativeExecutor::<ArenaShooter>::new(config.clone()))
-    }))
+    ShardedRuntime::new(
+        cfg.clone(),
+        Box::new(move |_shard_id, config| {
+            Box::new(NativeExecutor::<ArenaShooter>::new(config.clone()))
+        }),
+    )
 }
 
 /// An input that moves the player `dx` units on the x-axis (and 0 on y).
@@ -116,9 +119,9 @@ fn players_in_different_cells_use_different_shards() {
 
     // Inputs: A stays put, B crosses into cell (1,0), C crosses into cell (0,1).
     let inputs = vec![
-        (pa, Input::default()),       // stays in cell (0,0)
-        (pb, move_x(150.0)),          // crosses into cell (1,0)
-        (pc, move_y(110.0)),          // crosses into cell (0,1)
+        (pa, Input::default()), // stays in cell (0,0)
+        (pb, move_x(150.0)),    // crosses into cell (1,0)
+        (pc, move_y(110.0)),    // crosses into cell (0,1)
     ];
 
     let out = runtime.step(1, &inputs);
@@ -139,9 +142,7 @@ fn players_in_different_cells_use_different_shards() {
     let shard_b = runtime.shard_of(pb).expect("B has a shard");
     let shard_c = runtime.shard_of(pc).expect("C has a shard");
 
-    println!(
-        "[shards] A={shard_a:?}, B={shard_b:?}, C={shard_c:?}"
-    );
+    println!("[shards] A={shard_a:?}, B={shard_b:?}, C={shard_c:?}");
 
     assert_eq!(shard_a, ShardId::LOCAL, "A stays in origin cell (0,0)");
     assert_eq!(
@@ -196,8 +197,8 @@ fn handoff_preserves_state_hash() {
 
     // Tick 1: both players move within cell (0,0).
     let inputs_t1 = vec![
-        (pa, move_x(10.0)),  // within cell 0
-        (pb, move_x(20.0)),  // within cell 0
+        (pa, move_x(10.0)), // within cell 0
+        (pb, move_x(20.0)), // within cell 0
     ];
     let out1 = runtime.step(1, &inputs_t1);
     assert!(
@@ -208,8 +209,8 @@ fn handoff_preserves_state_hash() {
     // Tick 2: pb crosses from cell (0,0) into cell (1,0).
     // Accumulated x for pb = 20 + 150 = 170 → cell 1 (>= 100).
     let inputs_t2 = vec![
-        (pa, Input::default()),  // stays put
-        (pb, move_x(150.0)),     // crosses boundary
+        (pa, Input::default()), // stays put
+        (pb, move_x(150.0)),    // crosses boundary
     ];
     let out2 = runtime.step(2, &inputs_t2);
     let pb_handoff = out2
@@ -217,9 +218,20 @@ fn handoff_preserves_state_hash() {
         .iter()
         .find(|h| h.player == pb)
         .expect("tick 2: pb must be handed off");
-    assert_eq!(pb_handoff.from_shard, ShardId::LOCAL, "pb leaves origin shard");
-    assert_eq!(pb_handoff.to_shard, ShardId::from_cell(1, 0), "pb arrives at cell (1,0)");
-    assert!(pb_handoff.target_addr.is_none(), "single-process: no remote addr");
+    assert_eq!(
+        pb_handoff.from_shard,
+        ShardId::LOCAL,
+        "pb leaves origin shard"
+    );
+    assert_eq!(
+        pb_handoff.to_shard,
+        ShardId::from_cell(1, 0),
+        "pb arrives at cell (1,0)"
+    );
+    assert!(
+        pb_handoff.target_addr.is_none(),
+        "single-process: no remote addr"
+    );
 
     // The target shard executor must now exist.
     let target_shard = ShardId::from_cell(1, 0);
@@ -351,12 +363,18 @@ fn two_sharded_runtimes_converge() {
     // Both runtimes must agree on routing.
     let shard_p2_a = runtime_a.shard_of(p2).expect("p2 in A");
     let shard_p2_b = runtime_b.shard_of(p2).expect("p2 in B");
-    assert_eq!(shard_p2_a, shard_p2_b, "p2 routing must agree across runtimes");
+    assert_eq!(
+        shard_p2_a, shard_p2_b,
+        "p2 routing must agree across runtimes"
+    );
     assert_eq!(shard_p2_a, ShardId::from_cell(4, 0), "p2 in cell (4,0)");
 
     let shard_p3_a = runtime_a.shard_of(p3).expect("p3 in A");
     let shard_p3_b = runtime_b.shard_of(p3).expect("p3 in B");
-    assert_eq!(shard_p3_a, shard_p3_b, "p3 routing must agree across runtimes");
+    assert_eq!(
+        shard_p3_a, shard_p3_b,
+        "p3 routing must agree across runtimes"
+    );
     assert_eq!(shard_p3_a, ShardId::from_cell(0, 4), "p3 in cell (0,4)");
 
     println!(
@@ -384,10 +402,10 @@ fn sequential_handoffs_track_correctly() {
 
     // Sequence: cross into (1,0) → (2,0) → (2,1).
     let moves: &[(f64, f64, ShardId)] = &[
-        (150.0, 0.0,   ShardId::from_cell(1, 0)),  // tick 1: x→150 → cell (1,0)
-        (110.0, 0.0,   ShardId::from_cell(2, 0)),  // tick 2: x→260 → cell (2,0)
-        (0.0,   110.0, ShardId::from_cell(2, 1)),  // tick 3: y→110 → cell (2,1)
-        (0.0,   0.0,   ShardId::from_cell(2, 1)),  // tick 4: stays
+        (150.0, 0.0, ShardId::from_cell(1, 0)), // tick 1: x→150 → cell (1,0)
+        (110.0, 0.0, ShardId::from_cell(2, 0)), // tick 2: x→260 → cell (2,0)
+        (0.0, 110.0, ShardId::from_cell(2, 1)), // tick 3: y→110 → cell (2,1)
+        (0.0, 0.0, ShardId::from_cell(2, 1)),   // tick 4: stays
     ];
 
     for (tick_idx, &(dx, dy, expected_shard)) in moves.iter().enumerate() {
@@ -430,7 +448,10 @@ fn sequential_handoffs_track_correctly() {
         }
         let _ = crossed; // suppress unused warning
 
-        println!("[sequential] tick {tick} shard={actual_shard:?} handoffs={}", out.handoffs.len());
+        println!(
+            "[sequential] tick {tick} shard={actual_shard:?} handoffs={}",
+            out.handoffs.len()
+        );
     }
 
     println!("[sequential] PASS — sequential_handoffs_track_correctly");

@@ -88,7 +88,9 @@ fn parse_scope(req: &CreateRoomRequest) -> Result<RoomScope> {
             )
         }
         other => {
-            return Err(AppError::Validation(format!("unknown room scope `{other}`")));
+            return Err(AppError::Validation(format!(
+                "unknown room scope `{other}`"
+            )));
         }
     })
 }
@@ -118,7 +120,9 @@ pub async fn get_room(
     State(pool): State<PgPool>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<response::ApiResponse<super::RoomRecord>>> {
-    Ok(response::success_response(super::get_room(&pool, id).await?))
+    Ok(response::success_response(
+        super::get_room(&pool, id).await?,
+    ))
 }
 
 /// POST /api/v1/comms/rooms/:id/join — mint a join credential.

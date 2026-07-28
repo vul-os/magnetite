@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::blobstore::Hash;
 use crate::error::Result;
-use crate::identity::{AuthProvider, Audience, PubKey, Scope, Token};
+use crate::identity::{Audience, AuthProvider, PubKey, Scope, Token};
 use crate::now_unix;
 
 /// What a room is for. Drives naming and (in real providers) provisioning.
@@ -120,7 +120,10 @@ impl<A: AuthProvider + Send + Sync> CommsProvider for BuiltinProvider<A> {
             .mint_scoped_token(
                 user,
                 Audience("builtin".into()),
-                Scope(vec![format!("room:join:{}", room.0), format!("ts:{}", now_unix())]),
+                Scope(vec![
+                    format!("room:join:{}", room.0),
+                    format!("ts:{}", now_unix()),
+                ]),
             )
             .await;
         JoinCred {

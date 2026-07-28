@@ -28,7 +28,6 @@ use super::SuperAdminState;
 
 type Resp = axum::response::Response;
 
-
 // ── Moderation queue (flagged chat messages) ────────────────────────────────
 
 #[derive(FromRow)]

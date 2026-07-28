@@ -28,7 +28,15 @@ WASM sandbox, deterministic replay/anti-cheat) is the one thing we own and is al
 
 - **Fiat + custody:** Paystack, Wise, `wallet_balances`/`wallet_transactions`/`developer_balances`
   (the latter has no schema anyway), `payout`/`payout_requests` split-brain, ZAR→USD conversion,
-  subscription ZAR charging. All deleted — non-custodial crypto makes custody unnecessary.
+  subscription ZAR charging — non-custodial crypto makes custody unnecessary.
+  - **Done, in code.** `PaymentService`/`PayoutService`/`WalletService`/`WiseClient` and the
+    deposit/withdraw/payout-batch paths are gone; nothing reads or writes a custodial balance.
+  - **Not done, in schema, deliberately.** The legacy fiat *tables* are still in
+    `backend/migrations/20250119000000_baseline.sql`, retained and marked DEPRECATED so historical
+    rows are not destroyed — there is no DROP migration and this doc should not be read as saying
+    there is. What enforces the cut is `superadmin::billing::custody_is_dormant`, which counts
+    `wallet_balances` / `payouts` / `game_revenue` and flags any non-zero count as custodial code
+    coming back.
 - **Central identity:** single `JWT_SECRET` + `users` table as the *only* identity authority →
   demoted to one `Identity` provider behind the seam. Keypair identity is the default.
 - **Home-grown chat/voice/streaming:** `communities`/`channels`/`messages`/`ws/comms`/`ws/voice`/
@@ -94,7 +102,12 @@ struct SessionAd { game: Hash, node: NodeAddr, capacity: Capacity, ping_hint: u3
                    price: Option<Price>, chat_room: Option<RoomAddr>, voice_room: Option<RoomAddr> }
 ```
 - **Default:** `TrackerDiscovery` — dumb, swappable HTTP tracker (BitTorrent-style; anyone runs one,
-  redundant). Plus `LanDiscovery` (mDNS) for local. DHT adapter later.
+  redundant). Plus `FanoutDiscovery` to announce to several backends at once. DHT adapter later.
+- **`LanDiscovery` is not mDNS.** It is an in-process registry (`discovery.rs`: *"in-process
+  registry stub standing in for mDNS/LAN discovery"*) — it holds ads in a map inside one process,
+  puts no packet on the wire and finds no other machine. It is what makes the offline default and
+  the tests work; it is not local-network discovery, and two nodes on the same LAN will not see
+  each other through it. Real mDNS is unbuilt.
 - Replaces the central `runtime_instances`-poll model entirely.
 
 ### 3.5 `CommsProvider` (chat / voice / video / streaming — pluggable, we build none of it)
@@ -108,6 +121,13 @@ trait CommsProvider {
 - Providers: `MatrixProvider` (text/DMs/presence/spaces via Element homeservers),
   `JitsiProvider` (voice+video SFU), `LiveKitProvider` (voice+video at scale),
   `OwncastProvider`/`PeerTubeProvider` (live + VOD), `BuiltinProvider` (the demoted old stack).
+- **Where they are, and what they actually do.** `magnetite-seams` ships only `BuiltinProvider`; the
+  four external adapters live in `backend/src/comms/providers.rs`, each `None` unless its env var is
+  set (`MATRIX_HOMESERVER`, `JITSI_DOMAIN`, `LIVEKIT_URL`, `OWNCAST_URL`), and `peertube` is an alias
+  onto `OwncastAdapter` rather than its own adapter. They **address and credential**: they derive a
+  deterministic room address and mint a scoped join token from the player's keypair. They do **not
+  provision** — nothing calls Matrix `createRoom`, and `teardown` is a no-op for Matrix by design
+  (see the `TODO(matrix)` markers in that file). Room existence is the operator's homeserver's job.
 - **Identity bridge:** the node mints scoped creds via `AuthProvider::mint_scoped_token`
   (Matrix OpenID/SSO, Jitsi JWT, LiveKit token) from the player's keypair. One login → SSO into comms.
 - Join credential may be gated behind a payment receipt (§3.6) — paid room → token only after pay.
@@ -126,6 +146,17 @@ struct PaymentSplit { developer: Split, operator: Option<Split>, protocol_fee_bp
   signed receipt keyed `(buyer pk, game hash, item)`; node reads receipt to grant. (b) **hosting fee**
   → operator paid per-seat/per-hour via payment channel (no gas per join); this is the incentive to
   bring big servers. (c) **wager/tournament (optional)** → escrow settled by `verify_replay`.
+  - **(a) is built** end to end: `MarketplaceService::purchase` → `PaymentRail::checkout` → a
+    `payment_receipts` row, and `verify_entitlement` re-runs `verify_receipt` on the stored receipt,
+    so an entitlement row alone is never proof.
+  - **(b) is a scaffold.** `open_hosting_channel` opens a channel and writes a `hosting_channels`
+    row that gates the join, but there are no signed channel updates and no per-seat/per-hour
+    debit — on `MockPaymentRail` a `Channel` is a deterministic id, and the real Solana rail
+    refuses `open_channel` outright (`PaymentError::Unsupported` — no on-chain program deployed).
+    Money does not actually move per join today.
+  - **(c) is not built.** Nothing constructs `WagerTerms` outside `magnetite-seams`' own tests, no
+    caller settles an `Escrow`, and `SolanaPaymentRail::escrow` refuses for the same reason. The
+    `verify_replay`-settles-a-wager story is a design intent, not a code path.
 - **Chain:** stablecoin (USDC) on an L2 (Base/Arbitrum) + payment channels for micro-txns, OR Solana
   (Ed25519-native → identity key can double as wallet key). Keep on-chain state minimal. Configurable.
 - **Default (dev/test):** `MockPaymentRail` — deterministic signed receipts, no chain, so CI runs offline.
@@ -211,6 +242,11 @@ trait InputProvider {
 ## 4. Generic capacity-elastic node (the "bring any server → scales to infinity" property)
 
 Collapse `backend` + `magnetite-runtime` into one `magnetite` node binary.
+- **Not done — this line is still a target, not a description.** Two binaries ship:
+  `magnetite-backend` (HTTP API, Postgres, marketplace, comms, superadmin) and `magnetite`
+  (`magnetite-cli`, the game node — `dev` / `node` / `deploy`). The release workflow publishes both.
+  `magnetite node` is genuinely backend-free (offline defaults, no DB), which is the half of the
+  claim that holds; the two have not been merged, and the platform API still needs the other binary.
 - Node **measures its own hardware** (cores/RAM/bandwidth) → advertises `Capacity`.
 - A **world = a set of shards** (spatial cell / room / instance). Players live in shards; crossing a
   boundary is a handoff. Node runs as many shards as its box holds → **player cap is emergent from
@@ -273,10 +309,10 @@ Legend: **[O]** = Opus-class agent, **[S]** = Sonnet-class agent. One writer per
   `magnetite-sdk/` topology, `magnetite-runtime/` shard host. (Coordinate with N1 on runtime files — N1 owns bins, G1 owns shard/topology modules.)
 
 ### Wave 2 — Presentation track (parallel with backend; needs style-study output)
-- **L1 [S]** LANDING page in Vulos house style (match ofisi/wede), own accent, hero + sections,
-  screenshots embedded. **D1 [S]** DOCS site (same generator as ofisi/wede), chapters covering §1–§6
+- **L1 [S]** LANDING page in Vulos house style (match diwan/wede), own accent, hero + sections,
+  screenshots embedded. **D1 [S]** DOCS site (same generator as diwan/wede), chapters covering §1–§6
   architecture, screenshots. **R1 [S]** README rewrite (decentralized-games pitch, screenshots, badges).
-  **SC1 [S]** Screenshotter: `npm run screenshotter` mirroring ofisi/wede (Playwright), captures
+  **SC1 [S]** Screenshotter: `npm run screenshotter` mirroring diwan/wede (Playwright), captures
   landing + docs + app routes → images referenced by landing/docs/README.
 
 - **IN1 [O]** INPUT: `InputProvider` seam (§3.7) — `InputClass` boundary, `PlausibilityGate`,

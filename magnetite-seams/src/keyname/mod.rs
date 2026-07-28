@@ -324,12 +324,23 @@ mod tests {
 
     #[test]
     fn wordlist_is_2048_unique_sorted_ascii_words() {
-        assert_eq!(WORDLIST.len(), 2048, "11 bits per word requires exactly 2048");
+        assert_eq!(
+            WORDLIST.len(),
+            2048,
+            "11 bits per word requires exactly 2048"
+        );
         let set: HashSet<&&str> = WORDLIST.iter().collect();
-        assert_eq!(set.len(), 2048, "duplicate words would make names ambiguous");
+        assert_eq!(
+            set.len(),
+            2048,
+            "duplicate words would make names ambiguous"
+        );
         let mut sorted = WORDLIST;
         sorted.sort_unstable();
-        assert_eq!(sorted, WORDLIST, "binary_search lookup requires sorted order");
+        assert_eq!(
+            sorted, WORDLIST,
+            "binary_search lookup requires sorted order"
+        );
         for w in WORDLIST {
             assert!(
                 (4..=7).contains(&w.len()) && w.chars().all(|c| c.is_ascii_lowercase()),
@@ -341,7 +352,11 @@ mod tests {
     #[test]
     fn wordlist_prefixes_are_unique() {
         let prefixes: HashSet<&str> = WORDLIST.iter().map(|w| &w[..4]).collect();
-        assert_eq!(prefixes.len(), 2048, "every word must have a unique 4-char prefix");
+        assert_eq!(
+            prefixes.len(),
+            2048,
+            "every word must have a unique 4-char prefix"
+        );
     }
 
     // ---- lossless 24-word form: exact round trip ----
@@ -367,7 +382,10 @@ mod tests {
     fn full_names_are_distinct_for_distinct_keys() {
         let mut seen = HashSet::new();
         for i in 0..=255u8 {
-            assert!(seen.insert(full_name_of(&PubKey([i; 32]))), "collision at {i}");
+            assert!(
+                seen.insert(full_name_of(&PubKey([i; 32]))),
+                "collision at {i}"
+            );
         }
     }
 
@@ -407,13 +425,18 @@ mod tests {
                 broken += 1;
             }
         }
-        assert!(broken >= 60, "checksum should catch nearly every single-word typo");
+        assert!(
+            broken >= 60,
+            "checksum should catch nearly every single-word typo"
+        );
     }
 
     #[test]
     fn arbitrary_junk_never_panics() {
         let naming = KeyNameNaming::new();
-        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
         for junk in [
             "",
             "   ",
@@ -447,7 +470,10 @@ mod tests {
 
         let mut seen = HashSet::new();
         for _ in 0..2000 {
-            assert!(seen.insert(short_name_of(&random_key())), "88-bit collision");
+            assert!(
+                seen.insert(short_name_of(&random_key())),
+                "88-bit collision"
+            );
         }
     }
 
@@ -456,7 +482,11 @@ mod tests {
         let naming = KeyNameNaming::new();
         let pk = random_key();
         let name = short_name_of(&pk);
-        assert_eq!(naming.resolve(&name).await, None, "unknown key must not resolve");
+        assert_eq!(
+            naming.resolve(&name).await,
+            None,
+            "unknown key must not resolve"
+        );
         naming.learn(pk);
         assert_eq!(naming.resolve(&name).await, Some(pk));
         assert_eq!(naming.display(&pk), name);
@@ -476,7 +506,10 @@ mod tests {
         naming.learn_with_domain(pk, "Example.ORG");
         let short = short_name_of(&pk);
         assert_eq!(naming.display(&pk), format!("{short}@example.org"));
-        assert_eq!(naming.resolve(&format!("{short}@example.org")).await, Some(pk));
+        assert_eq!(
+            naming.resolve(&format!("{short}@example.org")).await,
+            Some(pk)
+        );
         // Unqualified still works…
         assert_eq!(naming.resolve(&short).await, Some(pk));
         // …but a WRONG domain fails closed rather than falling back to the key.

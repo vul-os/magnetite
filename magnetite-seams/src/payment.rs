@@ -454,7 +454,10 @@ mod tests {
 
         assert!(receipt_admits(&rail, &r, &buyer, 500), "exact price admits");
         assert!(receipt_admits(&rail, &r, &buyer, 100), "overpay admits");
-        assert!(receipt_admits(&rail, &r, &stranger, 0), "free needs nothing");
+        assert!(
+            receipt_admits(&rail, &r, &stranger, 0),
+            "free needs nothing"
+        );
 
         assert!(
             !receipt_admits(&rail, &r, &buyer, 501),

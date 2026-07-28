@@ -227,7 +227,9 @@ impl BlobStore for FsBlobStore {
         // Write to a temp name in the SAME directory, then rename. Rename is
         // atomic within a filesystem, so a reader never observes a partial blob
         // under a hash that promises whole content.
-        let tmp = self.root.join(format!(".tmp-{}-{}", hash.to_hex(), std::process::id()));
+        let tmp = self
+            .root
+            .join(format!(".tmp-{}-{}", hash.to_hex(), std::process::id()));
         if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, &final_path).is_err() {
             let _ = std::fs::remove_file(&tmp);
         }

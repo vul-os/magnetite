@@ -429,11 +429,7 @@ impl PlausibilityGate {
     /// State (rate window, cooldowns, sequence high-water mark) advances **only
     /// on acceptance**, so a burst of rejected events cannot be used to push a
     /// competitor's own legitimate events out of the window.
-    pub fn admit(
-        &self,
-        ev: &AttestedEvent,
-        now_ms: u64,
-    ) -> std::result::Result<(), Implausible> {
+    pub fn admit(&self, ev: &AttestedEvent, now_ms: u64) -> std::result::Result<(), Implausible> {
         if !self.limits.accepted_kinds.is_empty()
             && !self.limits.accepted_kinds.iter().any(|k| k == &ev.kind)
         {
@@ -652,7 +648,8 @@ impl AttestedEventInput {
     /// physically impossible". That is the ceiling for this input class.
     pub async fn submit_signed<I: Identity>(&self, signed: &SignedAttestedEvent) -> Result<()> {
         signed.verify::<I>()?;
-        self.submit(InputEvent::Attested(signed.event.clone())).await
+        self.submit(InputEvent::Attested(signed.event.clone()))
+            .await
     }
 }
 
@@ -864,15 +861,24 @@ mod tests {
         let g = PlausibilityGate::default();
         let mut low = ev(pk(1), "swing", 1, 10_000);
         low.confidence = 0.01;
-        assert_eq!(g.admit(&low, 10_000), Err(Implausible::ImplausibleConfidence));
+        assert_eq!(
+            g.admit(&low, 10_000),
+            Err(Implausible::ImplausibleConfidence)
+        );
 
         let mut nan = ev(pk(1), "swing", 1, 10_000);
         nan.confidence = f32::NAN;
-        assert_eq!(g.admit(&nan, 10_000), Err(Implausible::ImplausibleConfidence));
+        assert_eq!(
+            g.admit(&nan, 10_000),
+            Err(Implausible::ImplausibleConfidence)
+        );
 
         let mut over = ev(pk(1), "swing", 1, 10_000);
         over.confidence = 1.5;
-        assert_eq!(g.admit(&over, 10_000), Err(Implausible::ImplausibleConfidence));
+        assert_eq!(
+            g.admit(&over, 10_000),
+            Err(Implausible::ImplausibleConfidence)
+        );
 
         assert_eq!(
             g.admit(&ev(pk(1), "swing", 1, 99_000_000), 10_000),
@@ -989,8 +995,7 @@ mod tests {
         let p = AttestedEventInput::default();
         let honest = RawKeypairAuth::from_seed([3u8; 32]);
         let attacker = RawKeypairAuth::from_seed([4u8; 32]);
-        let forged =
-            SignedAttestedEvent::sign(&attacker, ev(honest.pubkey(), "swing", 1, 10_000));
+        let forged = SignedAttestedEvent::sign(&attacker, ev(honest.pubkey(), "swing", 1, 10_000));
         assert!(p.submit_signed::<RawKeypairAuth>(&forged).await.is_err());
         assert!(p.drain(0).await.is_empty());
     }

@@ -813,10 +813,8 @@ impl Rebalancer {
             match transport.probe_peer(route) {
                 Ok(status) => {
                     self.record_success(&route.pubkey);
-                    self.last_seen.insert(
-                        route.pubkey.to_hex(),
-                        (route.pubkey, status.shards.clone()),
-                    );
+                    self.last_seen
+                        .insert(route.pubkey.to_hex(), (route.pubkey, status.shards.clone()));
                     // A peer that answered is alive: nothing it holds is lost,
                     // so clear any mourning we recorded for it earlier.
                     self.mourned.retain(|(_, k)| k != &route.pubkey.to_hex());
@@ -887,18 +885,17 @@ impl Rebalancer {
                 // 5b. Try to make this a bounded rollback instead of a total
                 //     loss. Every failure path below ends in ShardLoss; none of
                 //     them ever starts an empty shard under a real shard id.
-                let refused = match self.try_restore(
-                    transport, *shard, *key, hex, lapsed, now_unix, now,
-                ) {
-                    Some(Ok(rec)) => {
-                        // It is ours now, at a strictly higher epoch. Do not
-                        // mourn it, and do not let a later tick mourn it either.
-                        recovered.push(rec);
-                        continue;
-                    }
-                    Some(Err(e)) => Some(e.to_string()),
-                    None => None,
-                };
+                let refused =
+                    match self.try_restore(transport, *shard, *key, hex, lapsed, now_unix, now) {
+                        Some(Ok(rec)) => {
+                            // It is ours now, at a strictly higher epoch. Do not
+                            // mourn it, and do not let a later tick mourn it either.
+                            recovered.push(rec);
+                            continue;
+                        }
+                        Some(Err(e)) => Some(e.to_string()),
+                        None => None,
+                    };
                 losses.push(ShardLoss {
                     shard: *shard,
                     last_owner: *key,
@@ -947,7 +944,9 @@ impl Rebalancer {
                             dropped,
                             "fenced a stale shard claim — no split-brain: the higher epoch wins"
                         );
-                        report.fenced.push((*shard, status.node, *peer_epoch, dropped));
+                        report
+                            .fenced
+                            .push((*shard, status.node, *peer_epoch, dropped));
                     }
                     Err(e) => warn!(
                         shard = shard.0,
@@ -1000,7 +999,10 @@ impl Rebalancer {
                     .push((mv.shard, SkipReason::NoRoute(e.to_string())));
                 continue;
             }
-            debug_assert_eq!(transport.route(mv.shard).map(|r| &r.addr), Some(&route.addr));
+            debug_assert_eq!(
+                transport.route(mv.shard).map(|r| &r.addr),
+                Some(&route.addr)
+            );
             match transport.migrate_shard(mv.shard) {
                 Ok(epoch) => {
                     // Cooldown starts on SUCCESS. A shard that failed to move is
@@ -1126,12 +1128,7 @@ mod tests {
         // Converge by repeatedly planning and applying.
         let mut passes = 0;
         loop {
-            let v = view(
-                key(1),
-                4,
-                &mine,
-                vec![status(key(2), &theirs, 4)],
-            );
+            let v = view(key(1), 4, &mine, vec![status(key(2), &theirs, 4)]);
             let p = plan(&v, &policy);
             if p.is_empty() {
                 break;
@@ -1142,7 +1139,10 @@ mod tests {
             }
             theirs.sort_unstable();
             passes += 1;
-            assert!(passes < 20, "rebalancer failed to converge — it is thrashing");
+            assert!(
+                passes < 20,
+                "rebalancer failed to converge — it is thrashing"
+            );
         }
         assert!(passes > 0, "test is vacuous: nothing ever moved");
 
@@ -1166,7 +1166,10 @@ mod tests {
         let v = view(key(1), 6, &mine, vec![status(key(2), &[], 2)]);
         let p = plan(&v, &loose());
         // A keeps the larger share; B is offered at most its ceiling.
-        assert!(p.moves.len() <= 2, "small node must not be overfilled: {p:?}");
+        assert!(
+            p.moves.len() <= 2,
+            "small node must not be overfilled: {p:?}"
+        );
         assert!(!p.moves.is_empty());
     }
 
@@ -1330,7 +1333,12 @@ mod tests {
     #[test]
     fn adding_a_node_makes_the_existing_ones_shed() {
         // Two nodes, balanced 4/4. A third joins with equal capacity.
-        let before = view(key(1), 4, &[1, 2, 3, 4], vec![status(key(2), &[5, 6, 7, 8], 4)]);
+        let before = view(
+            key(1),
+            4,
+            &[1, 2, 3, 4],
+            vec![status(key(2), &[5, 6, 7, 8], 4)],
+        );
         assert!(plan(&before, &loose()).is_empty(), "already balanced");
 
         let after = view(

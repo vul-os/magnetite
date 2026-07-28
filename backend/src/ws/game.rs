@@ -888,7 +888,7 @@ mod tests {
         session.register_player("player1".to_string(), tx);
 
         assert!(session.state.players.contains_key("player1"));
-        assert!(session.is_empty() == false);
+        assert!(!session.is_empty());
     }
 
     #[test]

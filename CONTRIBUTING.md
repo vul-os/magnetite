@@ -364,6 +364,61 @@ npm run test        # Watch mode
 npm run test:run    # Single run
 ```
 
+### Accessibility (axe) Tests
+
+Page- and component-level axe checks live in `src/**/*.a11y.test.jsx` and run
+under their **own** Vitest config, not the main one:
+
+```bash
+npm run test:a11y   # == vitest run --config vitest.a11y.config.js
+```
+
+Both are separate CI steps (`.github/workflows/ci.yml`), because the main
+config *excludes* `*.a11y.test.jsx` — if only `npm run test:run` ran, the
+entire a11y tranche would gate nothing.
+
+Two things make this suite reliable, and both are load-bearing:
+
+- **Serial execution.** axe-core keeps one global "is running" guard per jsdom
+  instance, so two overlapping `axe()` calls throw *"Axe is already running"*.
+  `vitest.a11y.config.js` sets `fileParallelism: false` and
+  `sequence.concurrent: false` so a run is never in flight twice.
+- **A severity floor.** `src/test/vitest-axe-shim.js` supplies the
+  `toHaveNoViolations` matcher and fails only on **serious** and **critical**
+  violations. Minor/moderate best-practice findings are reported but do not
+  fail the suite, which keeps the suite about impactful regressions.
+
+#### Lifting this harness into another repo
+
+It is deliberately **not** a package — there is nothing to install, and no
+shared thing whose disappearance could break your build. Copy four files and
+a script:
+
+| Copy | Why |
+|------|-----|
+| `vitest.a11y.config.js` | the serial-execution config; edit `include` to match your test glob |
+| `src/test/vitest-axe-shim.js` | the `axe` re-export + serious/critical matcher |
+| `src/test/setup.js` | jsdom stubs (`IntersectionObserver`, `ResizeObserver`, `matchMedia`) + Testing Library `cleanup` |
+| a `*.a11y.test.jsx` of your own | as the pattern to copy; see `src/components/common/Modal.a11y.test.jsx` |
+| `"test:a11y"` in `package.json` | `vitest run --config vitest.a11y.config.js` |
+
+Then, in the receiving repo:
+
+1. Add the dev dependencies: `vitest`, `@vitejs/plugin-react`, `jsdom`,
+   `axe-core`, `vitest-axe`, `@testing-library/react`,
+   `@testing-library/jest-dom`.
+2. Copy **both** `resolve.alias` entries into your Vitest config(s) — the
+   `vitest-axe` → shim alias and the `vitest-axe-real` → real-package alias.
+   They are a pair: the first makes `import { axe } from 'vitest-axe'` reach
+   the shim, the second is the shim's only non-recursive route back to the
+   real package (its `exports` map does not publish the deep `dist/` path).
+   `require.resolve` does the locating, so nothing depends on where
+   `node_modules` sits relative to the config — that is what makes the
+   harness copyable rather than merely readable.
+3. Exclude `**/*.a11y.test.jsx` from your **main** Vitest config, or the two
+   configs will both collect them and re-introduce the concurrency problem.
+4. Add `npm run test:a11y` as its own CI step.
+
 ### Integration Tests
 
 #### Backend Integration Tests

@@ -137,14 +137,14 @@ pub mod tick;
 pub mod tracker;
 
 pub use capacity::{measure_capacity, with_occupancy};
+pub use fleet::{
+    FleetNode, NetworkHandoffTransport, OwnedShard, PeerRoute, ShardAuthority, DEFAULT_TIMEOUT,
+};
 pub use node::{
     announce, build_session_ad, content_address, load_verified_game, prepare_game, run_node,
     NodeConfig, NodeError, PreparedGame,
 };
 pub use server::{GameServer, GameServerConfig, ServerError};
-pub use fleet::{
-    FleetNode, NetworkHandoffTransport, OwnedShard, PeerRoute, ShardAuthority, DEFAULT_TIMEOUT,
-};
 pub use shard::{
     ExecutorFactory, HandoffError, HandoffEvent, HandoffTransport, LoopbackTransport, ShardId,
     ShardManager, ShardedRuntime, ShardedStepOutput,
@@ -163,7 +163,7 @@ pub use magnetite_seams::discovery::{
 // emergent-capacity helpers through the runtime facade.
 pub use magnetite_sdk::scaling::{
     player_capacity, shards_for_capacity, LocalScheduler, NodeCapacity, NodeId, Placement,
-    Shardable, ShardKey, ShardScheduler, SpreadScheduler,
+    ShardKey, ShardScheduler, Shardable, SpreadScheduler,
 };
 
 // Re-export key sandbox types so callers get `serve_wasm` without a direct

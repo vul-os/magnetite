@@ -1,23 +1,87 @@
 name: CI
 on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  rust:
+  # ── Which Rust crates exist, and are they all gated? ───────────────────────
+  #
+  # This repo is a set of standalone crates linked by path dependencies — there
+  # is no root Cargo.toml, so `cargo test --workspace` covers nothing. The old
+  # `rust` job pinned `working-directory: backend`, which meant ONE of the
+  # fourteen crates was gated and the other thirteen — the SDK, all six moat
+  # crates, the CLI, the Bevy client and all four game templates — compiled,
+  # tested and linted nowhere.
+  #
+  # `ci/rust-crates.json` is the single source of truth for the matrix below.
+  # `scripts/ci-crate-coverage.sh` asserts it lists exactly the crates that are
+  # on disk, so adding a fifteenth crate without gating it FAILS CI instead of
+  # quietly recreating the hole. It fails closed (missing jq / missing manifest
+  # / zero crates found are all errors) and prints its coverage count.
+  discover:
     runs-on: ubuntu-latest
-    # The backend crate lives in backend/ (there is no root Cargo.toml), so
-    # every cargo step must run from there.
-    defaults:
-      run:
-        working-directory: backend
+    outputs:
+      crates: ${{ steps.manifest.outputs.crates }}
     steps:
       - uses: actions/checkout@v4
+      - name: Every crate on disk is in the CI matrix
+        run: bash scripts/ci-crate-coverage.sh
+      - id: manifest
+        run: echo "crates=$(jq -c . ci/rust-crates.json)" >> "$GITHUB_OUTPUT"
+
+  # ── Every Rust crate: fmt, clippy, build, test ─────────────────────────────
+  rust:
+    needs: discover
+    name: rust (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      # One broken crate must not hide the state of the other thirteen.
+      fail-fast: false
+      matrix:
+        crate: ${{ fromJSON(needs.discover.outputs.crates) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.crate.dir }}
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: backend
-      - run: cargo build --tests
-      - run: cargo test
-      - run: cargo clippy -- -D warnings
-  
+          workspaces: ${{ matrix.crate.dir }}
+
+      # game-client-bevy builds Bevy's default (render) feature set, which links
+      # ALSA and udev. Without these the crate — including src/main.rs, the only
+      # target that compiles the binary at all — cannot be gated on Linux.
+      - name: Install system dependencies
+        if: matrix.crate.apt != ''
+        working-directory: .
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.crate.apt }}
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      # --locked: the lockfile must already be correct. Two lockfiles in this
+      # repo had drifted from their manifests precisely because nothing ever
+      # resolved them in CI; without --locked, cargo silently rewrites them and
+      # the drift is never reported.
+      # --all-targets: tests, examples and benches are linted too. The old
+      # backend-only job ran bare `cargo clippy`, so every #[cfg(test)] module
+      # in the repo was exempt from -D warnings.
+      - name: cargo clippy -D warnings
+        run: cargo clippy --locked --all-targets ${{ matrix.crate.flags }} -- -D warnings
+
+      - name: cargo build
+        run: cargo build --locked --all-targets ${{ matrix.crate.flags }}
+
+      - name: cargo test
+        run: cargo test --locked ${{ matrix.crate.flags }}
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +98,17 @@ jobs:
       - run: npm run test:run
       - run: npm run test:a11y
       - run: npm run build
+
+  release-checksums:
+    # The release integrity gate is only worth having if its REFUSALS are
+    # exercised, and a `v*` tag is far too late to find out that the verifier
+    # waves through a release with no SHA256SUMS. `selftest` asserts each way a
+    # release can be wrong (absent manifest, empty manifest, unbuilt asset,
+    # unlisted asset, tampered bytes) still fails closed. Seconds to run.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/release-checksums.sh selftest
 
   e2e:
     # Pinned, NOT ubuntu-latest: Playwright's bundled Chromium does not support
@@ -53,3 +128,34 @@ jobs:
       # specs run (game-studio included since its rewrite).
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+
+  responsive:
+    # scripts/app-screenshots.mjs asserts no horizontal overflow on 14 routes x
+    # 2 themes x 3 breakpoints against the PRODUCTION bundle. It has always
+    # exited non-zero on overflow, but no workflow and no npm script invoked it,
+    # so it gated nothing.
+    #
+    # It also fails closed now: a route that fails to navigate, whose click
+    # target has vanished, or that renders a white screen is a hard failure —
+    # a page that never loaded cannot overflow, so "no overflow" over a broken
+    # page is not a pass. And it asserts the measurement COUNT (84) so a route
+    # or theme silently dropping out of the loop fails rather than shrinking
+    # what is checked.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # The script serves dist/ itself and refuses to run without it.
+      - run: npm run build
+      - run: npm run screenshots:app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-screenshots
+          path: docs/screenshots/app/
+          retention-days: 14

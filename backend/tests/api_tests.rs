@@ -241,8 +241,10 @@ mod tests {
 
             use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 
-            let mut header = Header::default();
-            header.alg = Algorithm::HS512;
+            let header = Header {
+                alg: Algorithm::HS512,
+                ..Header::default()
+            };
 
             let payload = magnetite_backend::api::middleware::Claims {
                 sub: "user-123".to_string(),

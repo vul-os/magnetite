@@ -374,7 +374,10 @@ mod tests {
 
     #[test]
     fn protocol_version_constant() {
-        assert!(PROTOCOL_VERSION > 0, "PROTOCOL_VERSION must be ≥ 1");
+        // A const block, not a runtime `assert!`: `PROTOCOL_VERSION` is a
+        // compile-time constant, so this invariant is now a compile error
+        // rather than a test failure if it is ever violated.
+        const { assert!(PROTOCOL_VERSION > 0, "PROTOCOL_VERSION must be ≥ 1") };
     }
 
     #[test]

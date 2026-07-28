@@ -319,12 +319,18 @@ pub struct AccountKey {
 impl AccountKey {
     /// A proven key the account demonstrably controls.
     pub fn linked(key: PubKey) -> Self {
-        Self { key, provenance: KeyProvenance::Linked }
+        Self {
+            key,
+            provenance: KeyProvenance::Linked,
+        }
     }
 
     /// A naming-only key derived from an account id. Cannot authorize.
     pub fn derived(user_id: Uuid) -> Self {
-        Self { key: derived_key(user_id), provenance: KeyProvenance::Derived }
+        Self {
+            key: derived_key(user_id),
+            provenance: KeyProvenance::Derived,
+        }
     }
 
     pub fn provenance(&self) -> KeyProvenance {
@@ -350,7 +356,9 @@ impl AccountKey {
     pub fn for_authorization(&self) -> Result<PubKey> {
         match self.provenance {
             KeyProvenance::Linked => Ok(self.key),
-            KeyProvenance::Derived => Err(AppError::Validation(DERIVED_KEY_CANNOT_AUTHORIZE.to_string())),
+            KeyProvenance::Derived => Err(AppError::Validation(
+                DERIVED_KEY_CANNOT_AUTHORIZE.to_string(),
+            )),
         }
     }
 }
@@ -442,7 +450,9 @@ mod tests {
         assert_eq!(scope_columns(&RoomScope::Lobby), ("lobby", None));
         let (tag, r) = scope_columns(&RoomScope::Community("abc".into()));
         assert_eq!((tag, r), ("community", Some("abc".to_string())));
-        let (tag, r) = scope_columns(&RoomScope::Match(magnetite_seams::blobstore::Hash::of(b"g")));
+        let (tag, r) = scope_columns(&RoomScope::Match(magnetite_seams::blobstore::Hash::of(
+            b"g",
+        )));
         assert_eq!(tag, "match");
         assert_eq!(r.unwrap().len(), 64, "game hash is recorded in full");
     }

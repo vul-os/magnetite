@@ -206,7 +206,7 @@ impl MouseState {
 /// };
 /// assert_eq!(frame.sequence, 42);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Input {
     /// Keyboard snapshot for this frame.
     pub keys: KeyState,
@@ -216,17 +216,6 @@ pub struct Input {
     pub sequence: u64,
     /// Client wall-clock time in milliseconds (for latency measurement).
     pub timestamp_ms: u64,
-}
-
-impl Default for Input {
-    fn default() -> Self {
-        Self {
-            keys: KeyState::default(),
-            mouse: MouseState::default(),
-            sequence: 0,
-            timestamp_ms: 0,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

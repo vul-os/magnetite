@@ -145,7 +145,8 @@ impl Drop for Node {
     }
 }
 
-type Ws = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+type Ws =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 async fn open(url: &str) -> Ws {
     let (ws, _) = connect_async(url).await.expect("connect");
@@ -345,7 +346,9 @@ async fn player_session_follows_a_migrated_shard_over_real_sockets() {
     .await
     .expect("B proves its node key");
     match ident_frame {
-        ServerNet::NodeIdentity { node_key, nonce, .. } => {
+        ServerNet::NodeIdentity {
+            node_key, nonce, ..
+        } => {
             assert_eq!(
                 node_key,
                 route.pubkey.to_hex(),
@@ -403,10 +406,8 @@ async fn a_forged_redirect_is_refused_by_the_client() {
     // authenticated. This is the whole reason the redirect is signed.
     let c = cluster(None);
     let attacker = ident(66);
-    let route = magnetite_runtime::fleet::PeerRoute::new(
-        "attacker.example:9999",
-        attacker.node_pubkey(),
-    );
+    let route =
+        magnetite_runtime::fleet::PeerRoute::new("attacker.example:9999", attacker.node_pubkey());
     let forged = SignedRedirect::mint(&attacker, 1, SHARD, 1, &route, now_secs(), 30);
 
     let err = forged

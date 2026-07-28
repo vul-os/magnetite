@@ -31,17 +31,17 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use magnetite_runtime::checkpoint::{
-    restore_shard, CheckpointPolicy, CheckpointStore, Checkpointer, ShardStateExecutor,
-    ShardStateSink, spawn_checkpoint_loop,
+    restore_shard, spawn_checkpoint_loop, CheckpointPolicy, CheckpointStore, Checkpointer,
+    ShardStateExecutor, ShardStateSink,
 };
 use magnetite_runtime::fleet::ShardAuthority;
 use magnetite_runtime::shard::ShardId;
-use magnetite_seams::blobstore::FsBlobStore;
 use magnetite_sdk::authority::{
     AuthoritativeGame, GameExecutor, MatchConfig, NativeExecutor, RejectReason, StepCtx, Tick,
 };
 use magnetite_sdk::input::Input;
 use magnetite_sdk::state::PlayerId;
+use magnetite_seams::blobstore::FsBlobStore;
 
 // ---------------------------------------------------------------------------
 // A toy world with state that visibly changes, so a rollback is detectable
@@ -74,7 +74,12 @@ impl AuthoritativeGame for Counter {
     fn init(_cfg: &MatchConfig) -> Self {
         Counter { ticks: 0 }
     }
-    fn validate(&self, _p: PlayerId, _i: &Input, _t: Tick) -> Result<Vec<CounterCmd>, RejectReason> {
+    fn validate(
+        &self,
+        _p: PlayerId,
+        _i: &Input,
+        _t: Tick,
+    ) -> Result<Vec<CounterCmd>, RejectReason> {
         Ok(vec![])
     }
     fn step(&mut self, _ctx: &mut StepCtx, _cmds: &[(PlayerId, CounterCmd)]) {
@@ -218,7 +223,10 @@ fn a_running_node_writes_a_checkpoint_without_anyone_asking_it_to() {
         node.authority.owns(ShardId::LOCAL),
         "a node that checkpoints a shard must actually own it"
     );
-    let state = node.authority.state_of(ShardId::LOCAL).expect("owned state");
+    let state = node
+        .authority
+        .state_of(ShardId::LOCAL)
+        .expect("owned state");
     let snap: CounterSnap = serde_json::from_slice(&state).expect("state is the game's snapshot");
     assert!(
         snap.ticks > 0,
@@ -362,7 +370,10 @@ fn newest_ref_on_disk(
             continue;
         };
         let r = cp.to_ref();
-        if best.map(|b| (r.epoch, r.tick) > (b.epoch, b.tick)).unwrap_or(true) {
+        if best
+            .map(|b| (r.epoch, r.tick) > (b.epoch, b.tick))
+            .unwrap_or(true)
+        {
             best = Some(r);
         }
     }

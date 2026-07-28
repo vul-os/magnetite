@@ -11,7 +11,7 @@
 mod noncustodial_wallet_tests {
     use magnetite_backend::api::wallet::{LinkWalletRequest, LinkedWallet};
     use magnetite_backend::services::payment::{
-        rail, sale_split, units_from_usd, verify_receipt, PaymentRail, PubKey,
+        rail, sale_split, units_from_usd, verify_receipt, PubKey,
     };
     use rust_decimal_macros::dec;
     use uuid::Uuid;

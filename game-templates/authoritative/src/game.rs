@@ -708,7 +708,7 @@ mod tests {
         exec.restore(&initial_snap_bytes);
 
         let input = make_input_move_right();
-        let out1 = exec.step(1, &[(p1, input.clone())]);
+        let out1 = exec.step(1, &[(p1, input)]);
         let snap_bytes = exec.snapshot();
 
         // Restore and replay.
@@ -832,7 +832,7 @@ mod tests {
 
         for tick in 1u64..=10 {
             let input = make_input_move_right();
-            let out_a = exec_a.step(tick, &[(p1, input.clone())]);
+            let out_a = exec_a.step(tick, &[(p1, input)]);
             let out_b = exec_b.step(tick, &[(p1, input)]);
             assert_eq!(
                 out_a.state_hash, out_b.state_hash,

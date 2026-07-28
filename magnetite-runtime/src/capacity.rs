@@ -10,8 +10,8 @@
 //! unavailable the field degrades to a conservative default — the node still
 //! advertises *something*, it just under-claims. No external crate is required.
 
-use magnetite_seams::discovery::Capacity;
 use magnetite_sdk::scaling::{player_capacity, shards_for_capacity, DEFAULT_PLAYERS_PER_SHARD};
+use magnetite_seams::discovery::Capacity;
 
 /// Conservative RAM fallback (MB) when the OS probe fails.
 const RAM_FALLBACK_MB: u64 = 4096;
