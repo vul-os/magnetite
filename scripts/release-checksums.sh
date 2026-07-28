@@ -107,7 +107,18 @@ write an empty ${MANIFEST}, which would vouch for nothing while looking like it 
     done <<< "$assets"
   )
 
-  echo "Wrote ${dir}/${MANIFEST}:"
+  # COVERAGE ASSERTION at the point of production. `verify` would also catch a
+  # short manifest (as "present but not listed"), but only if someone runs it;
+  # emit is the step that had one job. A digest tool that fails for one file
+  # and still exits 0 — a shimmed sha256sum, an unreadable asset, a full disk —
+  # otherwise yields a manifest that covers 2 of 3 assets and looks fine.
+  local want got
+  want="$(printf '%s\n' "$assets" | wc -l | tr -d ' ')"
+  got="$(awk 'END{print NR}' "${dir}/${MANIFEST}")"
+  [ "$want" = "$got" ] || die "${MANIFEST} has ${got} line(s) for ${want} asset(s) in ${dir} \
+— the manifest does not cover the release. Refusing to publish it."
+
+  echo "Wrote ${dir}/${MANIFEST} (${got} asset(s)):"
   cat "${dir}/${MANIFEST}"
 }
 
@@ -132,7 +143,12 @@ Every Magnetite release publishes ${MANIFEST}; its absence means the release is 
   # the directory, so an asset the manifest names but the build never produced
   # is caught rather than silently skipped.
   local listed=""
-  while read -r want_digest want_name; do
+  # `|| [ -n "$want_digest" ]`: a file whose last line has no trailing newline
+  # makes `read` return non-zero WITH the line already in the variables, so a
+  # bare `while read` silently drops that entry — the last asset in the
+  # manifest would go unchecked. Check (4) below would still fail the build,
+  # but as "present but not listed", sending the reader after the wrong bug.
+  while read -r want_digest want_name || [ -n "${want_digest:-}" ]; do
     [ -n "${want_digest:-}" ] || continue
     # `sha256sum` writes "*name" for binary mode; accept and strip that marker.
     want_name="${want_name#\*}"
@@ -165,7 +181,11 @@ Every Magnetite release publishes ${MANIFEST}; its absence means the release is 
 
   [ "$failures" -eq 0 ] || die "${failures} checksum problem(s) — refusing to publish this release."
 
-  echo "${MANIFEST} covers all $(wc -l < "$manifest" | tr -d ' ') asset(s) in ${dir}, every digest matches."
+  # awk NR, not `wc -l`: wc counts newlines, so a manifest whose last line has
+  # no trailing newline would be reported as covering one asset fewer than it
+  # just checked. A summary line that undercounts what was verified is a small
+  # lie in the one place a reader looks for the total.
+  echo "${MANIFEST} covers all $(awk 'END{print NR}' "$manifest") asset(s) in ${dir}, every digest matches."
 }
 
 # --- selftest ---------------------------------------------------------------
@@ -190,7 +210,7 @@ expect_pass() {
 }
 
 cmd_selftest() {
-  local tmp
+  local tmp last_name
   tmp="$(mktemp -d)"
   # Expanded now, not at trap time: `tmp` is function-local and the EXIT trap
   # runs after the function has returned, where it would be unset under `set -u`.
@@ -239,10 +259,20 @@ cmd_selftest() {
   printf 'binary-TWO' > "$tmp/tampered/magnetite-0.0.0-linux-x86_64"
   expect_fail "an asset whose bytes changed after SHA256SUMS was written" bash "$self" verify "$tmp/tampered"
 
+  # (5) tampered bytes, in the LAST manifest line, with no trailing newline —
+  # the shape a bare `while read` drops on the floor. Must be reported as a
+  # mismatch on that asset, not as some other file being unlisted.
+  cp -R "$tmp/good" "$tmp/no-trailing-newline"
+  printf '%s' "$(cat "$tmp/no-trailing-newline/SHA256SUMS")" > "$tmp/no-trailing-newline/SHA256SUMS"
+  last_name="$(tail -1 "$tmp/no-trailing-newline/SHA256SUMS" | awk '{print $2}')"
+  printf 'changed-after-the-manifest-was-written' > "$tmp/no-trailing-newline/${last_name#\*}"
+  expect_fail "a tampered last entry, manifest with no trailing newline" \
+    bash "$self" verify "$tmp/no-trailing-newline"
+
   # emit itself refuses to vouch for nothing.
   expect_fail "emitting a manifest for an empty directory" bash "$self" emit "$tmp/empty"
 
-  echo "selftest: all 9 cases behaved as specified."
+  echo "selftest: all 10 cases behaved as specified."
 }
 
 case "${1:-}" in

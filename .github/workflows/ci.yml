@@ -110,6 +110,16 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash scripts/release-checksums.sh selftest
 
+      # The producer-side gate above and the USER-side verifier are different
+      # scripts with different failure surfaces, and the user's is the one that
+      # runs on an untrusted network. Its 24 synthetic-origin cases assert, for
+      # each way a download can be wrong (manifest 404, HTML error page served
+      # as the manifest, empty/garbage manifest, no entry for the asset, the
+      # two name-matching traps, artifact 404, truncated transfer, digest
+      # mismatch, missing tools), both the exit code and that a diagnostic was
+      # actually printed.
+      - run: bash scripts/verify.sh --selftest
+
   e2e:
     # Pinned, NOT ubuntu-latest: Playwright's bundled Chromium does not support
     # Ubuntu 26+, so `install --with-deps` on a bumped ubuntu-latest would break.

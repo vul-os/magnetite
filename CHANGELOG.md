@@ -2,6 +2,48 @@
 
 ## [Unreleased] — Repository structure
 
+### Security
+
+- **Releases carry a sigstore build-provenance attestation.**
+  `actions/attest-build-provenance` signs every staged asset — including
+  `SHA256SUMS` itself, so the attestation on the manifest transitively covers
+  every asset it names — with a short-lived certificate minted from the release
+  job's OIDC token. No long-lived key, no repository secret, nothing to rotate.
+  `SHA256SUMS` alone proves only internal consistency, since whoever can serve
+  you the assets can serve you a matching manifest; the attestation is what
+  binds the bytes to this repository's release workflow. It is **not** OS
+  code-signing, and it is not load-bearing for integrity.
+
+- **Added `scripts/verify.sh`** — the fail-closed check a *user* runs before
+  executing downloaded bytes, as opposed to `release-checksums.sh`, which is
+  the producer's own re-derivation. Distinct exit code and diagnostic per
+  failure mode (missing manifest 3, HTML page served as the manifest 4,
+  empty/malformed manifest 5, no entry 6, unfetchable artifact 7, truncated
+  download 8, digest mismatch 9, missing tool 10, failed attestation 11,
+  plaintext origin 12); no skip flag and no path where an absent `SHA256SUMS`
+  means "nothing to check". `--selftest` runs 24 synthetic-origin cases
+  asserting exit code and that a diagnostic was printed; CI runs it on every
+  push, and the release job runs it plus a `--dir` verification of its own
+  output before publishing.
+
+### Fixed
+
+- **`release-checksums.sh emit` could write a short manifest and exit 0.**
+  A digest tool that fails for one file while exiting 0 (an unreadable asset, a
+  full disk) produced a manifest covering fewer assets than the release ships;
+  only `verify` caught it, and only as the differently-worded "present but not
+  listed". `emit` now asserts one manifest line per asset at the point of
+  production.
+
+- **`release-checksums.sh verify` skipped the last manifest entry when the
+  manifest had no trailing newline.** `while read` returns non-zero with the
+  final line already in the variables, so the digest loop dropped it; the build
+  still failed via the present-but-unlisted cross-check, pointing the reader at
+  the wrong bug. The loop now ends in `|| [ -n "$want_digest" ]`, and the
+  summary line counts records with `awk NR` instead of `wc -l`, which would
+  otherwise report one asset fewer than it just checked.
+
+
 ### Changed
 - **Game templates consolidated.** The four root-level template crates moved
   under a single `game-templates/` directory, and their directory names now

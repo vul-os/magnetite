@@ -35,12 +35,26 @@
 # container toolchain, and until someone wires that up, publishing two working
 # targets beats declaring three broken ones.
 #
-# ── Signing (not configured) ────────────────────────────────────────────────
-# Assets ship unsigned. SHA256SUMS is an INTEGRITY manifest, not a signature:
-# it lets a downloader detect a corrupted or substituted asset against the
-# manifest they fetched alongside it. It does not prove a release came from
-# this project — that needs a signing key, which is not provisioned here. Do
-# not describe these releases as signed.
+# ── Signing: what is and is not proved ──────────────────────────────────────
+# SHA256SUMS on its own is an INTEGRITY manifest, not a signature: it lets a
+# downloader detect a corrupted or substituted asset against the manifest they
+# fetched alongside it, but a party who can serve you the assets can serve you
+# a matching manifest, so on its own it proves only internal consistency.
+#
+# The `release` job therefore also attaches a sigstore BUILD PROVENANCE
+# attestation over every asset (actions/attest-build-provenance, signed with a
+# short-lived certificate minted from this workflow's OIDC token — no
+# long-lived key, no repository secret, nothing to rotate). It binds the bytes
+# to "this repository's release workflow at this commit", which is the claim
+# the manifest alone could not make. Downloaders check it with
+# `gh attestation verify` or `bash scripts/verify.sh --attest <asset>`.
+#
+# What that is NOT: it is not OS code-signing. macOS Gatekeeper and Windows
+# SmartScreen know nothing about sigstore and will still warn on these
+# binaries. And it is not load-bearing for integrity — verify.sh's digest path
+# needs only curl and sha256sum, so if the attestation action is removed or
+# broken, SHA256SUMS still verifies and no verification silently becomes a
+# no-op. Do not describe these binaries as "code-signed".
 
 name: Release
 
@@ -145,9 +159,13 @@ jobs:
 
   # ── Checksums + draft release ────────────────────────────────────────────
   release:
-    name: Checksum and draft release
+    name: Checksum, attest and draft release
     needs: [build-binaries, build-web]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write       # create the draft Release and upload assets
+      id-token: write       # mint the OIDC token the attestation is signed with
+      attestations: write   # record the attestation against this repo
     steps:
       # Checked out only for scripts/release-checksums.sh — the assets come
       # from the build jobs above, never from the checkout.
@@ -165,7 +183,13 @@ jobs:
           name: web
 
       - name: List assets
-        run: ls -la release-out
+        id: ver
+        run: |
+          set -euo pipefail
+          # Asset names carry the bare version (v0.1.0 -> magnetite-0.1.0-...),
+          # so the tag cannot be pasted into the verify snippet unchanged.
+          echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          ls -la release-out
 
       # Covers EVERY file staged above, and refuses to write a manifest for an
       # empty directory — a release whose builds all silently produced nothing
@@ -180,11 +204,53 @@ jobs:
       - name: Verify SHA256SUMS
         run: bash scripts/release-checksums.sh verify release-out
 
+      # The producer checked by the consumer. release-checksums.sh is the
+      # producer's own re-derivation; scripts/verify.sh is the script a USER
+      # runs. If the two ever disagree about the manifest format, it surfaces
+      # here, in a red release job, rather than in a downloader's terminal
+      # after the assets are public.
+      - name: Verify with the same script users run
+        run: |
+          set -euo pipefail
+          mapfile -t ASSETS < <(find release-out -maxdepth 1 -type f ! -name SHA256SUMS -exec basename {} \; | LC_ALL=C sort)
+          [ "${#ASSETS[@]}" -gt 0 ] || { echo "::error::release-out/ holds no assets"; exit 1; }
+          bash scripts/verify.sh --dir release-out "${ASSETS[@]}"
+
+      # A verifier whose refusals are never exercised is a verifier that has
+      # probably stopped refusing. 24 synthetic-origin cases, asserting the
+      # exit code AND that a diagnostic was actually printed.
+      - name: Prove the verifier still refuses broken releases
+        run: bash scripts/verify.sh --selftest
+
+      # Short-lived sigstore certificate minted from this job's OIDC identity —
+      # no long-lived key, no repository secret, nothing to rotate. Attests
+      # every file in release-out/ INCLUDING SHA256SUMS itself, so the
+      # attestation on the manifest transitively covers every asset it names.
+      - name: Attest build provenance (sigstore via OIDC — no long-lived key)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "release-out/*"
+
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
           generate_release_notes: true
           name: Magnetite ${{ github.ref_name }}
+          body: |
+            ### Verify before you run this
+
+            ```sh
+            curl -fsSLO https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/verify.sh
+            bash verify.sh --tag ${{ github.ref_name }} --attest magnetite-${{ steps.ver.outputs.ver }}-linux-x86_64
+            ```
+
+            `verify.sh` fetches `SHA256SUMS`, looks up the exact entry for the
+            asset and compares digests. It exits non-zero, with a distinct
+            diagnostic, on a missing or malformed manifest, a missing entry, a
+            truncated download or a digest mismatch. There is no skip path.
+            `--attest` additionally checks the sigstore build provenance (needs
+            the `gh` CLI); without it, provenance is NOT checked and the script
+            says so rather than letting a pass imply it.
           files: release-out/*
 
   # ── Container images ─────────────────────────────────────────────────────
