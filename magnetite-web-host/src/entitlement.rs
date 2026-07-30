@@ -24,7 +24,7 @@
 //! §7 phase 1 item 1), not this crate's.
 
 use magnetite_seams::identity::PubKey;
-use magnetite_seams::payment::{PaymentRail, Receipt};
+use magnetite_seams::payment::{PaymentRail, Receipt, Settlement};
 
 use crate::manifest::Pricing;
 
@@ -100,6 +100,14 @@ pub enum Refusal {
     /// The receipt is valid but was bought by a different key than the
     /// authenticated requester. → `403`.
     WrongBuyer,
+    /// A14: the rail reported [`Settlement::SignedUnsettled`] — the receipt's
+    /// signature and arithmetic check out locally, but the rail could not
+    /// re-confirm it against a chain right now (no network, most commonly).
+    /// This node has **no serving policy yet** for an unsettled receipt (see
+    /// [`Verdict::GrantedUnsettled`]'s docs — that is deliberately future
+    /// work, the same way backlog item A15 is), so today it refuses rather
+    /// than guess. → `403`.
+    PendingSettlement,
 }
 
 impl Refusal {
@@ -108,7 +116,7 @@ impl Refusal {
         match self {
             Self::NoReceipt => 402,
             Self::NoRail => 503,
-            Self::ReceiptRejected | Self::WrongBuyer => 403,
+            Self::ReceiptRejected | Self::WrongBuyer | Self::PendingSettlement => 403,
         }
     }
     /// A short, non-leaky reason for the response body and logs.
@@ -118,24 +126,40 @@ impl Refusal {
             Self::NoRail => "no payment rail configured; entitlement cannot be verified",
             Self::ReceiptRejected => "receipt did not verify for this item",
             Self::WrongBuyer => "receipt was not issued to the authenticated requester",
+            Self::PendingSettlement => {
+                "receipt verified locally but chain confirmation is unavailable; \
+                 this node has no policy for serving on an unsettled receipt"
+            }
         }
     }
 }
 
 /// The gate's answer.
+///
+/// A14: [`Self::Granted`] and [`Self::GrantedUnsettled`] are **two distinct
+/// variants**, not one `Granted` carrying a `bool` or an `Option` a caller
+/// could ignore. [`crate::respond::Response::respond`]'s `match` on this enum
+/// has to name both arms — the compiler refuses to compile a `match` that
+/// silently falls through an unsettled receipt as if it were settled. There is
+/// deliberately no `is_granted()` collapsing both into one boolean; that
+/// method existed once and was removed for exactly this reason (see
+/// `git log` on this file) — it is the shape this crate's honesty rule ("a
+/// caller must not be able to conflate signed-but-unsettled with settled by
+/// accident") requires.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
-    /// Serve the bytes.
+    /// Serve the bytes: free, or a receipt the rail chain-verified (or had no
+    /// chain to verify against at all — see [`Settlement::Settled`]).
     Granted,
+    /// The receipt verified **locally** (signature + arithmetic) but the rail
+    /// could not confirm it against a chain right now
+    /// ([`Settlement::SignedUnsettled`]). Not [`Self::Granted`] — a caller
+    /// that wants to serve provisionally on this tier must say so
+    /// explicitly, by matching this arm; there is no default that does it
+    /// for them.
+    GrantedUnsettled,
     /// Serve nothing.
     Refused(Refusal),
-}
-
-impl Verdict {
-    /// Whether bytes may be served.
-    pub fn is_granted(&self) -> bool {
-        matches!(self, Self::Granted)
-    }
 }
 
 /// Decide whether `creds` entitle the holder to a bundle priced as `pricing`.
@@ -164,20 +188,28 @@ pub fn evaluate<R: PaymentRail + ?Sized>(
     let Some(receipt) = creds.receipt.as_ref() else {
         return Verdict::Refused(Refusal::NoReceipt);
     };
-    // The seam's own fail-closed check: signature, item binding, and for chain
-    // rails a re-read of the chain. We add nothing to it and subtract nothing
-    // from it — in particular we never fall back to "the signature looked fine"
-    // when the item check is the part that failed.
-    if !rail.verify_receipt_for_item(receipt, item) {
-        return Verdict::Refused(Refusal::ReceiptRejected);
-    }
-    // Bind the receipt to the session, when there is one.
+    // A14: the seam's own fail-closed, tier-distinguishing check — signature,
+    // item binding, and (when the rail can reach it) a re-read of the chain.
+    // We add nothing to it and subtract nothing from it — in particular we
+    // never fall back to "the signature looked fine" when the chain check is
+    // the part that failed, and we never collapse `SignedUnsettled` into
+    // `Settled`: they return through different `Verdict` variants below.
+    let settlement = match rail.verify_receipt_for_item_tiered(receipt, item) {
+        None => return Verdict::Refused(Refusal::ReceiptRejected),
+        Some(s) => s,
+    };
+    // Bind the receipt to the session, when there is one. Checked at both
+    // tiers — a wrong buyer is refused regardless of whether the chain was
+    // reachable.
     if let Requester::Authenticated(key) = creds.who() {
         if receipt.buyer != key {
             return Verdict::Refused(Refusal::WrongBuyer);
         }
     }
-    Verdict::Granted
+    match settlement {
+        Settlement::Settled => Verdict::Granted,
+        Settlement::SignedUnsettled => Verdict::GrantedUnsettled,
+    }
 }
 
 #[cfg(test)]
@@ -303,14 +335,16 @@ mod tests {
         );
         // Without a session the same receipt is a bearer token and does pass —
         // which is exactly the limitation documented on `Requester::Anonymous`.
-        assert!(evaluate(
-            &Pricing::Paid {
-                item: "game:x".into()
-            },
-            Some(&rail),
-            &Credentials::bearer(r)
-        )
-        .is_granted());
+        assert_eq!(
+            evaluate(
+                &Pricing::Paid {
+                    item: "game:x".into()
+                },
+                Some(&rail),
+                &Credentials::bearer(r)
+            ),
+            Verdict::Granted
+        );
     }
 
     /// A rail whose item binding is real: `MockPaymentRail` ignores `item`
@@ -351,14 +385,16 @@ mod tests {
         let mock = MockPaymentRail::new();
         let r = receipt_for(&mock, key(1)).await;
 
-        assert!(evaluate(
-            &Pricing::Paid {
-                item: "game:right".into()
-            },
-            Some(&rail),
-            &Credentials::bearer(r.clone())
-        )
-        .is_granted());
+        assert_eq!(
+            evaluate(
+                &Pricing::Paid {
+                    item: "game:right".into()
+                },
+                Some(&rail),
+                &Credentials::bearer(r.clone())
+            ),
+            Verdict::Granted
+        );
         assert_eq!(
             evaluate(
                 &Pricing::Paid {
@@ -369,6 +405,155 @@ mod tests {
             ),
             Verdict::Refused(Refusal::ReceiptRejected),
             "a receipt for another item must not unlock this bundle"
+        );
+    }
+
+    // ── A14: Settlement tiers reach `Verdict` distinctly ────────────────────
+
+    /// A rail whose `verify_receipt_for_item_tiered` genuinely distinguishes
+    /// the two tiers, standing in for `magnetite_solana_rail::SolanaPaymentRail`
+    /// with its network switched off. `verify_receipt`/`verify_receipt_for_item`
+    /// (the untiered methods `evaluate` no longer calls, but which must still
+    /// exist to satisfy the trait) simply delegate to the mock underneath.
+    struct TieredRail {
+        inner: MockPaymentRail,
+        settlement: Option<Settlement>,
+    }
+
+    #[async_trait::async_trait]
+    impl PaymentRail for TieredRail {
+        async fn checkout(&self, _b: &PubKey, _s: PaymentSplit) -> Receipt {
+            unreachable!("gate never charges")
+        }
+        async fn open_channel(
+            &self,
+            _p: &PubKey,
+        ) -> Result<magnetite_seams::payment::Channel, magnetite_seams::payment::PaymentError>
+        {
+            unreachable!()
+        }
+        async fn escrow(
+            &self,
+            _t: magnetite_seams::payment::WagerTerms,
+        ) -> Result<magnetite_seams::payment::Escrow, magnetite_seams::payment::PaymentError>
+        {
+            unreachable!()
+        }
+        fn verify_receipt(&self, r: &Receipt) -> bool {
+            self.inner.verify_receipt(r)
+        }
+        fn verify_receipt_for_item(&self, r: &Receipt, item: &str) -> bool {
+            self.inner.verify_receipt_for_item(r, item)
+        }
+        fn verify_receipt_for_item_tiered(&self, _r: &Receipt, _item: &str) -> Option<Settlement> {
+            self.settlement
+        }
+    }
+
+    #[tokio::test]
+    async fn a_settled_receipt_grants_the_settled_verdict() {
+        let mock = MockPaymentRail::new();
+        let buyer = key(1);
+        let r = receipt_for(&mock, buyer).await;
+        let rail = TieredRail {
+            inner: mock,
+            settlement: Some(Settlement::Settled),
+        };
+        assert_eq!(
+            evaluate(
+                &Pricing::Paid {
+                    item: "game:x".into()
+                },
+                Some(&rail),
+                &Credentials::bearer(r)
+            ),
+            Verdict::Granted
+        );
+    }
+
+    /// The non-conflation guard: a signed-but-unsettled receipt must reach
+    /// `Verdict::GrantedUnsettled`, a value distinct from `Verdict::Granted` —
+    /// never the same variant, never silently upgraded.
+    #[tokio::test]
+    async fn a_signed_unsettled_receipt_grants_the_unsettled_verdict_not_granted() {
+        let mock = MockPaymentRail::new();
+        let buyer = key(2);
+        let r = receipt_for(&mock, buyer).await;
+        let rail = TieredRail {
+            inner: mock,
+            settlement: Some(Settlement::SignedUnsettled),
+        };
+        let v = evaluate(
+            &Pricing::Paid {
+                item: "game:x".into(),
+            },
+            Some(&rail),
+            &Credentials::bearer(r),
+        );
+        assert_eq!(v, Verdict::GrantedUnsettled);
+        assert_ne!(
+            v,
+            Verdict::Granted,
+            "signed-but-unsettled must never equal fully granted"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refused_tiered_result_still_refuses() {
+        let mock = MockPaymentRail::new();
+        let buyer = key(3);
+        let r = receipt_for(&mock, buyer).await;
+        let rail = TieredRail {
+            inner: mock,
+            settlement: None,
+        };
+        assert_eq!(
+            evaluate(
+                &Pricing::Paid {
+                    item: "game:x".into()
+                },
+                Some(&rail),
+                &Credentials::bearer(r)
+            ),
+            Verdict::Refused(Refusal::ReceiptRejected)
+        );
+    }
+
+    /// The wrong-buyer check runs at both tiers — a signed-but-unsettled
+    /// receipt bought by someone else must not slip through as either kind of
+    /// grant.
+    #[tokio::test]
+    async fn wrong_buyer_is_refused_even_when_unsettled() {
+        let mock = MockPaymentRail::new();
+        let buyer = key(4);
+        let r = receipt_for(&mock, buyer).await;
+        let rail = TieredRail {
+            inner: mock,
+            settlement: Some(Settlement::SignedUnsettled),
+        };
+        assert_eq!(
+            evaluate(
+                &Pricing::Paid {
+                    item: "game:x".into()
+                },
+                Some(&rail),
+                &Credentials::authenticated(r, key(5))
+            ),
+            Verdict::Refused(Refusal::WrongBuyer)
+        );
+    }
+
+    /// `Refusal::PendingSettlement` (the HTTP-layer name for an unsettled
+    /// receipt this node has no policy to serve on) must be distinguishable
+    /// from `ReceiptRejected` in both status and reason — an operator
+    /// debugging "my receipt won't work" needs to see "pending", not
+    /// "rejected", when the truth is the former.
+    #[test]
+    fn pending_settlement_is_a_distinct_refusal_not_a_rejected_alias() {
+        assert_eq!(Refusal::PendingSettlement.status(), 403);
+        assert_ne!(
+            Refusal::PendingSettlement.reason(),
+            Refusal::ReceiptRejected.reason()
         );
     }
 }

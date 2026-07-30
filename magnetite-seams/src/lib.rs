@@ -126,8 +126,9 @@ pub use comms::{BuiltinProvider, CommsProvider, JoinCred, RoomAddr, RoomScope};
 
 // Seam §3.6 — PaymentRail
 pub use payment::{
-    split_digest, ChainBinding, Channel, Escrow, Leg, MockPaymentRail, PayOut, PaymentError,
-    PaymentRail, PaymentSplit, Receipt, Role, WagerTerms, ZERO_ONLY_DUST_FLOOR,
+    split_digest, ChainBinding, Channel, Escrow, KnownRail, Leg, MockPaymentRail, PayOut,
+    PaymentError, PaymentPointer, PaymentRail, PaymentSplit, Receipt, Role, Settlement, WagerTerms,
+    ZERO_ONLY_DUST_FLOOR,
 };
 
 // Seam §3.7 — InputProvider

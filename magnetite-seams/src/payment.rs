@@ -72,6 +72,129 @@ use serde::{Deserialize, Serialize};
 use crate::blobstore::Hash;
 use crate::identity::{Identity, IdentityVerifier, PubKey, RawKeypairAuth, Sig};
 
+/// A payout destination for a rail, adopted **by design, not by dependency**
+/// from evermesh's rail-neutral payment-pointer registry (backlog item A13;
+/// spec `010-economics.md` §1;
+/// `evermesh-kernel::kinds::content::PaymentPointer`; evermesh revision
+/// `5436a56520c71ac3c7e97c3c1ee7e06de628f514`, 2026-07-30). `magnetite-seams`
+/// has NO dependency, path or published, on evermesh — the same
+/// standalone-ness rule `chunktree.rs` (A24) and `rotation.rs` (A8) already
+/// document; this copies evermesh's *semantics* by hand, not its code.
+///
+/// # What was adopted
+///
+/// * **The shape.** Evermesh's wire form is `[rail: uint, pointer: text]` —
+///   an ordered pair of a small registry id and an opaque pointer string.
+///   [`PaymentPointer`] carries the same two fields; this crate's `serde`
+///   idiom (every other type in this module is `serde`, not a hand-rolled
+///   codec — see the module docs' note on why this crate has no CBOR
+///   `Value`-style codec of its own) stands in for evermesh's CBOR array.
+/// * **The registry**, verbatim from spec `010` §1 (id `0` is reserved and
+///   never a valid pointer — see [`PaymentPointer::new`]):
+///
+///   | Id | Rail | Value |
+///   |---:|------|-------|
+///   | 1 | Lightning | Lightning address or LNURL |
+///   | 2 | USDC on Base | Base address |
+///   | 3 | Stripe | Stripe payment link |
+///   | 4 | PayPal | PayPal.me handle or address |
+///
+/// * **The forward-compatibility rule.** Spec `010` §1: "New rails are new
+///   registry entries. Clients render the rails they understand and MUST
+///   ignore unknown types." [`KnownRail::of`] returns `None` for any id
+///   outside the table above; nothing in [`PaymentPointer`] refuses to
+///   construct, store, or round-trip an unrecognised id — "unknown" is not
+///   "invalid" here, only "not ours to render".
+///
+/// # What was deliberately left out
+///
+/// * **No `stellar` id.** Evermesh's own `DECISIONS.md` X2 records a
+///   *proposal* to allocate a `stellar` registry type — the next free id,
+///   `5` — but marks it explicitly **"Proposed, not applied"**: a
+///   registry-entry addition is a normative wire-format change that belongs
+///   in a spec revision coordinated with `003-kinds-registry.md`, not a
+///   unilateral log entry, and that is true one level removed too — it is
+///   evermesh's registry to extend, not magnetite's to pre-empt. `KnownRail`
+///   below therefore stops at `4`. If magnetite ever needs to *carry* a
+///   Stellar payout pointer in this shape, id `5` stays reserved-but-
+///   unallocated here until evermesh's spec actually allocates it; see
+///   `tests::the_registry_stops_at_four_ids_stellar_is_not_allocated`,
+///   which is written to fail the moment anyone adds it unilaterally.
+/// * **No wire codec.** See "what was adopted" above — this is the registry
+///   and the shape, expressed in this crate's own serialization, not
+///   evermesh's CBOR `Value` machinery.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PaymentPointer {
+    /// The registry id. `0` is reserved; every other value — including ids
+    /// this crate does not recognise — round-trips unmodified.
+    pub rail: u64,
+    /// The rail-specific payout string (a Lightning address, a wallet
+    /// address, a payment link — whatever the rail's registry entry says).
+    pub pointer: String,
+}
+
+impl PaymentPointer {
+    /// Construct a pointer. Refuses the reserved id `0` — a publisher cannot
+    /// declare a payout on "no rail" — but accepts any other id, known or
+    /// not, per the forward-compatibility rule above.
+    pub fn new(rail: u64, pointer: impl Into<String>) -> Option<Self> {
+        if rail == 0 {
+            return None;
+        }
+        Some(Self {
+            rail,
+            pointer: pointer.into(),
+        })
+    }
+
+    /// The registry entry this pointer's `rail` names, or `None` if it is
+    /// outside the table this crate recognises — which per spec `010` §1 is
+    /// not an error, only something a renderer should skip.
+    pub fn known(&self) -> Option<KnownRail> {
+        KnownRail::of(self.rail)
+    }
+}
+
+/// The rail ids this crate recognises, verbatim from evermesh spec `010`
+/// §1. An id outside this set is not invalid — see [`PaymentPointer::known`]
+/// — it is simply a rail this build does not render.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KnownRail {
+    /// Id 1.
+    Lightning,
+    /// Id 2.
+    UsdcBase,
+    /// Id 3.
+    Stripe,
+    /// Id 4.
+    PayPal,
+}
+
+impl KnownRail {
+    /// Classify a raw registry id. `None` for reserved (`0`) or unknown —
+    /// including `5`, which is deliberately not `stellar` (see the
+    /// [`PaymentPointer`] docs above).
+    pub fn of(rail: u64) -> Option<Self> {
+        match rail {
+            1 => Some(Self::Lightning),
+            2 => Some(Self::UsdcBase),
+            3 => Some(Self::Stripe),
+            4 => Some(Self::PayPal),
+            _ => None,
+        }
+    }
+
+    /// The registry id this variant names — the inverse of [`Self::of`].
+    pub fn id(self) -> u64 {
+        match self {
+            Self::Lightning => 1,
+            Self::UsdcBase => 2,
+            Self::Stripe => 3,
+            Self::PayPal => 4,
+        }
+    }
+}
+
 /// The floor a currency-agnostic rail uses: `1` unit, i.e. only a
 /// zero-amount leg is dust.
 ///
@@ -417,6 +540,44 @@ pub struct Escrow {
     pub rail_pubkey: PubKey,
 }
 
+/// A14: whether a [`PaymentRail`]'s verification actually reached the chain,
+/// or only checked the receipt's own signature/arithmetic self-consistency.
+///
+/// Two tiers, adopted from evermesh's receipt discipline (spec
+/// `010-economics.md` §2: "A receipt proves the payer *said* they paid;
+/// settlement proof lives in the rail... Gateways MAY verify `proof`... and
+/// SHOULD label unverified receipts as claims"). Evermesh's own
+/// `DECISIONS.md` X3 records this as *prior art the sibling should adopt,
+/// not the other way round* — magnetite derived the same split
+/// independently, while designing for disconnected operation, and arrived
+/// later. Required so a node with no network can still say *something*
+/// truthful about a receipt instead of either lying "yes" or refusing
+/// everything a moment offline breaks: it retires the assumption that
+/// verifying anything requires retained chain history on hand.
+///
+/// **Non-conflatable by construction**: there is no `bool`, no shared
+/// variant, no `Option<()>` that both tiers satisfy. Every caller that grants
+/// something on the strength of a receipt has to name, in the type itself,
+/// which tier it is granting on — see
+/// `magnetite_web_host::entitlement::Verdict`, which turns this into
+/// `Granted` vs `GrantedUnsettled`, two distinct enum variants a `match` must
+/// handle separately.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Settlement {
+    /// The rail re-confirmed this receipt against a chain (or has no chain
+    /// to consult at all, in which case its signature check already *is* the
+    /// whole of what "settled" can mean for it — [`MockPaymentRail`], the
+    /// only zero-chain rail today, is always this tier).
+    Settled,
+    /// The receipt's own signature, arithmetic and binding are internally
+    /// consistent, but the rail could not, or did not attempt to, re-confirm
+    /// it against a chain right now — no network, most commonly. **Never**
+    /// treat this as [`Self::Settled`]: it proves the payer's rail attested
+    /// to the receipt at checkout time, not that the transfer still holds
+    /// now.
+    SignedUnsettled,
+}
+
 /// Non-custodial crypto payment rail (§3.6).
 #[async_trait::async_trait]
 pub trait PaymentRail {
@@ -451,6 +612,24 @@ pub trait PaymentRail {
     /// in the caller's database.
     fn verify_receipt_for_item(&self, r: &Receipt, _item: &str) -> bool {
         self.verify_receipt(r)
+    }
+    /// A14: verify a receipt for `item`, distinguishing [`Settlement`] tier.
+    /// `None` means refused — exactly [`Self::verify_receipt_for_item`]
+    /// returning `false`.
+    ///
+    /// **Default: conservative.** A rail that has not opted into
+    /// disconnected operation reports its existing boolean verdict as
+    /// [`Settlement::Settled`] on success — it never invents an unsettled
+    /// claim it did not actually check for. Only a rail that separates its
+    /// local checks from its chain re-confirmation may return
+    /// [`Settlement::SignedUnsettled`] (see
+    /// `magnetite_solana_rail::SolanaPaymentRail`, the first one that does).
+    fn verify_receipt_for_item_tiered(&self, r: &Receipt, item: &str) -> Option<Settlement> {
+        if self.verify_receipt_for_item(r, item) {
+            Some(Settlement::Settled)
+        } else {
+            None
+        }
     }
 }
 
@@ -1046,5 +1225,216 @@ mod tests {
         };
         let e = rail.escrow(terms).await.unwrap();
         assert_eq!(e.locked, 200);
+    }
+
+    // ── A13: PaymentPointer / KnownRail ─────────────────────────────────────
+
+    #[test]
+    fn known_rail_round_trips_ids_1_through_4() {
+        for k in [
+            KnownRail::Lightning,
+            KnownRail::UsdcBase,
+            KnownRail::Stripe,
+            KnownRail::PayPal,
+        ] {
+            assert_eq!(KnownRail::of(k.id()), Some(k), "id -> variant -> id");
+        }
+    }
+
+    /// Coverage-count assertion (per FANOUT-LOOP-STATE.md §2): scan a wide id
+    /// range and assert **exactly four** are known, so this guard notices if
+    /// anyone widens the registry without touching this test — in particular
+    /// id `5`, which evermesh's own `DECISIONS.md` X2 records as *proposed,
+    /// not applied*. This test is written to fail the moment someone
+    /// allocates it unilaterally here.
+    #[test]
+    fn the_registry_stops_at_four_ids_stellar_is_not_allocated() {
+        let known: Vec<u64> = (0..=16).filter(|id| KnownRail::of(*id).is_some()).collect();
+        assert_eq!(
+            known,
+            vec![1, 2, 3, 4],
+            "exactly ids 1-4 are known; id 5 (the proposed-but-not-applied \
+             `stellar` type) must stay unallocated here until evermesh's spec \
+             actually allocates it"
+        );
+        assert_eq!(KnownRail::of(5), None, "stellar is proposed, not applied");
+        assert_eq!(KnownRail::of(0), None, "0 is reserved, never known");
+    }
+
+    #[test]
+    fn reserved_id_zero_is_refused_by_construction() {
+        assert!(PaymentPointer::new(0, "anything").is_none());
+        assert!(PaymentPointer::new(1, "asha@ln.example.net").is_some());
+    }
+
+    #[test]
+    fn a_pointer_with_an_unknown_rail_id_round_trips_and_is_unknown_not_invalid() {
+        // id 99 is not in the registry. Per spec 010 §1 that is not an error —
+        // it must still construct, serialize/deserialize, and simply report
+        // `known() == None` rather than fail.
+        let p = PaymentPointer::new(99, "opaque-value").expect("non-zero id constructs");
+        assert_eq!(p.known(), None);
+
+        let bytes = serde_json::to_vec(&p).unwrap();
+        let back: PaymentPointer = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            back, p,
+            "an unrecognised rail id survives a round trip unmodified"
+        );
+    }
+
+    #[test]
+    fn a_mixed_pointer_list_preserves_unknown_entries_but_a_renderer_ignores_them() {
+        // Spec 010 §1: "Clients render the rails they understand and MUST
+        // ignore unknown types." Construct a publisher's ordered pointer list
+        // with one known (Lightning) and one unknown (id 42) entry.
+        let pointers = vec![
+            PaymentPointer::new(1, "asha@ln.example.net").unwrap(),
+            PaymentPointer::new(42, "some-future-rail-value").unwrap(),
+        ];
+
+        // Preserved: round-tripping the whole list changes nothing, including
+        // the unknown entry.
+        let bytes = serde_json::to_vec(&pointers).unwrap();
+        let back: Vec<PaymentPointer> = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(back, pointers, "unknown entries are preserved, not dropped");
+
+        // Ignored: a renderer that only acts on recognised rails sees exactly
+        // one candidate, not two and not zero.
+        let renderable: Vec<_> = pointers.iter().filter_map(|p| p.known()).collect();
+        assert_eq!(renderable, vec![KnownRail::Lightning]);
+    }
+
+    // ── A14: Settlement (settled vs signed-but-unsettled) ───────────────────
+
+    /// A rail whose local (signature) checks and chain re-confirmation are
+    /// genuinely separable, to prove the tier distinction is real and not
+    /// just two labels for the same branch. Wraps a `MockPaymentRail` (whose
+    /// own signature check stands in for "the rail's local checks") behind an
+    /// explicit `chain_reachable` switch standing in for network access.
+    struct DisconnectAwareRail {
+        inner: MockPaymentRail,
+        chain_reachable: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl PaymentRail for DisconnectAwareRail {
+        async fn checkout(&self, buyer: &PubKey, split: PaymentSplit) -> Receipt {
+            self.inner.checkout(buyer, split).await
+        }
+        async fn open_channel(&self, peer: &PubKey) -> Result<Channel, PaymentError> {
+            self.inner.open_channel(peer).await
+        }
+        async fn escrow(&self, terms: WagerTerms) -> Result<Escrow, PaymentError> {
+            self.inner.escrow(terms).await
+        }
+        fn verify_receipt(&self, r: &Receipt) -> bool {
+            self.inner.verify_receipt(r)
+        }
+        fn verify_receipt_for_item(&self, r: &Receipt, item: &str) -> bool {
+            self.inner.verify_receipt_for_item(r, item)
+        }
+        fn verify_receipt_for_item_tiered(&self, r: &Receipt, item: &str) -> Option<Settlement> {
+            // The local check (signature + arithmetic self-consistency) ALWAYS
+            // runs first and gates everything else — an invalid receipt is
+            // refused outright, never labelled "unsettled". Only a receipt
+            // that already passed locally can be *pending* chain confirmation.
+            if !self.inner.verify_receipt(r) {
+                return None;
+            }
+            if self.chain_reachable {
+                if self.inner.verify_receipt_for_item(r, item) {
+                    Some(Settlement::Settled)
+                } else {
+                    None
+                }
+            } else {
+                Some(Settlement::SignedUnsettled)
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn tiered_verification_reports_settled_when_the_chain_is_reachable() {
+        let inner = MockPaymentRail::new();
+        let buyer = PubKey([0xE0; 32]);
+        let r = inner
+            .checkout(&buyer, PaymentSplit::to_developer(PubKey([0xD0; 32]), 500))
+            .await;
+        let rail = DisconnectAwareRail {
+            inner,
+            chain_reachable: true,
+        };
+        assert_eq!(
+            rail.verify_receipt_for_item_tiered(&r, "game:x"),
+            Some(Settlement::Settled)
+        );
+    }
+
+    #[tokio::test]
+    async fn tiered_verification_reports_signed_unsettled_when_the_chain_is_unreachable() {
+        let inner = MockPaymentRail::new();
+        let buyer = PubKey([0xE1; 32]);
+        let r = inner
+            .checkout(&buyer, PaymentSplit::to_developer(PubKey([0xD0; 32]), 500))
+            .await;
+        let rail = DisconnectAwareRail {
+            inner,
+            chain_reachable: false,
+        };
+        assert_eq!(
+            rail.verify_receipt_for_item_tiered(&r, "game:x"),
+            Some(Settlement::SignedUnsettled)
+        );
+        // And the two tiers are not the same value — the whole point.
+        assert_ne!(
+            rail.verify_receipt_for_item_tiered(&r, "game:x"),
+            Some(Settlement::Settled)
+        );
+    }
+
+    #[tokio::test]
+    async fn an_invalid_receipt_is_never_signed_unsettled_even_offline() {
+        // A tampered receipt must refuse outright, regardless of chain
+        // reachability — "unsettled" is not a softer failure mode for a
+        // receipt that never verified locally in the first place.
+        let inner = MockPaymentRail::new();
+        let buyer = PubKey([0xE2; 32]);
+        let mut r = inner
+            .checkout(&buyer, PaymentSplit::to_developer(PubKey([0xD0; 32]), 500))
+            .await;
+        r.total += 1; // signature no longer covers the bytes
+        for chain_reachable in [true, false] {
+            let rail = DisconnectAwareRail {
+                inner: MockPaymentRail::new(),
+                chain_reachable,
+            };
+            assert_eq!(
+                rail.verify_receipt_for_item_tiered(&r, "game:x"),
+                None,
+                "an invalid receipt refuses at every reachability setting"
+            );
+        }
+    }
+
+    /// The default trait implementation is what every rail gets for free
+    /// (`MockPaymentRail`, `SolanaPaymentRail` before it opts in): it must
+    /// never manufacture `SignedUnsettled` on its own, only ever `Settled` or
+    /// refusal — see the trait doc's "never invents an unsettled claim it did
+    /// not actually check for".
+    #[tokio::test]
+    async fn the_default_tiered_impl_never_reports_unsettled() {
+        let rail = MockPaymentRail::new();
+        let buyer = PubKey([0xE3; 32]);
+        let r = rail
+            .checkout(&buyer, PaymentSplit::to_developer(PubKey([0xD0; 32]), 500))
+            .await;
+        assert_eq!(
+            rail.verify_receipt_for_item_tiered(&r, "game:x"),
+            Some(Settlement::Settled)
+        );
+        let mut bad = r.clone();
+        bad.total += 1;
+        assert_eq!(rail.verify_receipt_for_item_tiered(&bad, "game:x"), None);
     }
 }

@@ -382,6 +382,22 @@ impl HostedBundle {
         //    that does not — the file list is part of what was paid for.
         match entitlement::evaluate(&self.manifest.pricing, rail, &req.credentials) {
             Verdict::Granted => {}
+            // A14: the receipt verified locally but the rail could not
+            // re-confirm it against a chain right now. This node has not
+            // been given a policy for serving on that tier — deciding one
+            // (an operator opt-in? which bundles?) is real product work this
+            // pass does not do, the same way backlog item A15 documents a
+            // boundary without building the exchange across it. Until such a
+            // policy exists the fail-closed default applies: refuse, loudly
+            // and distinguishably (`Refusal::PendingSettlement`), rather than
+            // silently reusing `ReceiptRejected`'s reason, which would be a
+            // lie — this receipt did not fail, it is merely unconfirmed.
+            Verdict::GrantedUnsettled => {
+                return self.plain(
+                    Outcome::Refused(Refusal::PendingSettlement),
+                    Refusal::PendingSettlement.reason(),
+                )
+            }
             Verdict::Refused(r) => return self.plain(Outcome::Refused(r), r.reason()),
         }
 
