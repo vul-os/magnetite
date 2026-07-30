@@ -109,12 +109,34 @@ Ed25519 with no external dependency, and doubles as a lightweight identity
 provider: it mints short-lived, audience- and scope-bound tokens so external
 comms systems can be entered from a single keypair login.
 
+A second provider, `KotvaIdentity`, puts the same challenge/response protocol
+over `kotva-core`'s `IdentityKey`, tag-pinned at `core-v0.2.0`. Both curves are
+Ed25519, so one seed loads into either provider and produces the same public key
+and byte-identical signatures — asserted by test, not assumed. Nothing in the
+tree selects it yet; it exists so the binding is real code rather than a plan,
+and its docs record what in `kotva-core` has no seam to bind to (key lifecycle:
+`DeviceCert`, `RecoveryPolicy`, `KeyRotation`, `MoveRecord`).
+
+It lives in its own crate, `magnetite-kotva`, **not** behind a
+`--features kotva` flag on `magnetite-seams`. That is the same layout the Solana
+rail uses, for the same measured reason: Cargo resolves the dependency graph from
+the manifest before it considers which features are active, so an optional
+path-or-git dependency is load-bearing on the depending crate's default build
+even with the gating feature off. A feature-flag version was built first and
+measured failing `cargo build --offline` with the feature *off*; the crate's
+`Cargo.toml` records the transcript.
+
 ## 2. Naming
 
 Human names are a **display layer** over raw keys; the substrate is always the
-raw key. The default is short-hash addressing. An optional word-based key-name
-provider (`--features keyname`) adds no dependencies and exists to prove the seam
-is genuinely swappable rather than hardwired to its default.
+raw key. The default is short-hash addressing. Two further providers exist so the
+seam is demonstrably swappable rather than hardwired: a word-based key-name
+provider (`--features keyname`) that adds no dependencies and claims
+compatibility with nothing, and `KotvaNaming` (in the `magnetite-kotva` crate),
+which emits kotva's 8-words-plus-checksum key-name so a magnetite node and a
+kotva node show the same name for the same key. The kotva name derivation changed
+on kotva's `main` after `core-v0.2.0`, so names from that pin are not yet a stable
+long-lived identifier.
 
 ## 3. BlobStore
 

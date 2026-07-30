@@ -1,0 +1,83 @@
+[package]
+name = "magnetite-kotva"
+version = "0.1.0"
+edition = "2021"
+description = "kotva-substrate Identity/AuthProvider and Naming adapters for magnetite-seams — the thin glue over the sibling `kotva` repo's kotva-core crate (see magnetite ALIGNMENT.md §3)."
+license = "MIT OR Apache-2.0"
+
+# WHY THIS IS A SEPARATE CRATE AND NOT A `--features kotva` FLAG IN
+# `magnetite-seams` ITSELF
+# ---------------------------------------------------------------------------
+# Same reason as `../magnetite-solana-rail`, and it was re-measured here rather
+# than assumed, because the first attempt at this binding DID put the module
+# behind a `kotva = ["dep:kotva-core"]` feature on `magnetite-seams` and that
+# looked fine until it was tested properly.
+#
+# Cargo resolves the whole dependency graph from the MANIFEST, before it
+# considers which features are active. So an optional dependency on a non-
+# crates.io source is load-bearing on the depending crate's default build even
+# with the gating feature OFF. Measured, with the `kotva` feature off, a tracked
+# `Cargo.lock` pinning the exact git rev, a cold `target/`, and a `CARGO_HOME`
+# holding the crates.io registry but no kotva git checkout:
+#
+#     $ cargo build --offline
+#     error: failed to get `kotva-core` as a dependency of package
+#            `magnetite-seams v0.1.0`
+#     Caused by: failed to load source for dependency `kotva-core`
+#     Caused by: Unable to update https://github.com/vul-os/kotva?tag=core-v0.2.0
+#     Caused by: can't checkout from 'https://github.com/vul-os/kotva':
+#                you are in the offline mode (--offline)
+#
+# A pinned `Cargo.lock` does NOT rescue this. "Nothing extra is compiled" was
+# true (`cargo tree -e normal` showed no kotva node with the feature off) but it
+# is not the property that matters. The property that matters is the one
+# `magnetite-seams`'s own manifest claims: a fresh clone builds and tests with no
+# network and nothing outside crates.io. A git dependency breaks that whether it
+# is optional or not.
+#
+# Putting the binding in its OWN crate, never referenced (not even optionally)
+# by `magnetite-seams/Cargo.toml`, is the only construction that keeps
+# `magnetite-seams`'s default build/test graph provably crates.io-only on every
+# invocation. `magnetite-seams` has ZERO git dependencies as a result.
+#
+# Building the kotva binding today: `cd magnetite-kotva && cargo test`.
+#
+# COST OF THIS CRATE. Measured on one machine, cold `target/`, warm crates.io
+# registry, using the exact command CI runs so the two are comparable:
+#
+#   magnetite-seams  cargo build --locked --all-targets --all-features   1m20s
+#   magnetite-kotva  cargo build --locked --all-targets                  2m00s
+#
+# Treat these as same-machine ratios, not absolutes — they move with load and
+# with a cold registry. `kotva-core` drags in `hpke`, `x-wing`, `ml-dsa`,
+# `chacha20poly1305`, `ciborium`, `hkdf`, `sha2` and `unicode-normalization` for
+# the sake of the three modules this crate actually uses (`identity`, `id`,
+# `keyname`), which need none of them; kotva-core exposes no finer-grained
+# feature to ask for less.
+#
+# Under the split that cost lands on THIS crate's own CI matrix leg and runs in
+# parallel with the others, instead of being added to `magnetite-seams`'s
+# `--all-features` leg — which is the second reason the split is the right shape,
+# after the offline-resolution one above.
+
+[dependencies]
+magnetite-seams = { path = "../magnetite-seams" }
+# GIT dependency pinned to a TAG, never HEAD or a branch. kotva's own root
+# `Cargo.toml` documents this as the consumer contract ("the isango churn
+# lesson") and magnetite's ALIGNMENT.md §3 repeats it. `core-v0.2.0` resolves to
+# a4a6ca5afed1d21daf8e3e6b3b63d1dac7c90fe7 — verified with
+# `git ls-remote https://github.com/vul-os/kotva core-v0.2.0`.
+#
+# Pinning the tag also pins the key-name derivation, which matters: kotva's
+# `main` has already changed the keyname preimage from `BLAKE3(pubkey)` to
+# `BLAKE3(0x01 || 0x1e || pubkey)` (its §18.9.17 derivation-version binding).
+# Bumping this tag will change every name this crate emits. See `src/lib.rs`.
+kotva-core = { git = "https://github.com/vul-os/kotva", tag = "core-v0.2.0" }
+async-trait = "0.1"
+rand = "0.8"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# Only used by the test doubles: a "player" client that answers challenges with
+# plain Ed25519 and knows nothing about kotva.
+ed25519-dalek = "2"
