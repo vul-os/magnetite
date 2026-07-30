@@ -1,0 +1,86 @@
+[package]
+name = "magnetite-web-host"
+version = "0.1.0"
+edition = "2021"
+description = "Rung-0 web-bundle hosting for Magnetite — content-addressed static serving of three.js / Godot / Unity web exports with COOP+COEP, precompressed assets, HTTP range requests, per-file BLAKE3 integrity and a fail-closed entitlement gate. No VM, no tick loop, no authority."
+license = "MIT OR Apache-2.0"
+keywords = ["games", "wasm", "godot", "static", "magnetite"]
+categories = ["game-development", "web-programming::http-server"]
+
+# WHY THIS IS ITS OWN CRATE AND NOT PART OF `backend/`, `magnetite-runtime` OR
+# `magnetite-seams`
+# ---------------------------------------------------------------------------
+# ALIGNMENT.md §5 splits hosting in two, and the split is the whole argument:
+#
+#   * "Hosting a web build = serve content-addressed files over HTTP and check
+#     an entitlement receipt. No VM, no tick loop, no authority, no
+#     anti-cheat, no determinism."
+#   * "Hosting an authoritative match = the node, wasmtime, ticks, shards,
+#     migration."
+#
+# So:
+#
+# `backend/` is wrong. It is the legacy central service the redesign deletes
+# (`site/docs/status.md`, "Removal of the old backend — In progress"), it needs
+# Postgres and an account row, and ALIGNMENT.md §1 requires that a developer
+# with a laptop can host alone with zero coordinators. A rung-0 file server
+# that needs a database and a central API is a coordinator by construction.
+#
+# `magnetite-runtime` is wrong. It path-depends on `../backend/magnetite-sdk`
+# (i.e. on the directory being deleted), and it pulls `magnetite-sandbox`
+# (wasmtime) and `magnetite-anticheat`. Rung 0 needs none of those, and making
+# a static file server drag in a wasm VM inverts the dependency: the cheap rung
+# would inherit the expensive rung's build, its compile time and its attack
+# surface. Rung 2 may depend on rung 0; rung 0 must not depend on rung 2.
+#
+# `magnetite-seams` is wrong. That crate deliberately depends on no other
+# magnetite crate and on no HTTP client — see the comment on `BlobFetcher` in
+# `magnetite-seams/src/blobstore.rs`: "Keeping it a trait means this crate never
+# hard-depends on an HTTP client." An HTTP *server* there would break the same
+# rule harder.
+#
+# What is left is the pattern the rest of the tree already uses: a standalone
+# crate whose only magnetite dependency is the seam traits. It has NO edge —
+# not even an optional one — to `../../patala` or to `backend/`, so it builds
+# and tests on a bare checkout with neither present (see
+# `magnetite-solana-rail/Cargo.toml` for why "optional path dep" is not a
+# decoupling).
+
+[features]
+default = ["server"]
+# The hyper HTTP/1.1 binding and the `serve-web-bundle` binary. Turn it off to
+# link only the manifest + response-resolution core, e.g. to drive this from an
+# existing axum/nginx front end. The core (`manifest`, `entitlement`,
+# `respond`) has no HTTP dependency at all, which is why it is testable without
+# a socket.
+server = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:bytes"]
+
+[dependencies]
+# The seam traits only: BlobStore (content-addressed bytes + the Hash type) and
+# PaymentRail (`verify_receipt_for_item`). No provider, no chain, no network.
+magnetite-seams = { path = "../magnetite-seams" }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+hex = "0.4"
+blake3 = "1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "io-util", "macros", "time"] }
+
+hyper = { version = "1", features = ["server", "http1"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
+http-body-util = { version = "0.1", optional = true }
+bytes = { version = "1", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+# Real precompressed fixture bytes. The server never decompresses anything —
+# it passes bytes through with a `Content-Encoding` — but a fixture built with
+# a real brotli/gzip encoder is the only kind whose headers mean anything.
+brotli = "8"
+flate2 = "1"
+
+[[bin]]
+name = "serve-web-bundle"
+path = "src/bin/serve_web_bundle.rs"
+required-features = ["server"]
