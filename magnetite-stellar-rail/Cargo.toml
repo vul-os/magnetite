@@ -1,0 +1,51 @@
+[package]
+name = "magnetite-stellar-rail"
+version = "0.1.0"
+edition = "2021"
+description = "Real native-USDC-on-Stellar PaymentRail adapter for magnetite-seams (backlog A12). STANDALONE: no dependency, path or git, on the sibling `patala` repo — this crate copies patala-stellar's semantics by hand (see this file's comments and src/lib.rs's module docs), exactly as rotation.rs (A8) and chunktree.rs (A24) copied evermesh's."
+license = "MIT OR Apache-2.0"
+
+# WHY THIS IS A SEPARATE CRATE AND NOT A `--features stellar` FLAG IN
+# `magnetite-seams` ITSELF
+# ---------------------------------------------------------------------------
+# Same reasoning `magnetite-solana-rail/Cargo.toml` documented (and which A12
+# preserves rather than re-litigates): `magnetite-seams`'s payment seam must
+# build and test with ZERO knowledge of any real-chain crypto/network stack.
+# Putting the real Stellar adapter in its OWN crate keeps that graph provably
+# clean on every invocation.
+#
+# WHY THIS CRATE HAS NO DEPENDENCY ON `patala` AT ALL (path, git, or
+# otherwise) — unlike the solana rail it replaces
+# ---------------------------------------------------------------------------
+# Owner directive #1 (`FANOUT-LOOP-STATE.md` §1): products never import each
+# other; shared code comes from kotva via crates.io, never a path/git dep
+# across product repos. `magnetite-solana-rail` depended on patala's own
+# `patala-core`/`patala-solana` crates via a pinned git rev — a real coupling
+# this crate does not repeat. Instead this crate depends directly on the SAME
+# upstream, third-party crates `patala-stellar` itself depends on for the
+# Stellar wire format — `stellar-xdr`/`stellar-strkey`, both published by the
+# Stellar Development Foundation, Apache-2.0 — exactly the way depending on
+# `tokio` or `serde` is not "depending on patala". The actual transaction
+# construction, signing, memo binding, and verification logic in `src/tx.rs`
+# and `src/lib.rs` is written fresh for this crate, copying patala-stellar's
+# *design* (documented in its `README.md`/`src/lib.rs`) by hand — not its code.
+#
+# Building: `cd magnetite-stellar-rail && cargo build`.
+[dependencies]
+magnetite-seams = { path = "../magnetite-seams" }
+async-trait = "0.1"
+blake3 = "1"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
+sha2 = "0.10"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["std"] }
+stellar-strkey = "0.0.8"
+stellar-xdr = { version = "22", features = ["curr", "base64"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

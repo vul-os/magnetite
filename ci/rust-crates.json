@@ -7,6 +7,7 @@
   { "name": "runtime",          "dir": "magnetite-runtime",             "flags": "" },
   { "name": "e2e",              "dir": "magnetite-e2e",                 "flags": "" },
   { "name": "solana-rail",      "dir": "magnetite-solana-rail",         "flags": "" },
+  { "name": "stellar-rail",     "dir": "magnetite-stellar-rail",        "flags": "" },
   { "name": "kotva",            "dir": "magnetite-kotva",               "flags": "" },
   { "name": "web-host",         "dir": "magnetite-web-host",            "flags": "" },
   { "name": "cli",              "dir": "magnetite-cli",                 "flags": "" },

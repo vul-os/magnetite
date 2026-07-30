@@ -56,13 +56,15 @@
 //! The floor is **the rail's**, not this seam's, and that is deliberate. A
 //! value-based floor requires knowing the currency's scale, and this seam does
 //! not: its callers denominate in different units today (the backend in USD
-//! cents, `magnetite_solana_rail` in micro-USDC). A single constant here would
-//! be a floor of 0.001 USDC on one rail and $10 on the other — and on the
-//! second it would silently skip the *developer's* leg on any ordinary
-//! purchase, which is a fail-open dressed as a safety feature. So the
-//! mechanism lives here ([`PaymentSplit::partition_at`]) and the number lives
-//! with whoever knows the unit ([`MockPaymentRail::with_dust_floor`],
-//! `magnetite_solana_rail::DUST_FLOOR_MICRO_USDC`).
+//! cents, `magnetite_solana_rail` in micro-USDC, `magnetite_stellar_rail` in
+//! stroops). A single constant here would be a floor of 0.001 USDC on one
+//! rail and $10 on another — and on the latter it would silently skip the
+//! *developer's* leg on any ordinary purchase, which is a fail-open dressed
+//! as a safety feature. So the mechanism lives here
+//! ([`PaymentSplit::partition_at`]) and the number lives with whoever knows
+//! the unit ([`MockPaymentRail::with_dust_floor`],
+//! `magnetite_solana_rail::DUST_FLOOR_MICRO_USDC`,
+//! `magnetite_stellar_rail::DUST_FLOOR_STROOPS`).
 //!
 //! A plan with **no** payable leg is a different matter and is refused
 //! outright: a purchase that moves no money is not a purchase.
@@ -202,7 +204,8 @@ impl KnownRail {
 /// without knowing what a unit is worth — a zero transfer moves nothing, so
 /// emitting an instruction for it is pure cost. Any rail that does know its
 /// currency's scale must state a real, value-based floor instead; see
-/// `magnetite_solana_rail::DUST_FLOOR_MICRO_USDC` and the module docs above
+/// `magnetite_solana_rail::DUST_FLOOR_MICRO_USDC`,
+/// `magnetite_stellar_rail::DUST_FLOOR_STROOPS`, and the module docs above
 /// for why this seam refuses to guess one.
 pub const ZERO_ONLY_DUST_FLOOR: u64 = 1;
 
@@ -222,7 +225,7 @@ pub enum Role {
     /// **Voluntary** contribution to magnetite's maintainers. The destination
     /// is NOT operator-configurable: chain rails take it from a compiled-in,
     /// signed-release constant, never from node environment (see
-    /// `magnetite_solana_rail::stewards`).
+    /// `magnetite_solana_rail::stewards`, `magnetite_stellar_rail::stewards`).
     Stewards,
     /// Anyone else, labelled: publisher, co-developer, asset-pack author,
     /// charity, translator…
@@ -622,8 +625,20 @@ pub trait PaymentRail {
     /// [`Settlement::Settled`] on success — it never invents an unsettled
     /// claim it did not actually check for. Only a rail that separates its
     /// local checks from its chain re-confirmation may return
-    /// [`Settlement::SignedUnsettled`] (see
-    /// `magnetite_solana_rail::SolanaPaymentRail`, the first one that does).
+    /// [`Settlement::SignedUnsettled`].
+    ///
+    /// **Honest status (corrected 2026-07-30, A12):** no chain rail in this
+    /// tree does that split today. Neither the former `magnetite-solana-rail`
+    /// nor `magnetite-stellar-rail` (its A12 replacement) override this
+    /// method — both accept the default above, so both report only `Settled`
+    /// or refusal, never `SignedUnsettled`. This doc previously named
+    /// `magnetite_solana_rail::SolanaPaymentRail` as "the first one that
+    /// does", which was never true (verified by grep: that crate's
+    /// `verify_async` has no `Settlement`/tiered logic at all) — exactly the
+    /// class of doc claim `FANOUT-LOOP-STATE.md` §2 warns about. The only
+    /// place the tier split is actually exercised is this module's own
+    /// `tests::DisconnectAwareRail`, a test-only wrapper built to prove the
+    /// two tiers are distinguishable in principle.
     fn verify_receipt_for_item_tiered(&self, r: &Receipt, item: &str) -> Option<Settlement> {
         if self.verify_receipt_for_item(r, item) {
             Some(Settlement::Settled)
@@ -1417,11 +1432,14 @@ mod tests {
         }
     }
 
-    /// The default trait implementation is what every rail gets for free
-    /// (`MockPaymentRail`, `SolanaPaymentRail` before it opts in): it must
-    /// never manufacture `SignedUnsettled` on its own, only ever `Settled` or
-    /// refusal — see the trait doc's "never invents an unsettled claim it did
-    /// not actually check for".
+    /// The default trait implementation is what every rail gets for free —
+    /// `MockPaymentRail` and every chain rail in this tree today
+    /// (`magnetite_solana_rail::SolanaPaymentRail`,
+    /// `magnetite_stellar_rail::StellarPaymentRail`) all use it unmodified,
+    /// none has opted into the split yet: it must never manufacture
+    /// `SignedUnsettled` on its own, only ever `Settled` or refusal — see the
+    /// trait doc's "never invents an unsettled claim it did not actually
+    /// check for".
     #[tokio::test]
     async fn the_default_tiered_impl_never_reports_unsettled() {
         let rail = MockPaymentRail::new();
