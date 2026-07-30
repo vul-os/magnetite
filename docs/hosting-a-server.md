@@ -128,7 +128,9 @@ Nodes self-advertise (`Discovery::announce`) instead of polling a central
 is a dumb, swappable HTTP tracker in the BitTorrent sense — anyone can run one,
 and redundancy comes from running more than one, not from Magnetite operating
 a single blessed registry. `LanDiscovery` (mDNS) covers the local-network
-case with zero external dependency at all.
+case with zero external dependency at all. For exactly what "self-hostable"
+means for the tracker today (and where it does and doesn't require a third
+party at all), see [The zero-third-party path](zero-third-party-path.md).
 
 ## Who is allowed to receive a shard
 

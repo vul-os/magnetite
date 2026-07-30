@@ -25,6 +25,7 @@ database, no payment provider.
 | [Getting started](./getting-started.md) | Install the CLI, scaffold a game, run it with zero backend |
 | [Architecture](./architecture.md) | The six seams and how they compose |
 | [Hosting a server](./hosting-a-server.md) | Capacity-elastic nodes, shards, discovery |
+| [The zero-third-party path](./zero-third-party-path.md) | What needs nobody else — discovery, reachability, packages, payments — and where a third party is genuinely unavoidable |
 | [Payments](./payments.md) | Non-custodial checkout, signed receipts, hosting fees |
 | [Comms](./comms.md) | Pluggable chat/voice/video/streaming providers |
 | [Screenshots](./screenshots.md) | Landing, docs, and app gallery |
