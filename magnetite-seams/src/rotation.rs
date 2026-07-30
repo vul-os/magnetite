@@ -337,7 +337,12 @@ mod tests {
         r.sig = signer.sign(&r.signing_bytes());
     }
 
-    fn genesis(signer: &RawKeypairAuth, recovery: Vec<PubKey>, window: u64, ts: u64) -> RotationRecord {
+    fn genesis(
+        signer: &RawKeypairAuth,
+        recovery: Vec<PubKey>,
+        window: u64,
+        ts: u64,
+    ) -> RotationRecord {
         let mut r = RotationRecord {
             key: signer.pubkey(),
             recovery,
@@ -386,7 +391,7 @@ mod tests {
     fn genesis_verifies_and_derives_identity_id() {
         let user = RawKeypairAuth::from_seed([1u8; 32]);
         let g = genesis(&user, vec![], WINDOW, 100);
-        let state = verify_chain(&[g.clone()], &user, &seen_now, 1000).unwrap();
+        let state = verify_chain(std::slice::from_ref(&g), &user, &seen_now, 1000).unwrap();
         assert_eq!(state.identity_id, g.id());
         assert_eq!(state.signing_key, user.pubkey());
         assert_eq!(state.depth, 0);
@@ -405,7 +410,7 @@ mod tests {
         let g = genesis(&old, vec![], WINDOW, 100);
         let rot = rotate(&old, g.id(), new.pubkey(), vec![], WINDOW, 200);
 
-        let before = verify_chain(&[g.clone()], &old, &seen_now, 1000).unwrap();
+        let before = verify_chain(std::slice::from_ref(&g), &old, &seen_now, 1000).unwrap();
         let after = verify_chain(&[g.clone(), rot.clone()], &old, &seen_now, 1000).unwrap();
 
         assert_eq!(
@@ -473,7 +478,14 @@ mod tests {
         );
         // Deeper thief branch must still lose.
         let attacker2 = RawKeypairAuth::from_seed([5u8; 32]);
-        let thief_rot2 = rotate(&thief, thief_rot.id(), attacker2.pubkey(), vec![], WINDOW, 400);
+        let thief_rot2 = rotate(
+            &thief,
+            thief_rot.id(),
+            attacker2.pubkey(),
+            vec![],
+            WINDOW,
+            400,
+        );
 
         let records = vec![g, thief_rot, thief_rot2, owner_rot.clone()];
         let state = verify_chain(&records, &owner_signing, &seen_now, 1000).unwrap();
@@ -499,7 +511,14 @@ mod tests {
             WINDOW,
             200,
         );
-        let late_recovery = rotate(&recovery, g.id(), recovery_new.pubkey(), vec![], WINDOW, 300);
+        let late_recovery = rotate(
+            &recovery,
+            g.id(),
+            recovery_new.pubkey(),
+            vec![],
+            WINDOW,
+            300,
+        );
 
         let legit_id = legit.id();
         let observed = move |h: &Hash| -> Option<u64> {
@@ -546,7 +565,14 @@ mod tests {
         let n2 = RawKeypairAuth::from_seed([4u8; 32]);
 
         let g = genesis(&signing, vec![recovery.pubkey()], WINDOW, 100);
-        let r1 = rotate(&signing, g.id(), n1.pubkey(), vec![recovery.pubkey()], WINDOW, 200);
+        let r1 = rotate(
+            &signing,
+            g.id(),
+            n1.pubkey(),
+            vec![recovery.pubkey()],
+            WINDOW,
+            200,
+        );
         let r2 = rotate(&n1, r1.id(), n2.pubkey(), vec![], WINDOW, 300);
 
         let mut records = vec![g, r1, r2];
@@ -588,7 +614,14 @@ mod tests {
         let a = RawKeypairAuth::from_seed([1u8; 32]);
         let b = RawKeypairAuth::from_seed([2u8; 32]);
         // A "rotation" with no genesis in the input set to anchor it.
-        let orphan = rotate(&a, Hash::of(b"nonexistent-parent"), b.pubkey(), vec![], WINDOW, 200);
+        let orphan = rotate(
+            &a,
+            Hash::of(b"nonexistent-parent"),
+            b.pubkey(),
+            vec![],
+            WINDOW,
+            200,
+        );
         assert!(matches!(
             verify_chain(&[orphan], &a, &seen_now, 1000),
             Err(SeamError::Invalid(_))

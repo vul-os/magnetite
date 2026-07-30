@@ -2874,8 +2874,11 @@ mod tests {
                 Ok(vk) => vk,
                 Err(_) => return false,
             };
-            vk.verify(&Self::tagged(msg), &ed25519_dalek::Signature::from_bytes(&sig.0))
-                .is_ok()
+            vk.verify(
+                &Self::tagged(msg),
+                &ed25519_dalek::Signature::from_bytes(&sig.0),
+            )
+            .is_ok()
         }
     }
 
