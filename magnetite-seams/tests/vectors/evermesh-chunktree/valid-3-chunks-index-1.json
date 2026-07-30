@@ -1,0 +1,15 @@
+{
+  "chunk_index": 1,
+  "description": "A valid range proof for chunk 1 of 3 (last chunk length 1048576 bytes).",
+  "group": "chunktree",
+  "kind": "chunk-proof",
+  "last_chunk_len": 1048576,
+  "n_chunks": 3,
+  "name": "valid-3-chunks-index-1",
+  "proof_hex": [
+    "c9b3e89559bb623b5e2dc19daebf3933c1afe5ee5dca08428522e60a40fcb998",
+    "acc6ab6f36b14ce399c68bf7577c478e499306e9b07067c1ba15dc88f57550ee"
+  ],
+  "root_hex": "52450cb29354e6e432f0edf5e8ae0fa89333355b233438449f2be3cc95871045",
+  "valid": true
+}

@@ -45,6 +45,12 @@ pub enum SeamError {
     /// Generic invalid-input guard.
     #[error("invalid input: {0}")]
     Invalid(String),
+
+    /// A chunk-tree range proof (`chunktree` module, backlog item A24) failed
+    /// to verify: an out-of-range index, a malformed/mismatched proof, or a
+    /// root mismatch.
+    #[error("chunk proof invalid: {0}")]
+    ChunkProof(String),
 }
 
 /// Crate-wide result alias.

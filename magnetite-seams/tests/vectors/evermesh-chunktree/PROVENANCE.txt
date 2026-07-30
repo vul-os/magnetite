@@ -1,0 +1,57 @@
+# Frozen chunk-tree conformance vectors, EXTRACTED from evermesh's conformance
+# suite (`tools/conformance/vectors/chunktree/`, spec `001-kernel.md` §8) at
+# evermesh revision 5436a56520c71ac3c7e97c3c1ee7e06de628f514 (2026-07-30T20:45:13+02:00).
+#
+# WHY THIS DIRECTORY EXISTS. Backlog item A24: magnetite-seams's `BlobStore::get_range`
+# (A9) makes a byte range expressible, but a ranged read cannot be verified against a
+# whole-blob BLAKE3 hash without reading the whole blob first — see the `get_range`
+# docs in `src/blobstore.rs` and commit `c5fcb96`. The fix is a chunked/Merkle hash
+# scheme, and evermesh already has one: specified in `spec/001-kernel.md` §8 (profile
+# `EM-1`) and conformance-tested with these exact 14 vectors. A24 says plainly: do not
+# design a new chunk scheme, adopt evermesh's.
+#
+# `magnetite-seams` has NO dependency, path or published, on evermesh (product
+# standalone-ness, `FANOUT-LOOP-STATE.md` owner directive #1). `src/chunktree.rs`
+# copies evermesh's EM-1 semantics BY HAND — same chunk size, same leaf/interior
+# hash construction, same proof shape — independently written and independently
+# tested, exactly the way `src/rotation.rs` (A8) copied evermesh's identity
+# fork-resolution rule without a dependency. This directory is a byte-for-byte copy
+# of evermesh's OWN vector files (not re-derived, not summarized), so replaying them
+# tests magnetite's independent implementation against evermesh's actual conformance
+# ground truth, not against this crate's own restatement of it.
+#
+# PROVENANCE, per file: sha256 of the copy here (verified byte-identical to the
+# evermesh source at the revision above; `diff -q` against every source file was run
+# and produced zero output before this header was written):
+#
+#   ff6c475d7aee1abb2c15a7c48dfa959f71daa6f0a9ea8600b0dac4a536bfc17f  empty-blob-any-index-invalid.json
+#   67be957b7d64f6ba3cb3e449e59b795db21e8dc93003a31983554539221bb040  invalid-wrong-index.json
+#   25cd069687d74643b86a9a8eb65c062051e126ccad1651b4d6ad3254b3b09955  invalid-wrong-sibling.json
+#   95b15c968350409e265c2ee16be34dbcea0b4ca0490cf3ff6cc30c46f5455db2  valid-1-chunks-index-0.json
+#   07c48c5b541715175e5d7389964d5ae6ed94c81f8d0840ae5c4be2dea8b25bf5  valid-2-chunks-index-0.json
+#   a6f9aa0062e38273a5dda3e3c43c7c3af3688156c5f3d07f7026239bc3ac3dcb  valid-2-chunks-index-1.json
+#   446d1cf575e9510678316285a59bc98c632bc3cb6b1b82be34ab6f07683d1f89  valid-3-chunks-index-0.json
+#   eaca4c8ae31e6292d9973398fee7b5a56c34c110033206034ee56076a25e9fff  valid-3-chunks-index-1.json
+#   eab5b39ce874fa2016e28599a61d217e0e83a94ed14d47e6b3ed4de5176b5651  valid-3-chunks-index-2.json
+#   e53aaa34c94b0fd5fba62459fc5edb472b60a0e3cb6d010c07848561d0e722c2  valid-5-chunks-index-0.json
+#   344e0f838c9fad2ae453e9c1d15001be1f62a7b5113e0d78296ec152aec1a68e  valid-5-chunks-index-1.json
+#   763eb6d99657a927c4740ad331a610e921b1c10b7bc00dc5c2cc36ffcc4e1f97  valid-5-chunks-index-2.json
+#   2e61efa47e9a5f2c85c17771f3512f53efa2e53e3ec5a5a64c8b837fc187b1da  valid-5-chunks-index-3.json
+#   b64e56673d684a4736d2bf5571d7a308cf7d4f71711556b889002b4393a16593  valid-5-chunks-index-4.json
+#
+# vectors: 14 (11 valid, 3 invalid)
+#
+# FORMAT (unchanged from the evermesh source — see evermesh's
+# `tools/conformance/README.md`, `chunk-proof` row): each file describes a
+# SYNTHETIC blob by formula rather than embedding megabytes of hex — chunk `i`
+# is `(i % 251)` repeated for its whole length, every chunk but the last is
+# exactly 1 MiB (`n_chunks`, `last_chunk_len` give the shape) — plus a
+# `chunk_index`, a range `proof_hex` (sibling hashes, bottom-up), a `root_hex`
+# (bare 32 bytes, EM-1 form), and `valid` (whether `verify_chunk` MUST accept
+# the proof against the root). See `../chunktree_conformance.rs` for the
+# replay, which reconstructs each synthetic blob the same way evermesh's own
+# conformance runner does (`tools/conformance/src/kernel_target.rs::synth_blob`).
+#
+# This is a SNAPSHOT, not a live mirror. Regenerate deliberately (re-copy from
+# evermesh's `tools/conformance/vectors/chunktree/` and record the new
+# revision here), never hand-edit a vector file.

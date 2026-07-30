@@ -70,6 +70,7 @@
 
 pub mod blobstore;
 pub mod cbor;
+pub mod chunktree;
 pub mod comms;
 pub mod discovery;
 mod error;
@@ -103,6 +104,16 @@ pub use naming::{HashNaming, Naming};
 
 // Seam §3.3 — BlobStore
 pub use blobstore::{BlobFetcher, BlobStore, FsBlobStore, Hash, HttpBlobStore, LocalBlobStore};
+
+// Seam §3.3 extension (A24) — chunk trees for verified range reads, adopted
+// (by design, not by dependency) from evermesh's `EM-1` profile. See the
+// `chunktree` module docs for exactly what was copied and what was
+// deliberately left out (in particular: NOT yet wired into
+// `magnetite-web-host`'s serving path).
+pub use chunktree::{
+    leaf_hash as chunk_leaf_hash, node_hash as chunk_node_hash, verify_chunk, ChunkTree,
+    CHUNK_SIZE as CHUNK_TREE_SIZE,
+};
 
 // Seam §3.4 — Discovery
 pub use discovery::{

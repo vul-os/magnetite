@@ -1,0 +1,12 @@
+{
+  "chunk_index": 0,
+  "description": "The empty blob has zero chunks and no chunk root (spec 001 §8); any index is out of range.",
+  "group": "chunktree",
+  "kind": "chunk-proof",
+  "last_chunk_len": 0,
+  "n_chunks": 0,
+  "name": "empty-blob-any-index-invalid",
+  "proof_hex": [],
+  "root_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+  "valid": false
+}
