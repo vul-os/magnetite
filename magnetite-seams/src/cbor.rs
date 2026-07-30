@@ -28,9 +28,10 @@
 //!    optional path deps to build a lockfile). The kotva binding is a
 //!    tag-pinned git dependency to be added deliberately, in one place, when
 //!    that binding lands — not smuggled in under this module.
-//! 2. Having a second independent implementation of the encoding is exactly the
-//!    thing the DMTAP spec asks for: if the two disagree, one of them is wrong,
-//!    and the disagreement is findable.
+//! 2. ~~Having a second independent implementation of the encoding is exactly
+//!    the thing the DMTAP spec asks for: if the two disagree, one of them is
+//!    wrong, and the disagreement is findable.~~ **Superseded — see the
+//!    TEMPORARY STATE notice below.** Reason 1 stands; reason 2 does not.
 //!
 //! **Intended binding.** When kotva-core is linked (`kotva-core = { git = ...,
 //! tag = "core-v0.2.0" }`), [`Cv`] maps 1:1 onto `kotva_core::cbor::Cv` minus
@@ -39,6 +40,41 @@
 //! outright and is strictly stricter). [`encode`] and [`decode`] are then
 //! replaceable by kotva's with no change to the byte stream. Until that happens,
 //! nothing here reaches outside crates.io.
+//!
+//! # ⚠ TEMPORARY STATE — this module is a known SOVEREIGNTY.md §3.5 violation
+//!
+//! **Do not read the section above as a settled design.** It is the reasoning
+//! this module was written under, kept because it explains the code, but it has
+//! been overtaken. Recorded per `ALIGNMENT.md` §9 item 1 and
+//! `docs/cross-repo-backlog.md` **A2**:
+//!
+//! * `kotva/substrate/SOVEREIGNTY.md` §3.5 requires consumers to run the
+//!   **shared compiled algebra**, not merely an algorithm that agrees
+//!   byte-for-byte. Under that rule a byte-identical reimplementation is *still*
+//!   a violation, so reason 2 above — "a second independent implementation is a
+//!   feature" — is no longer the house position. Two codecs that agree today can
+//!   drift tomorrow, and nothing in either tree would notice.
+//! * There are in fact **three** implementations in the family, not two:
+//!   this one, `kotva-core/src/cbor.rs`, and `evermesh-kernel/src/codec.rs` —
+//!   the last being the most mature (189 conformance vectors replayed across
+//!   three runtimes) and unknown to the other two. **No cross-check exists
+//!   between any pair of them.** That is a latent signature-compatibility break,
+//!   not a redundancy.
+//!
+//! **Why it is being merged as-is anyway, deliberately.** Collapsing onto one
+//! codec is blocked on `kotva-cbor` being published to **crates.io** — a
+//! crates.io dependency is the only form that satisfies both §3.5 and this
+//! crate's own no-git-dependency rule (reason 1, which still holds). That
+//! publication has not happened; `kotva-cbor`'s extraction is itself unfinished
+//! (backlog C1) and another agent holds the kotva side. Rewriting this module
+//! against an unpublished crate now would trade a recorded violation for a
+//! broken build.
+//!
+//! **The exit, in order:** publish `kotva-cbor` (C3) → cross-validate all three
+//! codecs against evermesh's 189 vectors on the shared subset, in
+//! `magnetite-kotva`, the one crate legitimately depending on more than one (C2)
+//! → delete this module in favour of the published crate. Until every step
+//! lands, treat byte-identity with kotva as **asserted, not proven**.
 //!
 //! # Rules enforced (both directions)
 //!
