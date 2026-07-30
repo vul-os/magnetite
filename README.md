@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/magnetite-logo.svg" alt="Magnetite" width="96" height="96">
+<img src="brand/logo.svg" alt="Magnetite" width="96" height="96">
 
 # MAGNETITE
 
@@ -350,6 +350,16 @@ npm run screenshotter     # regenerate docs/screenshots/ (alias: npm run screens
 > `magnetite-seams`. See [DECENTRALIZATION.md § 6](DECENTRALIZATION.md#6-guardrails-for-all-agents).
 
 ---
+
+## Brand
+
+The mark in [`brand/`](brand/) is the source of truth. Every icon this repo
+ships — favicon, PWA and app icons, the mark in the README and on the site — is
+rendered from `brand/logo.svg` rather than redrawn, so there is one approved
+drawing and no second copy to drift.
+
+Copy it outward, never edit a derived copy, and never edit `brand/` to match
+something downstream.
 
 ## License
 
