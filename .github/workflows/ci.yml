@@ -151,6 +151,12 @@ jobs:
     # page is not a pass. And it asserts the measurement COUNT (84) so a route
     # or theme silently dropping out of the loop fails rather than shrinking
     # what is checked.
+    #
+    # Without a flag the script writes captures to the gitignored
+    # .responsive-check/app/, NOT the tracked docs/screenshots/app/ — a CI gate
+    # must not rewrite its own tracked subject on every run. Refreshing the
+    # committed screenshots is a deliberate, manual
+    # `npm run screenshots:app -- --update-screenshots`, never something CI does.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -167,5 +173,5 @@ jobs:
         if: always()
         with:
           name: app-screenshots
-          path: docs/screenshots/app/
+          path: .responsive-check/app/
           retention-days: 14

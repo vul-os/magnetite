@@ -16,6 +16,11 @@ dist-ssr
 test-results/
 playwright-report/
 
+# scripts/app-screenshots.mjs gate-only captures. Default output for the CI
+# "responsive" gate — only `npm run screenshots:app -- --update-screenshots`
+# writes the tracked set at docs/screenshots/app/ instead.
+.responsive-check/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

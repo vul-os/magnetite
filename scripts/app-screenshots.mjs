@@ -9,10 +9,24 @@
  *   2. screenshots each exemplar route in BOTH themes at 1280px
  *   3. asserts no horizontal overflow at 390 / 768 / 1280
  *
- * Usage:  node scripts/app-screenshots.mjs
- * Output: docs/screenshots/app/
+ * Exits non-zero if any route overflows horizontally (or fails to load, or
+ * the coverage count is wrong), so it gates CI (`.github/workflows/ci.yml`'s
+ * `responsive` job).
  *
- * Exits non-zero if any route overflows horizontally, so it can gate CI.
+ * A CI gate must not rewrite the thing it gates on every run — that turns a
+ * check into a self-healing mirror that can never fail. So by default this
+ * writes captures to a gitignored scratch dir, NOT the tracked
+ * docs/screenshots/app/. The overflow/coverage/broken-route assertions run
+ * identically either way; only the destination of the PNGs changes.
+ *
+ * Usage:
+ *   node scripts/app-screenshots.mjs                    # gate-only: writes to
+ *                                                        # .responsive-check/app/
+ *                                                        # (gitignored), tracked
+ *                                                        # screenshots untouched
+ *   node scripts/app-screenshots.mjs --update-screenshots  # refresh the real,
+ *                                                        # committed set at
+ *                                                        # docs/screenshots/app/
  */
 
 import { chromium } from 'playwright'
@@ -25,7 +39,10 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const DIST = path.join(ROOT, 'dist')
-const OUT = path.join(ROOT, 'docs', 'screenshots', 'app')
+const UPDATE_SCREENSHOTS = process.argv.includes('--update-screenshots')
+const TRACKED_OUT = path.join(ROOT, 'docs', 'screenshots', 'app')
+const SCRATCH_OUT = path.join(ROOT, '.responsive-check', 'app')
+const OUT = UPDATE_SCREENSHOTS ? TRACKED_OUT : SCRATCH_OUT
 
 /* The exemplar pages redesigned in this pass, plus every surface that renders
  * an "unavailable" state. The unavailable routes need a signed-in user and a
@@ -407,6 +424,12 @@ const main = async () => {
   }
 
   console.log(`\nScreenshots: ${path.relative(ROOT, OUT)}`)
+  console.log(
+    UPDATE_SCREENSHOTS
+      ? '(--update-screenshots was passed — the tracked set was refreshed)'
+      : '(gate-only run — tracked docs/screenshots/app/ was NOT touched; ' +
+          'pass --update-screenshots to refresh it)',
+  )
   if (failed) process.exitCode = 1
 }
 
