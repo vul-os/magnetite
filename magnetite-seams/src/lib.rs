@@ -24,11 +24,23 @@
 //! **Every default works with zero external services** — no network, no chain,
 //! no homeserver — so CI runs fully offline. This crate itself depends on NO
 //! provider-specific / external-service SDK, not even optionally: a bare
-//! `cargo build`/`cargo test` never touches anything outside crates.io. A
-//! provider-specific `PaymentRail` adapter (real SPL-USDC-on-Solana, via the
-//! sibling `patala` repo's `patala-core`/`patala-solana` crates) exists as its
-//! own crate, `magnetite-solana-rail` — see that crate's docs for why it is a
-//! separate crate rather than a `--features solana` flag on this one.
+//! `cargo build`/`cargo test` never touches anything outside crates.io —
+//! measured with a cold `target/` and a `CARGO_HOME` holding no git checkouts at
+//! all, not just assumed. Two provider-specific adapters live in their own
+//! sibling crates for exactly that reason, each documenting the measurement that
+//! put it there:
+//!
+//! * `magnetite-solana-rail` — a real SPL-USDC-on-Solana [`PaymentRail`], via
+//!   the sibling `patala` repo's `patala-core`/`patala-solana` crates.
+//! * `magnetite-kotva` — [`Identity`]/[`AuthProvider`] and [`Naming`] over the
+//!   sibling `kotva` repo's tag-pinned `kotva-core` crate (`ALIGNMENT.md` §3).
+//!
+//! Neither is a `--features` flag on this crate, and the reason is the same for
+//! both: Cargo resolves the dependency graph from the manifest *before* it
+//! considers which features are active, so an optional path-or-git dependency is
+//! load-bearing on this crate's default build even with the gating feature off.
+//! A `--features kotva` flag was built and measured failing that way before the
+//! binding was moved out; see `magnetite-kotva/Cargo.toml` for the transcript.
 //!
 //! The one optional provider that IS a feature flag on this crate is
 //! [`keyname::KeyNameNaming`] (`--features keyname`), a second `Naming`
