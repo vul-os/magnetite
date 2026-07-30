@@ -80,14 +80,20 @@ pub mod keyname;
 pub mod naming;
 pub mod package;
 pub mod payment;
+pub mod rotation;
 
 pub use error::{Result, SeamError};
 
 // Seam §3.1 — Identity / Auth
 pub use identity::{
-    Audience, AuthProvider, Challenge, Identity, LoginResponse, PubKey, RawKeypairAuth, Scope,
-    Session, Sig, Token, TokenClaims,
+    Audience, AuthProvider, Challenge, Identity, IdentityVerifier, LoginResponse, PubKey,
+    RawKeypairAuth, Scope, Session, Sig, Token, TokenClaims,
 };
+
+// Seam §3.1 extension (A8) — key-rotation chain, so a rotated key stays the
+// same identity. See the `rotation` module docs for what was adopted from
+// kotva/evermesh and what is deliberately not here.
+pub use rotation::{verify_chain as verify_identity_chain, ChainState, RotationRecord};
 
 // Seam §3.2 — Naming
 /// Optional second Naming provider (`--features keyname`) — see [`keyname`].
