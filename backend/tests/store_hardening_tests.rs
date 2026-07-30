@@ -481,7 +481,10 @@ mod settlement_split_math_tests {
         // `SplitPlan::resolve`, and it must stay the only such place.
         let split = PaymentSplit::to_developer(dev(0xD0), 999);
         assert_eq!(split.legs.len(), 1);
-        assert_eq!(split.legs[0].amount, 999, "no fee is added on top of anything");
+        assert_eq!(
+            split.legs[0].amount, 999,
+            "no fee is added on top of anything"
+        );
         assert_eq!(split.stewards_total(), 0);
     }
 

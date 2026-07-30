@@ -32,7 +32,7 @@ feature-gated module and is never referenced by non-provider code.
 |---|---|---|---|
 | 1 | `Identity` / `AuthProvider` | `RawKeypairAuth` — raw Ed25519 challenge/response | Ships |
 | 2 | `Naming` | `HashNaming` — pubkey / short-hash addresses | Ships |
-| 3 | `BlobStore` | `LocalBlobStore` + `HttpBlobStore` | Ships |
+| 3 | `BlobStore` | `FsBlobStore` + `HttpBlobStore` | Ships |
 | 4 | `Discovery` | `LanDiscovery` + `TrackerDiscovery` | Ships |
 | 5 | `CommsProvider` | `BuiltinProvider`, plus Matrix / Jitsi / LiveKit / Owncast adapters | Ships |
 | 6 | `PaymentRail` | `MockPaymentRail` — deterministic, offline | **Mock only — no chain** |

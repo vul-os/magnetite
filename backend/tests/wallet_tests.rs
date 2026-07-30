@@ -11,7 +11,7 @@
 mod noncustodial_wallet_tests {
     use magnetite_backend::api::wallet::{LinkWalletRequest, LinkedWallet};
     use magnetite_backend::services::payment::{
-        rail, sale_split, units_from_usd, verify_receipt, PubKey,
+        micro_usdc_from_usd, rail, sale_split, verify_receipt, PubKey,
     };
     use rust_decimal_macros::dec;
     use uuid::Uuid;
@@ -54,7 +54,7 @@ mod noncustodial_wallet_tests {
     async fn checkout_receipt_gates_entitlement() {
         let buyer = PubKey([0xB0; 32]);
         let developer = PubKey([0xD0; 32]);
-        let amount = units_from_usd(dec!(19.99));
+        let amount = micro_usdc_from_usd(dec!(19.99)).expect("19.99 fits in u64 micro-USDC");
 
         let receipt = rail()
             .checkout(&buyer, sale_split(developer, amount, None))
@@ -99,8 +99,8 @@ mod noncustodial_wallet_tests {
 
     #[test]
     fn usd_prices_convert_to_rail_units() {
-        assert_eq!(units_from_usd(dec!(0.01)), 1);
-        assert_eq!(units_from_usd(dec!(25.00)), 2500);
-        assert_eq!(units_from_usd(dec!(1234.56)), 123_456);
+        assert_eq!(micro_usdc_from_usd(dec!(0.01)).unwrap(), 10_000);
+        assert_eq!(micro_usdc_from_usd(dec!(25.00)).unwrap(), 25_000_000);
+        assert_eq!(micro_usdc_from_usd(dec!(1234.56)).unwrap(), 1_234_560_000);
     }
 }

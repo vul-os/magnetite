@@ -8,6 +8,7 @@
   { "name": "e2e",              "dir": "magnetite-e2e",                 "flags": "" },
   { "name": "solana-rail",      "dir": "magnetite-solana-rail",         "flags": "" },
   { "name": "kotva",            "dir": "magnetite-kotva",               "flags": "" },
+  { "name": "web-host",         "dir": "magnetite-web-host",            "flags": "" },
   { "name": "cli",              "dir": "magnetite-cli",                 "flags": "" },
   { "name": "game-client-bevy", "dir": "game-client-bevy",              "flags": "", "apt": "libasound2-dev libudev-dev" },
   { "name": "tpl-arcade",       "dir": "game-templates/arcade",         "flags": "" },

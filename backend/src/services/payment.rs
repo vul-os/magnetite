@@ -137,23 +137,23 @@ pub fn rail() -> &'static dyn PaymentRail {
     RAIL.get_or_init(|| {
         warn_unhonourable_stewards_override();
         match rail_kind().as_str() {
-        "mock" => Box::new(MockPaymentRail::new()) as Box<dyn PaymentRail + Send + Sync>,
-        #[cfg(feature = "solana")]
-        "solana" => Box::new(solana_rail_from_env().unwrap_or_else(|e| {
-            panic!(
-                "PAYMENT_RAIL=solana is misconfigured: {e}. Refusing to start — falling \
+            "mock" => Box::new(MockPaymentRail::new()) as Box<dyn PaymentRail + Send + Sync>,
+            #[cfg(feature = "solana")]
+            "solana" => Box::new(solana_rail_from_env().unwrap_or_else(|e| {
+                panic!(
+                    "PAYMENT_RAIL=solana is misconfigured: {e}. Refusing to start — falling \
                  back to the mock rail would hand out paid items for free."
-            )
-        })) as Box<dyn PaymentRail + Send + Sync>,
-        #[cfg(not(feature = "solana"))]
-        "solana" => panic!(
-            "PAYMENT_RAIL=solana but this binary was built WITHOUT `--features solana`. \
+                )
+            })) as Box<dyn PaymentRail + Send + Sync>,
+            #[cfg(not(feature = "solana"))]
+            "solana" => panic!(
+                "PAYMENT_RAIL=solana but this binary was built WITHOUT `--features solana`. \
              Refusing to start rather than silently using the mock rail."
-        ),
-        other => panic!(
-            "PAYMENT_RAIL={other:?} is not a known payment rail (expected \"mock\" or \
+            ),
+            other => panic!(
+                "PAYMENT_RAIL={other:?} is not a known payment rail (expected \"mock\" or \
              \"solana\"). Refusing to start."
-        ),
+            ),
         }
     })
     .as_ref()
@@ -255,13 +255,26 @@ pub fn verify_receipt(r: &Receipt) -> bool {
     rail().verify_receipt(r)
 }
 
-/// Convert a USD-denominated `Decimal` price to the rail's smallest unit (cents).
-pub fn units_from_usd(price: Decimal) -> u64 {
+/// Convert a USD-denominated `Decimal` price to the rail's smallest unit,
+/// **micro-USDC** — USDC has 6 decimals, so one dollar is 1_000_000 units.
+///
+/// This multiplied by 100 (cents) until 2026-07-30 while every rail consumed
+/// micro-USDC: a 10_000x under-charge at all three call sites. No payment was
+/// ever mispriced only because nothing has ever settled through any rail. The
+/// unit is now named in the function so the next mismatch is visible at the
+/// call site rather than four layers away.
+///
+/// Refuses rather than saturating. The previous `unwrap_or(u64::MAX)` turned an
+/// unrepresentable price into the largest possible charge, which is a lie about
+/// what the buyer owes; the seam's own rule is that overflow refuses.
+pub fn micro_usdc_from_usd(price: Decimal) -> Result<u64> {
     use rust_decimal::prelude::ToPrimitive;
-    (price * Decimal::new(100, 0))
+    (price * Decimal::new(1_000_000, 0))
         .round()
         .to_u64()
-        .unwrap_or(u64::MAX)
+        .ok_or_else(|| {
+            AppError::Validation(format!("price {price} is not representable in micro-USDC"))
+        })
 }
 
 /// The wallet (Ed25519 pubkey) a user has linked, if any. Non-custodial: we only
@@ -603,11 +616,27 @@ mod tests {
         PubKey([b; 32])
     }
 
+    /// USDC has **6 decimals**. This test previously asserted cents — $19.99 as
+    /// `1999` — which is exactly the 10_000x mismatch it was supposed to catch:
+    /// the test encoded the bug, so the bug could not fail a test.
     #[test]
-    fn usd_converts_to_cents() {
-        assert_eq!(units_from_usd(Decimal::new(1999, 2)), 1999);
-        assert_eq!(units_from_usd(Decimal::new(5, 0)), 500);
-        assert_eq!(units_from_usd(Decimal::ZERO), 0);
+    fn usd_converts_to_micro_usdc() {
+        assert_eq!(
+            micro_usdc_from_usd(Decimal::new(1999, 2)).unwrap(),
+            19_990_000
+        );
+        assert_eq!(micro_usdc_from_usd(Decimal::new(5, 0)).unwrap(), 5_000_000);
+        assert_eq!(micro_usdc_from_usd(Decimal::ZERO).unwrap(), 0);
+        // The smallest representable amount is one micro-USDC, not one cent.
+        assert_eq!(micro_usdc_from_usd(Decimal::new(1, 6)).unwrap(), 1);
+    }
+
+    /// Overflow refuses rather than saturating — `u64::MAX` would be a lie about
+    /// what the buyer owes.
+    #[test]
+    fn an_unrepresentable_price_is_refused_not_saturated() {
+        // u64::MAX micro-USDC is ~1.8e13 dollars; 2e13 dollars overflows it.
+        assert!(micro_usdc_from_usd(Decimal::from(20_000_000_000_000i64)).is_err());
     }
 
     /// The rate is not readable from the environment AT ALL any more — not

@@ -527,7 +527,7 @@ impl MarketplaceService {
         let dev_wallet =
             payment::require_wallet(&self.pool, store.developer_id, "store developer").await?;
 
-        let amount = payment::units_from_usd(price);
+        let amount = payment::micro_usdc_from_usd(price)?;
         // TODO(hosting): when the game is served by a third-party operator, add an
         // `Role::Operator` leg here (`sale_split`'s third argument).
         let split = payment::sale_split(dev_wallet, amount, None);
@@ -1116,20 +1116,27 @@ mod tests {
         let buyer = payment::PubKey([0xB0; 32]);
         let dev = payment::PubKey([0xD0; 32]);
         let price = Decimal::new(1000, 2); // 10.00
-        let amount = payment::units_from_usd(price);
+        let amount = payment::micro_usdc_from_usd(price).expect("10.00 fits in u64 micro-USDC");
+        assert_eq!(
+            amount, 10_000_000,
+            "USDC has 6 decimals: $10.00 is 10_000_000 micro-USDC"
+        );
 
         let receipt = payment::rail()
             .checkout(&buyer, payment::sale_split(dev, amount, None))
             .await;
 
-        assert_eq!(receipt.total, 1000, "10.00 USD == 1000 cents");
+        assert_eq!(
+            receipt.total, 10_000_000,
+            "10.00 USD == 10_000_000 micro-USDC"
+        );
         assert_eq!(
             receipt.stewards_amount, 0,
             "no stewards leg without a signed manifest to declare one"
         );
         assert_eq!(receipt.payouts.len(), 1);
         assert_eq!(receipt.payouts[0].wallet, dev);
-        assert_eq!(receipt.payouts[0].amount, 1000);
+        assert_eq!(receipt.payouts[0].amount, 10_000_000);
         assert!(payment::verify_receipt(&receipt));
     }
 
@@ -1166,7 +1173,14 @@ mod tests {
 
     #[test]
     fn usd_prices_map_to_rail_units() {
-        assert_eq!(payment::units_from_usd(Decimal::new(10_000, 2)), 10_000);
-        assert_eq!(payment::units_from_usd(Decimal::new(99, 2)), 99);
+        // Micro-USDC, not cents: $100.00 is 100_000_000 units on a 6-decimal asset.
+        assert_eq!(
+            payment::micro_usdc_from_usd(Decimal::new(10_000, 2)).unwrap(),
+            100_000_000
+        );
+        assert_eq!(
+            payment::micro_usdc_from_usd(Decimal::new(99, 2)).unwrap(),
+            990_000
+        );
     }
 }

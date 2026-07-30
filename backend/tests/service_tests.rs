@@ -13,7 +13,7 @@
 #[cfg(test)]
 mod noncustodial_payment_tests {
     use magnetite_backend::services::payment::{
-        rail, sale_split, units_from_usd, verify_receipt, PubKey,
+        micro_usdc_from_usd, rail, sale_split, verify_receipt, PubKey,
     };
     use rust_decimal_macros::dec;
 
@@ -25,7 +25,11 @@ mod noncustodial_payment_tests {
         let receipt = rail()
             .checkout(
                 &PubKey([0xB0; 32]),
-                sale_split(PubKey([0xD0; 32]), units_from_usd(dec!(100.00)), None),
+                sale_split(
+                    PubKey([0xD0; 32]),
+                    micro_usdc_from_usd(dec!(100.00)).expect("100.00 fits"),
+                    None,
+                ),
             )
             .await;
 
@@ -92,8 +96,8 @@ mod noncustodial_payment_tests {
 
     #[test]
     fn usd_maps_to_smallest_rail_unit() {
-        assert_eq!(units_from_usd(dec!(0.01)), 1);
-        assert_eq!(units_from_usd(dec!(12.34)), 1234);
+        assert_eq!(micro_usdc_from_usd(dec!(0.01)).unwrap(), 10_000);
+        assert_eq!(micro_usdc_from_usd(dec!(12.34)).unwrap(), 12_340_000);
     }
 }
 

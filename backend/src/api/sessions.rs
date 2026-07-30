@@ -102,7 +102,7 @@ pub async fn create_game_session(
     // re-verifies the rail signature, so a database row alone is never proof,
     // and it fails CLOSED.
     if fee_amount > Decimal::ZERO {
-        let required = crate::services::payment::units_from_usd(fee_amount);
+        let required = crate::services::payment::micro_usdc_from_usd(fee_amount)?;
         if !crate::services::payment::has_verified_receipt(&pool, user_id, game_id, required).await
         {
             return Err(AppError::Validation(
