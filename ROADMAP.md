@@ -38,4 +38,6 @@ what this roadmap tracks. The templates are structure-tested in
 ---
 
 For the platform/engine backlog (the seams, the decentralization waves) rather
-than games, see [DECENTRALIZATION.md](DECENTRALIZATION.md) §5.
+than games, see [DECENTRALIZATION.md](DECENTRALIZATION.md) §5, and
+[ALIGNMENT.md](ALIGNMENT.md) for the kotva/patala binding direction, the
+reachability rungs and the phased platform roadmap.
