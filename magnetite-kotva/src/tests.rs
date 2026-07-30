@@ -7,6 +7,11 @@
 //!    fail closed on their own failure mode; a kotva-minted `Token` is still
 //!    accepted by `Token::is_valid_at`, which hard-codes `RawKeypairAuth::verify`
 //!    (the empty-domain decision, asserted rather than assumed);
+//!  * **A7 cross-check** — `Token::is_valid_for` (magnetite-seams's fix: verify
+//!    against whichever provider is actually passed in) genuinely follows a
+//!    REAL kotva domain-separated signature, not just the synthetic double
+//!    `magnetite-seams`'s own tests use — and still rejects it under a
+//!    different provider over the same key, proving it is not a rubber stamp;
 //!  * **key-material interchange** — one seed produces the same public key and
 //!    byte-identical signatures in both providers, which is the concrete content
 //!    of `ALIGNMENT.md` §3's "the identity curve already matches";
@@ -121,6 +126,76 @@ fn a_domain_tag_actually_separates() {
         msg,
         &sig
     ));
+}
+
+/// A test-only [`Identity`] view of [`KotvaIdentity`] that uses a REAL,
+/// non-empty kotva domain tag — the opposite choice from `KotvaIdentity`'s
+/// own `Identity` impl, which deliberately signs with an EMPTY domain so its
+/// bytes match `RawKeypairAuth`'s (see the crate docs). This type exists
+/// purely to prove `magnetite_seams`'s A7 fix
+/// (`IdentityVerifier`/`Token::is_valid_for`) against genuine kotva
+/// domain-separated crypto, not just the synthetic double
+/// `magnetite-seams`'s own tests use.
+struct DomainedKotvaForTokens<'a>(&'a KotvaIdentity);
+
+const TOKEN_TEST_DOMAIN: &[u8] = b"magnetite-kotva/token-cross-check/v1";
+
+impl Identity for DomainedKotvaForTokens<'_> {
+    fn pubkey(&self) -> PubKey {
+        self.0.node_pubkey()
+    }
+    fn sign(&self, msg: &[u8]) -> Sig {
+        self.0
+            .sign_domain(TOKEN_TEST_DOMAIN, msg)
+            .expect("64-byte ed25519 signature")
+    }
+    fn verify(pk: &PubKey, msg: &[u8], sig: &Sig) -> bool {
+        verify_domain(pk, TOKEN_TEST_DOMAIN, msg, sig)
+    }
+}
+
+#[test]
+fn is_valid_for_follows_a_genuinely_domain_separated_kotva_signature() {
+    // Builds a token "issued" via real kotva domain-separated signing (NOT
+    // KotvaIdentity's own empty-domain `Identity` impl), and shows:
+    //  1. the legacy `is_valid_at` (hard-coded to RawKeypairAuth's plain
+    //     Ed25519) silently rejects it — this crate's own docs named that
+    //     as the A7 defect;
+    //  2. `is_valid_for` accepts it when given the matching domained
+    //     provider — magnetite-seams's A7 fix, exercised here against real
+    //     kotva crypto rather than a synthetic double;
+    //  3. `is_valid_for` still rejects it under a DIFFERENT provider over
+    //     the same key (the undomained `KotvaIdentity` itself), proving
+    //     this is genuine per-instance dispatch, not a rubber stamp.
+    let node = KotvaIdentity::from_seed([55u8; 32]);
+    let domained = DomainedKotvaForTokens(&node);
+    let now = now_unix();
+    let claims = TokenClaims {
+        issuer: domained.pubkey(),
+        subject: PubKey([1u8; 32]),
+        audience: Audience("matrix".into()),
+        scope: Scope(vec!["room:join".into()]),
+        issued_at: now,
+        expires_at: now + 900,
+        nonce: [5u8; 16],
+    };
+    let sig = domained.sign(&claims.signing_bytes());
+    let tok = Token { claims, sig };
+
+    assert!(
+        !tok.is_valid_at(now),
+        "legacy hard-coded path silently rejects a real, honestly-issued \
+         domain-separated kotva token"
+    );
+    assert!(
+        tok.is_valid_for(&domained, now),
+        "is_valid_for must accept the token under its ACTUAL issuing provider"
+    );
+    assert!(
+        !tok.is_valid_for(&node, now),
+        "the undomained KotvaIdentity is a DIFFERENT algorithm over the same \
+         key and must not verify a domain-separated signature"
+    );
 }
 
 #[tokio::test]

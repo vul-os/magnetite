@@ -17,9 +17,13 @@
 //! questions get answered in code rather than in prose.
 //!
 //! What is **not** here, and is not claimed: kotva's `Identity` object
-//! (multi-suite key set), `DeviceCert`, `RecoveryPolicy`, `KeyRotation`,
-//! `MoveRecord`, `CapabilityToken`, `pubobj`/`pubsub`, and the canonical CBOR
-//! codec. Those have no seam to bind to today — see "What does not fit" below.
+//! (multi-suite key set), `DeviceCert`, `MoveRecord`, `CapabilityToken`,
+//! `pubobj`/`pubsub`, and the canonical CBOR codec. Those still have no seam
+//! to bind to today — see "What does not fit" below. `RecoveryPolicy` and
+//! `KeyRotation` **do** now have somewhere to land, in reduced form:
+//! `magnetite_seams::rotation` (A8, landed after this crate's own docs named
+//! the gap — see that module and "What does not fit" below for exactly what
+//! carried over and what deliberately did not).
 //!
 //! # Seam §3.1 — [`KotvaIdentity`]
 //!
@@ -96,19 +100,39 @@
 //! fixed** — changing the seam traits is separate work, tracked in
 //! `ALIGNMENT.md`, and this crate deliberately does not touch them:
 //!
-//! * **`Identity::verify` is an associated (static) function**, so a magnetite
-//!   provider cannot carry per-instance verification policy, and callers must
-//!   name a concrete type to verify anything. `Token::is_valid_at` does exactly
-//!   that. Any provider whose signature bytes differ from raw Ed25519 silently
-//!   breaks token verification. The empty-domain choice above is a workaround,
-//!   not a fix; the seam wants `verify` to be a method, or verification to be
-//!   carried on the token.
-//! * **No seam expresses key lifecycle.** kotva's `DeviceCert`,
-//!   `RecoveryPolicy`, `KeyRotation` and `MoveRecord` are the substantive half of
-//!   `kotva_core::identity` and have nowhere to land: magnetite's `Identity` is
-//!   "a keypair that signs", with no notion of a key being superseded. A node or
-//!   player that rotates its kotva key becomes, to magnetite, a different
-//!   identity.
+//! * **`Identity::verify` was an associated (static) function — FIXED (A7).**
+//!   `magnetite_seams::identity::IdentityVerifier` is now a method, blanket-
+//!   implemented for every `Identity` (this crate's `KotvaIdentity` included,
+//!   automatically — nothing here changed to gain it). `Token::is_valid_for`
+//!   is the corrected counterpart of `Token::is_valid_at`: it verifies
+//!   against whichever provider is actually passed in, so it is no longer
+//!   hard-coded to `RawKeypairAuth`. `Token::is_valid_at` itself is
+//!   unchanged and still hard-coded — existing callers throughout the tree
+//!   depend on its exact signature — which is exactly why the empty-domain
+//!   choice above still matters: it is what keeps `KotvaIdentity`-issued
+//!   tokens verifying correctly under `is_valid_at`'s legacy path too, not
+//!   just under `is_valid_for`.
+//! * **No seam expressed key lifecycle — PARTIALLY LANDED (A8).**
+//!   `magnetite_seams::rotation` now carries a minimum key-rotation chain
+//!   (`RotationRecord` + `verify_chain`), adopted from kotva's own
+//!   `KeyRotation` shape (continuity signature by the retiring key,
+//!   hash-chained) and evermesh's decided fork-resolution rule (finalized
+//!   signing beats everything; short of finality, recovery beats a
+//!   provisional signing rotation; same-class forks resolve by lowest record
+//!   id, merge-order independent). A node or player that rotates its key
+//!   through that seam keeps the SAME `identity_id` (the genesis record's
+//!   content hash) — it no longer becomes a different identity. What did
+//!   NOT land: kotva's multi-guardian `RecoveryPolicy` quorum
+//!   (`GuardianApproval`, `rotate_threshold`) is reduced to evermesh's
+//!   simpler "any one declared recovery key suffices" shape, with no quorum
+//!   counting; `DeviceCert` (a delegation fact layered on top of a resolved
+//!   chain head, not about whether the root identity persists) and
+//!   `MoveRecord` (a name rebinding — the `Naming` seam's concern, not
+//!   `Identity`'s) still have nowhere to land and are not claimed. This
+//!   crate does not yet bridge `KotvaIdentity` to `magnetite_seams::rotation`
+//!   — that would need kotva's own `KeyRotation`/`RecoveryPolicy` CBOR shapes
+//!   translated the way `content_id_of_hash` bridges `ContentId`, and is
+//!   future work, not assumed here.
 //! * **The signing codec differs and no seam mediates it.** Every signed kotva
 //!   object is canonical integer-keyed deterministic CBOR; every signed
 //!   magnetite object (`Challenge`, `TokenClaims`, `SignedAd`) is a hand-rolled
