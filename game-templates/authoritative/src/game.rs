@@ -63,6 +63,12 @@ impl AuthoritativeGame for ArenaShooter {
     }
 
     fn on_join(&mut self, p: PlayerId) {
+        // Idempotent, as the trait requires: after a restore the executor has no
+        // record of who the snapshot already contains and will call this again on
+        // the next input from each of them.
+        if self.players.iter().any(|ps| ps.id == p) {
+            return;
+        }
         // Spawn at a deterministic position based on join order.
         let index = self.players.len();
         let total = self.max_players as usize;

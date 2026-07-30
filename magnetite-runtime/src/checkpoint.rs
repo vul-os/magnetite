@@ -841,6 +841,12 @@ impl magnetite_sdk::authority::GameExecutor for ShardStateExecutor {
     fn restore(&mut self, bytes: &[u8]) {
         self.inner.restore(bytes)
     }
+    fn try_restore(&mut self, bytes: &[u8]) -> Result<(), magnetite_sdk::authority::RestoreError> {
+        // Forward rather than inherit the default: the default would call
+        // `restore` and report success, turning the wrapped executor's fallible
+        // path back into a panic.
+        self.inner.try_restore(bytes)
+    }
     fn view_for(&self, player: magnetite_sdk::state::PlayerId) -> Vec<u8> {
         self.inner.view_for(player)
     }

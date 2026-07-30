@@ -101,12 +101,16 @@ loopback, debug build, Apple M-series, 2026-06-03.
 > client send → kernel TCP → server `ws.next()` poll → tick boundary → Ack serialise →
 > kernel TCP → client `ws.next()` poll. Pure network RTT on loopback is < 0.1 ms.
 >
-> **Why NopGame?** `ArenaShooter::validate` returns `Unauthorized` for players that have not
-> been registered via `on_join`. The WS connection path does not call `on_join` (that is the
-> runtime host's responsibility, a Bucket-N2 integration point). Using `ArenaShooter`
-> therefore produces only `Reject` frames, not `Ack`, yielding zero latency samples. `NopGame`
-> accepts any input from any player without `on_join`, so real Ack round-trip latency is
-> measured. The test asserts `samples > 0` so the regression cannot silently re-appear.
+> **Why NopGame?** Historically, `ArenaShooter::validate` returned `Unauthorized` for players
+> that had not been registered via `on_join`, and nothing in the WS connection path — or any
+> other production path — ever called it. Using `ArenaShooter` therefore produced only `Reject`
+> frames, not `Ack`, yielding zero latency samples.
+>
+> `NativeExecutor::step` now joins a player on first sight of their id in a tick's input list
+> (the sandbox ABI has no join call, so first sight is the only join signal that exists in both
+> the native and the sandboxed path), which removes that obstacle. `NopGame` is kept regardless:
+> a transport-latency bench should measure the transport, not a simulation. The test asserts
+> `samples > 0` so the regression cannot silently re-appear.
 
 ---
 

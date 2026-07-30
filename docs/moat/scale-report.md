@@ -18,7 +18,7 @@ invoked explicitly.
 |---|---|---|
 | `tests/convergence.rs` | `convergence_and_replay_clean` | yes |
 | `tests/anticheat.rs` | `anticheat_rejects_speedhack_and_escalates_trust_score`, `anticheat_allows_honest_client` | yes |
-| `tests/wasm_end_to_end.rs` | `wasm_sandbox_parity_with_native`, `wasm_state_hash_is_reproducible_across_instances`, `native_verify_replay_clean_baseline` | yes (requires wasm artifact) |
+| `tests/wasm_end_to_end.rs` | `wasm_sandbox_parity_with_native`, `wasm_state_hash_is_reproducible_across_instances`, `wasm_snapshot_restore_resumes_the_same_trajectory`, `native_verify_replay_clean_baseline` | yes (requires wasm artifact) |
 | `tests/scale_bench.rs` | `scale_bench`, `ws_round_trip_latency_bench` | no (`#[ignore]`) |
 
 ---
@@ -78,26 +78,42 @@ Requires the WASM artifact (see "How to run the wasm tests" below).
 
 Loads `game_template_authoritative.wasm` into a `WasmExecutor` (Wasmtime, fuel-metered,
 memory-capped, epoch-interrupt timeout, no wall clock, no OS random). Simultaneously runs the
-same game via `NativeExecutor<ArenaShooter>`. Drives 30 ticks with an empty input list (no
-players joined via `on_join` — the ABI does not expose `on_join`, so both executors start
-with identical empty state).
+same game via `NativeExecutor<ArenaShooter>`. Drives 30 ticks with **non-empty, varying inputs
+from four players** — movement, aim and shooting, so validation, rejection and the RNG draw that
+mints a projectile id are all exercised on both sides. The sandbox ABI has no `on_join`, so first
+sight of a player id in a `mag_step` payload is that player's join.
+
+> **This used to be an empty input list**, on the reasoning that identical empty state makes for a
+> clean hash-equality assertion. It does — and it is worthless. Two executors simulating nothing
+> agree perfectly, which is how a guest that discarded every input frame passed this test for
+> months. See [`site/docs/sandbox-abi.md`](../../site/docs/sandbox-abi.md) §8.
 
 Asserts:
 
 - `native_out.state_hash == wasm_out.state_hash` on **every tick** — the sandboxed execution
   produces bit-for-bit identical state hashes to the native path.
+- `native_out.rejects.len() == wasm_out.rejects.len()` on every tick.
+- More than half the ticks produce a *distinct* state hash — proof the inputs actually reached
+  the simulation rather than the two sides agreeing on an idle physics loop.
 - `verify_replay::<ArenaShooter>` over the native log returns `ReplayVerdict::Clean`.
 
-This is the headline MOAT proof: the sandbox is deterministic, parity with native is exact,
-and the replay verifier passes.
+This is the headline MOAT proof: the sandbox is deterministic, parity with native is exact under
+real inputs, and the replay verifier passes.
 
-**Verified hash sample (seed = 0xDEADCAFE1337BABE):**
+Observed: **30 distinct state hashes over 30 ticks** (seed = `0xDEADCAFE1337BABE`). Specific hash
+values are deliberately not pinned here — `StepCtx::rng` is now derived per tick from
+`(seed, tick)`, and a table of literals in a report is a thing that goes stale silently.
 
-| Tick | state_hash (native = wasm) |
-|---|---|
-| 1 | 10807387752211344925 |
-| 2 | 10806261852304246086 |
-| 3 | (continues for 30 ticks) |
+### `wasm_snapshot_restore_resumes_the_same_trajectory`
+
+**File:** `tests/wasm_end_to_end.rs`
+
+Snapshots a sandboxed match at tick 15, installs that snapshot in a **fresh** `WasmExecutor`, and
+runs both forward to tick 30 under identical inputs. Every tick's `state_hash` must match.
+
+This is the property shard handoff and replay-from-checkpoint actually rest on, and it is strictly
+stronger than "`restore(snapshot())` is idempotent" — which also passes on a module that ignores
+`mag_restore` altogether, the exact shape of the bug it was written to catch.
 
 ### `wasm_state_hash_is_reproducible_across_instances`
 
@@ -120,8 +136,15 @@ tick as an explicit ABI parameter.
 **File:** `tests/wasm_end_to_end.rs`
 
 Regression guard that does not require the wasm artifact. Runs `NativeExecutor<ArenaShooter>`
-for 30 ticks (empty inputs), records the `ReplayLog`, and asserts `ReplayVerdict::Clean`.
-Ensures the baseline used in the parity test is itself sound.
+for 30 ticks with the same four-player input sequence as the parity test, records the
+`ReplayLog`, and asserts `ReplayVerdict::Clean`.
+
+Worth stating plainly, because the restore defects in
+[`site/docs/sandbox-abi.md`](../../site/docs/sandbox-abi.md) §8 raise the question: replay
+verification never depended on any of them. `verify_replay` re-simulates from tick 0 and never
+calls `restore`. What it *did* depend on was `on_join` being reachable — re-simulation has to
+spawn the same players the recorded run had — and that now holds in both paths, so this baseline
+covers a populated world rather than an empty one.
 
 ---
 
@@ -149,11 +172,15 @@ one WebSocket client, sends 50 `ClientNet::InputFrame` messages, and collects pe
 round-trip latency (send → `ServerNet::Ack` received). Reports min, mean, p50, p99, and max
 in microseconds.
 
-> **Bug fix (SCALE+POLISH wave):** earlier versions used `ArenaShooter` which rejects inputs
-> from players that have not been registered via `on_join`, causing the server to send
-> `Reject` instead of `Ack` — resulting in zero latency samples. The bench now uses
-> `NopGame` (accepts any input unconditionally), so real round-trip Ack latency is measured.
-> The test asserts `samples > 0` so the regression cannot silently re-appear.
+> **Bug fix (SCALE+POLISH wave):** earlier versions used `ArenaShooter` which rejected inputs
+> from players that had not been registered via `on_join`, causing the server to send
+> `Reject` instead of `Ack` — resulting in zero latency samples. The bench uses `NopGame`
+> (accepts any input unconditionally), so real round-trip Ack latency is measured. The test
+> asserts `samples > 0` so the regression cannot silently re-appear.
+>
+> That original reason no longer applies: `NativeExecutor::step` now joins a player on first
+> sight of their id, so `ArenaShooter` would `Ack`. `NopGame` stays anyway — a transport
+> latency bench should measure the transport, not a simulation.
 
 ### How to run the scale bench
 
@@ -245,8 +272,10 @@ cargo test -p magnetite-e2e
 | Identical game code scales from 4 to 256 players (SingleRoom → Dedicated) | `scale_bench` (throughput table; same `NativeExecutor` interface, topology auto-selected) |
 | Authoritative simulation is deterministic | `convergence_and_replay_clean` (`verify_replay` returns `Clean`; two independent runs produce identical final hash) |
 | All clients receive the same authoritative state | `convergence_and_replay_clean` (4 WS clients each receive ≥1 state message from the live server) |
-| Sandbox (Wasmtime) is deterministically identical to native | `wasm_sandbox_parity_with_native` (state_hash matches on every tick for 30 ticks) |
+| Sandbox (Wasmtime) is deterministically identical to native | `wasm_sandbox_parity_with_native` (state_hash matches on every tick for 30 ticks, under four players' non-empty varying inputs) |
 | Sandbox is self-consistent across instances | `wasm_state_hash_is_reproducible_across_instances` (two independent WasmExecutor instances agree) |
+| A sandboxed match can be resumed from a snapshot | `wasm_snapshot_restore_resumes_the_same_trajectory` (snapshot at tick 15 → fresh executor → identical hashes to tick 30) |
+| Any wasm module can be checked against the ABI, in any language | `magnetite-sandbox` `conformance` + `mag-conformance`; `conformance/reference.wat` (hand-written WebAssembly, zero imports) reports 34 pass / 0 fail |
 | Replay log enables tamper detection | `wasm_sandbox_parity_with_native` + `convergence_and_replay_clean` (`verify_replay` → `Clean`) |
 | Anti-cheat rejects cheating inputs server-side | `anticheat_rejects_speedhack_and_escalates_trust_score` (`Reject` for huge mouse delta) |
 | Anti-cheat allows honest inputs | `anticheat_allows_honest_client` (`Ack` for clean input, no `Reject`) |

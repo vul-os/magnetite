@@ -15,7 +15,11 @@
 //!
 //! ## Game rules
 //!
-//! * Players spawn at deterministic positions (seed-derived, arena corners).
+//! * A player joins the first tick their id appears in the input list — the
+//!   sandbox ABI has no join call, so first sight is the join.
+//! * Players spawn at deterministic positions: evenly spaced on a circle by
+//!   join index, so the same join order always produces the same layout. The
+//!   positions do not depend on the match seed.
 //! * Each tick a player may **move** (up to [`MAX_SPEED`] units/tick) and/or
 //!   **shoot** (one projectile per [`SHOOT_COOLDOWN_TICKS`] ticks).
 //! * Projectiles travel [`PROJECTILE_SPEED`] units/tick and expire after

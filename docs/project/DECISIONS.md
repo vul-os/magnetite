@@ -1098,6 +1098,31 @@ Prove the one-command pipeline: compile `game-template-authoritative` to `wasm32
 | N3-4 | e2e Cargo.toml — add magnetite-sandbox | Added `magnetite-sandbox = { path = "../magnetite-sandbox" }` to both `[dependencies]` and `[dev-dependencies]` | The integration test imports `WasmExecutor` and `LimitsConfig` directly from the sandbox crate. The crate is already in the tree; just not listed. |
 | N3-5 | moat-demo.sh design | Shell script: build-wasm → run wasm_end_to_end tests → run convergence → fmt check → cargo check → summary | Proves the complete pipeline: WASM build + sandbox parity + replay verification + live WS server convergence in one command. All output piped to `/tmp/demo.txt`. |
 
+> **SUPERSEDED — N3-2 and N3-3 were the blind spot, not the baseline.**
+>
+> **N3-2 (empty inputs)** made the parity assertion vacuous. Two executors that
+> simulate nothing agree perfectly, and that agreement concealed a guest that
+> discarded every input frame it was ever handed: `mag_step` deserialised
+> `Vec<(PlayerId, Input)>` from the host's array-of-objects payload, which serde
+> can never do, and fell back to an empty list. The test is now driven with four
+> players' varying inputs and asserts the state keeps changing.
+>
+> **N3-3** correctly identified that `CURRENT_TICK` is not reset by `mag_restore`,
+> and chose to test around it. The second of the two fixes it floats has been
+> taken: the guest re-seeds its counter from `ArenaSnapshot::tick` on restore. No
+> ABI change was needed — the tick was already in the snapshot. Passing the tick
+> as a `mag_step` parameter (M15) remains open and is *not* what was done here.
+>
+> Two further defects fell out of the same investigation: `on_join` was never
+> called by any production path, so no game could hold a player in either
+> executor; and the per-match RNG's stream position was hidden state that no
+> snapshot captured, so a restored executor rewound its randomness. Both fixed in
+> `NativeExecutor`. The RNG fix changes the `state_hash` values a match produces,
+> so the hash samples recorded below no longer reproduce.
+>
+> Full account, evidence, and the one decision still outstanding:
+> [`site/docs/sandbox-abi.md`](../../site/docs/sandbox-abi.md) §8.
+
 ### Verification (all PASS)
 
 | Step | Result |

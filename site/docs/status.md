@@ -63,7 +63,8 @@ finished than it is.
 |---|---|---|
 | Authoritative simulation | `AuthoritativeGame` — deterministic `validate` / `step` in the SDK. | <span class="mg-s live">Running</span> |
 | WASM sandbox | Wasmtime, `wasm32-wasip1`, fuel budget, memory cap, epoch interrupt. No OS randomness and no wall clock inside the guest. | <span class="mg-s live">Running</span> |
-| Replay verification | `ReplayLog` + `verify_replay`. Anyone re-simulates from scratch and locates tampering. | <span class="mg-s live">Running</span> |
+| Public sandbox ABI | The `mag_*` guest boundary written down as a normative, language-agnostic contract — [The sandbox ABI](./docs.html#sandbox-abi) — now **versioned** (`mag_abi_version`), so a module built against a different revision is refused at load instead of being handed bytes it misreads. Plus `mag-conformance`, which loads any `.wasm` into the real sandbox and reports per-check pass/fail. A module hand-written in WebAssembly text, containing no Rust and importing nothing, passes all 34 checks. | <span class="mg-s live">Running</span> |
+| Replay verification | `ReplayLog` + `verify_replay`. Anyone re-simulates from scratch and locates tampering. Re-simulation starts at tick 0 and never restores a snapshot, so it was unaffected by the restore defects below; it is now exercised with real players and non-empty inputs rather than an idle loop. | <span class="mg-s live">Running</span> |
 | Anti-cheat | Composable validator chain, per-player trust scoring, warn → kick → ban escalation. | <span class="mg-s live">Running</span> |
 | Zero-backend dev loop | `magnetite dev` builds to wasm and serves a live match with no server, no database and no account. | <span class="mg-s live">Running</span> |
 | Seam crate | Every seam is a trait with a default that needs no external service, so the suite runs fully offline. | <span class="mg-s live">Running</span> |
@@ -72,11 +73,42 @@ finished than it is.
 | Signed discovery | Nodes sign and lease their own `SessionAd`s, TTL-capped, over LAN and ordinary HTTP trackers, fanned out redundantly. | <span class="mg-s live">Running</span> |
 | Comms adapters | Matrix, Jitsi, LiveKit and Owncast behind one `CommsProvider` trait, in `backend/src/comms/providers.rs`, with the old in-house stack demoted to a fallback. | <span class="mg-s live">Running</span> |
 
+> [!NOTE]
+> **Writing the ABI contract down found five defects, and all five are fixed.**
+> The Rust arena-shooter guest discarded every input frame it was handed, ignored
+> `mag_restore` outright, and kept its tick counter outside its snapshot; no
+> production path ever called `on_join`, so no game could have players; the
+> per-match RNG carried a stream position that no snapshot captured; and the
+> host could not tell fuel exhaustion from a wall-clock timeout. The sandbox and
+> the ABI were sound throughout — the reference *guest*, the executor's join
+> lifecycle and its randomness were not.
+>
+> All of it survived because the wasm/native parity test stepped both executors
+> with **empty inputs**: two executors simulating nothing agree perfectly. That
+> test now drives four players' varying inputs, and a snapshot taken mid-match
+> must resume the same trajectory in a fresh executor. Evidence:
+> [The sandbox ABI §8](./docs.html#sandbox-abi).
+
+> [!WARNING]
+> **The sandbox ABI has taken a breaking change, and existing modules must be
+> rebuilt.** `mag_step` now carries the authoritative tick and the guest echoes it
+> back for the host to check; `mag_restore` takes bare JSON with no length prefix;
+> and `mag_abi_version` is a required export. A module built against the older,
+> undeclared ABI is **refused at load** rather than misinterpreted — which is the
+> point of adding the version.
+>
+> The one external consumer, [wibbly](https://github.com/vul-os/wibbly)'s
+> `@vulos/wibbly-authority`, vendors a prebuilt `.wasm` and needs a re-vendor: for
+> this change, and independently for the input, join and RNG fixes above. Its
+> vendored module records no magnetite commit or hash, so there is currently no way
+> to tell which version of the guest is running in a browser. Exact steps and the
+> provenance recommendation: [The sandbox ABI §11](./docs.html#sandbox-abi).
+
 ## Working, but LAN-only
 
 | Capability | What it is | State |
 |---|---|---|
-| Shard migration | Two-phase, epoch-fenced handoff. Every partial failure — ack timeout, rejection, dropped connection, target crash — resolves to "the source keeps authority" with state intact. | <span class="mg-s lan">LAN only</span> |
+| Shard migration | Two-phase, epoch-fenced handoff. Every partial failure — ack timeout, rejection, dropped connection, target crash, **and now a target that cannot decode the transferred snapshot** — resolves to "the source keeps authority" with state intact. That last case used to be a fail-open: the target kept its own state, the handoff was reported as complete, and authority moved to an executor holding the wrong world. Snapshot fidelity itself depended on two things that were broken and are now fixed — see the note under *Working*. | <span class="mg-s lan">LAN only</span> |
 | Cluster membership | Deny-by-default operator allowlist of node public keys, checked when an ad is observed, again at migration time, and on the inbound connection allowlist. | <span class="mg-s lan">LAN only</span> |
 | Session follow | Signed, single-use redirects move players with their shard. A forged redirect is inert; nothing is minted on a rolled-back migration. | <span class="mg-s lan">LAN only</span> |
 | Attested input wire | Signed events reach a live node over a real socket: per-connection rate limit, then signature, then plausibility gate, then queue. | <span class="mg-s lan">LAN only</span> |

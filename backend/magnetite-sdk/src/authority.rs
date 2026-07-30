@@ -32,15 +32,19 @@
 //! identical output on every platform, every run. Specifically:
 //!
 //! * Use **only** [`StepCtx::rng`] for randomness — never `rand`, `thread_rng`,
-//!   or any OS RNG.
+//!   or any OS RNG. It is scoped to the tick; see [`StepCtx::rng`].
 //! * Never read wall-clock time inside `step` / `validate`.
 //! * Prefer fixed-point arithmetic over `f64` for values accumulated across ticks.
+//! * Keep every piece of state that affects the simulation inside
+//!   [`AuthoritativeGame::Snapshot`]. State that lives outside it survives
+//!   `step` but not `restore`, which makes shard handoff and
+//!   replay-from-checkpoint diverge silently.
 //!
 //! Violations are detected at runtime by the replay verifier: if `state_hash`
 //! diverges between the original run and the re-simulation, the verdict is
 //! [`ReplayVerdict::Divergence`].
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -59,11 +63,16 @@ pub type Tick = u64;
 // DeterministicRng  (xoshiro256**)
 // ---------------------------------------------------------------------------
 
-/// Deterministic per-match RNG seeded from [`MatchConfig::seed`].
+/// Deterministic RNG seeded from [`MatchConfig::seed`].
 ///
 /// This is the **only** source of randomness a game is permitted to use inside
 /// `step` or `validate`. Using any other RNG source (including `rand::thread_rng`,
 /// `std::random`, or the OS) violates the determinism contract.
+///
+/// [`NativeExecutor`] hands `step` a *per-tick* instance derived from
+/// `(seed, tick)` rather than one long-lived stream, so that RNG position is
+/// implied by the tick instead of being hidden state a snapshot cannot capture.
+/// See [`StepCtx::rng`].
 ///
 /// Implements the [xoshiro256**](https://prng.di.unimi.it/xoshiro256starstar.c)
 /// algorithm — fast, high-quality, period 2^256−1.
@@ -156,6 +165,13 @@ pub struct StepCtx<'a> {
     /// Nominal tick duration in milliseconds (e.g. 16 for 60 Hz).
     pub dt_ms: u32,
     /// The only permitted source of randomness.
+    ///
+    /// **Scoped to this tick.** [`NativeExecutor`] derives it from
+    /// `(MatchConfig::seed, tick)` and drops it when the step returns, so draws
+    /// made in one tick never shift the values another tick sees. That is what
+    /// makes randomness survive snapshot/restore: there is no stream position to
+    /// lose, only a tick to restore. Do not cache it or expect continuity across
+    /// ticks.
     pub rng: &'a mut DeterministicRng,
 }
 
@@ -241,7 +257,38 @@ pub trait AuthoritativeGame: Send + 'static {
     /// Construct a fresh game state for a new match.
     fn init(cfg: &MatchConfig) -> Self;
 
-    /// Called when a player joins mid-game.
+    /// Called the first time a player is seen in a tick's input list.
+    ///
+    /// # There is no separate join channel
+    ///
+    /// The sandbox ABI (`mag_init` / `mag_step`) has no join call, so "a player
+    /// appeared" and "a player sent an input" are the same event. Rather than
+    /// give the native and sandboxed paths different join semantics — which
+    /// would break their parity — [`NativeExecutor::step`] calls `on_join` for
+    /// every player id it has not seen since the last
+    /// [`init`](AuthoritativeGame::init) or
+    /// [`GameExecutor::restore`]. First sight *is* the join.
+    ///
+    /// # `on_join` MUST be idempotent
+    ///
+    /// The executor cannot enumerate the players inside a restored snapshot, so
+    /// after a restore it has no record of who is already present and will call
+    /// `on_join` again on the next input from each of them. An implementation
+    /// that appends unconditionally will duplicate those players.
+    ///
+    /// ```rust
+    /// # use magnetite_sdk::state::PlayerId;
+    /// # struct P { id: PlayerId }
+    /// # struct G { players: Vec<P> }
+    /// # impl G {
+    /// fn on_join(&mut self, p: PlayerId) {
+    ///     if self.players.iter().any(|q| q.id == p) {
+    ///         return; // already present — restored from a snapshot
+    ///     }
+    ///     self.players.push(P { id: p });
+    /// }
+    /// # }
+    /// ```
     fn on_join(&mut self, _p: PlayerId) {}
 
     /// Called when a player disconnects or is kicked.
@@ -402,6 +449,45 @@ pub struct StepOutput {
     pub state_hash: u64,
 }
 
+/// Why a [`GameExecutor::try_restore`] refused a snapshot.
+///
+/// There is deliberately no "restored, but partially" variant: a restore either
+/// installed the snapshot or changed nothing at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RestoreError {
+    /// The bytes are not a valid encoding of this game's snapshot type.
+    ///
+    /// Carries the decoder's message and the length of the rejected buffer —
+    /// enough to tell a truncated transfer from a wrong-game transfer without
+    /// logging the payload itself.
+    Malformed {
+        /// The underlying decode error, as text.
+        detail: String,
+        /// How many bytes were offered.
+        len: usize,
+    },
+    /// The executor is a sandboxed guest and the guest call failed.
+    Guest {
+        /// What the host observed.
+        detail: String,
+    },
+}
+
+impl std::fmt::Display for RestoreError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RestoreError::Malformed { detail, len } => {
+                write!(f, "snapshot of {len} bytes could not be decoded: {detail}")
+            }
+            RestoreError::Guest { detail } => {
+                write!(f, "guest refused the snapshot: {detail}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RestoreError {}
+
 /// Runtime-facing execution abstraction.
 ///
 /// The same game can run in two modes without any game-code changes:
@@ -421,7 +507,30 @@ pub trait GameExecutor: Send {
     fn snapshot(&self) -> Vec<u8>;
 
     /// Replace the current state with a previously-serialised snapshot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bytes` is not a snapshot this executor can decode. A restore
+    /// that cannot read its input has *not* restored anything, and continuing
+    /// with stale state while reporting success is how a node ends up
+    /// authoritative over a world that never existed. Callers that must survive
+    /// a bad snapshot — shard handoff, checkpoint recovery — use
+    /// [`try_restore`](GameExecutor::try_restore) and fail closed.
     fn restore(&mut self, bytes: &[u8]);
+
+    /// Fallible [`restore`](GameExecutor::restore).
+    ///
+    /// Returns `Err` instead of panicking when `bytes` cannot be decoded, so a
+    /// caller can decline the state transfer and leave authority where it was.
+    ///
+    /// The default implementation forwards to `restore` and reports success,
+    /// which means it inherits `restore`'s panic. Executors that can decode
+    /// fallibly — [`NativeExecutor`] and `magnetite_sandbox::WasmExecutor` —
+    /// override it.
+    fn try_restore(&mut self, bytes: &[u8]) -> Result<(), RestoreError> {
+        self.restore(bytes);
+        Ok(())
+    }
 
     /// Serialise the interest-filtered view for `player`.
     fn view_for(&self, player: PlayerId) -> Vec<u8>;
@@ -492,19 +601,49 @@ pub trait GameExecutor: Send {
 pub struct NativeExecutor<G: AuthoritativeGame> {
     game: G,
     config: MatchConfig,
-    rng: DeterministicRng,
+    /// Player ids already handed to [`AuthoritativeGame::on_join`] since the
+    /// last `init` or `restore`. See that method for why first sight is the
+    /// join signal and why `on_join` must be idempotent.
+    joined: BTreeSet<u64>,
 }
 
 impl<G: AuthoritativeGame> NativeExecutor<G> {
     /// Construct a new executor, initialising the game from `cfg`.
     pub fn new(cfg: MatchConfig) -> Self {
-        let rng = DeterministicRng::new(cfg.seed);
         let game = G::init(&cfg);
         Self {
             game,
             config: cfg,
-            rng,
+            joined: BTreeSet::new(),
         }
+    }
+
+    /// The per-tick RNG for `tick`, derived from `(MatchConfig::seed, tick)`.
+    ///
+    /// # Why this is derived rather than carried
+    ///
+    /// A long-lived RNG stream has a *position*, and that position is hidden
+    /// state: it is not part of `AuthoritativeGame::Snapshot`, so it cannot be
+    /// captured by [`GameExecutor::snapshot`] or rebuilt by
+    /// [`GameExecutor::restore`]. An executor restored from a snapshot would
+    /// resume with its stream rewound to the start and immediately diverge from
+    /// the executor the snapshot came from — silently, and only for games that
+    /// actually draw randomness.
+    ///
+    /// Deriving the stream from the tick removes the hidden state entirely: RNG
+    /// position becomes a pure function of the tick, and any snapshot that
+    /// carries its tick carries the RNG position with it. Restore-from-snapshot,
+    /// shard handoff and replay-from-checkpoint all become exact.
+    ///
+    /// The seed is still the only entropy in the system, and identical
+    /// `(seed, tick)` still yields an identical stream on every host.
+    fn rng_for_tick(&self, tick: Tick) -> DeterministicRng {
+        // splitmix64-style mix so adjacent ticks do not produce correlated
+        // streams, then fold in the match seed.
+        let mut z = tick.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        DeterministicRng::new(self.config.seed ^ (z ^ (z >> 31)))
     }
 }
 
@@ -512,6 +651,17 @@ impl<G: AuthoritativeGame> GameExecutor for NativeExecutor<G> {
     fn step(&mut self, tick: Tick, inputs: &[(PlayerId, Input)]) -> StepOutput {
         let dt_ms = 1000u32 / u32::from(self.config.tick_hz).max(1);
         let mut rejects = Vec::new();
+
+        // First sight of a player id is that player's join. The sandbox ABI has
+        // no join call, so this is the only join signal that exists in both the
+        // native and the sandboxed path — see `AuthoritativeGame::on_join`.
+        // Inputs reach here already sorted by player id, so join order (and any
+        // spawn position derived from it) is deterministic.
+        for (player, _) in inputs {
+            if self.joined.insert(player.as_u64()) {
+                self.game.on_join(*player);
+            }
+        }
 
         // Validate inputs → commands.
         let mut commands: Vec<(PlayerId, G::Command)> = Vec::with_capacity(inputs.len());
@@ -532,12 +682,15 @@ impl<G: AuthoritativeGame> GameExecutor for NativeExecutor<G> {
         // identical regardless of input arrival order.
         commands.sort_by_key(|(pid, _)| pid.as_u64());
 
-        // Advance game state.
+        // Advance game state. The RNG is derived from (seed, tick) rather than
+        // carried across ticks, so that RNG position is implied by the tick and
+        // survives snapshot/restore — see `NativeExecutor::rng_for_tick`.
         {
+            let mut rng = self.rng_for_tick(tick);
             let mut ctx = StepCtx {
                 tick,
                 dt_ms,
-                rng: &mut self.rng,
+                rng: &mut rng,
             };
             self.game.step(&mut ctx, &commands);
         }
@@ -558,11 +711,25 @@ impl<G: AuthoritativeGame> GameExecutor for NativeExecutor<G> {
     }
 
     fn restore(&mut self, bytes: &[u8]) {
-        if let Ok(snap) = serde_json::from_slice::<G::Snapshot>(bytes) {
-            self.game = G::restore(&snap, &self.config);
-            // Re-seed RNG from config to keep things consistent after restore.
-            self.rng = DeterministicRng::new(self.config.seed);
+        if let Err(e) = self.try_restore(bytes) {
+            panic!("NativeExecutor::restore: {e}");
         }
+    }
+
+    fn try_restore(&mut self, bytes: &[u8]) -> Result<(), RestoreError> {
+        let snap =
+            serde_json::from_slice::<G::Snapshot>(bytes).map_err(|e| RestoreError::Malformed {
+                detail: e.to_string(),
+                len: bytes.len(),
+            })?;
+        self.game = G::restore(&snap, &self.config);
+        // The restored snapshot decides who is present, and the executor cannot
+        // enumerate them. Forget the join set so first sight re-joins them;
+        // `on_join` is required to be idempotent for exactly this reason.
+        self.joined.clear();
+        // No RNG state to rebuild: the per-tick stream is derived from
+        // (seed, tick), so restoring the tick restores the randomness.
+        Ok(())
     }
 
     fn view_for(&self, player: PlayerId) -> Vec<u8> {
