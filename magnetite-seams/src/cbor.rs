@@ -57,9 +57,21 @@
 //! * There are in fact **three** implementations in the family, not two:
 //!   this one, `kotva-core/src/cbor.rs`, and `evermesh-kernel/src/codec.rs` —
 //!   the last being the most mature (189 conformance vectors replayed across
-//!   three runtimes) and unknown to the other two. **No cross-check exists
-//!   between any pair of them.** That is a latent signature-compatibility break,
-//!   not a redundancy.
+//!   three runtimes).
+//!
+//! **Update 2026-07-30 — a partial cross-check now exists, and it is clean.**
+//! `tests/evermesh_conformance.rs` replays the same frozen corpus kotva-cbor
+//! carries (itself a mechanically-verified byte-for-byte extraction of
+//! evermesh's 189 vectors) against this module's own `decode`/`encode`. Of the
+//! 153 `accept` vectors, only **9** apply — this type is strictly narrower
+//! than `kotva_cbor::Value` (no `Nint`, no `Null`, `u64`-only map keys), so the
+//! other 144 use shapes `Cv` cannot represent at all, which is a scope gap,
+//! not a codec disagreement. On the 9 that do apply, and on all 30 `reject`
+//! vectors, **zero divergence was found**: every applicable accept vector
+//! decodes and re-encodes to itself, and every reject vector is refused. That
+//! is real evidence on a real subset — it is **not** the full 189-vector
+//! cross-validation the exit plan below still calls for, because most of the
+//! corpus is structurally out of reach for this narrower type.
 //!
 //! **Why it is being merged as-is anyway, deliberately.** Collapsing onto one
 //! codec is blocked on `kotva-cbor` being published to **crates.io** — a
@@ -74,7 +86,10 @@
 //! codecs against evermesh's 189 vectors on the shared subset, in
 //! `magnetite-kotva`, the one crate legitimately depending on more than one (C2)
 //! → delete this module in favour of the published crate. Until every step
-//! lands, treat byte-identity with kotva as **asserted, not proven**.
+//! lands, treat full byte-identity with kotva as **asserted on 9/153 vectors,
+//! proven; on the rest, still unproven** — this module remains a §3.5
+//! violation regardless, because §3.5 requires running the shared compiled
+//! algebra, not merely agreeing with it where the two domains overlap.
 //!
 //! # Rules enforced (both directions)
 //!
