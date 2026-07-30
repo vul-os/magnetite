@@ -14,9 +14,13 @@
 :root[data-theme="dark"] .mg-dark{display:block}
 .mg-cap{padding:11px 15px;border-top:1px solid var(--dv-border);background:var(--dv-code-bg);font-family:var(--doc-mono);font-size:.76rem;line-height:1.6;color:var(--dv-ink-3)}
 .mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.68rem;display:block;margin-bottom:3px}
+.mg-cap code,.mg-cap b code{font-size:1em}
 .mg-bar{display:flex;align-items:center;gap:6px;padding:8px 13px;border-bottom:1px solid var(--dv-border);background:var(--dv-code-bg)}
 .mg-bar i{width:8px;height:8px;border-radius:50%;background:var(--dv-border-2)}
 .mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.68rem;color:var(--dv-ink-faint)}
+/* --dv-ink-faint reads ~3.4:1 on --dv-code-bg at this size — short of AA. */
+:root[data-theme="light"] .mg-bar span{color:#5A6171}
+:root[data-theme="dark"] .mg-bar span{color:#768096}
 /* the status key — a designed element, not a bolted-on disclaimer */
 .mg-key{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--dv-border);border:1px solid var(--dv-border);border-radius:10px;overflow:hidden;margin:1.6rem 0}
 @media(max-width:760px){.mg-key{grid-template-columns:1fr 1fr}}
@@ -25,17 +29,17 @@
 .mg-k i{display:block;width:24px;height:3px;border-radius:2px;background:var(--kc);margin-bottom:9px}
 .mg-k b{display:block;font-family:var(--doc-mono);font-size:.68rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--kc)}
 .mg-k span{display:block;font-size:.8rem;line-height:1.5;color:var(--dv-ink-3);margin-top:5px}
-.mg-k.live{--kc:#17803D} .mg-k.lan{--kc:#A45B00} .mg-k.mock{--kc:#C4006B} .mg-k.no{--kc:#737C90}
+.mg-k.live{--kc:#17803D} .mg-k.lan{--kc:#A45B00} .mg-k.mock{--kc:#C4006B} .mg-k.no{--kc:#5A6171}
 :root[data-theme="dark"] .mg-k.live{--kc:#6EE79B}
 :root[data-theme="dark"] .mg-k.lan{--kc:#FFC24D}
 :root[data-theme="dark"] .mg-k.mock{--kc:#FF74B2}
-:root[data-theme="dark"] .mg-k.no{--kc:#8892A6}
+:root[data-theme="dark"] .mg-k.no{--kc:#768096}
 .mg-s{font-family:var(--doc-mono);font-size:.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
-.mg-s.live{color:#17803D} .mg-s.lan{color:#A45B00} .mg-s.mock{color:var(--mg-bnd)} .mg-s.no{color:#737C90}
+.mg-s.live{color:#17803D} .mg-s.lan{color:#A45B00} .mg-s.mock{color:var(--mg-bnd)} .mg-s.no{color:#5A6171}
 :root[data-theme="dark"] .mg-s.live{color:#6EE79B}
 :root[data-theme="dark"] .mg-s.lan{color:#FFC24D}
 :root[data-theme="dark"] .mg-s.mock{color:#FF74B2}
-:root[data-theme="dark"] .mg-s.no{color:#8892A6}
+:root[data-theme="dark"] .mg-s.no{color:#768096}
 </style>
 
 # Status — what actually runs today

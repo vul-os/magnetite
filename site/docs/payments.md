@@ -14,9 +14,13 @@
 :root[data-theme="dark"] .mg-dark{display:block}
 .mg-cap{padding:11px 15px;border-top:1px solid var(--dv-border);background:var(--dv-code-bg);font-family:var(--doc-mono);font-size:.76rem;line-height:1.6;color:var(--dv-ink-3)}
 .mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.68rem;display:block;margin-bottom:3px}
+.mg-cap code,.mg-cap b code{font-size:1em}
 .mg-bar{display:flex;align-items:center;gap:6px;padding:8px 13px;border-bottom:1px solid var(--dv-border);background:var(--dv-code-bg)}
 .mg-bar i{width:8px;height:8px;border-radius:50%;background:var(--dv-border-2)}
 .mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.68rem;color:var(--dv-ink-faint)}
+/* --dv-ink-faint reads ~3.4:1 on --dv-code-bg at this size — short of AA. */
+:root[data-theme="light"] .mg-bar span{color:#5A6171}
+:root[data-theme="dark"] .mg-bar span{color:#768096}
 </style>
 
 # Payments

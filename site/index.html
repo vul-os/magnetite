@@ -96,6 +96,10 @@
     --ink: #E7EAF2;
     --ink-2: #99A2B6;
     --ink-3: #6B7488;
+    /* AA-safe variant of --ink-3 for small uppercase micro-labels (eyebrows, tags,
+       table headers, chip/status text <=11px) — --ink-3 itself reads ~4.2:1 on the
+       --sunk/--paper backgrounds these sit on, short of the 4.5:1 floor at this size. */
+    --ink-3-aa: #768096;
     --field: #8B74FF;        --field-text: #A08FFF;
     --field-tint: rgba(139,116,255,.13);  --field-line: rgba(139,116,255,.34);
     --boundary: #FF4D9D;     --boundary-text: #FF74B2;
@@ -123,6 +127,8 @@
     --ink: #0D1017;
     --ink-2: #4A5265;
     --ink-3: #737C90;
+    /* AA-safe variant of --ink-3 for small uppercase micro-labels — see dark theme note. */
+    --ink-3-aa: #5A6171;
     --field: #5B3FE0;        --field-text: #4B2FD0;
     --field-tint: rgba(91,63,224,.075); --field-line: rgba(91,63,224,.26);
     --boundary: #C4006B;     --boundary-text: #A80059;
@@ -162,7 +168,7 @@
   @media (max-width: 560px) { .wrap { padding: 0 18px; } }
 
   /* Mono tracking ladder — the smaller the label, the wider the tracking. */
-  .m-xs { font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; }
+  .m-xs { font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; }
   .m-sm { font-family: var(--mono); font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; }
   .m-md { font-family: var(--mono); font-size: 11.5px; letter-spacing: .11em; text-transform: uppercase; }
 
@@ -180,7 +186,7 @@
   .brand { display: flex; align-items: center; gap: 11px; }
   .brand .stone { width: 30px; height: 30px; flex: none; color: var(--ink-3); }
   .brand b { font-family: var(--display); font-size: 23px; font-weight: 400; letter-spacing: -.01em; line-height: 1; }
-  .brand small { display: block; color: var(--ink-3); margin-top: 2px; }
+  .brand small { display: block; color: var(--ink-3-aa); margin-top: 2px; }
   .spacer { flex: 1; }
   .bar-nav { display: flex; gap: 22px; }
   .bar-nav a { color: var(--ink-2); font-size: 13.5px; transition: color .15s; }
@@ -210,7 +216,7 @@
   /* ── Plate layout: a lab-notebook margin + the content ──────────────── */
   .plate { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 40px; align-items: start; }
   @media (max-width: 940px) { .plate { grid-template-columns: 1fr; gap: 18px; } }
-  .margin { position: sticky; top: 92px; color: var(--ink-3); }
+  .margin { position: sticky; top: 92px; color: var(--ink-3-aa); }
   @media (max-width: 940px) { .margin { position: static; display: flex; align-items: center; gap: 12px; } }
   .margin .no { font-family: var(--display); font-size: 34px; line-height: 1; color: var(--line-2); display: block; }
   @media (max-width: 940px) { .margin .no { font-size: 22px; } }
@@ -253,7 +259,7 @@
     mask-image: radial-gradient(120% 90% at 50% 30%, #000 30%, transparent 78%);
   }
 
-  .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--ink-3); }
+  .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--ink-3-aa); }
   .eyebrow .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--spec); box-shadow: 0 0 0 3px var(--spec-tint); flex: none; }
 
   .hero h1 {
@@ -280,7 +286,7 @@
 
   /* ── The legend — the status system, stated once, up front ─────────── */
   .legend { margin-top: 46px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); box-shadow: var(--sh-2); overflow: hidden; }
-  .legend-head { padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--sunk); color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+  .legend-head { padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--sunk); color: var(--ink-3-aa); display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
   .legend-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
   @media (max-width: 860px) { .legend-grid { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 460px) { .legend-grid { grid-template-columns: 1fr; } }
@@ -300,7 +306,7 @@
   /* ── Re-simulation strip — the signature demonstration ─────────────── */
   .resim { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); overflow: hidden; box-shadow: var(--sh-2); }
   .resim-head { display: grid; grid-template-columns: 62px 1fr 1fr; border-bottom: 1px solid var(--line); background: var(--sunk); }
-  .resim-head > div { padding: 11px 14px; color: var(--ink-3); border-right: 1px solid var(--line); }
+  .resim-head > div { padding: 11px 14px; color: var(--ink-3-aa); border-right: 1px solid var(--line); }
   .resim-head > div:last-child { border-right: 0; }
   .resim-scroll { overflow-x: auto; }
   .resim-body { min-width: 520px; }
@@ -325,7 +331,7 @@
   .ledger-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
   table.ledger { width: 100%; border-collapse: collapse; min-width: 660px; font-size: 14px; }
   table.ledger th, table.ledger td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
-  table.ledger th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); font-weight: 400; background: var(--sunk); }
+  table.ledger th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3-aa); font-weight: 400; background: var(--sunk); }
   table.ledger tr:last-child td { border-bottom: 0; }
   table.ledger td:first-child { font-weight: 500; white-space: nowrap; }
   table.ledger td.d { color: var(--ink-2); font-size: 13.5px; }
@@ -334,9 +340,9 @@
   .st::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
   .st.live { color: var(--live-text); }
   .st.lan  { color: var(--live-text); }
-  .st.lan::after { content: 'LAN'; margin-left: 2px; padding: 1px 5px; border-radius: 2px; background: var(--spec-tint); color: var(--spec-text); font-size: 9.5px; letter-spacing: .1em; }
+  .st.lan::after { content: 'LAN'; margin-left: 2px; padding: 1px 5px; border-radius: 2px; background: var(--spec-tint); color: var(--spec-text); font-size: 10.5px; letter-spacing: .08em; }
   .st.spec { color: var(--spec-text); }
-  .st.no   { color: var(--ink-3); }
+  .st.no   { color: var(--ink-3-aa); }
 
   /* ── Seam cards ────────────────────────────────────────────────────── */
   .seams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
@@ -344,10 +350,10 @@
   @media (max-width: 640px) { .seams { grid-template-columns: 1fr; } }
   .seam { background: var(--paper); padding: 24px; transition: background .2s; }
   .seam:hover { background: var(--surface-2); }
-  .seam .no { color: var(--ink-3); }
+  .seam .no { color: var(--ink-3-aa); }
   .seam h3 { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: -.01em; margin: 12px 0 0; color: var(--field-text); }
   .seam p { color: var(--ink-2); font-size: 14px; margin: 10px 0 0; }
-  .seam .chip { display: inline-block; margin-top: 12px; font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; }
+  .seam .chip { display: inline-block; margin-top: 12px; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; }
   .chip.live { color: var(--live-text); background: var(--live-tint); }
   .chip.spec { color: var(--spec-text); background: var(--spec-tint); }
   .chip.bnd  { color: var(--boundary-text); background: var(--boundary-tint); }
@@ -366,11 +372,11 @@
   .shot h3 { font-size: clamp(21px, 2.6vw, 27px); margin-bottom: 10px; }
   .shot p { color: var(--ink-2); font-size: 14.5px; margin: 0; }
   .shot .caveat { margin-top: 14px; padding: 11px 13px; border-left: 2px solid var(--spec); background: var(--spec-tint); color: var(--ink-2); font-size: 13px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
-  .shot .caveat b { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--spec-text); display: block; margin-bottom: 3px; }
+  .shot .caveat b { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--spec-text); display: block; margin-bottom: 3px; }
   .frame { border: 1px solid var(--line-2); border-radius: var(--r-md); overflow: hidden; background: var(--paper); box-shadow: var(--sh-2); }
   .frame-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--sunk); }
   .frame-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); }
-  .frame-bar span { margin-left: 8px; color: var(--ink-3); font-family: var(--mono); font-size: 10.5px; }
+  .frame-bar span { margin-left: 8px; color: var(--ink-3-aa); font-family: var(--mono); font-size: 10.5px; }
   .frame img { width: 100%; height: auto; }
   /* CSS-only theme-aware imagery — no JS, no <picture>, no extra request beyond the one shown */
   .frame img.dark { display: none; }
@@ -381,7 +387,7 @@
   .term {
     /* locally-scoped palette: the terminal stays dark in both themes */
     --t-bg: #0A0C12; --t-bar: #10131B; --t-line: #1E2431;
-    --t-fg: #DFE4EF; --t-dim: #6B7488; --t-vio: #A08FFF;
+    --t-fg: #DFE4EF; --t-dim: #768096; --t-vio: #A08FFF;
     background: var(--t-bg); border: 1px solid var(--t-line); border-radius: var(--r-md); overflow: hidden; box-shadow: var(--sh-2);
   }
   .term-bar { display: flex; align-items: center; gap: 6px; padding: 9px 13px; background: var(--t-bar); border-bottom: 1px solid var(--t-line); }
