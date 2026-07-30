@@ -341,7 +341,127 @@ reconciliation and a partial-failure story — which weakens the guarantee that
 makes the model work. That is the actual trade, and it should be made
 deliberately rather than discovered.
 
-> ## DECISION: Sui, not Solana
+> ## DECISION: Stellar — supersedes the Sui block below
+>
+> **The chain is Stellar. XLM is the native asset; every payee declares the asset it
+> wants to receive. The Sui decision below is withdrawn, and `patala-sui` is
+> abandoned.** Recorded 2026-07-30, after a sixteen-candidate sweep against primary
+> sources — `docs/chain-candidates.md`, 1,209 lines, every yes/no carrying a URL.
+>
+> ### Stellar is NOT uniquely qualified, and that matters
+>
+> Four candidates clear every hard filter: **Radix, Sui, Stellar, Solana.** No
+> candidate wins on every axis. Stellar is a *preference*, chosen on cost-to-ship and
+> on the isolation requirement — not a technical necessity. Anyone reopening this
+> should read the matrix rather than re-deriving it.
+>
+> ### The criteria that actually discriminate
+>
+> The original discriminator — "can you sign offline and submit much later" — was the
+> **wrong test**: it admits seven of sixteen. The tests that cut:
+>
+> | Criterion | Effect |
+> |---|---|
+> | **3 — atomic N-way in one tx, no custom contract** | eliminated XRPL (1 op, `Batch` disabled in rippled v3.1.1 after a Feb 2026 signature-validation vulnerability), MultiversX (1), Ethereum (1), Mina (1) |
+> | **15 — minimum payment granularity per recipient** | eliminated **Cardano** (~0.97 ADA per output — not rent, so a *floor on payment size*; it makes sub-cent voluntary legs impossible with no non-custodial workaround) |
+> | **16 — batch integrity against a hostile or unprepared recipient** | Stellar's weakest axis. See below. |
+> | **Offline validity** | eliminated **Algorand** (`MaxTxnLife = 1000`, ~47 min, never overridden through v42, no escape hatch) |
+> | **Validator hardware** | eliminated **Solana** (256 GB RAM, ~2.5 TB across three disks, up to 1.1 SOL/day) |
+>
+> Capacity, for the record: Sui ~511 legs, Cardano ~249, Radix 126, Stellar 100,
+> Solana ~21–60. Magnetite needs three to eight. Not a discriminator.
+>
+> ### Why Stellar, in order of weight
+>
+> 1. **The rail already exists.** `patala-stellar` ships 29 offline tests, real
+>    hand-assembled XDR on the SDF's own codec crates, a `StellarRpc` trait for
+>    offline testing, and `Memo::Hash` item binding **already implemented**. Every
+>    other candidate means a from-scratch rail. With nothing ever settled, seven bugs
+>    found and five worktrees unintegrated, a new chain rail is the wrong spend.
+> 2. **Unbounded offline transaction validity**, confirmed — time bounds are optional.
+>    Sui matches it; Radix caps at ~30 days (`MAX_EPOCH_RANGE = 8640`). This is what
+>    serves the disconnected-deployment requirement.
+> 3. **Lightest nodes of the four, and the only candidate where validating requires
+>    no economic stake at all** — SCP membership is emergent from quorum slices, not
+>    bonded. That is the sovereignty axis this project actually cares about.
+> 4. Native 32-byte `MEMO_HASH`, Ed25519 so an identity key doubles as a wallet key,
+>    1-stroop granularity (no criterion-15 exposure), and Soroban available if
+>    contracts are ever needed for escrow.
+>
+> ### What Stellar lacks, and what it costs
+>
+> **Trustlines are the root of the biggest cost.** An asset cannot be paid to an
+> account that has not opted in, which produces two problems:
+>
+> - **Payee veto (criterion 16).** One payee without a trustline fails the whole
+>   atomic bundle. The native remedy, `CREATE_CLAIMABLE_BALANCE`, **locks 0.5 XLM per
+>   leg** — many times the value of a small voluntary leg. Sui is *structurally
+>   immune* (no account object exists to attach deposit rules to, proven by a
+>   committed test transferring to 100 addresses including `@0x0`); Radix has a free
+>   remedy in `AccountLocker::airdrop`.
+> - **"Pay any wallet" does not work.** Per-asset setup per payee.
+>
+> **Mitigation:** the manifest already declares each payee's asset, so trustline
+> existence becomes a **publish-time validation** — a signing error rather than a
+> checkout failure. Pay directly to prepared payees; skip or claimable-balance the
+> unprepared. Manageable, not solved.
+>
+> Also lacking: **a 32-byte memo ceiling with zero headroom** (Sui's PTB `Pure` input
+> carries 16,383 bytes; Algorand's note field 1 KB — so binding more than one hash
+> inline is impossible and would need an off-chain preimage, weakening third-party
+> verifiability); and **sequence-number coupling** on offline batches, where one gap
+> invalidates everything after it, requiring channel or per-deployment source
+> accounts. Trustlines are simultaneously the sovereignty feature — explicit, opt-in
+> issuer exposure — and the operational tax.
+>
+> ### Magnetite supports every patala rail, in two tiers
+>
+> `patala_core`'s seam is **single-recipient**: one `PayRequest` is one recipient.
+> Magnetite's atomic split therefore lives *below* that seam, per chain.
+>
+> - **Tier A — every patala rail, including all 20 fiat processors.** Single-recipient
+>   payment plus receipt verification. "Pay the developer" works on Stripe, Paystack,
+>   Yoco, PayFast, Solana, Stellar.
+> - **Tier B — atomic multi-party split.** Per-chain work below the seam. Exists only
+>   where magnetite writes it.
+>
+> This is a property of the rail, not a gap in magnetite: N payouts through a fiat
+> processor are N independent API calls and cannot be made atomic. **Therefore add
+> `atomic_multi_party: bool` to `RailCapabilities`**, alongside `RailClass` and
+> `Settlement`. The manifest declares whether the package requires atomicity; a rail
+> that cannot provide it is **refused** for those packages rather than silently
+> degrading — the same shape as the fiat revocation policy.
+>
+> So Stellar is a preference. A developer may take fiat via Paystack with a
+> non-atomic split and a declared revocation window, and that is a coherent choice.
+>
+> ### Corrections this sweep forced
+>
+> Two claims used to eliminate candidates were **false**, and both were mine:
+>
+> - **Sui**: `TransactionExpiration::None` → "By default, transactions do not
+>   expire." The pinned gas coin *is* the replay protection, which is why `None` is
+>   permitted. "Gas ObjectRefs make offline signing fragile" was wrong.
+> - **Solana**: **durable nonces** remove the blockhash TTL entirely via the builtin
+>   System Program — "valid until executed." The ~60s expiry is real but escapable.
+>   Solana's rejection stands on validator weight; it was rejected for a good reason
+>   and defended with a bad one.
+>
+> ### Open, and deliberately not blocking
+>
+> **Stellar's history retention is unverified** — the assigned agent died twice. It
+> is *not* a gate: the isolation requirement already forces **self-proving receipts**
+> (verifiable from signed transaction bytes with no network), and once a receipt
+> self-proves, chain retention stops being load-bearing for entitlement. Since Sui is
+> 30-day and Solana ~4.4h, no candidate solves retention anyway — it was a design
+> requirement mislabelled as a chain property. Verify it as a fact worth knowing.
+>
+> Also open: Radix disk growth; no candidate publishes a Nakamoto coefficient; only
+> the two *eliminated* chains have real client diversity.
+>
+> ---
+>
+> ## SUPERSEDED — DECISION: Sui, not Solana
 >
 > **The chain is Sui. A `patala-sui` rail is to be written, and the Solana rail
 > retired.** Decided deliberately, and the timing is the strongest part of the
@@ -517,6 +637,24 @@ choice was never the bottleneck.
 **Therefore: blob storage is `FsBlobStore` + `HttpBlobStore`. Walrus is removed
 from the plan. Paid content on a public store remains unsolved, and is not blocked
 on choosing a store.**
+
+### RESOLVED — the Sui memo problem had a clean answer, and this section overstated it
+
+**The section below is superseded.** It called this "the highest-risk unknown in the
+switch" and listed three unattractive options. A spike found a fourth that none of
+them anticipated: **an unused PTB `Pure` input carries up to 16,383 bytes, is covered
+by the transaction signature, and is third-party readable via public GraphQL — with no
+Move package.** The verifier recomputes the transaction digest from
+`Transaction.bcs` and only then reads the binding, so the bytes are self-proving
+rather than RPC-asserted, which is *stronger* than Solana's SPL-Memo path.
+
+Two of the three rejected options were rejected for the right reasons, and one was
+rejected too weakly: deterministic transaction reconstruction is not merely fragile
+but **impossible**, because `GasData` — gas-coin `ObjectRef`s including versions and
+content digests — is inside the digest.
+
+Kept below for the record, since the reasoning about what a binding must prove is
+still correct.
 
 ### The one genuine risk: Sui has no memo primitive
 >
