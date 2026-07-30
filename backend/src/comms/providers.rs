@@ -462,7 +462,9 @@ mod tests {
         assert!(a.exists(&room));
 
         let cred = a.issue_join_credential(&PubKey([1u8; 32]), &room).await;
-        assert!(cred.token.is_valid_for(bridge::node_auth(), bridge::now_unix()));
+        assert!(cred
+            .token
+            .is_valid_for(bridge::node_auth(), bridge::now_unix()));
         a.teardown(&room).await.unwrap();
         assert!(!a.exists(&room));
     }
