@@ -108,20 +108,23 @@ struct DailyPlayStat {
     pub total_duration_secs: Option<f64>,
 }
 
-/// Raw settled-cents row from `payment_receipts`. Kept as `i64` (the rail's
-/// smallest unit) through every query and arithmetic step — only converted to
-/// `Decimal` once, at the edge, for display. No float ever touches money here.
+/// Raw settled-micro-USDC row from `payment_receipts`. Kept as `i64` (the
+/// rail's smallest unit) through every query and arithmetic step — only
+/// converted to `Decimal` once, at the edge, via
+/// [`crate::services::payment::usd_from_micro_usdc`] (B5: never a bare
+/// `Decimal::new(_, 2)`, which used to assume cents). No float ever touches
+/// money here.
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-struct ReceiptCentsRow {
-    pub total_cents: Option<i64>,
-    pub protocol_fee_cents: Option<i64>,
+struct ReceiptMicroRow {
+    pub total_micro: Option<i64>,
+    pub protocol_fee_micro: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-struct DailyReceiptCents {
+struct DailyReceiptMicro {
     pub date: NaiveDate,
-    pub total_cents: i64,
-    pub protocol_fee_cents: i64,
+    pub total_micro: i64,
+    pub protocol_fee_micro: i64,
     pub receipt_count: i64,
 }
 
@@ -159,7 +162,7 @@ pub async fn get_game_analytics(
 
     // Gross value settled wallet-to-wallet for this game's receipts. Voided
     // receipts backed a refunded entitlement, so they are excluded.
-    let total_revenue_cents = sqlx::query_scalar::<_, i64>(
+    let total_revenue_micro = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COALESCE(SUM(total), 0)::bigint
         FROM payment_receipts
@@ -170,7 +173,7 @@ pub async fn get_game_analytics(
     .bind(start_date)
     .fetch_one(db)
     .await?;
-    let total_revenue = Decimal::new(total_revenue_cents, 2);
+    let total_revenue = crate::services::payment::usd_from_micro_usdc(total_revenue_micro);
 
     let daily_stats_raw = sqlx::query_as::<_, DailyPlayStat>(
         r#"
@@ -209,12 +212,12 @@ pub async fn get_game_analytics(
     // the play stats above. Merged in Rust rather than a second GROUP BY on the
     // play-session query so the two independent tables (`play_sessions`,
     // `payment_receipts`) each get their own straightforward query.
-    let daily_revenue_raw = sqlx::query_as::<_, DailyReceiptCents>(
+    let daily_revenue_raw = sqlx::query_as::<_, DailyReceiptMicro>(
         r#"
         SELECT
             DATE_TRUNC('day', created_at)::date as date,
-            COALESCE(SUM(total), 0)::bigint as total_cents,
-            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_cents,
+            COALESCE(SUM(total), 0)::bigint as total_micro,
+            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_micro,
             COUNT(*) as receipt_count
         FROM payment_receipts
         WHERE game_id = $1 AND created_at >= $2 AND voided = false
@@ -228,19 +231,19 @@ pub async fn get_game_analytics(
 
     let revenue_by_date: std::collections::HashMap<NaiveDate, i64> = daily_revenue_raw
         .into_iter()
-        .map(|r| (r.date, r.total_cents))
+        .map(|r| (r.date, r.total_micro))
         .collect();
 
     let daily_stats: Vec<DailyStat> = daily_stats_raw
         .into_iter()
         .map(|row| {
             let plays_i32: i32 = row.plays.min(i32::MAX as i64) as i32;
-            let revenue_cents = revenue_by_date.get(&row.date).copied().unwrap_or(0);
+            let revenue_micro = revenue_by_date.get(&row.date).copied().unwrap_or(0);
             DailyStat {
                 date: row.date,
                 plays: plays_i32,
                 new_players: row.new_players.min(i32::MAX as i64) as i32,
-                revenue: Decimal::new(revenue_cents, 2),
+                revenue: crate::services::payment::usd_from_micro_usdc(revenue_micro),
                 avg_duration_secs: if row.plays > 0 {
                     row.total_duration_secs.unwrap_or(0.0) / row.plays as f64
                 } else {
@@ -261,11 +264,11 @@ pub async fn get_game_analytics(
 }
 
 pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<RevenueBreakdown> {
-    let totals = sqlx::query_as::<_, ReceiptCentsRow>(
+    let totals = sqlx::query_as::<_, ReceiptMicroRow>(
         r#"
         SELECT
-            COALESCE(SUM(total), 0)::bigint as total_cents,
-            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_cents
+            COALESCE(SUM(total), 0)::bigint as total_micro,
+            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_micro
         FROM payment_receipts
         WHERE game_id = $1 AND voided = false
         "#,
@@ -274,13 +277,13 @@ pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<R
     .fetch_one(db)
     .await?;
 
-    let total_cents = totals.total_cents.unwrap_or(0);
-    let protocol_fee_cents = totals.protocol_fee_cents.unwrap_or(0);
-    let developer_cents = total_cents - protocol_fee_cents;
+    let total_micro = totals.total_micro.unwrap_or(0);
+    let protocol_fee_micro = totals.protocol_fee_micro.unwrap_or(0);
+    let developer_micro = total_micro - protocol_fee_micro;
 
-    let total_revenue = Decimal::new(total_cents, 2);
-    let protocol_fees = Decimal::new(protocol_fee_cents, 2);
-    let developer_earnings = Decimal::new(developer_cents, 2);
+    let total_revenue = crate::services::payment::usd_from_micro_usdc(total_micro);
+    let protocol_fees = crate::services::payment::usd_from_micro_usdc(protocol_fee_micro);
+    let developer_earnings = crate::services::payment::usd_from_micro_usdc(developer_micro);
 
     let transaction_count = sqlx::query_scalar::<_, i64>(
         r#"
@@ -293,12 +296,12 @@ pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<R
     .fetch_one(db)
     .await?;
 
-    let revenue_by_day_raw = sqlx::query_as::<_, DailyReceiptCents>(
+    let revenue_by_day_raw = sqlx::query_as::<_, DailyReceiptMicro>(
         r#"
         SELECT
             DATE_TRUNC('day', created_at)::date as date,
-            COALESCE(SUM(total), 0)::bigint as total_cents,
-            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_cents,
+            COALESCE(SUM(total), 0)::bigint as total_micro,
+            COALESCE(SUM(protocol_fee), 0)::bigint as protocol_fee_micro,
             COUNT(*) as receipt_count
         FROM payment_receipts
         WHERE game_id = $1 AND voided = false
@@ -317,9 +320,11 @@ pub async fn get_revenue_breakdown(db: &sqlx::PgPool, game_id: Uuid) -> Result<R
         .into_iter()
         .map(|row| DailyRevenue {
             date: row.date,
-            gross_revenue: Decimal::new(row.total_cents, 2),
-            protocol_fees: Decimal::new(row.protocol_fee_cents, 2),
-            developer_earnings: Decimal::new(row.total_cents - row.protocol_fee_cents, 2),
+            gross_revenue: crate::services::payment::usd_from_micro_usdc(row.total_micro),
+            protocol_fees: crate::services::payment::usd_from_micro_usdc(row.protocol_fee_micro),
+            developer_earnings: crate::services::payment::usd_from_micro_usdc(
+                row.total_micro - row.protocol_fee_micro,
+            ),
         })
         .collect();
 
@@ -469,7 +474,7 @@ pub async fn get_dashboard_summary(
         0.0
     };
 
-    let total_revenue_cents = sqlx::query_scalar::<_, i64>(
+    let total_revenue_micro = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT COALESCE(SUM(total), 0)::bigint
         FROM payment_receipts
@@ -479,7 +484,7 @@ pub async fn get_dashboard_summary(
     .bind(&game_ids)
     .fetch_one(db)
     .await?;
-    let total_revenue = Decimal::new(total_revenue_cents, 2);
+    let total_revenue = crate::services::payment::usd_from_micro_usdc(total_revenue_micro);
 
     let top_game = get_top_performing_games(db, developer_id, 1)
         .await?
@@ -503,23 +508,23 @@ pub async fn get_top_performing_games(
     limit: i32,
 ) -> Result<Vec<GameStats>> {
     #[derive(Debug, FromRow)]
-    struct GameStatsCents {
+    struct GameStatsMicro {
         game_id: Uuid,
         title: String,
         total_plays: i64,
         unique_players: i64,
-        total_revenue_cents: i64,
+        total_revenue_micro: i64,
         avg_session_duration_secs: f64,
     }
 
-    let games = sqlx::query_as::<_, GameStatsCents>(
+    let games = sqlx::query_as::<_, GameStatsMicro>(
         r#"
         SELECT
             g.id as game_id,
             g.title,
             COALESCE(ps.total_plays, 0) as total_plays,
             COALESCE(ps.unique_players, 0) as unique_players,
-            COALESCE(r.total_revenue_cents, 0) as total_revenue_cents,
+            COALESCE(r.total_revenue_micro, 0) as total_revenue_micro,
             COALESCE(ps.avg_duration, 0) as avg_session_duration_secs
         FROM games g
         LEFT JOIN (
@@ -534,13 +539,13 @@ pub async fn get_top_performing_games(
         LEFT JOIN (
             SELECT
                 game_id,
-                SUM(total)::bigint as total_revenue_cents
+                SUM(total)::bigint as total_revenue_micro
             FROM payment_receipts
             WHERE voided = false
             GROUP BY game_id
         ) r ON g.id = r.game_id
         WHERE g.developer_id = $1
-        ORDER BY r.total_revenue_cents DESC NULLS LAST, ps.total_plays DESC NULLS LAST
+        ORDER BY r.total_revenue_micro DESC NULLS LAST, ps.total_plays DESC NULLS LAST
         LIMIT $2
         "#,
     )
@@ -556,7 +561,7 @@ pub async fn get_top_performing_games(
             title: g.title,
             total_plays: g.total_plays,
             unique_players: g.unique_players,
-            total_revenue: Decimal::new(g.total_revenue_cents, 2),
+            total_revenue: crate::services::payment::usd_from_micro_usdc(g.total_revenue_micro),
             avg_session_duration_secs: g.avg_session_duration_secs,
         })
         .collect())

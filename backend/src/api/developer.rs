@@ -301,8 +301,10 @@ pub async fn get_earnings_summary(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<EarningsSummary>> {
-    // Receipt totals are in the rail's smallest unit (cents) -> back to USD.
-    let cents: i64 = sqlx::query_scalar(
+    // Receipt totals are in the rail's smallest unit, micro-USDC -> back to USD
+    // (B5: this used to divide by 100 as if the column held cents, a stale
+    // assumption left over from before the A4/A5 write-path fix).
+    let total_micro: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(r.total - r.protocol_fee), 0)::bigint
          FROM payment_receipts r
          JOIN games g ON g.id = r.game_id
@@ -311,7 +313,7 @@ pub async fn get_earnings_summary(
     .bind(user_id)
     .fetch_one(&pool)
     .await?;
-    let total_earnings = Decimal::new(cents, 2);
+    let total_earnings = payment::usd_from_micro_usdc(total_micro);
 
     let recent_earnings = sqlx::query_as::<_, (Uuid, String, i64, i64)>(
         "SELECT g.id, g.title,
@@ -329,10 +331,10 @@ pub async fn get_earnings_summary(
 
     let earnings_by_game: Vec<EarningsByGame> = recent_earnings
         .into_iter()
-        .map(|(game_id, title, cents, players)| EarningsByGame {
+        .map(|(game_id, title, game_micro, players)| EarningsByGame {
             game_id,
             game_title: title,
-            total_earnings: Decimal::new(cents, 2),
+            total_earnings: payment::usd_from_micro_usdc(game_micro),
             player_count: players,
         })
         .collect();

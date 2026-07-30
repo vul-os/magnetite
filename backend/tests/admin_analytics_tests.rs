@@ -144,6 +144,7 @@ mod live_db_tests {
         analytics_overview, analytics_revenue, list_transactions, revenue_dashboard,
         PaginationQuery,
     };
+    use magnetite_backend::services::payment::usd_from_micro_usdc;
     use rust_decimal::Decimal;
     use sqlx::postgres::PgPoolOptions;
     use sqlx::PgPool;
@@ -195,17 +196,20 @@ mod live_db_tests {
     }
 
     /// Seeds a settled, non-voided `payment_receipts` row — the live-written
-    /// non-custodial ledger these endpoints must read.
+    /// non-custodial ledger these endpoints must read. `total_micro` /
+    /// `protocol_fee_micro` are in the rail's smallest unit, **micro-USDC**
+    /// (B5: these used to be named/treated as cents; the column itself never
+    /// changed, only what post-A4/A5 checkout actually writes into it did).
     async fn seed_receipt(
         pool: &PgPool,
         buyer_id: Uuid,
         game_id: Uuid,
-        total_cents: i64,
-        protocol_fee_cents: i64,
+        total_micro: i64,
+        protocol_fee_micro: i64,
         payee_wallet: &str,
     ) -> Uuid {
         let id = Uuid::new_v4();
-        let payouts = serde_json::json!([{ "wallet": payee_wallet, "amount": total_cents - protocol_fee_cents }]);
+        let payouts = serde_json::json!([{ "wallet": payee_wallet, "amount": total_micro - protocol_fee_micro }]);
         sqlx::query(
             "INSERT INTO payment_receipts
                 (id, kind, buyer_id, buyer_pubkey, game_id, total, protocol_fee, payouts,
@@ -217,8 +221,8 @@ mod live_db_tests {
         .bind(buyer_id)
         .bind("b".repeat(64))
         .bind(game_id)
-        .bind(total_cents)
-        .bind(protocol_fee_cents)
+        .bind(total_micro)
+        .bind(protocol_fee_micro)
         .bind(payouts)
         .bind(format!("nonce-{id}"))
         .bind("r".repeat(64))
@@ -271,8 +275,9 @@ mod live_db_tests {
             after.total_settled_units - before.total_settled_units,
             1234,
             "total_settled_units must move by exactly the seeded receipt total \
-             (1234 cents) — a jump near 9999 would mean it is still reading \
-             the legacy `transactions` table"
+             (1234 raw units — this endpoint is deliberately unit-agnostic, \
+             see RevenueDashboard's doc comment) — a jump near 9999 would mean \
+             it is still reading the legacy `transactions` table"
         );
         assert_eq!(
             after.total_protocol_fee_units - before.total_protocol_fee_units,
@@ -297,7 +302,9 @@ mod live_db_tests {
             .await
             .expect("analytics_overview before seed");
 
-        seed_receipt(&pool, buyer_id, game_id, 500, 0, &"e".repeat(64)).await;
+        // $5.00 in micro-USDC (B5: this used to be seeded/asserted as "500
+        // cents" — the pre-A4/A5 scale the write path no longer produces).
+        seed_receipt(&pool, buyer_id, game_id, 5_000_000, 0, &"e".repeat(64)).await;
         seed_legacy_poison_transaction(&pool, buyer_id, game_id).await;
 
         // Real, live-written play session — the honest source for activity
@@ -325,9 +332,14 @@ mod live_db_tests {
             1,
             "active_users_24h must move by 1 for our fresh, never-before-seen buyer"
         );
+        // An independent literal, not `usd_from_micro_usdc(5_000_000)` — asserting
+        // against the very function under test would make this pass under ANY
+        // scale bug in that function, catching nothing (the same false-negative
+        // shape as a hardening test that re-implements its own subject).
         assert_eq!(
             after.total_revenue_usd - before.total_revenue_usd,
-            Decimal::new(500, 2)
+            Decimal::new(5, 0),
+            "$5.00, not $500.00 or $0.0005 — a scale error here is exactly B5's bug class"
         );
     }
 
@@ -341,7 +353,10 @@ mod live_db_tests {
         let game_id = seed_game(&pool, dev_id).await;
         let payee = "f".repeat(64);
 
-        let receipt_id = seed_receipt(&pool, buyer_id, game_id, 4999, 0, &payee).await;
+        // $19.99 in micro-USDC — the exact figure the original enshrined-bug
+        // test used (as cents). B5: seeding and asserting in the same,
+        // correct scale is what makes this test actually discriminate.
+        let receipt_id = seed_receipt(&pool, buyer_id, game_id, 19_990_000, 0, &payee).await;
         seed_legacy_poison_transaction(&pool, buyer_id, game_id).await;
 
         let page = list_transactions(
@@ -362,7 +377,8 @@ mod live_db_tests {
             .expect("seeded receipt must appear in the admin transactions list");
 
         assert_eq!(found.kind, "item_purchase");
-        assert_eq!(found.total, Decimal::new(4999, 2));
+        assert_eq!(found.total, usd_from_micro_usdc(19_990_000));
+        assert_eq!(found.total, Decimal::new(1999, 2), "$19.99, not $4999.00");
         assert_eq!(found.protocol_fee, Decimal::ZERO);
         assert_eq!(found.payee.as_deref(), Some(payee.as_str()));
         assert!(!found.voided);
@@ -377,7 +393,19 @@ mod live_db_tests {
         let buyer_id = seed_user(&pool, false, false).await;
         let game_id = seed_game(&pool, dev_id).await;
 
-        seed_receipt(&pool, buyer_id, game_id, 1000, 50, &"a".repeat(64)).await;
+        // $10.00 total, $0.50 protocol fee, $9.50 to the developer — all in
+        // micro-USDC. B5: the pre-fix version of this test seeded these same
+        // digits (1000/50) and asserted cents ($10.00/$0.50), which is exactly
+        // the scale `payment_receipts.total`/`.protocol_fee` no longer use.
+        seed_receipt(
+            &pool,
+            buyer_id,
+            game_id,
+            10_000_000,
+            500_000,
+            &"a".repeat(64),
+        )
+        .await;
 
         let analytics = analytics_revenue(State(pool.clone()), Extension(admin_id))
             .await
@@ -389,9 +417,9 @@ mod live_db_tests {
             .find(|g| g.game_id == game_id)
             .expect("seeded game must appear in by_game breakdown");
 
-        assert_eq!(row.total_revenue, Decimal::new(1000, 2));
-        assert_eq!(row.protocol_fee, Decimal::new(50, 2));
-        assert_eq!(row.developer_settled, Decimal::new(950, 2));
+        assert_eq!(row.total_revenue, Decimal::new(1000, 2), "$10.00");
+        assert_eq!(row.protocol_fee, Decimal::new(50, 2), "$0.50");
+        assert_eq!(row.developer_settled, Decimal::new(950, 2), "$9.50");
         assert_eq!(row.receipt_count, 1);
     }
 }

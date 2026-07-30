@@ -277,6 +277,26 @@ pub fn micro_usdc_from_usd(price: Decimal) -> Result<u64> {
         })
 }
 
+/// The inverse of [`micro_usdc_from_usd`]: raw micro-USDC (as stored in
+/// `payment_receipts.total`/`.protocol_fee` post-A4/A5) back to a
+/// USD-denominated `Decimal` for display.
+///
+/// B5: every reporting endpoint that reads `payment_receipts` needs exactly
+/// this division, and until now each one open-coded it as `Decimal::new(x,
+/// 2)` — the pre-A4/A5 *cents* scale, copy-pasted forward across
+/// `api::admin`, `api::developer` and `services::analytics` without ever
+/// being updated when the write path became micro-USDC. That is the same
+/// bug shape as A5 (an implicit, unnamed scale silently disagreeing with
+/// what a sibling boundary actually produces), just relocated from the
+/// checkout write path to the reporting read path, and it went unnoticed for
+/// the same reason: nothing has ever settled through a live rail, so no
+/// dollar figure this function's callers emit has ever been compared against
+/// a real receipt. Naming the scale here, once, is what makes every one of
+/// those call sites structurally unable to silently disagree with it again.
+pub fn usd_from_micro_usdc(units: i64) -> Decimal {
+    Decimal::new(units, 6)
+}
+
 /// The wallet (Ed25519 pubkey) a user has linked, if any. Non-custodial: we only
 /// ever record an address, never hold funds.
 pub async fn wallet_of(pool: &PgPool, user_id: Uuid) -> Result<Option<PubKey>> {
@@ -637,6 +657,58 @@ mod tests {
     fn an_unrepresentable_price_is_refused_not_saturated() {
         // u64::MAX micro-USDC is ~1.8e13 dollars; 2e13 dollars overflows it.
         assert!(micro_usdc_from_usd(Decimal::from(20_000_000_000_000i64)).is_err());
+    }
+
+    /// B5: the reporting-side inverse of `micro_usdc_from_usd`. `19_990_000`
+    /// micro-USDC is $19.99 — never `Decimal::new(19_990_000, 2)`'s $199,900.00
+    /// (100x too large) and never the pre-A4/A5 cents reading of `$199900.00`'s
+    /// sibling mistake, treating the raw units as cents (10,000x too large).
+    #[test]
+    fn micro_usdc_converts_back_to_usd() {
+        assert_eq!(usd_from_micro_usdc(19_990_000), Decimal::new(1999, 2));
+        assert_eq!(usd_from_micro_usdc(5_000_000), Decimal::new(5, 0));
+        assert_eq!(usd_from_micro_usdc(0), Decimal::ZERO);
+        assert_eq!(usd_from_micro_usdc(1), Decimal::new(1, 6));
+    }
+
+    /// Round-trip through both directions of the boundary: whatever a real
+    /// checkout charges is exactly what a report must show, at a representative
+    /// spread of amounts (including the exact `$19.99` the enshrined-bug test
+    /// used to get wrong). A 100x or 10,000x scale error introduced in either
+    /// function breaks this for every value tried.
+    #[test]
+    fn usd_and_micro_usdc_round_trip_at_every_scale() {
+        for usd in [
+            Decimal::new(1, 6),    // smallest unit
+            Decimal::new(1999, 2), // $19.99, the historical bug's own example
+            Decimal::new(5, 0),
+            Decimal::new(123_456, 2), // $1234.56
+            Decimal::ZERO,
+        ] {
+            let micro = micro_usdc_from_usd(usd).unwrap();
+            assert_eq!(
+                usd_from_micro_usdc(micro as i64),
+                usd,
+                "round trip broke for {usd}"
+            );
+        }
+    }
+
+    /// Mutation test (plant-and-revert): if `usd_from_micro_usdc` regressed to
+    /// the pre-fix cents scale (`Decimal::new(units, 2)`, a 10,000x error) or to
+    /// a 100x error (`Decimal::new(units, 4)`), this must fail. Confirms the
+    /// test actually discriminates the scale rather than passing regardless.
+    #[test]
+    fn wrong_scale_conversions_do_not_match_the_real_one() {
+        let units = 19_990_000_i64; // $19.99 in micro-USDC
+        let correct = usd_from_micro_usdc(units);
+        assert_eq!(correct, Decimal::new(1999, 2));
+
+        let ten_thousand_x_wrong = Decimal::new(units, 2); // the old cents bug
+        let hundred_x_wrong = Decimal::new(units, 4);
+        assert_ne!(correct, ten_thousand_x_wrong);
+        assert_ne!(correct, hundred_x_wrong);
+        assert_ne!(ten_thousand_x_wrong, hundred_x_wrong);
     }
 
     /// The rate is not readable from the environment AT ALL any more — not

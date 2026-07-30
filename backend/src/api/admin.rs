@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::api::middleware;
 use crate::error::{AppError, Result};
+use crate::services::payment::usd_from_micro_usdc;
 
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
@@ -134,19 +135,20 @@ pub struct AdminTransaction {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Raw settled-cents row fetched from `payment_receipts`. Kept as `i64` through
-/// the query and only converted to `Decimal` once, at the edge — no float ever
-/// touches money here.
+/// Raw settled-micro-USDC row fetched from `payment_receipts`. Kept as `i64`
+/// through the query and only converted to `Decimal` once, at the edge — via
+/// [`crate::services::payment::usd_from_micro_usdc`], never a hand-rolled
+/// `Decimal::new(_, 2)` (B5: that used to assume cents, the pre-A4/A5 scale).
 #[derive(Debug, sqlx::FromRow)]
-struct AdminReceiptCentsRow {
+struct AdminReceiptMicroRow {
     id: Uuid,
     user_id: Uuid,
     username: Option<String>,
     game_id: Option<Uuid>,
     game_title: Option<String>,
     kind: String,
-    total_cents: i64,
-    protocol_fee_cents: i64,
+    total_micro: i64,
+    protocol_fee_micro: i64,
     payee: Option<String>,
     rail_pubkey: String,
     voided: bool,
@@ -490,9 +492,9 @@ pub async fn list_transactions(
         .fetch_one(&pool)
         .await?;
 
-    let rows = sqlx::query_as::<_, AdminReceiptCentsRow>(
+    let rows = sqlx::query_as::<_, AdminReceiptMicroRow>(
         "SELECT r.id, r.buyer_id as user_id, u.username, r.game_id, g.title as game_title,
-                r.kind, r.total as total_cents, r.protocol_fee as protocol_fee_cents,
+                r.kind, r.total as total_micro, r.protocol_fee as protocol_fee_micro,
                 r.payouts->0->>'wallet' as payee, r.rail_pubkey, r.voided, r.created_at
          FROM payment_receipts r
          LEFT JOIN users u ON r.buyer_id = u.id
@@ -513,8 +515,8 @@ pub async fn list_transactions(
             game_id: r.game_id,
             game_title: r.game_title,
             kind: r.kind,
-            total: Decimal::new(r.total_cents, 2),
-            protocol_fee: Decimal::new(r.protocol_fee_cents, 2),
+            total: usd_from_micro_usdc(r.total_micro),
+            protocol_fee: usd_from_micro_usdc(r.protocol_fee_micro),
             payee: r.payee,
             rail_pubkey: r.rail_pubkey,
             voided: r.voided,
@@ -612,23 +614,23 @@ pub struct RevenueTimeSeries {
     pub total_revenue: Decimal,
 }
 
-/// Raw cents row for a `RevenueTimeSeries` bucket, fetched straight off
+/// Raw micro-USDC row for a `RevenueTimeSeries` bucket, fetched straight off
 /// `payment_receipts`. Kept as `i64` until the single conversion to `Decimal`
-/// below — no float touches money in this file.
+/// below (via [`usd_from_micro_usdc`]) — no float touches money in this file.
 #[derive(Debug, sqlx::FromRow)]
-struct RevenueTimeSeriesCentsRow {
+struct RevenueTimeSeriesMicroRow {
     date: String,
-    total_cents: i64,
-    protocol_fee_cents: i64,
+    total_micro: i64,
+    protocol_fee_micro: i64,
 }
 
-fn cents_rows_to_time_series(rows: Vec<RevenueTimeSeriesCentsRow>) -> Vec<RevenueTimeSeries> {
+fn micro_rows_to_time_series(rows: Vec<RevenueTimeSeriesMicroRow>) -> Vec<RevenueTimeSeries> {
     rows.into_iter()
         .map(|r| RevenueTimeSeries {
             date: r.date,
-            protocol_fee: Decimal::new(r.protocol_fee_cents, 2),
-            developer_settled: Decimal::new(r.total_cents - r.protocol_fee_cents, 2),
-            total_revenue: Decimal::new(r.total_cents, 2),
+            protocol_fee: usd_from_micro_usdc(r.protocol_fee_micro),
+            developer_settled: usd_from_micro_usdc(r.total_micro - r.protocol_fee_micro),
+            total_revenue: usd_from_micro_usdc(r.total_micro),
         })
         .collect()
 }
@@ -649,13 +651,13 @@ pub struct RevenueByGame {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct RevenueByGameCentsRow {
+struct RevenueByGameMicroRow {
     game_id: Uuid,
     game_title: String,
     developer_username: Option<String>,
-    total_cents: i64,
+    total_micro: i64,
     receipt_count: i64,
-    protocol_fee_cents: i64,
+    protocol_fee_micro: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -760,12 +762,12 @@ pub async fn analytics_overview(
         .await?;
 
     // Gross value settled wallet-to-wallet through verified, non-voided receipts.
-    let total_revenue_cents = sqlx::query_scalar::<_, i64>(
+    let total_revenue_micro = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(SUM(total), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
-    let total_revenue_usd = Decimal::new(total_revenue_cents, 2);
+    let total_revenue_usd = usd_from_micro_usdc(total_revenue_micro);
 
     // Real activity proxy: distinct players who started a play session in the
     // last 24h. `transactions` was never a real source for this either way.
@@ -801,11 +803,11 @@ pub async fn analytics_revenue(
     // since the payment pivot, so every query below used to return zero. There
     // is also no platform cut to report any more: `protocol_fee` is real (0
     // unless a signed manifest declares a voluntary stewards leg), never fabricated.
-    let daily_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
+    let daily_rows = sqlx::query_as::<_, RevenueTimeSeriesMicroRow>(
         "SELECT
             DATE(r.created_at)::text as date,
-            COALESCE(SUM(r.total), 0)::bigint as total_cents,
-            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+            COALESCE(SUM(r.total), 0)::bigint as total_micro,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_micro
          FROM payment_receipts r
          WHERE r.created_at > NOW() - INTERVAL '30 days' AND r.voided = false
          GROUP BY DATE(r.created_at)
@@ -813,13 +815,13 @@ pub async fn analytics_revenue(
     )
     .fetch_all(&pool)
     .await?;
-    let daily = cents_rows_to_time_series(daily_rows);
+    let daily = micro_rows_to_time_series(daily_rows);
 
-    let weekly_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
+    let weekly_rows = sqlx::query_as::<_, RevenueTimeSeriesMicroRow>(
         "SELECT
             DATE_TRUNC('week', r.created_at)::date::text as date,
-            COALESCE(SUM(r.total), 0)::bigint as total_cents,
-            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+            COALESCE(SUM(r.total), 0)::bigint as total_micro,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_micro
          FROM payment_receipts r
          WHERE r.created_at > NOW() - INTERVAL '12 weeks' AND r.voided = false
          GROUP BY DATE_TRUNC('week', r.created_at)
@@ -827,13 +829,13 @@ pub async fn analytics_revenue(
     )
     .fetch_all(&pool)
     .await?;
-    let weekly = cents_rows_to_time_series(weekly_rows);
+    let weekly = micro_rows_to_time_series(weekly_rows);
 
-    let monthly_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
+    let monthly_rows = sqlx::query_as::<_, RevenueTimeSeriesMicroRow>(
         "SELECT
             DATE_TRUNC('month', r.created_at)::date::text as date,
-            COALESCE(SUM(r.total), 0)::bigint as total_cents,
-            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+            COALESCE(SUM(r.total), 0)::bigint as total_micro,
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_micro
          FROM payment_receipts r
          WHERE r.created_at > NOW() - INTERVAL '12 months' AND r.voided = false
          GROUP BY DATE_TRUNC('month', r.created_at)
@@ -841,21 +843,21 @@ pub async fn analytics_revenue(
     )
     .fetch_all(&pool)
     .await?;
-    let monthly = cents_rows_to_time_series(monthly_rows);
+    let monthly = micro_rows_to_time_series(monthly_rows);
 
-    let by_game_rows = sqlx::query_as::<_, RevenueByGameCentsRow>(
+    let by_game_rows = sqlx::query_as::<_, RevenueByGameMicroRow>(
         "SELECT
             g.id as game_id,
             g.title as game_title,
             u.username as developer_username,
-            COALESCE(SUM(r.total), 0)::bigint as total_cents,
+            COALESCE(SUM(r.total), 0)::bigint as total_micro,
             COUNT(r.id) as receipt_count,
-            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_cents
+            COALESCE(SUM(r.protocol_fee), 0)::bigint as protocol_fee_micro
          FROM games g
          LEFT JOIN payment_receipts r ON g.id = r.game_id AND r.voided = false
          LEFT JOIN users u ON g.developer_id = u.id
          GROUP BY g.id, g.title, u.username
-         ORDER BY total_cents DESC",
+         ORDER BY total_micro DESC",
     )
     .fetch_all(&pool)
     .await?;
@@ -866,27 +868,28 @@ pub async fn analytics_revenue(
             game_id: r.game_id,
             game_title: r.game_title,
             developer_username: r.developer_username,
-            total_revenue: Decimal::new(r.total_cents, 2),
+            total_revenue: usd_from_micro_usdc(r.total_micro),
             receipt_count: r.receipt_count,
-            protocol_fee: Decimal::new(r.protocol_fee_cents, 2),
-            developer_settled: Decimal::new(r.total_cents - r.protocol_fee_cents, 2),
+            protocol_fee: usd_from_micro_usdc(r.protocol_fee_micro),
+            developer_settled: usd_from_micro_usdc(r.total_micro - r.protocol_fee_micro),
         })
         .collect();
 
-    let total_protocol_fee_cents = sqlx::query_scalar::<_, i64>(
+    let total_protocol_fee_micro = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(SUM(protocol_fee), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
 
-    let total_settled_cents = sqlx::query_scalar::<_, i64>(
+    let total_settled_micro = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(SUM(total), 0)::bigint FROM payment_receipts WHERE voided = false",
     )
     .fetch_one(&pool)
     .await?;
 
-    let total_protocol_fee = Decimal::new(total_protocol_fee_cents, 2);
-    let total_developer_settled = Decimal::new(total_settled_cents - total_protocol_fee_cents, 2);
+    let total_protocol_fee = usd_from_micro_usdc(total_protocol_fee_micro);
+    let total_developer_settled =
+        usd_from_micro_usdc(total_settled_micro - total_protocol_fee_micro);
 
     Ok(Json(RevenueAnalytics {
         daily,
