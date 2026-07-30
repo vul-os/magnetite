@@ -84,15 +84,61 @@ impl<'de> Deserialize<'de> for Sig {
 
 /// The substrate identity trait: a keypair that can sign and verify.
 ///
-/// `verify` is an associated function because verification only needs the
-/// public key, never the secret half.
+/// **A7 (fixed).** `verify` was originally an associated function — "it only
+/// needs the public key, never the secret half" — so every caller had to name
+/// a *concrete type* to verify anything (`<RawKeypairAuth as
+/// Identity>::verify(...)`), and [`Token::is_valid_at`] hard-coded
+/// `RawKeypairAuth` specifically. That is a silent trap: a provider whose
+/// signature bytes differ (a domain tag, a different curve) does not error,
+/// it just makes `is_valid_at` return `false` for a token that is actually
+/// valid, or — worse, in principle — `true` for one that is not, if the two
+/// algorithms ever agreed on the wrong pair. The associated function is left
+/// in place here because eight call sites elsewhere in this tree (outside
+/// this crate's `src/` and `magnetite-kotva/`, which is as far as this fix's
+/// scope extends) already invoke it by that exact name via UFCS with no
+/// instance in hand, and Rust has no method overloading — turning `verify`
+/// itself into a `&self` method would silently require an edit at every one
+/// of those call sites in the same breaking change.
+///
+/// Instead, [`IdentityVerifier`] below is the actual fix: a **method**, blanket-
+/// implemented for every `Identity`, so any concrete provider — the one
+/// actually "in play" at a call site — is reachable as `&dyn IdentityVerifier` and
+/// dispatches through its own algorithm rather than a hard-coded type. See
+/// [`Token::is_valid_for`], which is the corrected counterpart of
+/// `is_valid_at` built on it, and the `is_valid_for_follows_the_provider_*`
+/// test below, which proves the dispatch actually follows the instance
+/// passed in rather than rubber-stamping.
 pub trait Identity {
     /// This identity's Ed25519 public key.
     fn pubkey(&self) -> PubKey;
     /// Sign a message with this identity's secret key.
     fn sign(&self, msg: &[u8]) -> Sig;
     /// Verify a detached signature against a public key and message.
+    ///
+    /// Associated function, not a method — see the trait docs on why this
+    /// stays as-is and [`IdentityVerifier`] for the method-based fix.
     fn verify(pk: &PubKey, msg: &[u8], sig: &Sig) -> bool;
+}
+
+/// **A7 fix.** A live, per-instance, dynamically-dispatchable verifier — the
+/// "provider in play" that [`Identity::verify`] could not be, because it
+/// takes no `self`.
+///
+/// Blanket-implemented for every [`Identity`], so nothing that already
+/// implements `Identity` (in this crate, in `magnetite-kotva`, or anywhere
+/// else) has to change to gain it: `RawKeypairAuth`, `KotvaIdentity` and any
+/// test double are all `IdentityVerifier`s automatically. Holding `&dyn IdentityVerifier`
+/// lets a caller verify against *whichever concrete provider is actually
+/// running* instead of a type named at compile time.
+pub trait IdentityVerifier {
+    /// Verify `sig` over `msg` under `pk`, using this instance's algorithm.
+    fn verify(&self, pk: &PubKey, msg: &[u8], sig: &Sig) -> bool;
+}
+
+impl<T: Identity> IdentityVerifier for T {
+    fn verify(&self, pk: &PubKey, msg: &[u8], sig: &Sig) -> bool {
+        <T as Identity>::verify(pk, msg, sig)
+    }
 }
 
 /// A login challenge. Self-contained and MAC'd by the authority so login can be
@@ -199,6 +245,19 @@ pub struct Token {
 impl Token {
     /// Verify the token is well-formed, unexpired, and signed by `issuer`.
     ///
+    /// **Legacy, hard-coded path — this is the A7 defect, preserved rather
+    /// than silently changed.** It always checks the signature under
+    /// `RawKeypairAuth`'s algorithm, regardless of which provider actually
+    /// issued the token. Every existing caller in this tree relies on this
+    /// exact signature (`fn(&self, u64) -> bool`), including several outside
+    /// this crate, so it is not changed here. It happens to still be correct
+    /// for `magnetite-kotva`'s `KotvaIdentity` today only because that
+    /// provider *deliberately* chose an empty domain to be byte-identical to
+    /// `RawKeypairAuth` — a workaround, not a fix (see that crate's docs).
+    /// **Prefer [`Token::is_valid_for`]** for any token that might have been
+    /// issued by a provider whose signature bytes are NOT byte-identical to
+    /// `RawKeypairAuth`'s.
+    ///
     /// `now` is unix seconds; pass the current time in production.
     pub fn is_valid_at(&self, now: u64) -> bool {
         if now >= self.claims.expires_at {
@@ -206,6 +265,23 @@ impl Token {
         }
         let msg = self.claims.signing_bytes();
         <RawKeypairAuth as Identity>::verify(&self.claims.issuer, &msg, &self.sig)
+    }
+
+    /// **A7 fix.** Verify the token against `provider` — the auth provider
+    /// actually in play — instead of assuming `RawKeypairAuth`.
+    ///
+    /// This is the corrected general form of [`Token::is_valid_at`]: pass the
+    /// live [`Identity`] instance whose algorithm actually produced (or
+    /// should have produced) `self.sig`. Because [`IdentityVerifier`] is blanket-
+    /// implemented for every `Identity`, any provider — `RawKeypairAuth`,
+    /// `magnetite-kotva`'s `KotvaIdentity`, or a foreign one this crate has
+    /// never heard of — works here with no special-casing.
+    pub fn is_valid_for(&self, provider: &dyn IdentityVerifier, now: u64) -> bool {
+        if now >= self.claims.expires_at {
+            return false;
+        }
+        let msg = self.claims.signing_bytes();
+        provider.verify(&self.claims.issuer, &msg, &self.sig)
     }
 }
 
@@ -456,6 +532,136 @@ mod tests {
             node.verify_login(resp).await,
             Err(SeamError::UntrustedChallenge)
         ));
+    }
+
+    /// A SECOND, deliberately different `Identity` provider for the A7 proof
+    /// below. Unlike `magnetite-kotva`'s `KotvaIdentity` (which chose an
+    /// **empty** domain specifically so its bytes match `RawKeypairAuth`'s),
+    /// this one signs `DOMAIN_TAG ‖ msg` — its signature bytes are NEVER
+    /// equal to `RawKeypairAuth`'s over the same key and message. A test that
+    /// only ever exercises `RawKeypairAuth` (or a provider engineered to be
+    /// byte-identical to it) cannot distinguish "verification follows the
+    /// provider" from "every provider happens to agree" — this one can.
+    struct DomainTaggedAuth(SigningKey);
+
+    const DOMAIN_TAG: &[u8] = b"magnetite-seams/domain-tagged-test/v1";
+
+    impl DomainTaggedAuth {
+        fn from_seed(seed: [u8; 32]) -> Self {
+            DomainTaggedAuth(SigningKey::from_bytes(&seed))
+        }
+        fn tagged(msg: &[u8]) -> Vec<u8> {
+            let mut v = DOMAIN_TAG.to_vec();
+            v.extend_from_slice(msg);
+            v
+        }
+    }
+
+    impl Identity for DomainTaggedAuth {
+        fn pubkey(&self) -> PubKey {
+            PubKey(self.0.verifying_key().to_bytes())
+        }
+        fn sign(&self, msg: &[u8]) -> Sig {
+            Sig(self.0.sign(&Self::tagged(msg)).to_bytes())
+        }
+        fn verify(pk: &PubKey, msg: &[u8], sig: &Sig) -> bool {
+            let vk = match VerifyingKey::from_bytes(&pk.0) {
+                Ok(vk) => vk,
+                Err(_) => return false,
+            };
+            vk.verify(&Self::tagged(msg), &Signature::from_bytes(&sig.0))
+                .is_ok()
+        }
+    }
+
+    #[test]
+    fn domain_tagged_signatures_really_do_differ_from_raw_keypair_auths() {
+        // Sanity check on the test double itself: if this ever failed, the
+        // "SECOND, deliberately different" premise below would be false.
+        let seed = [77u8; 32];
+        let tagged = DomainTaggedAuth::from_seed(seed);
+        let raw = RawKeypairAuth::from_seed(seed);
+        let msg = b"a message both providers sign";
+        assert_eq!(tagged.pubkey(), raw.pubkey(), "same seed, same key");
+        assert_ne!(
+            tagged.sign(msg).0,
+            raw.sign(msg).0,
+            "different algorithms MUST NOT produce the same signature bytes"
+        );
+    }
+
+    #[test]
+    fn is_valid_at_silently_mis_verifies_a_non_default_providers_token() {
+        // Reproduces the A7 defect itself, rather than assuming it: a token
+        // honestly issued by a provider that is NOT byte-compatible with
+        // RawKeypairAuth is REJECTED by the hard-coded legacy path — not with
+        // an error, just silently `false` — even though the signature is
+        // perfectly valid under the provider that actually issued it.
+        let issuer = DomainTaggedAuth::from_seed([88u8; 32]);
+        let now = now_unix();
+        let claims = TokenClaims {
+            issuer: issuer.pubkey(),
+            subject: PubKey([9u8; 32]),
+            audience: Audience("session".into()),
+            scope: Scope(vec!["session".into()]),
+            issued_at: now,
+            expires_at: now + 900,
+            nonce: [3u8; 16],
+        };
+        let sig = issuer.sign(&claims.signing_bytes());
+        let tok = Token { claims, sig };
+
+        assert!(
+            !tok.is_valid_at(now),
+            "legacy hard-coded path: a HONESTLY-ISSUED token from a real (non-default) \
+             provider is wrongly rejected, and does so silently rather than erring"
+        );
+    }
+
+    #[tokio::test]
+    async fn is_valid_for_follows_the_provider_rather_than_the_hard_coded_one() {
+        // The A7 fix, proved with the second, byte-different provider above:
+        // `is_valid_for` verifies correctly when given the ACTUAL issuing
+        // provider, and correctly REJECTS when given a different one — so
+        // this is not a rubber stamp, it genuinely dispatches per-instance.
+        let issuer = DomainTaggedAuth::from_seed([99u8; 32]);
+        let now = now_unix();
+        let claims = TokenClaims {
+            issuer: issuer.pubkey(),
+            subject: PubKey([1u8; 32]),
+            audience: Audience("matrix".into()),
+            scope: Scope(vec!["room:join".into()]),
+            issued_at: now,
+            expires_at: now + 900,
+            nonce: [4u8; 16],
+        };
+        let sig = issuer.sign(&claims.signing_bytes());
+        let tok = Token { claims, sig };
+
+        // 1. The provider that actually issued it: verifies.
+        assert!(
+            tok.is_valid_for(&issuer, now),
+            "is_valid_for must accept the token under its ACTUAL issuing provider"
+        );
+
+        // 2. A different provider algorithm, same key (same seed): must
+        //    reject. If verification were secretly still hard-coded to one
+        //    algorithm, swapping the passed-in provider would change nothing
+        //    and this would spuriously agree with (1) for the wrong reason.
+        let raw_same_key = RawKeypairAuth::from_seed([99u8; 32]);
+        assert!(
+            !tok.is_valid_for(&raw_same_key, now),
+            "a structurally different algorithm over the SAME key must not verify \
+             a domain-tagged signature — proves this isn't a rubber stamp"
+        );
+
+        // 3. Expiry is still enforced regardless of provider.
+        assert!(!tok.is_valid_for(&issuer, tok.claims.expires_at));
+
+        // 4. And the legacy hard-coded path still gets this one wrong,
+        //    confirming `is_valid_for` is doing genuinely different work,
+        //    not just re-deriving the same answer another way.
+        assert!(!tok.is_valid_at(now));
     }
 
     #[tokio::test]
