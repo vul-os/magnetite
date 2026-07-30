@@ -35,13 +35,13 @@
 //! **1. Domain separation.** kotva signs via
 //! [`IdentityKey::sign_domain(domain, msg)`](kotva_core::identity::IdentityKey::sign_domain),
 //! which signs `domain ‖ msg`. Magnetite's [`Identity::sign`] takes no domain
-//! parameter, and [`Token::is_valid_at`] hard-codes
-//! `<RawKeypairAuth as Identity>::verify` for the issuer check. So
-//! [`KotvaIdentity`]'s [`Identity`] impl uses an **empty domain**, making its
-//! signatures byte-identical to
+//! parameter, so [`KotvaIdentity`]'s [`Identity`] impl uses an **empty
+//! domain**, making its signatures byte-identical to
 //! [`RawKeypairAuth`](magnetite_seams::RawKeypairAuth)'s raw Ed25519. That is
-//! what keeps the existing [`Challenge`]/[`Token`] types working unchanged across
-//! both providers, and it is verified by test.
+//! what keeps the existing [`Challenge`]/[`Token`] types working unchanged
+//! across both providers, and it is verified by test — including under
+//! [`Token::is_valid_for`], which dispatches through whichever provider is
+//! actually passed to it rather than assuming one.
 //!
 //! Callers who want kotva's domain separation use
 //! [`KotvaIdentity::sign_domain`] / [`verify_domain`] directly. Those signatures
@@ -104,14 +104,19 @@
 //!   `magnetite_seams::identity::IdentityVerifier` is now a method, blanket-
 //!   implemented for every `Identity` (this crate's `KotvaIdentity` included,
 //!   automatically — nothing here changed to gain it). `Token::is_valid_for`
-//!   is the corrected counterpart of `Token::is_valid_at`: it verifies
-//!   against whichever provider is actually passed in, so it is no longer
-//!   hard-coded to `RawKeypairAuth`. `Token::is_valid_at` itself is
-//!   unchanged and still hard-coded — existing callers throughout the tree
-//!   depend on its exact signature — which is exactly why the empty-domain
-//!   choice above still matters: it is what keeps `KotvaIdentity`-issued
-//!   tokens verifying correctly under `is_valid_at`'s legacy path too, not
-//!   just under `is_valid_for`.
+//!   verifies against whichever provider is actually passed in, so it is not
+//!   hard-coded to `RawKeypairAuth`. The old hard-coded `Token::is_valid_at`
+//!   has since been deleted outright: auditing every caller across all 16
+//!   magnetite crates (the second half of A7) found zero in production code
+//!   — only tests, all migrated to `is_valid_for` — so there was no
+//!   compatibility reason left to keep it, and keeping it would have left a
+//!   silent-mis-verification trap callable for no benefit.
+//!   `magnetite-runtime`'s `fleet`/`cluster`/`follow` protocol and
+//!   `magnetite-solana-rail`'s handshake path still call `Identity::verify`
+//!   directly by concrete type via UFCS (the reason `verify` itself stays an
+//!   associated function rather than becoming a method) — those were
+//!   individually audited and found to be a **closed** system (the signing
+//!   side is equally hard-typed to `RawKeypairAuth`), not a live A7-class bug.
 //! * **No seam expressed key lifecycle — PARTIALLY LANDED (A8).**
 //!   `magnetite_seams::rotation` now carries a minimum key-rotation chain
 //!   (`RotationRecord` + `verify_chain`), adopted from kotva's own

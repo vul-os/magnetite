@@ -369,7 +369,8 @@ async fn decentralized_loop_end_to_end_offline() {
     );
     assert_eq!(cred.token.claims.issuer, node_key.pubkey());
     assert!(
-        cred.token.is_valid_at(
+        cred.token.is_valid_for(
+            &node_key,
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -378,7 +379,7 @@ async fn decentralized_loop_end_to_end_offline() {
         "a freshly minted credential must be live"
     );
     assert!(
-        !cred.token.is_valid_at(u64::MAX),
+        !cred.token.is_valid_for(&node_key, u64::MAX),
         "FAIL-CLOSED: a credential must not be valid forever"
     );
 

@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn seam_token_is_node_signed_and_audience_bound() {
         let t = tok_for("jitsi");
-        assert!(t.is_valid_at(now_unix()));
+        assert!(t.is_valid_for(node_auth(), now_unix()));
         assert_eq!(t.claims.issuer, node_pubkey());
         assert_eq!(t.claims.audience, Audience("jitsi".into()));
         assert!(t.claims.scope.0.iter().any(|s| s.starts_with("room:join:")));

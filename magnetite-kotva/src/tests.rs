@@ -4,14 +4,19 @@
 //!
 //! What these cover:
 //!  * **§3.1** — a challenge/response round-trips; the four login checks each
-//!    fail closed on their own failure mode; a kotva-minted `Token` is still
-//!    accepted by `Token::is_valid_at`, which hard-codes `RawKeypairAuth::verify`
-//!    (the empty-domain decision, asserted rather than assumed);
+//!    fail closed on their own failure mode; a kotva-minted `Token` verifies
+//!    correctly through `Token::is_valid_for(&node, ...)` (the empty-domain
+//!    decision that keeps `KotvaIdentity` byte-compatible with
+//!    `RawKeypairAuth`, asserted rather than assumed);
 //!  * **A7 cross-check** — `Token::is_valid_for` (magnetite-seams's fix: verify
 //!    against whichever provider is actually passed in) genuinely follows a
 //!    REAL kotva domain-separated signature, not just the synthetic double
 //!    `magnetite-seams`'s own tests use — and still rejects it under a
-//!    different provider over the same key, proving it is not a rubber stamp;
+//!    different provider over the same key, proving it is not a rubber stamp.
+//!    (The crate used to also show `Token::is_valid_at` — a hard-coded,
+//!    RawKeypairAuth-only path — silently rejecting the same honest token;
+//!    that method has since been deleted, having had zero production callers
+//!    anywhere in the tree, so this crate's docs no longer reference it.)
 //!  * **key-material interchange** — one seed produces the same public key and
 //!    byte-identical signatures in both providers, which is the concrete content
 //!    of `ALIGNMENT.md` §3's "the identity curve already matches";
@@ -158,15 +163,17 @@ impl Identity for DomainedKotvaForTokens<'_> {
 fn is_valid_for_follows_a_genuinely_domain_separated_kotva_signature() {
     // Builds a token "issued" via real kotva domain-separated signing (NOT
     // KotvaIdentity's own empty-domain `Identity` impl), and shows:
-    //  1. the legacy `is_valid_at` (hard-coded to RawKeypairAuth's plain
-    //     Ed25519) silently rejects it — this crate's own docs named that
-    //     as the A7 defect;
-    //  2. `is_valid_for` accepts it when given the matching domained
+    //  1. `is_valid_for` accepts it when given the matching domained
     //     provider — magnetite-seams's A7 fix, exercised here against real
     //     kotva crypto rather than a synthetic double;
-    //  3. `is_valid_for` still rejects it under a DIFFERENT provider over
+    //  2. `is_valid_for` still rejects it under a DIFFERENT provider over
     //     the same key (the undomained `KotvaIdentity` itself), proving
     //     this is genuine per-instance dispatch, not a rubber stamp.
+    // (This test used to also show the legacy `Token::is_valid_at` — hard-coded
+    // to RawKeypairAuth's plain Ed25519 — silently rejecting this same honest
+    // token. That method has been deleted; it had zero production callers
+    // anywhere in the tree, only tests, all of which have been migrated to
+    // `is_valid_for`.)
     let node = KotvaIdentity::from_seed([55u8; 32]);
     let domained = DomainedKotvaForTokens(&node);
     let now = now_unix();
@@ -182,11 +189,6 @@ fn is_valid_for_follows_a_genuinely_domain_separated_kotva_signature() {
     let sig = domained.sign(&claims.signing_bytes());
     let tok = Token { claims, sig };
 
-    assert!(
-        !tok.is_valid_at(now),
-        "legacy hard-coded path silently rejects a real, honestly-issued \
-         domain-separated kotva token"
-    );
     assert!(
         tok.is_valid_for(&domained, now),
         "is_valid_for must accept the token under its ACTUAL issuing provider"
@@ -212,11 +214,12 @@ async fn challenge_response_login_round_trips() {
     let session = node.verify_login(resp).await.expect("login ok");
     assert_eq!(session.subject, player.pubkey());
     assert_eq!(session.token.claims.issuer, node.node_pubkey());
-    // `Token::is_valid_at` hard-codes `RawKeypairAuth::verify` for the issuer
-    // check. It must still accept a kotva-minted token — that is the
-    // empty-domain decision paying off, and the reason it was made.
-    assert!(session.token.is_valid_at(now_unix()));
-    assert!(!session.token.is_valid_at(session.token.claims.expires_at));
+    // `is_valid_for` dispatches through whichever provider is actually
+    // passed in — here, the kotva node itself.
+    assert!(session.token.is_valid_for(&node, now_unix()));
+    assert!(!session
+        .token
+        .is_valid_for(&node, session.token.claims.expires_at));
 }
 
 #[tokio::test]
@@ -280,11 +283,11 @@ async fn a_kotva_minted_token_is_audience_bound_and_tamper_evident() {
         )
         .await;
     assert_eq!(tok.claims.audience, Audience("matrix".into()));
-    assert!(tok.is_valid_at(now_unix()));
+    assert!(tok.is_valid_for(&node, now_unix()));
 
     let mut bad = tok.clone();
     bad.claims.audience = Audience("jitsi".into());
-    assert!(!bad.is_valid_at(now_unix()));
+    assert!(!bad.is_valid_for(&node, now_unix()));
 }
 
 // --- §3.2 ------------------------------------------------------------------------------------

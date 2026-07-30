@@ -462,7 +462,7 @@ mod tests {
         assert!(a.exists(&room));
 
         let cred = a.issue_join_credential(&PubKey([1u8; 32]), &room).await;
-        assert!(cred.token.is_valid_at(bridge::now_unix()));
+        assert!(cred.token.is_valid_for(bridge::node_auth(), bridge::now_unix()));
         a.teardown(&room).await.unwrap();
         assert!(!a.exists(&room));
     }
@@ -483,7 +483,9 @@ mod tests {
         let rendered = m.render(&cred, None);
         assert_eq!(rendered.kind, "matrix");
         assert!(rendered.token.is_none());
-        assert!(rendered.seam_token.is_valid_at(bridge::now_unix()));
+        assert!(rendered
+            .seam_token
+            .is_valid_for(bridge::node_auth(), bridge::now_unix()));
     }
 
     #[tokio::test]
