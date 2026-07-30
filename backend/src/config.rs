@@ -23,11 +23,16 @@ pub struct Config {
     pub gitlab_client_id: String,
     pub gitlab_client_secret: String,
     /// Payment rail selector (`PAYMENT_RAIL`). Default `mock` — deterministic,
-    /// offline, zero external services. Any other value currently falls back to
-    /// the mock rail with a warning (see TODO(chain) in services/payment.rs).
+    /// offline, zero external services. An unknown value, or `solana` on a
+    /// binary built without `--features solana`, PANICS at startup (see
+    /// `services::payment::rail`) — it never falls back.
+    ///
+    /// There is deliberately no fee-rate and no fee-destination field here.
+    /// `PROTOCOL_FEE_BPS` and `SOLANA_FEE_WALLET` are gone: the rate belongs to
+    /// whoever's money it is (the developer's signed manifest, the player's
+    /// checkout) and the stewards destination comes from the signed release, so
+    /// neither is a node-operator setting. See `ALIGNMENT.md` §4.
     pub payment_rail: String,
-    /// Protocol fee in basis points (`PROTOCOL_FEE_BPS`). Default 0.
-    pub protocol_fee_bps: u16,
     /// Operator wallet that receives hosting/subscription fees (`OPERATOR_WALLET_PUBKEY`).
     pub operator_wallet_pubkey: Option<String>,
     /// Placeholder chain config — unused by the mock rail.
@@ -114,10 +119,6 @@ impl Config {
             gitlab_client_secret: env::var("GITLAB_CLIENT_SECRET")
                 .unwrap_or_else(|_| "".to_string()),
             payment_rail: env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string()),
-            protocol_fee_bps: env::var("PROTOCOL_FEE_BPS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(0),
             operator_wallet_pubkey: env::var("OPERATOR_WALLET_PUBKEY").ok(),
             chain_rpc_url: env::var("CHAIN_RPC_URL").ok(),
             chain_id: env::var("CHAIN_ID").ok(),

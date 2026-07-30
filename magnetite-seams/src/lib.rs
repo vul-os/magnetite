@@ -78,8 +78,8 @@ pub use comms::{BuiltinProvider, CommsProvider, JoinCred, RoomAddr, RoomScope};
 
 // Seam §3.6 — PaymentRail
 pub use payment::{
-    ChainBinding, Channel, Escrow, MockPaymentRail, PayOut, PaymentError, PaymentRail,
-    PaymentSplit, Receipt, Split, WagerTerms,
+    split_digest, ChainBinding, Channel, Escrow, Leg, MockPaymentRail, PayOut, PaymentError,
+    PaymentRail, PaymentSplit, Receipt, Role, WagerTerms, ZERO_ONLY_DUST_FLOOR,
 };
 
 // Seam §3.7 — InputProvider
@@ -191,14 +191,7 @@ pub mod defaults {
             let cred = seams.comms.issue_join_credential(&pk, &room).await;
             assert_eq!(cred.token.claims.issuer, pk);
             // Payments produce a verifiable receipt.
-            let split = crate::PaymentSplit {
-                developer: crate::Split {
-                    wallet: pk,
-                    amount: 500,
-                },
-                operator: None,
-                protocol_fee_bps: 0,
-            };
+            let split = crate::PaymentSplit::to_developer(pk, 500);
             let r = seams.payments.checkout(&pk, split).await;
             assert!(seams.payments.verify_receipt(&r));
             // Input: the default slot is deterministic, so the default bundle

@@ -36,7 +36,7 @@ use magnetite_seams::discovery::{
 };
 use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth};
 use magnetite_seams::payment::{
-    receipt_admits, MockPaymentRail, PaymentRail, PaymentSplit, Receipt, Split,
+    receipt_admits, Leg, MockPaymentRail, PaymentRail, PaymentSplit, Receipt,
 };
 
 use game_template_authoritative::ArenaShooter;
@@ -327,14 +327,7 @@ async fn decentralized_loop_end_to_end_offline() {
     // ── 4. Pay for a seat ───────────────────────────────────────────────────
     // Wallet → wallet. No balance table, no custody: the receipt IS the
     // entitlement, and the developer takes the whole subtotal.
-    let split = PaymentSplit {
-        developer: Split {
-            wallet: developer.pubkey(),
-            amount: SEAT_PRICE,
-        },
-        operator: None,
-        protocol_fee_bps: 0,
-    };
+    let split = PaymentSplit::new(vec![Leg::developer(developer.pubkey(), SEAT_PRICE)]);
     let receipt: Receipt = rail.checkout(&player.pubkey(), split).await;
 
     assert_eq!(receipt.buyer, player.pubkey());
@@ -416,14 +409,7 @@ async fn decentralized_loop_end_to_end_offline() {
     let cheap = rail
         .checkout(
             &player.pubkey(),
-            PaymentSplit {
-                developer: Split {
-                    wallet: developer.pubkey(),
-                    amount: 1,
-                },
-                operator: None,
-                protocol_fee_bps: 0,
-            },
+            PaymentSplit::new(vec![Leg::developer(developer.pubkey(), 1)]),
         )
         .await;
     assert!(

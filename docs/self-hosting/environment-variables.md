@@ -142,7 +142,6 @@ All payment variables are optional; the defaults need no external service.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PAYMENT_RAIL` | `mock` | Settlement rail: `mock` or `solana`. `mock` issues deterministic signed receipts fully offline — this is what CI and `magnetite dev` use. `solana` selects the real SPL-USDC rail and requires building with `--features solana` (see the **Solana rail** section below); an unknown or not-compiled-in value is fatal at startup |
-| `PROTOCOL_FEE_BPS` | `0` | Protocol fee in basis points, taken **on top of** the subtotal. The developer receives the whole subtotal |
 | `OPERATOR_WALLET_PUBKEY` | — | Hex Ed25519 pubkey that receives hosting / paid-tier fees. Only needed if this node sells hosting or paid tiers |
 | `CHAIN_RPC_URL` | — | Dormant generic-config field; the Solana rail below reads `SOLANA_RPC_URL` instead |
 | `CHAIN_ID` | — | Dormant generic-config field, unused by both rails |
@@ -152,8 +151,7 @@ All payment variables are optional; the defaults need no external service.
 
 A real, non-custodial SPL-USDC settlement rail on Solana
 (`magnetite-solana-rail` → `patala-solana`), off by default. When selected, the
-node validates every field at startup and refuses to boot on a misconfiguration
-(e.g. a mainnet cluster with `PROTOCOL_FEE_BPS > 0` but no fee wallet).
+node validates every field at startup and refuses to boot on a misconfiguration.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -161,8 +159,32 @@ node validates every field at startup and refuses to boot on a misconfiguration
 | `SOLANA_CLUSTER` | — | `mainnet-beta` \| `devnet` \| `testnet` \| `localnet` (required) |
 | `SOLANA_COMMITMENT` | `finalized` | `confirmed` \| `finalized` |
 | `SOLANA_USDC_MINT` | canonical mint for the cluster | base58 USDC mint address |
-| `SOLANA_FEE_WALLET` | — | base58; **required when `PROTOCOL_FEE_BPS > 0`** |
 | `SOLANA_KEYPAIR_PATH` / `SOLANA_KEYPAIR` | — | Optional signer (`chmod 600`); absent ⇒ the rail is verify-only |
+| `MAGNETITE_STEWARDS_WALLET_DEVNET` | — | base58; **devnet / testnet / localnet ONLY.** Overrides the stewards destination for local testing. Setting it while `SOLANA_CLUSTER=mainnet-beta` is a **fatal startup error**, never ignored |
+
+#### There is no fee rate and no fee wallet, on purpose
+
+`PROTOCOL_FEE_BPS` and `SOLANA_FEE_WALLET` are **gone**, and they are not coming
+back as renamed variables. Both put someone else's money under the node
+operator's control:
+
+* the **rate** was an operator setting on a *developer's* sale. A voluntary
+  contribution's size belongs to whoever's money it is — the developer, in their
+  signed manifest, or the player at checkout.
+* the **destination** was worse, because verification could not catch it. The
+  fail-closed checks prove that the recipients a receipt *claims* are the ones
+  the chain actually paid — not that they are the right parties. An operator who
+  pointed `SOLANA_FEE_WALLET` at their own address produced receipts that
+  verified perfectly.
+
+The stewards destination is now **compiled into the binary** at build time
+(`MAGNETITE_STEWARDS_WALLET`), so it is covered by the release's `SHA256SUMS`
+manifest and provenance attestation. Changing it means shipping a different
+binary, whose digest will not match. A fork that changes it is expected and
+visible; a host silently redirecting it is not possible.
+
+No release currently sets it, so a stewards leg is **refused** on any build in
+this tree — never redirected, and never silently dropped.
 
 ---
 

@@ -421,11 +421,12 @@ pub async fn get_game_analytics(
             .fetch_one(&pool)
             .await?;
 
-    // Non-custodial model: the developer takes the full subtotal and the platform takes only
-    // `PROTOCOL_FEE_BPS` (default 0) — there is no 70/30 split. NOTE: `game_revenue` is a legacy
+    // Non-custodial model: the developer takes the full subtotal; the only other leg is a
+    // VOLUNTARY stewards contribution the developer themselves declares (0 today, and never
+    // settable by this node — see `services::payment::stewards_bps`). There is no 70/30 split. NOTE: `game_revenue` is a legacy
     // table with no remaining writers; signed receipts (`GET /developer/earnings`) are the
     // authoritative record of money. This breakdown is retained only for historical rows.
-    let fee_bps = crate::services::payment::protocol_fee_bps();
+    let fee_bps = crate::services::payment::stewards_bps();
     let platform_fee = total_revenue * Decimal::from(fee_bps) / Decimal::from(10_000u32);
     let developer_earnings = total_revenue - platform_fee;
 

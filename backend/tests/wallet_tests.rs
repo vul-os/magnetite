@@ -62,7 +62,10 @@ mod noncustodial_wallet_tests {
 
         assert_eq!(receipt.buyer, buyer);
         assert_eq!(receipt.total, 1999);
-        assert_eq!(receipt.protocol_fee, 0, "protocol fee defaults to 0 bps");
+        assert_eq!(
+            receipt.stewards_amount, 0,
+            "no stewards leg unless one is declared"
+        );
         assert_eq!(receipt.payouts[0].wallet, developer);
         assert!(
             verify_receipt(&receipt),

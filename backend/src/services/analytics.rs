@@ -4,7 +4,7 @@
 // legacy `transactions` table (`type IN ('platform_fee', 'game_fee')`) has had no
 // writer since the payment pivot — every query in this file used to read it and
 // therefore always returned zero. There is also no platform cut to report: the
-// platform takes `PROTOCOL_FEE_BPS` (default 0, real if an operator sets it) and
+// platform takes nothing; a voluntary stewards contribution (0 today) may exist and
 // nothing else, so "revenue" here means gross settled value and what actually
 // reached developer/operator wallets — never a fabricated split.
 #![allow(dead_code)]
@@ -40,7 +40,7 @@ pub struct DailyStat {
 pub struct RevenueBreakdown {
     pub game_id: Uuid,
     pub total_revenue: Decimal,
-    /// Real sum of `payment_receipts.protocol_fee` — 0 unless PROTOCOL_FEE_BPS
+    /// Real sum of `payment_receipts.protocol_fee` — 0 unless a signed manifest
     /// is configured above its default. Never a fabricated percentage.
     pub protocol_fees: Decimal,
     /// Settled to the developer's (and any operator's) wallet at checkout.

@@ -113,7 +113,8 @@ services:
       # `mock` = deterministic signed receipts, fully offline, zero external
       # services. There is no fiat processor and no custody.
       PAYMENT_RAIL: ${PAYMENT_RAIL:-mock}
-      PROTOCOL_FEE_BPS: ${PROTOCOL_FEE_BPS:-0}
+      # No PROTOCOL_FEE_BPS / SOLANA_FEE_WALLET — neither the stewards rate nor
+      # its destination is a node-operator setting (ALIGNMENT.md §4).
       OPERATOR_WALLET_PUBKEY: ${OPERATOR_WALLET_PUBKEY:-}
       # Comms — pluggable (§3.5). `builtin` needs no external service.
       COMMS_PROVIDER: ${COMMS_PROVIDER:-builtin}
