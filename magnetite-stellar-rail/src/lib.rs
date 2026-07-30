@@ -90,6 +90,28 @@
 //! **operation count** ([`tx::MAX_OPERATIONS`]), which this crate checks
 //! directly and more precisely (no serialized-byte estimate needed).
 //!
+//! # A26 — this rail overrides `verify_receipt_for_item_tiered`
+//!
+//! `docs/stellar-history-retention.md` records that Stellar **testnet resets
+//! to genesis 2-4x/year**, wiping Horizon, and that
+//! `magnetite_seams::payment::PaymentRail::verify_receipt_for_item_tiered`'s
+//! default implementation (which this rail inherited until now) reports only
+//! [`Settlement::Settled`] or refusal — a Horizon miss reads as outright
+//! forgery, not graceful degradation, which defeats the whole point of the
+//! two-tier split. This crate now overrides it (see
+//! [`StellarPaymentRail::verify_tiered_async`]) so a Horizon **miss** (`Ok(None)`,
+//! e.g. pruned/reset history) or an **operational failure to even ask**
+//! (`Err`, e.g. no network) degrades to [`Settlement::SignedUnsettled`] rather
+//! than refusing outright — but ONLY once checks 1-5 (signature, arithmetic,
+//! binding) have already passed offline, and ONLY when Horizon has not
+//! actually answered "no": a transaction Horizon reports as failed, or whose
+//! on-chain content disagrees with the receipt (checks 7-10), is refused
+//! exactly as before. See [`StellarPaymentRail::verify_tiered_async`]'s own
+//! docs for the three-way split (confirmed / could-not-check / refused).
+//! `magnetite-solana-rail` (scheduled for retirement per `docs/cross-repo-backlog.md`
+//! A12) does not get this treatment — see that crate's absence of any
+//! `Settlement`/`tiered` reference, unchanged by this pass.
+//!
 //! # Money math
 //!
 //! USDC on Stellar has 7 decimals (`tx::USDC_DECIMALS`) — classic Stellar XDR
@@ -112,7 +134,7 @@ use std::sync::Arc;
 use magnetite_seams::identity::{Identity, IdentityVerifier, PubKey, RawKeypairAuth, Sig};
 use magnetite_seams::payment::{
     split_digest, ChainBinding, Channel, Escrow, Leg, PayOut, PaymentError, PaymentRail,
-    PaymentSplit, Receipt, Role, WagerTerms,
+    PaymentSplit, Receipt, Role, Settlement, WagerTerms,
 };
 
 use rpc::StellarRpc;
@@ -412,6 +434,32 @@ struct ProofLeg {
     role: String,
 }
 
+/// Everything checks 1-5 ([`StellarPaymentRail::verify_offline`]) resolve,
+/// handed to the chain-facing checks 6-10
+/// ([`StellarPaymentRail::verify_chain`] /
+/// [`StellarPaymentRail::verify_chain_record`]). Exists so the offline work
+/// is done exactly once and shared byte-for-byte between the boolean
+/// (`verify_async`) and tiered (`verify_tiered_async`, A26) verification
+/// paths — neither re-derives it differently.
+struct OfflineVerified {
+    /// The receipt's claimed buyer (check 8 compares this to the on-chain
+    /// source account).
+    buyer: PubKey,
+    /// The parsed, offline-consistent rail proof (its `tx_hash` is what
+    /// checks 6+ look up).
+    proof: RailProof,
+    /// The legs reconstructed from the proof/receipt agreement (check 10
+    /// compares these to the decoded on-chain operations).
+    legs: Vec<Leg>,
+    /// The derived binding reference, already confirmed to equal both the
+    /// proof's and the receipt's own copies (check 9 compares this to the
+    /// on-chain `MEMO_HASH`).
+    memo: [u8; 32],
+    /// The configured USDC issuer's decoded public key (check 10's asset
+    /// check).
+    issuer_pk: PubKey,
+}
+
 /// Map a [`Role::tag`] back to a [`Role`]. Same labelling-collision caveat as
 /// `magnetite_solana_rail::role_from_tag`: `Other("developer")` and
 /// `Developer` share a tag; what moves money is the wallet and amount, both
@@ -676,11 +724,34 @@ impl StellarPaymentRail {
     /// `magnetite_solana_rail::SolanaPaymentRail::verify_async` — see this
     /// crate's module docs for the numbered mapping. **Every** error path
     /// means "do not grant". There is no fail-open branch anywhere below.
+    ///
+    /// Checks 1-5 are [`Self::verify_offline`]; checks 6-10 are
+    /// [`Self::verify_chain`]. This function exists, unchanged in behaviour
+    /// from before the A26 split, so `verify_receipt`/`verify_receipt_for_item`
+    /// keep their original boolean semantics: a Horizon miss or RPC error
+    /// refuses here exactly as it always did. [`Self::verify_tiered_async`] is
+    /// the ONLY path that treats a miss/RPC-error differently
+    /// (`Settlement::SignedUnsettled` instead of refusal) — see its own docs.
     async fn verify_async(
         &self,
         r: &Receipt,
         expect_item: Option<&str>,
     ) -> Result<(), StellarError> {
+        let off = self.verify_offline(r, expect_item).await?;
+        self.verify_chain(&off).await
+    }
+
+    /// Checks 1-5: everything that can be decided about a receipt **without
+    /// asking Horizon anything**. Shared, unmodified, by both
+    /// [`Self::verify_async`] (boolean) and [`Self::verify_tiered_async`]
+    /// (tiered) — a receipt that fails here is refused at every reachability
+    /// setting; only checks 6-10 (chain-dependent, [`Self::verify_chain`] /
+    /// [`Self::verify_chain_record`]) differ between the two callers.
+    async fn verify_offline(
+        &self,
+        r: &Receipt,
+        expect_item: Option<&str>,
+    ) -> Result<OfflineVerified, StellarError> {
         let deny = |m: &str| StellarError::Config(m.to_string());
 
         // ── 1. the receipt carries a chain binding, and the chain is stellar ─
@@ -825,12 +896,50 @@ impl StellarPaymentRail {
             ));
         }
 
+        Ok(OfflineVerified {
+            buyer: r.buyer,
+            proof,
+            legs,
+            memo,
+            issuer_pk,
+        })
+    }
+
+    /// Checks 6-10, boolean semantics: ask Horizon for `off.proof.tx_hash`,
+    /// then run [`Self::verify_chain_record`] against whatever it returns.
+    /// `Ok(None)` (never heard of this hash) and `Err` (could not even ask —
+    /// no network, timeout, garbage response) **both refuse** here, exactly
+    /// as they always have — see [`Self::verify_tiered_async`] for the A26
+    /// path that treats those two cases as "unsettled" instead of "refused".
+    async fn verify_chain(&self, off: &OfflineVerified) -> Result<(), StellarError> {
         // ── 6. the transaction is known to Horizon ──────────────────────────
-        let record = match self.rpc.get_transaction(&proof.tx_hash).await {
+        let record = match self.rpc.get_transaction(&off.proof.tx_hash).await {
             Ok(Some(t)) => t,
-            Ok(None) => return Err(deny("horizon has never heard of this transaction hash")),
+            Ok(None) => {
+                return Err(StellarError::Config(
+                    "horizon has never heard of this transaction hash".to_string(),
+                ))
+            }
             Err(e) => return Err(e),
         };
+        self.verify_chain_record(off, &record)
+    }
+
+    /// Checks 7-10, given a [`rpc::TxRecord`] Horizon has already answered
+    /// with. Factored out of [`Self::verify_chain`] so
+    /// [`Self::verify_tiered_async`] can reuse the exact same on-chain-content
+    /// checks *after* it has already decided, from the `Result<Option<_>, _>`
+    /// shape of the Horizon call, whether it is even looking at a record at
+    /// all (a miss/error never reaches this function in the tiered path —
+    /// see its docs). This function's contract is unchanged either way: any
+    /// `Err` here means Horizon **answered**, and the answer disagrees with
+    /// the receipt — never "could not check".
+    fn verify_chain_record(
+        &self,
+        off: &OfflineVerified,
+        record: &rpc::TxRecord,
+    ) -> Result<(), StellarError> {
+        let deny = |m: &str| StellarError::Config(m.to_string());
 
         // ── 7. it landed successfully ────────────────────────────────────
         if !record.successful {
@@ -843,22 +952,22 @@ impl StellarPaymentRail {
             .map_err(|_| deny("horizon's envelope is not the payment shape this rail builds"))?;
 
         // ── 8. the buyer is the transaction's own source account ───────────
-        if decoded.source_pk != r.buyer.0 {
+        if decoded.source_pk != off.buyer.0 {
             return Err(deny("buyer is not the source account of this transaction"));
         }
 
         // ── 9. the on-chain memo is EXACTLY the derived binding ─────────────
-        if decoded.memo != memo {
+        if decoded.memo != off.memo {
             return Err(deny("on-chain memo is not the derived binding"));
         }
 
         // ── 10. the money: every decoded PAYMENT operation, in order, pays
         //        exactly the wallet and amount a leg claims, in the
         //        configured USDC asset, with no extra/missing operation.
-        if decoded.legs.len() != legs.len() {
-            return Err(StellarLegCountMismatch(decoded.legs.len(), legs.len()).into());
+        if decoded.legs.len() != off.legs.len() {
+            return Err(StellarLegCountMismatch(decoded.legs.len(), off.legs.len()).into());
         }
-        for (i, (d, want)) in decoded.legs.iter().zip(legs.iter()).enumerate() {
+        for (i, (d, want)) in decoded.legs.iter().zip(off.legs.iter()).enumerate() {
             let want_amount = i64::try_from(want.amount)
                 .map_err(|_| deny("leg amount exceeds Stellar's i64 range"))?;
             if d.dest_pk != want.wallet.0 {
@@ -871,7 +980,7 @@ impl StellarPaymentRail {
                     "operation {i}: on-chain amount does not match the claimed leg"
                 )));
             }
-            if !tx::asset_is(&d.asset, "USDC", issuer_pk.0) {
+            if !tx::asset_is(&d.asset, "USDC", off.issuer_pk.0) {
                 return Err(StellarError::Config(format!(
                     "operation {i}: on-chain asset is not the configured USDC issuer"
                 )));
@@ -879,6 +988,53 @@ impl StellarPaymentRail {
         }
 
         Ok(())
+    }
+
+    /// A26: [`magnetite_seams::payment::PaymentRail::verify_receipt_for_item_tiered`],
+    /// overridden. Runs the SAME checks 1-5 ([`Self::verify_offline`]) as
+    /// [`Self::verify_async`], then branches checks 6-10 three ways instead
+    /// of two — this is the whole point of the override:
+    ///
+    /// * **Confirmed** — Horizon returns a record AND [`Self::verify_chain_record`]
+    ///   accepts it (checks 7-10 all pass) → [`Settlement::Settled`].
+    /// * **Could not check** — Horizon has never heard of this hash
+    ///   (`Ok(None)`: pruned history, most plausibly a testnet reset per
+    ///   `docs/stellar-history-retention.md`, though a signed-but-never-submitted
+    ///   transaction is honestly indistinguishable from this case — exactly
+    ///   why this tier is named "signed", not "paid") **or** Horizon could not
+    ///   even be asked (`Err`: no network, timeout, malformed response — an
+    ///   OPERATIONAL failure to check, not an answer) → [`Settlement::SignedUnsettled`].
+    ///   These two share one outcome deliberately: from this rail's point of
+    ///   view they are the identical fact, "chain state is currently
+    ///   unknowable," never "chain state is bad."
+    /// * **Refused** — Horizon answered and the answer is wrong: `successful:
+    ///   false`, or the envelope disagrees with the receipt on buyer, memo, or
+    ///   money (checks 7-10 via [`Self::verify_chain_record`]) → refused
+    ///   (`None`). This is the branch that must NEVER become
+    ///   `SignedUnsettled` — Horizon did not fail to answer here, it answered
+    ///   "no" or "not this", and a tampered/failed receipt does not get a
+    ///   softer label for it.
+    ///
+    /// Checks 1-5 gate everything, exactly as in [`Self::verify_async`]: a
+    /// receipt that fails them is refused at every reachability setting —
+    /// this tier is never available to a receipt that was not already
+    /// cryptographically sound. See `magnetite-seams`' own
+    /// `tests::DisconnectAwareRail` for the same three-way shape proven in
+    /// the abstract; this is that shape wired into a real chain rail.
+    async fn verify_tiered_async(
+        &self,
+        r: &Receipt,
+        expect_item: Option<&str>,
+    ) -> Option<Settlement> {
+        let off = self.verify_offline(r, expect_item).await.ok()?;
+        match self.rpc.get_transaction(&off.proof.tx_hash).await {
+            Ok(Some(record)) => match self.verify_chain_record(&off, &record) {
+                Ok(()) => Some(Settlement::Settled),
+                Err(_) => None,
+            },
+            Ok(None) => Some(Settlement::SignedUnsettled),
+            Err(_) => Some(Settlement::SignedUnsettled),
+        }
     }
 
     /// Drive [`Self::verify_async`] from a synchronous caller.
@@ -899,6 +1055,29 @@ impl StellarPaymentRail {
         match rpc_result {
             Ok(Ok(Ok(()))) => true,
             Ok(Ok(Err(_))) | Ok(Err(_)) | Err(_) => false,
+        }
+    }
+
+    /// Drive [`Self::verify_tiered_async`] from a synchronous caller — the
+    /// tiered counterpart of [`Self::verify_blocking`], same thread/runtime
+    /// shape. A runtime-build failure (essentially untestable, an OS-level
+    /// resource failure) collapses to `None` (refused), never to
+    /// `SignedUnsettled` — an inability to even run the check is not
+    /// evidence the receipt was ever signed.
+    fn verify_tiered_blocking(&self, r: &Receipt, item: Option<String>) -> Option<Settlement> {
+        let rpc_result = std::thread::scope(|s| {
+            s.spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| StellarError::Config(format!("runtime: {e}")))
+                    .map(|rt| rt.block_on(self.verify_tiered_async(r, item.as_deref())))
+            })
+            .join()
+        });
+        match rpc_result {
+            Ok(Ok(settlement)) => settlement,
+            Ok(Err(_)) | Err(_) => None,
         }
     }
 }
@@ -971,6 +1150,13 @@ impl PaymentRail for StellarPaymentRail {
 
     fn verify_receipt_for_item(&self, r: &Receipt, item: &str) -> bool {
         self.verify_blocking(r, Some(item.to_string()))
+    }
+
+    /// A26: overrides the trait default — see
+    /// [`StellarPaymentRail::verify_tiered_async`] for the three-way split
+    /// (confirmed / could-not-check / refused) this delegates to.
+    fn verify_receipt_for_item_tiered(&self, r: &Receipt, item: &str) -> Option<Settlement> {
+        self.verify_tiered_blocking(r, Some(item.to_string()))
     }
 }
 

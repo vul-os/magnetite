@@ -140,6 +140,50 @@ A26's own framing — recorded here as an open recommendation, not a change
 made (this session did not touch `magnetite-stellar-rail`, per its
 constraint).
 
+## Update, same day (2026-07-30): the wiring recommended above has landed
+
+The recommendation two paragraphs up — "wiring a rail's Horizon-404 case to
+`Some(Settlement::SignedUnsettled)` ... recorded here as an open
+recommendation, not a change made" — **has now been done**, in
+`magnetite-stellar-rail`, not in this document's own pass (this file is left
+as the historical record of the assessment; it is not rewritten to pretend
+the finding came pre-solved).
+
+`StellarPaymentRail` now overrides `verify_receipt_for_item_tiered`
+(`magnetite-stellar-rail/src/lib.rs`, `verify_tiered_async`): checks 1-5 run
+offline exactly as they always did (this document's "steps 1-6" survive any
+retention loss forever, unchanged); a Horizon miss (`Ok(None)` — the pruned-
+or-reset case this document is about) **or** an operational failure to even
+ask Horizon (`Err` — no network, timeout) both degrade to
+`Settlement::SignedUnsettled` rather than refusing; and Horizon *answering*
+that the transaction failed, or that its content disagrees with the receipt,
+still refuses outright — the three-way split (confirmed / could-not-check /
+refused) this document's own step-8 distinction (RPC failure propagates as
+`Err`, "never as an implied verified") already implied but did not itself
+wire up. Each branch was mutation-tested: forcing the miss-path, the
+RPC-error-path, or the on-chain-refusal-path to report the wrong tier turned
+a test red in each case; forcing an offline-tampered receipt to report
+`SignedUnsettled` also turned two tests red. All reverted; 70/70 tests green
+in `magnetite-stellar-rail`.
+
+So the honest answer this document gave — "none of magnetite's guarantees
+gracefully degrade today" — **is now false for `magnetite-stellar-rail`
+specifically** (the crate this document said, as of its own writing, "does
+not override `verify_receipt_for_item_tiered` either"). It remains true for
+`magnetite-solana-rail`, which was deliberately left alone: that crate is
+scheduled for retirement (`docs/cross-repo-backlog.md` A12), and giving it
+the same treatment would be wasted work on a rail already slated for
+deletion.
+
+**What did NOT change**: `magnetite-web-host`'s serving policy for
+`Verdict::GrantedUnsettled` — it still refuses (`Refusal::PendingSettlement`).
+That a rail can now produce the tier does not by itself argue for serving on
+it; see `magnetite-web-host/src/entitlement.rs`'s doc on
+`Verdict::GrantedUnsettled` for the considered argument (asymmetric,
+irreversible loss vs. a recoverable retry; `HorizonRpc` here has still never
+completed a live round trip; an opt-in serving policy is separate product
+work, not a side effect of wiring one rail).
+
 ## What could not be established
 
 - **Exact reaping mechanics.** Horizon's admin guide says a purge removes

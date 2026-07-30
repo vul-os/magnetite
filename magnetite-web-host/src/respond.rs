@@ -382,14 +382,20 @@ impl HostedBundle {
         //    that does not — the file list is part of what was paid for.
         match entitlement::evaluate(&self.manifest.pricing, rail, &req.credentials) {
             Verdict::Granted => {}
-            // A14: the receipt verified locally but the rail could not
-            // re-confirm it against a chain right now. This node has not
-            // been given a policy for serving on that tier — deciding one
-            // (an operator opt-in? which bundles?) is real product work this
-            // pass does not do, the same way backlog item A15 documents a
-            // boundary without building the exchange across it. Until such a
-            // policy exists the fail-closed default applies: refuse, loudly
-            // and distinguishably (`Refusal::PendingSettlement`), rather than
+            // A14/A26: the receipt verified locally but the rail could not
+            // re-confirm it against a chain right now — reachable for real
+            // since `magnetite-stellar-rail` overrode `verify_receipt_for_item_tiered`
+            // (a Horizon miss or RPC failure after checks 1-5 pass, most
+            // plausibly a Stellar testnet reset per
+            // `docs/stellar-history-retention.md`). The policy is a
+            // considered decision, not a deferred one — see
+            // `entitlement::Verdict::GrantedUnsettled`'s doc for the full
+            // argument (asymmetric loss: a wrongly-refused buyer retries,
+            // wrongly-served bytes cannot be un-served; the rail's own
+            // `HorizonRpc` has never completed a live round trip; and an
+            // opt-in serving policy is real product work with its own threat
+            // model, not a side effect of this pass). Refuse, loudly and
+            // distinguishably (`Refusal::PendingSettlement`), rather than
             // silently reusing `ReceiptRejected`'s reason, which would be a
             // lie — this receipt did not fail, it is merely unconfirmed.
             Verdict::GrantedUnsettled => {

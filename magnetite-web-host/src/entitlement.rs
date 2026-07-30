@@ -102,11 +102,23 @@ pub enum Refusal {
     WrongBuyer,
     /// A14: the rail reported [`Settlement::SignedUnsettled`] — the receipt's
     /// signature and arithmetic check out locally, but the rail could not
-    /// re-confirm it against a chain right now (no network, most commonly).
-    /// This node has **no serving policy yet** for an unsettled receipt (see
-    /// [`Verdict::GrantedUnsettled`]'s docs — that is deliberately future
-    /// work, the same way backlog item A15 is), so today it refuses rather
-    /// than guess. → `403`.
+    /// re-confirm it against a chain right now.
+    ///
+    /// **A26 update:** this is no longer a hypothetical branch. `magnetite-stellar-rail`
+    /// overrides `verify_receipt_for_item_tiered` and produces exactly this
+    /// tier whenever Horizon has never heard of a transaction hash (pruned
+    /// history, most plausibly a Stellar testnet reset — see
+    /// `docs/stellar-history-retention.md`) or could not even be asked (no
+    /// network). The policy decision was revisited with that in mind and
+    /// **stays refuse-by-default, deliberately** — see
+    /// [`Verdict::GrantedUnsettled`]'s docs for the argument. This is not
+    /// "future work nobody has looked at yet"; it is a considered, standing
+    /// choice: serving paid bytes on an unconfirmed payment is a real loss
+    /// mode with no clawback (there is no "un-serve" once the response left
+    /// the process), while wrongly refusing a legitimate signed-but-unsettled
+    /// receipt is recoverable — the buyer retries once the chain, or the
+    /// node's network, comes back. That asymmetry is the whole argument. →
+    /// `403`.
     PendingSettlement,
 }
 
@@ -128,7 +140,7 @@ impl Refusal {
             Self::WrongBuyer => "receipt was not issued to the authenticated requester",
             Self::PendingSettlement => {
                 "receipt verified locally but chain confirmation is unavailable; \
-                 this node has no policy for serving on an unsettled receipt"
+                 this node's policy is to refuse rather than serve on an unsettled receipt"
             }
         }
     }
@@ -157,6 +169,39 @@ pub enum Verdict {
     /// that wants to serve provisionally on this tier must say so
     /// explicitly, by matching this arm; there is no default that does it
     /// for them.
+    ///
+    /// **A26 policy decision, made and argued here, not deferred:** as of
+    /// `magnetite-stellar-rail`'s A26 override this variant is reachable from
+    /// a real rail (a Horizon miss or RPC failure after checks 1-5 already
+    /// passed — most plausibly a Stellar testnet reset, per
+    /// `docs/stellar-history-retention.md`), so what this crate does with it
+    /// stopped being academic the moment that rail landed. [`crate::respond`]
+    /// still maps this arm to [`Refusal::PendingSettlement`] (refuse) rather
+    /// than serving the bundle, and that stays the default deliberately:
+    ///
+    /// * **The loss is asymmetric.** Refusing a legitimate signed-but-unsettled
+    ///   receipt is recoverable — the buyer retries once Horizon or the
+    ///   node's own network recovers, and nothing was given away in the
+    ///   meantime. Granting one that turns out to have never actually settled
+    ///   (the buyer signed a transaction offline and never submitted it, or
+    ///   submitted it and it never landed) is not recoverable: the bytes are
+    ///   served, and a game bundle has no atomic clawback.
+    /// * **The rail itself is unproven live.** `magnetite-stellar-rail`'s own
+    ///   module docs are explicit that its `HorizonRpc` has never completed a
+    ///   real round trip — every offline test here runs against a scripted
+    ///   fake. Flipping a fail-closed default to fail-open on a path this
+    ///   crate has never exercised against a live network would compound one
+    ///   unverified thing with another.
+    /// * **This is a policy, not a capability gap**, and policies belong to
+    ///   the operator, not a blanket default baked into the library. A future
+    ///   per-bundle or per-operator opt-in ("serve this catalogue on
+    ///   `SignedUnsettled` for buyers who have a support channel", say) is a
+    ///   legitimate thing to want, but it needs its own design, its own
+    ///   threat model, and its own tests — it is not something this pass
+    ///   bolts on as a side effect of wiring the tier into one rail. Until
+    ///   that exists, conservative-by-default is the only honest answer, and
+    ///   it is the fail-closed direction (ALIGNMENT.md's own consistent bias)
+    ///   should an operator ever build the opt-in and misconfigure it.
     GrantedUnsettled,
     /// Serve nothing.
     Refused(Refusal),
@@ -411,10 +456,12 @@ mod tests {
     // ── A14: Settlement tiers reach `Verdict` distinctly ────────────────────
 
     /// A rail whose `verify_receipt_for_item_tiered` genuinely distinguishes
-    /// the two tiers, standing in for `magnetite_solana_rail::SolanaPaymentRail`
-    /// with its network switched off. `verify_receipt`/`verify_receipt_for_item`
-    /// (the untiered methods `evaluate` no longer calls, but which must still
-    /// exist to satisfy the trait) simply delegate to the mock underneath.
+    /// the two tiers, standing in for `magnetite_stellar_rail::StellarPaymentRail`
+    /// with Horizon unreachable (A26: as of that crate's own override, this is
+    /// no longer a hypothetical rail shape — see its `verify_tiered_async`).
+    /// `verify_receipt`/`verify_receipt_for_item` (the untiered methods
+    /// `evaluate` no longer calls, but which must still exist to satisfy the
+    /// trait) simply delegate to the mock underneath.
     struct TieredRail {
         inner: MockPaymentRail,
         settlement: Option<Settlement>,

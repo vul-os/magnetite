@@ -627,18 +627,29 @@ pub trait PaymentRail {
     /// local checks from its chain re-confirmation may return
     /// [`Settlement::SignedUnsettled`].
     ///
-    /// **Honest status (corrected 2026-07-30, A12):** no chain rail in this
-    /// tree does that split today. Neither the former `magnetite-solana-rail`
-    /// nor `magnetite-stellar-rail` (its A12 replacement) override this
-    /// method — both accept the default above, so both report only `Settled`
-    /// or refusal, never `SignedUnsettled`. This doc previously named
-    /// `magnetite_solana_rail::SolanaPaymentRail` as "the first one that
-    /// does", which was never true (verified by grep: that crate's
-    /// `verify_async` has no `Settlement`/tiered logic at all) — exactly the
-    /// class of doc claim `FANOUT-LOOP-STATE.md` §2 warns about. The only
-    /// place the tier split is actually exercised is this module's own
+    /// **Honest status (corrected again 2026-07-30, A26):** `magnetite-stellar-rail`
+    /// **does** override this method now — see
+    /// `magnetite_stellar_rail::StellarPaymentRail::verify_tiered_async`, which
+    /// runs the same offline checks (signature, arithmetic, binding) as its
+    /// boolean `verify_receipt_for_item`, then reports `SignedUnsettled` when
+    /// Horizon has never heard of the transaction hash OR could not even be
+    /// asked (network/timeout failure), and refuses outright when Horizon
+    /// *answered* that the transaction failed or disagreed with the receipt.
+    /// `magnetite-solana-rail` (scheduled for retirement, `docs/cross-repo-backlog.md`
+    /// A12) still does **not** override this method and was deliberately left
+    /// alone — accepting the default below, so it still reports only `Settled`
+    /// or refusal, never `SignedUnsettled`. This doc previously claimed (twice,
+    /// about two different rails in turn — `magnetite_solana_rail::SolanaPaymentRail`
+    /// first, then "neither rail does" as a correction) that no chain rail in
+    /// this tree exercised the split; both were true when written and neither
+    /// is true now — exactly the class of doc claim `FANOUT-LOOP-STATE.md` §2
+    /// warns about, and exactly why this comment is corrected again rather
+    /// than trusted to still be accurate. Before `magnetite-stellar-rail`, the
+    /// only place the tier split was exercised was this module's own
     /// `tests::DisconnectAwareRail`, a test-only wrapper built to prove the
-    /// two tiers are distinguishable in principle.
+    /// two tiers are distinguishable in principle; that wrapper still exists
+    /// and its tests still pass, but it is no longer the only real exercise
+    /// of the split.
     fn verify_receipt_for_item_tiered(&self, r: &Receipt, item: &str) -> Option<Settlement> {
         if self.verify_receipt_for_item(r, item) {
             Some(Settlement::Settled)
@@ -1432,14 +1443,17 @@ mod tests {
         }
     }
 
-    /// The default trait implementation is what every rail gets for free —
-    /// `MockPaymentRail` and every chain rail in this tree today
-    /// (`magnetite_solana_rail::SolanaPaymentRail`,
-    /// `magnetite_stellar_rail::StellarPaymentRail`) all use it unmodified,
-    /// none has opted into the split yet: it must never manufacture
-    /// `SignedUnsettled` on its own, only ever `Settled` or refusal — see the
-    /// trait doc's "never invents an unsettled claim it did not actually
-    /// check for".
+    /// The default trait implementation is what every rail gets for free
+    /// until it opts out. `MockPaymentRail` uses it unmodified (it has no
+    /// chain to re-confirm against, so `Settled` already is the whole of what
+    /// "settled" can mean for it), and so does `magnetite_solana_rail::SolanaPaymentRail`
+    /// (scheduled for retirement, `docs/cross-repo-backlog.md` A12 — left
+    /// alone rather than given the split). `magnetite_stellar_rail::StellarPaymentRail`
+    /// no longer uses this default: it overrides `verify_receipt_for_item_tiered`
+    /// directly (A26) — see that crate's own tests for its three-way split.
+    /// This default itself must still never manufacture `SignedUnsettled` on
+    /// its own, only ever `Settled` or refusal — see the trait doc's "never
+    /// invents an unsettled claim it did not actually check for".
     #[tokio::test]
     async fn the_default_tiered_impl_never_reports_unsettled() {
         let rail = MockPaymentRail::new();

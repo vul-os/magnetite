@@ -1061,6 +1061,154 @@ fn channels_and_escrow_are_unsupported_not_faked() {
     assert!(matches!(e, Err(PaymentError::Unsupported(_))));
 }
 
+// ── A26: verify_receipt_for_item_tiered — confirmed / could-not-check / refused ─
+
+/// Confirmed: offline checks pass AND Horizon confirms → `Settled`.
+#[test]
+fn tiered_reports_settled_when_horizon_confirms() {
+    let (item, split) = base_case();
+    let (rail, receipt) = charge(cfg(), item, split);
+    assert_eq!(
+        rail.verify_receipt_for_item_tiered(&receipt, item),
+        Some(Settlement::Settled)
+    );
+}
+
+/// Could-not-check, case 1: Horizon has never heard of the hash
+/// (`Ok(None)`) — the exact shape of a testnet reset/pruned history per
+/// `docs/stellar-history-retention.md`. Offline checks (1-5) all still
+/// passed, so this degrades to `SignedUnsettled`, NOT a refusal.
+#[test]
+fn tiered_reports_signed_unsettled_when_horizon_has_never_heard_of_the_hash() {
+    let (item, split) = base_case();
+    let (_, receipt) = charge(cfg(), item, split);
+    // A fresh rail whose FakeRpc was never told about this transaction —
+    // exactly `rejects_unconfirmed_transaction`'s setup, but read through the
+    // tiered method instead of the boolean one.
+    let rail = StellarPaymentRail::new(cfg(), FakeRpc::unconfirmed(PASSPHRASE, 1));
+    assert_eq!(
+        rail.verify_receipt_for_item_tiered(&receipt, item),
+        Some(Settlement::SignedUnsettled)
+    );
+    assert_ne!(
+        rail.verify_receipt_for_item_tiered(&receipt, item),
+        Some(Settlement::Settled),
+        "a miss is not a confirmation"
+    );
+}
+
+/// Could-not-check, case 2: Horizon could not even be asked (`Err` — no
+/// network, timeout, garbage response). An OPERATIONAL failure to check is
+/// the same fact as a miss from this rail's point of view — also
+/// `SignedUnsettled`, never a refusal and never silently treated as
+/// confirmed.
+#[test]
+fn tiered_reports_signed_unsettled_when_horizon_is_unreachable() {
+    let (item, split) = base_case();
+    let (_, receipt) = charge(cfg(), item, split);
+    let rail = StellarPaymentRail::new(cfg(), FakeRpc::failing_get(PASSPHRASE, 1));
+    assert_eq!(
+        rail.verify_receipt_for_item_tiered(&receipt, item),
+        Some(Settlement::SignedUnsettled),
+        "an RPC error is 'could not check', not 'refused' — see the crux this backlog item names"
+    );
+}
+
+/// Refused, case 1: Horizon answered and the transaction failed on chain
+/// (`successful: false`). This must NEVER read as `SignedUnsettled` — Horizon
+/// did not fail to answer, it said "no".
+#[test]
+fn tiered_refuses_when_horizon_reports_the_transaction_failed() {
+    let (item, split) = base_case();
+    let (_, receipt) = charge(cfg(), item, split);
+    let proof = proof_of(&receipt);
+    let fake = FakeRpc::unsuccessful_on_get(PASSPHRASE, 1);
+    let memo: [u8; 32] = hex::decode(&proof.reference).unwrap().try_into().unwrap();
+    let (_, env_b64) = build_envelope(
+        buyer().0,
+        &[(pk(0xD0), 800_000), (pk(0x0B), 200_000)],
+        proof.seq_num,
+        cfg().base_fee_stroops,
+        memo,
+        &signer(),
+    );
+    fake.seed(&proof.tx_hash, &env_b64);
+    let verifier = StellarPaymentRail::new(cfg(), fake);
+    assert_eq!(
+        verifier.verify_receipt_for_item_tiered(&receipt, item),
+        None,
+        "'Horizon said no' must never become the softer 'Horizon didn't answer' tier"
+    );
+}
+
+/// Refused, case 2: Horizon answered, but the on-chain content disagrees
+/// (wrong recipient) — one of checks 7-10, exercised through the tiered
+/// path. Must refuse, not degrade.
+#[test]
+fn tiered_refuses_when_on_chain_content_disagrees() {
+    let (item, split) = base_case();
+    let (_, receipt) = charge(cfg(), item, split);
+    let proof = proof_of(&receipt);
+    let memo: [u8; 32] = hex::decode(&proof.reference).unwrap().try_into().unwrap();
+    // The operator's money went somewhere else — same tamper as
+    // `rejects_wrong_recipient_on_chain`, read through the tiered method.
+    let (_, env_b64) = build_envelope(
+        buyer().0,
+        &[(pk(0xD0), 800_000), (pk(0xEE), 200_000)],
+        proof.seq_num,
+        cfg().base_fee_stroops,
+        memo,
+        &signer(),
+    );
+    let verifier = verifier_with_seed(cfg(), &proof.tx_hash, &env_b64);
+    assert_eq!(
+        verifier.verify_receipt_for_item_tiered(&receipt, item),
+        None
+    );
+}
+
+/// The crux this backlog item names: an offline check failing (checks 1-5,
+/// a tampered/forged receipt) must refuse at EVERY reachability setting —
+/// unconfirmed and unreachable included. `SignedUnsettled` is never a softer
+/// failure mode for a receipt that never verified locally in the first
+/// place.
+#[test]
+fn tiered_never_reports_signed_unsettled_for_a_receipt_that_fails_offline() {
+    let (item, split) = base_case();
+    let (_, receipt) = charge(cfg(), item, split);
+    let mut tampered = receipt.clone();
+    tampered.total += 1; // signature no longer covers the bytes — fails check 5
+
+    let fakes: Vec<Arc<dyn rpc::StellarRpc>> = vec![
+        FakeRpc::unconfirmed(PASSPHRASE, 1),
+        FakeRpc::failing_get(PASSPHRASE, 1),
+    ];
+    for fake in fakes {
+        let rail = StellarPaymentRail::new(cfg(), fake);
+        assert_eq!(
+            rail.verify_receipt_for_item_tiered(&tampered, item),
+            None,
+            "an offline-invalid receipt must refuse regardless of chain reachability"
+        );
+    }
+}
+
+/// The tiered and boolean paths must never disagree about what checks 1-5
+/// decide: `verify_receipt_for_item` (boolean) already refuses this receipt
+/// (it is unconfirmed), and the tiered method must not quietly grant
+/// something the boolean method refuses outright — it is allowed to grant
+/// something WEAKER (`SignedUnsettled`), never to disagree about whether
+/// checks 1-5 passed.
+#[test]
+fn tiered_and_boolean_paths_agree_on_offline_validity() {
+    let (item, split) = base_case();
+    let (_, mut receipt) = charge(cfg(), item, split);
+    receipt.total += 1;
+    let rail = StellarPaymentRail::new(cfg(), FakeRpc::unconfirmed(PASSPHRASE, 1));
+    assert!(!rail.verify_receipt_for_item(&receipt, item));
+    assert_eq!(rail.verify_receipt_for_item_tiered(&receipt, item), None);
+}
+
 // ── Coverage-count assertion (FANOUT-LOOP-STATE.md §2): the ten checks ─────
 
 /// Asserts `verify_async` in `lib.rs` still carries exactly ten numbered
