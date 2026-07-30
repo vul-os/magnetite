@@ -343,9 +343,25 @@ impl HostedBundle {
     ///    blob I/O
     /// 3. path → [`FileEntry`]
     /// 4. encoding negotiation
-    /// 5. fetch **and verify** the blob
-    /// 6. conditional request (`If-None-Match`)
-    /// 7. range
+    /// 5. range (`Range`), parsed against the manifest's own length — no blob
+    ///    I/O needed yet, so an unsatisfiable range (`416`) is answered
+    ///    without ever touching the blob store
+    /// 6. conditional request (`If-None-Match`) — also needs only the
+    ///    manifest's hash, not the bytes
+    /// 7. fetch **and verify** the blob — the *last* gate before touching
+    ///    storage, and deliberately so: it is the one step whose cost scales
+    ///    with the blob's size, so every gate that does not need bytes runs
+    ///    first. This step still calls the whole-blob [`BlobStore::get`], on
+    ///    every response, ranged or not — **not** [`BlobStore::get_range`].
+    ///    See the comment above the fetch itself for why: a partial fetch
+    ///    cannot be re-verified against the whole-blob hash without reading
+    ///    the whole blob anyway, and this crate's own
+    ///    `a_range_request_over_a_tampered_file_is_also_refused` test requires
+    ///    that a tampered file is refused identically whether the request was
+    ///    ranged or not. `get_range` is real, tested, and correctly avoids
+    ///    materializing a large blob for backends that implement it — see
+    ///    `magnetite-seams`' `blobstore` module — but wiring it in here would
+    ///    trade that guarantee away, which this pass does not do.
     pub async fn respond<B, R>(
         &self,
         blobs: &B,
@@ -412,53 +428,9 @@ impl HostedBundle {
             );
         }
 
-        // 5. Bytes, then integrity. FAIL CLOSED.
-        //
-        //    `FsBlobStore` and `HttpBlobStore` already re-verify on read, but
-        //    `BlobStore` is a *pluggable seam*: a third-party implementation
-        //    (Walrus, Arweave, Filecoin — ALIGNMENT.md §6) is under no
-        //    obligation to, and `LocalBlobStore` does not. Verifying here means
-        //    the guarantee holds for every backend, present and future, rather
-        //    than for the two that happen to implement it today. It is one
-        //    BLAKE3 pass over bytes already in memory.
-        let Some(bytes) = blobs.get(&serving.hash).await else {
-            return self.plain(
-                Outcome::BlobMissing { hash: serving.hash },
-                "bundle file is listed in the manifest but absent from this node's blob store",
-            );
-        };
-        let got = Hash::of(&bytes);
-        if got != serving.hash || bytes.len() as u64 != serving.len {
-            // Note the length check shares this branch: a blob whose length
-            // disagrees with the manifest is refused even in the impossible case
-            // that its hash matched, because `Content-Length` and `Content-Range`
-            // are computed from the manifest and must not describe other bytes.
-            return self.plain(
-                Outcome::IntegrityFailure {
-                    expected: serving.hash,
-                    got,
-                },
-                "bundle file failed its integrity check and was not served",
-            );
-        }
-
-        // 6. Conditional. ETag is the file's content hash — a strong validator
-        //    for free, and exactly right: same hash means same bytes, always.
-        let etag = format!("\"{}\"", serving.hash.to_hex());
-        if let Some(inm) = req.if_none_match {
-            if if_none_match_matches(inm, &etag) {
-                let mut h = self.base_headers(vary_accept_encoding);
-                h.push(("ETag".into(), etag));
-                return BundleResponse {
-                    status: 304,
-                    headers: h,
-                    body: Vec::new(),
-                    outcome: Outcome::NotModified,
-                };
-            }
-        }
-
-        // 7. Range.
+        // 5. Range. Parsed against the manifest's own `len` — no blob store
+        //    I/O needed to know how large the representation is, so an
+        //    unsatisfiable range answers `416` without ever fetching a byte.
         //
         //    Ranges are only honoured for the representation the URL names. When
         //    step 4 *substituted* a compressed variant, the offsets the client
@@ -487,6 +459,68 @@ impl HostedBundle {
             },
             _ => None,
         };
+
+        // 6. Conditional. ETag is the file's content hash — a strong validator
+        //    for free, computable from the manifest alone, and exactly right:
+        //    same hash means same bytes, always. Also needs no blob I/O.
+        let etag = format!("\"{}\"", serving.hash.to_hex());
+        if let Some(inm) = req.if_none_match {
+            if if_none_match_matches(inm, &etag) {
+                let mut h = self.base_headers(vary_accept_encoding);
+                h.push(("ETag".into(), etag));
+                return BundleResponse {
+                    status: 304,
+                    headers: h,
+                    body: Vec::new(),
+                    outcome: Outcome::NotModified,
+                };
+            }
+        }
+
+        // 7. Bytes, then integrity. FAIL CLOSED.
+        //
+        //    Deliberately still `get` — the whole blob — for EVERY response,
+        //    ranged or not. This is a considered decision, not an oversight of
+        //    magnetite-seams A9's `get_range`: see the doc comment above
+        //    `respond` and the note on `BlobStore::get_range` for why this
+        //    method does not (yet) read a genuinely partial `Range` through
+        //    it. In short — `a_range_request_over_a_tampered_file_is_also_refused`
+        //    (`tests/serving.rs`) requires that a range response over
+        //    tampered content is refused exactly like a whole one, and there
+        //    is no way to verify a *slice* against a whole-blob hash without
+        //    reading the whole blob, which would silently defeat the point of
+        //    `get_range` anyway. Preserving that guarantee costs the same
+        //    memory here today as before this change; genuinely fixing it
+        //    needs a streaming/verify-while-reading shape, which is the
+        //    larger, deferred design this pass's seam change does not attempt.
+        //
+        //    `FsBlobStore` and `HttpBlobStore` already re-verify on read, but
+        //    `BlobStore` is a *pluggable seam*: a third-party implementation
+        //    (Walrus, Arweave, Filecoin — ALIGNMENT.md §6) is under no
+        //    obligation to, and `LocalBlobStore` does not. Verifying here means
+        //    the guarantee holds for every backend, present and future, rather
+        //    than for the two that happen to implement it today. It is one
+        //    BLAKE3 pass over bytes already in memory.
+        let Some(bytes) = blobs.get(&serving.hash).await else {
+            return self.plain(
+                Outcome::BlobMissing { hash: serving.hash },
+                "bundle file is listed in the manifest but absent from this node's blob store",
+            );
+        };
+        let got = Hash::of(&bytes);
+        if got != serving.hash || bytes.len() as u64 != serving.len {
+            // Note the length check shares this branch: a blob whose length
+            // disagrees with the manifest is refused even in the impossible case
+            // that its hash matched, because `Content-Length` and `Content-Range`
+            // are computed from the manifest and must not describe other bytes.
+            return self.plain(
+                Outcome::IntegrityFailure {
+                    expected: serving.hash,
+                    got,
+                },
+                "bundle file failed its integrity check and was not served",
+            );
+        }
 
         let mut headers = self.base_headers(vary_accept_encoding);
         headers.push((
