@@ -70,7 +70,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::blobstore::Hash;
-use crate::identity::{Identity, PubKey, RawKeypairAuth, Sig};
+use crate::identity::{Identity, IdentityVerifier, PubKey, RawKeypairAuth, Sig};
 
 /// The floor a currency-agnostic rail uses: `1` unit, i.e. only a
 /// zero-amount leg is dust.
@@ -650,7 +650,14 @@ impl PaymentRail for MockPaymentRail {
         // 3. Signature must be by the claimed rail key. Because
         //    `signing_bytes` covers the nonce, and the nonce commits to every
         //    leg, this also pins the distribution.
-        <RawKeypairAuth as Identity>::verify(&r.rail_pubkey, &r.signing_bytes(), &r.sig)
+        //
+        //    A7 finish: dispatches through `self.rail` — the actual provider
+        //    this mock rail signs with — via `IdentityVerifier`, instead of a
+        //    hard-coded `<RawKeypairAuth as Identity>::verify`. Harmless today
+        //    (this mock only ever holds a `RawKeypairAuth`), but it means a
+        //    future rail variant that swaps `self.rail`'s type is verified
+        //    correctly rather than silently checked under the wrong algorithm.
+        self.rail.verify(&r.rail_pubkey, &r.signing_bytes(), &r.sig)
     }
 }
 

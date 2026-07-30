@@ -88,7 +88,7 @@ use std::path::{Path, PathBuf};
 
 use crate::blobstore::Hash;
 use crate::cbor::{self, CborError, Cv, MapReader};
-use crate::identity::{Identity, PubKey, RawKeypairAuth, Sig};
+use crate::identity::{Identity, IdentityVerifier, PubKey, RawKeypairAuth, Sig};
 // ONE `Role`, ONE resolved `Leg` — both defined in `crate::payment`, not here.
 //
 // `ALIGNMENT.md` §4 ("Economics: voluntary legs, not a protocol fee") specifies a
@@ -1449,8 +1449,15 @@ impl PackageManifest {
     /// Refuses if `signer`'s public key is not the manifest's declared
     /// [`Self::developer`] — signing under a key the manifest does not name
     /// would produce a package that can never verify.
-    pub fn sign(mut self, signer: &RawKeypairAuth) -> Result<Package> {
-        if signer.node_pubkey().0 != self.developer.0 {
+    ///
+    /// **A7 finish.** Generic over any [`Identity`], not just
+    /// [`RawKeypairAuth`] — every existing caller passes a `&RawKeypairAuth`
+    /// today and keeps compiling unchanged (the compiler infers `I =
+    /// RawKeypairAuth`), but a package can now genuinely be signed by any
+    /// provider. Pair with [`Package::verify_for`], which is the
+    /// provider-generic counterpart of [`Package::verify`].
+    pub fn sign<I: Identity>(mut self, signer: &I) -> Result<Package> {
+        if signer.pubkey().0 != self.developer.0 {
             return Err(PackageError::BadSignature);
         }
         self.canonicalize();
@@ -1616,12 +1623,41 @@ impl Package {
 
     /// Check everything that can be checked without the file bytes:
     /// structure, entry/kind agreement, the determinism rule, the root over the
-    /// file list, and the developer's signature.
+    /// file list, and the developer's signature **under `RawKeypairAuth`'s
+    /// algorithm specifically**.
+    ///
+    /// This is the default because [`Self::sign`] was, until this A7 pass,
+    /// the only way to produce a `Package` at all, and it only ever accepted
+    /// `&RawKeypairAuth` — so every package this crate has ever been able to
+    /// sign is one this hard-coded check can correctly verify. Now that
+    /// [`Self::sign`] is generic over any [`Identity`], a package signed by a
+    /// *different* provider will fail here — not with a confusing error, but
+    /// exactly like a bad signature, because the two are indistinguishable
+    /// through this method. **Prefer [`Self::verify_for`]** for any package
+    /// that might have been signed by a provider other than `RawKeypairAuth`.
     ///
     /// **There is no fail-open path.** Every failure returns `Err`.
     pub fn verify(&self) -> Result<VerifiedPackage<'_>> {
         self.manifest.validate()?;
         if !<RawKeypairAuth as Identity>::verify(
+            &self.manifest.developer,
+            &self.manifest.signing_bytes(),
+            &self.sig,
+        ) {
+            return Err(PackageError::BadSignature);
+        }
+        Ok(VerifiedPackage { inner: self })
+    }
+
+    /// **A7 finish.** Verify against `provider` — the identity provider
+    /// actually used to [`Self::sign`] this package — instead of assuming
+    /// `RawKeypairAuth`. The provider-generic counterpart of [`Self::verify`],
+    /// mirroring [`crate::identity::Token::is_valid_for`].
+    ///
+    /// **There is no fail-open path.** Every failure returns `Err`.
+    pub fn verify_for(&self, provider: &dyn IdentityVerifier) -> Result<VerifiedPackage<'_>> {
+        self.manifest.validate()?;
+        if !provider.verify(
             &self.manifest.developer,
             &self.manifest.signing_bytes(),
             &self.sig,
@@ -2798,5 +2834,97 @@ mod tests {
             Poll::Ready(v) => v,
             Poll::Pending => panic!("the mock rail must not yield"),
         }
+    }
+
+    // -- A7 finish: Package::sign / Package::verify_for are provider-generic --
+
+    /// A second `Identity` provider, deliberately byte-incompatible with
+    /// `RawKeypairAuth` (same trick as `magnetite_seams::identity`'s own A7
+    /// test double): it signs `DOMAIN ‖ msg`, so its signature bytes are NEVER
+    /// equal to `RawKeypairAuth`'s over the same key and message. Exists to
+    /// prove `Package::sign`/`verify_for` genuinely dispatch per-provider,
+    /// rather than merely happening to work because `RawKeypairAuth` was the
+    /// only thing ever tried.
+    struct DomainTaggedDeveloper(ed25519_dalek::SigningKey);
+
+    const PKG_DOMAIN_TAG: &[u8] = b"magnetite-seams/package-domain-tagged-test/v1";
+
+    impl DomainTaggedDeveloper {
+        fn from_seed(seed: [u8; 32]) -> Self {
+            DomainTaggedDeveloper(ed25519_dalek::SigningKey::from_bytes(&seed))
+        }
+        fn tagged(msg: &[u8]) -> Vec<u8> {
+            let mut v = PKG_DOMAIN_TAG.to_vec();
+            v.extend_from_slice(msg);
+            v
+        }
+    }
+
+    impl Identity for DomainTaggedDeveloper {
+        fn pubkey(&self) -> PubKey {
+            PubKey(self.0.verifying_key().to_bytes())
+        }
+        fn sign(&self, msg: &[u8]) -> Sig {
+            use ed25519_dalek::Signer;
+            Sig(self.0.sign(&Self::tagged(msg)).to_bytes())
+        }
+        fn verify(pk: &PubKey, msg: &[u8], sig: &Sig) -> bool {
+            use ed25519_dalek::Verifier;
+            let vk = match ed25519_dalek::VerifyingKey::from_bytes(&pk.0) {
+                Ok(vk) => vk,
+                Err(_) => return false,
+            };
+            vk.verify(&Self::tagged(msg), &ed25519_dalek::Signature::from_bytes(&sig.0))
+                .is_ok()
+        }
+    }
+
+    #[test]
+    fn sign_is_provider_generic_and_verify_for_follows_the_actual_signer() {
+        // Before this A7 finish, `PackageManifest::sign` only ever accepted
+        // `&RawKeypairAuth`, so `Package::verify`'s hard-coded check was
+        // harmless in practice — nothing else could have signed a package.
+        // Now that `sign` is generic over any `Identity`, a package CAN be
+        // signed by a provider `verify()` cannot recognise, which is exactly
+        // why `verify_for` exists.
+        let dev = DomainTaggedDeveloper::from_seed([0xABu8; 32]);
+        let pk = dev.pubkey();
+        let (_mem, entries) = web_bundle();
+        let pkg = PackageManifest::web(
+            "index.html",
+            entries,
+            PackagePrice::fixed(500, "USDC"),
+            dev_split(pk),
+            pk,
+        )
+        .sign(&dev)
+        .expect("signing under the manifest's own declared developer key must succeed");
+
+        // 1. The legacy, RawKeypairAuth-hard-coded `verify()` cannot tell a
+        //    domain-tagged signature apart from a bad one — it was never able
+        //    to check any algorithm but RawKeypairAuth's.
+        assert!(
+            matches!(pkg.verify(), Err(PackageError::BadSignature)),
+            "legacy hard-coded verify(): an honestly-signed package from a \
+             non-default provider is wrongly rejected, silently rather than erring"
+        );
+
+        // 2. `verify_for`, given the ACTUAL signing provider, accepts it.
+        assert!(
+            pkg.verify_for(&dev).is_ok(),
+            "verify_for must accept the package under its ACTUAL signing provider"
+        );
+
+        // 3. A structurally different algorithm over the SAME key must not
+        //    verify a domain-tagged signature — proves this isn't a rubber stamp.
+        let raw_same_key = RawKeypairAuth::from_seed([0xABu8; 32]);
+        assert!(
+            matches!(
+                pkg.verify_for(&raw_same_key),
+                Err(PackageError::BadSignature)
+            ),
+            "a different algorithm over the same key must not verify a \
+             domain-tagged signature"
+        );
     }
 }

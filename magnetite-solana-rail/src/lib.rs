@@ -62,7 +62,7 @@
 
 use std::sync::Arc;
 
-use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth, Sig};
+use magnetite_seams::identity::{Identity, IdentityVerifier, PubKey, RawKeypairAuth, Sig};
 use magnetite_seams::payment::{
     split_digest, ChainBinding, Channel, Escrow, Leg, PayOut, PaymentError, PaymentRail,
     PaymentSplit, Receipt, Role, WagerTerms,
@@ -820,7 +820,12 @@ impl SolanaPaymentRail {
         if r.stewards_amount > r.total {
             return Err(deny("stewards component exceeds the total"));
         }
-        if !<RawKeypairAuth as Identity>::verify(&r.rail_pubkey, &r.signing_bytes(), &r.sig) {
+        // A7 finish: dispatches through `self.rail` — the actual provider this
+        // rail signs its own receipt wrapper with — via `IdentityVerifier`,
+        // instead of a hard-coded `<RawKeypairAuth as Identity>::verify`. This
+        // is the local self-consistency check only; the real security
+        // boundary is the on-chain transaction checked below.
+        if !self.rail.verify(&r.rail_pubkey, &r.signing_bytes(), &r.sig) {
             return Err(deny("receipt signature invalid"));
         }
 

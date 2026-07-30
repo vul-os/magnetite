@@ -158,8 +158,11 @@ mod tests {
         let cred = comms.issue_join_credential(&player, &room).await;
         assert_eq!(cred.user, player);
         assert_eq!(cred.room, room);
-        // Credential is a valid, node-issued, builtin-audience token.
-        assert!(cred.token.is_valid_at(now_unix()));
+        // Credential is a valid, node-issued, builtin-audience token. `node`
+        // was moved into `comms` above, so re-derive the same identity from
+        // the same seed to check against — deterministic, not a different key.
+        let verifier = RawKeypairAuth::from_seed([21u8; 32]);
+        assert!(cred.token.is_valid_for(&verifier, now_unix()));
         assert_eq!(cred.token.claims.issuer, node_pk);
         assert_eq!(cred.token.claims.audience, Audience("builtin".into()));
 

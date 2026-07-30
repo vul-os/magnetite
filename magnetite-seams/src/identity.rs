@@ -87,27 +87,38 @@ impl<'de> Deserialize<'de> for Sig {
 /// **A7 (fixed).** `verify` was originally an associated function — "it only
 /// needs the public key, never the secret half" — so every caller had to name
 /// a *concrete type* to verify anything (`<RawKeypairAuth as
-/// Identity>::verify(...)`), and [`Token::is_valid_at`] hard-coded
-/// `RawKeypairAuth` specifically. That is a silent trap: a provider whose
-/// signature bytes differ (a domain tag, a different curve) does not error,
-/// it just makes `is_valid_at` return `false` for a token that is actually
-/// valid, or — worse, in principle — `true` for one that is not, if the two
-/// algorithms ever agreed on the wrong pair. The associated function is left
-/// in place here because eight call sites elsewhere in this tree (outside
-/// this crate's `src/` and `magnetite-kotva/`, which is as far as this fix's
-/// scope extends) already invoke it by that exact name via UFCS with no
-/// instance in hand, and Rust has no method overloading — turning `verify`
-/// itself into a `&self` method would silently require an edit at every one
-/// of those call sites in the same breaking change.
+/// Identity>::verify(...)`), and the crate's `Token` type used to expose an
+/// `is_valid_at` method that hard-coded `RawKeypairAuth` specifically. That
+/// was a silent trap: a provider whose signature bytes differ (a domain tag,
+/// a different curve) would not error, it would just make verification
+/// return `false` for a token that is actually valid, or — worse, in
+/// principle — `true` for one that is not, if the two algorithms ever agreed
+/// on the wrong pair. `is_valid_at` has since been deleted (see
+/// [`Token::is_valid_for`]'s docs) because auditing every caller in the tree
+/// found none in production code — only tests, which have all been migrated.
 ///
-/// Instead, [`IdentityVerifier`] below is the actual fix: a **method**, blanket-
-/// implemented for every `Identity`, so any concrete provider — the one
-/// actually "in play" at a call site — is reachable as `&dyn IdentityVerifier` and
-/// dispatches through its own algorithm rather than a hard-coded type. See
-/// [`Token::is_valid_for`], which is the corrected counterpart of
-/// `is_valid_at` built on it, and the `is_valid_for_follows_the_provider_*`
-/// test below, which proves the dispatch actually follows the instance
-/// passed in rather than rubber-stamping.
+/// `verify` itself is STILL an associated function, not a method: eight call
+/// sites elsewhere in this tree (`magnetite-runtime`'s `fleet`/`cluster`/
+/// `follow` modules and `magnetite-solana-rail`'s handshake path) invoke it by
+/// that exact name via UFCS, and Rust has no method overloading — turning
+/// `verify` itself into a `&self` method would require an edit at every one of
+/// those call sites in the same breaking change. Those eight sites were
+/// individually audited for the A7 finish: every one of them is part of a
+/// **closed** subsystem where the signing side is *also* hard-typed to
+/// `RawKeypairAuth` (e.g. `FollowToken::mint(id: &RawKeypairAuth, ...)`), so
+/// there is no live cross-provider mismatch there today — unlike `Token`,
+/// which is generically issued by any [`AuthProvider`]. `verify` staying an
+/// associated function is therefore tracked as a design wart, not a live bug.
+///
+/// [`IdentityVerifier`] below is the actual fix for the cases that ARE
+/// pluggable: a **method**, blanket-implemented for every `Identity`, so any
+/// concrete provider — the one actually "in play" at a call site — is
+/// reachable as `&dyn IdentityVerifier` and dispatches through its own
+/// algorithm rather than a hard-coded type. See [`Token::is_valid_for`],
+/// [`crate::package::Package::verify_for`], and the
+/// `is_valid_for_follows_the_provider_*` tests below, which prove the
+/// dispatch actually follows the instance passed in rather than
+/// rubber-stamping.
 pub trait Identity {
     /// This identity's Ed25519 public key.
     fn pubkey(&self) -> PubKey;
@@ -243,39 +254,30 @@ pub struct Token {
 }
 
 impl Token {
-    /// Verify the token is well-formed, unexpired, and signed by `issuer`.
+    /// Verify the token against `provider` — the auth provider actually in
+    /// play — instead of assuming `RawKeypairAuth`.
     ///
-    /// **Legacy, hard-coded path — this is the A7 defect, preserved rather
-    /// than silently changed.** It always checks the signature under
-    /// `RawKeypairAuth`'s algorithm, regardless of which provider actually
-    /// issued the token. Every existing caller in this tree relies on this
-    /// exact signature (`fn(&self, u64) -> bool`), including several outside
-    /// this crate, so it is not changed here. It happens to still be correct
-    /// for `magnetite-kotva`'s `KotvaIdentity` today only because that
-    /// provider *deliberately* chose an empty domain to be byte-identical to
-    /// `RawKeypairAuth` — a workaround, not a fix (see that crate's docs).
-    /// **Prefer [`Token::is_valid_for`]** for any token that might have been
-    /// issued by a provider whose signature bytes are NOT byte-identical to
-    /// `RawKeypairAuth`'s.
+    /// **A7 fix, now the ONLY verification path.** A previous, hard-coded
+    /// `is_valid_at(&self, now: u64) -> bool` used to check every token's
+    /// signature under `RawKeypairAuth`'s algorithm specifically, regardless
+    /// of which provider actually issued it — silently wrong (not erroring)
+    /// for any provider whose signature bytes were not byte-identical to
+    /// `RawKeypairAuth`'s. It was kept temporarily rather than fixed in place
+    /// because callers throughout the tree depended on its exact signature.
+    /// Auditing every one of those callers (A7's remaining scope) found that
+    /// **all of them were test code** — zero production call sites anywhere
+    /// in the 16-crate tree called it — so it has been deleted outright
+    /// rather than deprecated: there is no external consumer for a
+    /// workspace-internal crate to break, and a `#[deprecated]` attribute
+    /// would have left the trap callable.
+    ///
+    /// Pass the live [`Identity`] instance whose algorithm actually produced
+    /// (or should have produced) `self.sig`. Because [`IdentityVerifier`] is
+    /// blanket-implemented for every `Identity`, any provider —
+    /// `RawKeypairAuth`, `magnetite-kotva`'s `KotvaIdentity`, or a foreign one
+    /// this crate has never heard of — works here with no special-casing.
     ///
     /// `now` is unix seconds; pass the current time in production.
-    pub fn is_valid_at(&self, now: u64) -> bool {
-        if now >= self.claims.expires_at {
-            return false;
-        }
-        let msg = self.claims.signing_bytes();
-        <RawKeypairAuth as Identity>::verify(&self.claims.issuer, &msg, &self.sig)
-    }
-
-    /// **A7 fix.** Verify the token against `provider` — the auth provider
-    /// actually in play — instead of assuming `RawKeypairAuth`.
-    ///
-    /// This is the corrected general form of [`Token::is_valid_at`]: pass the
-    /// live [`Identity`] instance whose algorithm actually produced (or
-    /// should have produced) `self.sig`. Because [`IdentityVerifier`] is blanket-
-    /// implemented for every `Identity`, any provider — `RawKeypairAuth`,
-    /// `magnetite-kotva`'s `KotvaIdentity`, or a foreign one this crate has
-    /// never heard of — works here with no special-casing.
     pub fn is_valid_for(&self, provider: &dyn IdentityVerifier, now: u64) -> bool {
         if now >= self.claims.expires_at {
             return false;
@@ -493,10 +495,12 @@ mod tests {
 
         let session = node.verify_login(resp).await.expect("login ok");
         assert_eq!(session.subject, player.pubkey());
-        assert!(session.token.is_valid_at(now_unix()));
+        assert!(session.token.is_valid_for(&node, now_unix()));
         assert_eq!(session.token.claims.issuer, node.node_pubkey());
         // Token expired in the future -> invalid once past expiry.
-        assert!(!session.token.is_valid_at(session.token.claims.expires_at));
+        assert!(!session
+            .token
+            .is_valid_for(&node, session.token.claims.expires_at));
     }
 
     #[tokio::test]
@@ -591,12 +595,20 @@ mod tests {
     }
 
     #[test]
-    fn is_valid_at_silently_mis_verifies_a_non_default_providers_token() {
-        // Reproduces the A7 defect itself, rather than assuming it: a token
-        // honestly issued by a provider that is NOT byte-compatible with
-        // RawKeypairAuth is REJECTED by the hard-coded legacy path — not with
-        // an error, just silently `false` — even though the signature is
-        // perfectly valid under the provider that actually issued it.
+    fn hard_coding_the_wrong_provider_silently_mis_verifies_an_honest_token() {
+        // Reproduces the A7 defect's SHAPE directly against `Identity::verify`,
+        // rather than assuming it: a token honestly issued by a provider that
+        // is NOT byte-compatible with RawKeypairAuth is REJECTED when checked
+        // under a hard-coded `RawKeypairAuth` verify call — not with an error,
+        // just silently `false` — even though the signature is perfectly valid
+        // under the provider that actually issued it. This is the exact defect
+        // the deleted `Token::is_valid_at` used to exhibit (see `is_valid_for`'s
+        // docs); it is kept here as a standing regression check because the
+        // underlying pattern — verifying via a named concrete type instead of
+        // the live instance — still exists at the handful of call sites this
+        // A7 pass found to be architecturally closed (see the `Identity` trait
+        // docs) and would reappear instantly if anyone reintroduced it into a
+        // pluggable path like `Token`.
         let issuer = DomainTaggedAuth::from_seed([88u8; 32]);
         let now = now_unix();
         let claims = TokenClaims {
@@ -612,10 +624,22 @@ mod tests {
         let tok = Token { claims, sig };
 
         assert!(
-            !tok.is_valid_at(now),
-            "legacy hard-coded path: a HONESTLY-ISSUED token from a real (non-default) \
+            now < tok.claims.expires_at,
+            "test bug: token must still be fresh for this to be a signature-only check"
+        );
+        assert!(
+            !<RawKeypairAuth as Identity>::verify(
+                &tok.claims.issuer,
+                &tok.claims.signing_bytes(),
+                &tok.sig
+            ),
+            "hard-coding RawKeypairAuth: a HONESTLY-ISSUED token from a real (non-default) \
              provider is wrongly rejected, and does so silently rather than erring"
         );
+        // The corrected form, given the ACTUAL issuing provider, agrees the
+        // token is good — proving the mismatch above is purely a provider
+        // problem, not a malformed token.
+        assert!(tok.is_valid_for(&issuer, now));
     }
 
     #[tokio::test]
@@ -657,11 +681,6 @@ mod tests {
 
         // 3. Expiry is still enforced regardless of provider.
         assert!(!tok.is_valid_for(&issuer, tok.claims.expires_at));
-
-        // 4. And the legacy hard-coded path still gets this one wrong,
-        //    confirming `is_valid_for` is doing genuinely different work,
-        //    not just re-deriving the same answer another way.
-        assert!(!tok.is_valid_at(now));
     }
 
     #[tokio::test]
@@ -677,11 +696,11 @@ mod tests {
             .await;
         assert_eq!(tok.claims.audience, Audience("matrix".into()));
         assert_eq!(tok.claims.subject, player.pubkey());
-        assert!(tok.is_valid_at(now_unix()));
+        assert!(tok.is_valid_for(&node, now_unix()));
 
         // Any bit-flip in claims breaks the signature.
         let mut bad = tok.clone();
         bad.claims.audience = Audience("jitsi".into());
-        assert!(!bad.is_valid_at(now_unix()));
+        assert!(!bad.is_valid_for(&node, now_unix()));
     }
 }
