@@ -40,7 +40,7 @@ use std::sync::Arc;
 
 use magnetite_seams::blobstore::{BlobStore, LocalBlobStore};
 use magnetite_seams::identity::{PubKey, RawKeypairAuth};
-use magnetite_seams::payment::{MockPaymentRail, PaymentRail, PaymentSplit, Receipt, Split};
+use magnetite_seams::payment::{MockPaymentRail, PaymentRail, PaymentSplit, Receipt};
 use magnetite_web_host::manifest::{BundleKind, BundleManifest, FileEntry, Pricing};
 use magnetite_web_host::respond::{HostedBundle, ServePolicy};
 use magnetite_web_host::{host::WebHost, ingest};
@@ -355,14 +355,7 @@ pub async fn mint_receipt(rail: &MockPaymentRail, item: &str) -> Receipt {
     rail.checkout_for_item(
         &buyer,
         item,
-        PaymentSplit {
-            developer: Split {
-                wallet: RawKeypairAuth::from_seed([43u8; 32]).node_pubkey(),
-                amount: 500,
-            },
-            operator: None,
-            protocol_fee_bps: 0,
-        },
+        PaymentSplit::to_developer(RawKeypairAuth::from_seed([43u8; 32]).node_pubkey(), 500),
     )
     .await
     .expect("mock rail always issues")

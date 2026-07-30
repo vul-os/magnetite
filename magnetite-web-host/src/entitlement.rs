@@ -184,7 +184,7 @@ pub fn evaluate<R: PaymentRail + ?Sized>(
 mod tests {
     use super::*;
     use magnetite_seams::identity::RawKeypairAuth;
-    use magnetite_seams::payment::{MockPaymentRail, PaymentSplit, Split};
+    use magnetite_seams::payment::{MockPaymentRail, PaymentSplit};
 
     fn key(seed: u8) -> PubKey {
         RawKeypairAuth::from_seed([seed; 32]).node_pubkey()
@@ -193,14 +193,7 @@ mod tests {
     async fn receipt_for(rail: &MockPaymentRail, buyer: PubKey) -> Receipt {
         rail.checkout(
             &buyer,
-            PaymentSplit {
-                developer: Split {
-                    wallet: key(200),
-                    amount: 500,
-                },
-                operator: None,
-                protocol_fee_bps: 0,
-            },
+            PaymentSplit::to_developer(key(200), 500),
         )
         .await
     }
