@@ -10,6 +10,8 @@
 //! | `magnetite build` | **implemented** | `cargo build --release --target wasm32-wasip1` |
 //! | `magnetite dev` | **implemented** | Build → load into sandbox → run SingleRoom server → print URL |
 //! | `magnetite deploy` | **implemented** | Build → register artifact → request runtime instance |
+//! | `magnetite package build` | **implemented** | Build a signed, content-addressed package from a directory |
+//! | `magnetite package verify` | **implemented** | Verify a package (signature, root, per-file hashes) |
 //!
 //! ## Example
 //!
@@ -19,6 +21,14 @@
 //! magnetite build            # produces ./target/wasm32-wasip1/release/my_game.wasm
 //! magnetite dev              # prints ws://127.0.0.1:<port>, serves locally
 //! magnetite deploy           # registers artifact with backend, prints result
+//! ```
+//!
+//! Packaging a web build (three.js / Godot / Unity) — rung 0 of the capability
+//! ladder, no wasm authority and therefore **not** replay-verifiable:
+//!
+//! ```bash
+//! magnetite package build --dir dist --web-entry index.html --price pwyw:0:500
+//! magnetite package verify --package package.mag --dir dist
 //! ```
 
 use std::net::TcpListener as StdTcpListener;
@@ -253,6 +263,108 @@ enum Commands {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
+
+    /// Build or verify a signed, content-addressed game **package**.
+    ///
+    /// A package is magnetite's unit of publication (`ALIGNMENT.md` §7 Phase
+    /// 1.2). It holds a wasm authority, a web bundle (three.js / Godot / Unity /
+    /// Bevy-web), or both, with a per-file `path -> BLAKE3` list, a root hash
+    /// over that sorted list, a price, a revenue split, and a *checkable*
+    /// determinism class. The signed bytes are canonical integer-keyed
+    /// deterministic CBOR — not JSON.
+    #[command(subcommand)]
+    Package(PackageCmd),
+}
+
+/// `magnetite package …`
+#[derive(Subcommand)]
+enum PackageCmd {
+    /// Build a signed package from a directory of files.
+    ///
+    /// Every regular file under `--dir` is hashed and listed; symlinks are
+    /// refused rather than followed. Nothing is skipped, so clean the directory
+    /// first — a stray `.DS_Store` lands in the manifest and changes the root.
+    ///
+    /// The build is reproducible: identical directory contents produce identical
+    /// bytes and an identical package id, with no timestamps recorded.
+    ///
+    /// Examples:
+    ///   magnetite package build --dir dist --web-entry index.html --price pwyw:0:500
+    ///   magnetite package build --dir out --wasm-entry game.wasm --deterministic
+    ///   magnetite package build --dir dist --web-entry index.html --wasm-entry rules.wasm \
+    ///       --deterministic --leg developer:9500:<hex> --leg stewards:500:<hex>
+    Build {
+        /// Directory holding the package contents.
+        #[arg(long)]
+        dir: PathBuf,
+
+        /// Path (relative to `--dir`) a browser loads first, e.g. `index.html`.
+        #[arg(long)]
+        web_entry: Option<String>,
+
+        /// Path (relative to `--dir`) of the wasm authority module.
+        #[arg(long)]
+        wasm_entry: Option<String>,
+
+        /// Where to write the package. Defaults to `<dir>/../package.mag`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+
+        /// Developer signing key file (32-byte hex seed). Defaults to
+        /// `$MAGNETITE_HOME/developer.key`, else `~/.magnetite/developer.key`,
+        /// generated 0600 on first use. Also readable from
+        /// `MAGNETITE_DEVELOPER_SEED`.
+        #[arg(long)]
+        key: Option<PathBuf>,
+
+        /// `free`, `fixed:<amount>`, or `pwyw:<min>:<suggested>`. Amounts are in
+        /// the smallest unit of `--currency`.
+        #[arg(long, default_value = "free")]
+        price: String,
+
+        /// Currency label for the price amounts.
+        #[arg(long, default_value = "USDC")]
+        currency: String,
+
+        /// A revenue-split leg: `<role>:<bps>:<pubkey-hex>[:<label>]`, where
+        /// role is `developer`, `operator`, `stewards` or `other` (which
+        /// requires the label). Repeatable. Shares must sum to exactly 10000.
+        ///
+        /// With no `--leg` at all, the whole total goes to the signing key as
+        /// the developer leg.
+        ///
+        /// The stewards destination lives here, in the signed release, and
+        /// deliberately NOT in node environment — see `ALIGNMENT.md` §4.
+        #[arg(long = "leg")]
+        legs: Vec<String>,
+
+        /// Declare this package deterministic and therefore replay-verifiable.
+        ///
+        /// **Refused unless the package carries a wasm authority.** A three.js,
+        /// Godot or Unity build renders with wall-clock time, float drift and GPU
+        /// state in the loop; nothing can re-derive it, so rung 0 does not get to
+        /// claim rung 2's guarantee.
+        #[arg(long)]
+        deterministic: bool,
+    },
+
+    /// Verify a package and print what it claims. Exits non-zero on any failure.
+    ///
+    /// Always checked: canonical encoding, format version, path safety, file
+    /// list sortedness, entry/kind agreement, the determinism rule, the root
+    /// over the file list, and the developer's signature.
+    ///
+    /// With `--dir`, every listed file's length and BLAKE3 hash are checked
+    /// against the bytes on disk as well.
+    Verify {
+        /// The package file to verify.
+        #[arg(long)]
+        package: PathBuf,
+
+        /// Also verify the file contents against this directory.
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -316,6 +428,7 @@ fn run(cli: Cli) -> Result<()> {
             },
         ),
         Commands::Deploy { path } => cmd_deploy(&path),
+        Commands::Package(cmd) => cmd_package(cmd),
     }
 }
 
@@ -1678,6 +1791,389 @@ fn cmd_deploy(crate_path: &Path) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// `magnetite package build` / `magnetite package verify`
+// ---------------------------------------------------------------------------
+
+use magnetite_seams::package::{
+    DeterminismClass, DirFiles, Package, PackageKind, PackageManifest, PackagePrice, PackageTerms,
+    PriceModel, Role, SplitLeg, SplitPlan, BPS_TOTAL,
+};
+
+fn cmd_package(cmd: PackageCmd) -> Result<()> {
+    match cmd {
+        PackageCmd::Build {
+            dir,
+            web_entry,
+            wasm_entry,
+            out,
+            key,
+            price,
+            currency,
+            legs,
+            deterministic,
+        } => cmd_package_build(PackageBuildOpts {
+            dir,
+            web_entry,
+            wasm_entry,
+            out,
+            key,
+            price,
+            currency,
+            legs,
+            deterministic,
+        }),
+        PackageCmd::Verify { package, dir } => cmd_package_verify(&package, dir.as_deref()),
+    }
+}
+
+/// Options for `magnetite package build`, grouped so the function does not take
+/// nine positional arguments.
+struct PackageBuildOpts {
+    dir: PathBuf,
+    web_entry: Option<String>,
+    wasm_entry: Option<String>,
+    out: Option<PathBuf>,
+    key: Option<PathBuf>,
+    price: String,
+    currency: String,
+    legs: Vec<String>,
+    deterministic: bool,
+}
+
+fn cmd_package_build(o: PackageBuildOpts) -> Result<()> {
+    if !o.dir.is_dir() {
+        bail!("`{}` is not a directory", o.dir.display());
+    }
+
+    // The kind is derived from which entries were given, so it can never
+    // disagree with them.
+    let kind = match (&o.web_entry, &o.wasm_entry) {
+        (Some(_), Some(_)) => PackageKind::WebAndWasm,
+        (Some(_), None) => PackageKind::Web,
+        (None, Some(_)) => PackageKind::Wasm,
+        (None, None) => bail!(
+            "give at least one of --web-entry (e.g. index.html) or --wasm-entry \
+             (e.g. game.wasm); the package kind is derived from which you give"
+        ),
+    };
+
+    // The determinism boundary, refused here with an explanation rather than
+    // surfaced as a validation error later.
+    let determinism = if o.deterministic {
+        if !kind.has_wasm() {
+            bail!(
+                "--deterministic refused for kind `{}`: this package has no wasm authority, \
+                 so there is nothing to re-simulate and replay verification cannot apply. \
+                 A three.js / Godot / Unity build is not deterministic. Drop the flag, or \
+                 add --wasm-entry pointing at a wasm authority module.",
+                kind.label()
+            );
+        }
+        DeterminismClass::Deterministic
+    } else {
+        DeterminismClass::NonDeterministic
+    };
+
+    let (developer_key, key_path) = developer_identity(o.key.as_deref())?;
+    let developer = developer_key.node_pubkey();
+
+    let price = parse_price(&o.price, &o.currency)?;
+    let split = if o.legs.is_empty() {
+        SplitPlan::all_to(developer, Role::Developer)
+    } else {
+        parse_legs(&o.legs)?
+    };
+
+    let manifest = PackageManifest::from_dir(
+        &o.dir,
+        kind,
+        o.web_entry.clone(),
+        o.wasm_entry.clone(),
+        PackageTerms {
+            price,
+            split,
+            determinism,
+            developer,
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("building package from `{}`: {e}", o.dir.display()))?;
+
+    let pkg = manifest
+        .sign(&developer_key)
+        .map_err(|e| anyhow::anyhow!("signing package: {e}"))?;
+
+    // Belt and braces: a package this command wrote must verify, including its
+    // contents against the directory it was built from.
+    pkg.verify_with_contents(&DirFiles::new(&o.dir))
+        .map_err(|e| anyhow::anyhow!("self-check of the freshly built package FAILED: {e}"))?;
+
+    let out = o.out.unwrap_or_else(|| {
+        o.dir
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("package.mag")
+    });
+    let bytes = pkg.to_canonical_cbor();
+    std::fs::write(&out, &bytes).with_context(|| format!("writing `{}`", out.display()))?;
+
+    println!("Wrote {} ({} bytes)", out.display(), bytes.len());
+    if let Some(p) = key_path {
+        println!("Signed with developer key {}", p.display());
+    } else {
+        println!("Signed with developer key from MAGNETITE_DEVELOPER_SEED");
+    }
+    // `build` already re-verified the contents against the source directory
+    // above, so say so rather than printing "not checked".
+    print_package(&pkg, Some(&o.dir));
+    Ok(())
+}
+
+fn cmd_package_verify(package: &Path, dir: Option<&Path>) -> Result<()> {
+    let bytes = std::fs::read(package)
+        .with_context(|| format!("reading package `{}`", package.display()))?;
+    let pkg = Package::from_canonical_cbor(&bytes)
+        .map_err(|e| anyhow::anyhow!("`{}` is not a valid package: {e}", package.display()))?;
+
+    let verified = pkg
+        .verify()
+        .map_err(|e| anyhow::anyhow!("package REFUSED: {e}"))?;
+
+    let contents = match dir {
+        Some(d) => {
+            verified
+                .verify_contents(&DirFiles::new(d))
+                .map_err(|e| anyhow::anyhow!("package contents REFUSED: {e}"))?;
+            Some(d)
+        }
+        None => None,
+    };
+
+    println!("Package OK: {}", package.display());
+    print_package(&pkg, contents);
+    if contents.is_none() {
+        println!();
+        println!(
+            "note: the signature and the file list are verified, but no file bytes were \
+             checked. Pass --dir <bundle> to verify the content of every listed file."
+        );
+    }
+    Ok(())
+}
+
+/// Print everything a package claims, including the guarantee it does *not*
+/// carry. The determinism line is deliberately explicit in both directions —
+/// a reader must not have to infer it from the kind.
+fn print_package(pkg: &Package, checked_dir: Option<&Path>) {
+    let m = &pkg.manifest;
+    println!("  id           {}", pkg.id().to_hex());
+    println!("  kind         {}", m.kind.label());
+    println!("  entry        {}", m.entry());
+    if let Some(w) = &m.wasm_entry {
+        println!("  authority    {w}");
+    }
+    println!("  root         {}", m.root.to_hex());
+    println!(
+        "  files        {} ({} bytes total)",
+        m.files.len(),
+        m.total_size()
+    );
+    println!("  developer    {}", m.developer.to_hex());
+    let price = match m.price.model {
+        PriceModel::Free => "free".to_string(),
+        PriceModel::Fixed { amount } => format!("{amount} {}", m.price.currency),
+        PriceModel::Pwyw { min, suggested } => format!(
+            "pay-what-you-want, min {min} {c}, suggested {suggested} {c}",
+            c = m.price.currency
+        ),
+    };
+    println!("  price        {price}");
+    println!("  split");
+    for leg in &m.split.legs {
+        println!(
+            "    {:>5} bps  {:<12} {}",
+            leg.share_bps,
+            leg.role.label(),
+            leg.wallet.to_hex()
+        );
+    }
+    println!(
+        "  determinism  {} — replay-verifiable: {}",
+        m.determinism.label(),
+        if m.is_replay_verifiable() {
+            "yes"
+        } else {
+            "NO"
+        }
+    );
+    if !m.is_replay_verifiable() {
+        println!(
+            "               (no deterministic authority: no replay proof, no replay-gated \
+             anti-cheat, and wager escrow must not be settled from this package's play)"
+        );
+    }
+    match checked_dir {
+        Some(d) => println!("  contents     verified against {}", d.display()),
+        None => println!("  contents     NOT checked (no --dir given)"),
+    }
+}
+
+/// Parse `free` / `fixed:<amount>` / `pwyw:<min>:<suggested>`.
+fn parse_price(s: &str, currency: &str) -> Result<PackagePrice> {
+    let parts: Vec<&str> = s.trim().split(':').collect();
+    let model = match parts.as_slice() {
+        ["free"] => PriceModel::Free,
+        ["fixed", amount] => PriceModel::Fixed {
+            amount: amount
+                .parse()
+                .map_err(|e| anyhow::anyhow!("--price fixed amount `{amount}`: {e}"))?,
+        },
+        ["pwyw", min, suggested] => PriceModel::Pwyw {
+            min: min
+                .parse()
+                .map_err(|e| anyhow::anyhow!("--price pwyw minimum `{min}`: {e}"))?,
+            suggested: suggested
+                .parse()
+                .map_err(|e| anyhow::anyhow!("--price pwyw suggested `{suggested}`: {e}"))?,
+        },
+        _ => bail!(
+            "--price `{s}` is not understood; expected `free`, `fixed:<amount>`, \
+             or `pwyw:<min>:<suggested>`"
+        ),
+    };
+    Ok(PackagePrice {
+        model,
+        currency: currency.to_string(),
+    })
+}
+
+/// Parse repeated `--leg <role>:<bps>:<pubkey-hex>[:<label>]`.
+fn parse_legs(specs: &[String]) -> Result<SplitPlan> {
+    let mut legs = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let parts: Vec<&str> = spec.split(':').collect();
+        if parts.len() < 3 || parts.len() > 4 {
+            bail!(
+                "--leg `{spec}` is not understood; expected \
+                 `<role>:<bps>:<pubkey-hex>[:<label>]`"
+            );
+        }
+        let share_bps: u32 = parts[1]
+            .parse()
+            .map_err(|e| anyhow::anyhow!("--leg `{spec}`: basis points `{}`: {e}", parts[1]))?;
+        let wallet = parse_peer_pubkey(parts[2])
+            .map_err(|e| anyhow::anyhow!("--leg `{spec}`: wallet: {e}"))?;
+        let label = parts.get(3).map(|s| s.to_string());
+        let role = match (parts[0], label) {
+            ("developer", None) => Role::Developer,
+            ("operator", None) => Role::Operator,
+            ("stewards", None) => Role::Stewards,
+            ("other", Some(l)) => Role::Other(l),
+            ("other", None) => bail!("--leg `{spec}`: role `other` needs a `:<label>` suffix"),
+            (role, Some(_)) => bail!("--leg `{spec}`: role `{role}` must not carry a label"),
+            (role, None) => bail!(
+                "--leg `{spec}`: unknown role `{role}`; expected developer, operator, \
+                 stewards or other"
+            ),
+        };
+        legs.push(SplitLeg {
+            wallet,
+            share_bps,
+            role,
+        });
+    }
+    let sum: u32 = legs.iter().map(|l| l.share_bps).sum();
+    if sum != BPS_TOTAL {
+        bail!(
+            "--leg basis points sum to {sum}, must be exactly {BPS_TOTAL} \
+             (a split that does not sum leaves money unaccounted for)"
+        );
+    }
+    Ok(SplitPlan { legs })
+}
+
+/// The developer's publishing identity — a *different* key from the node key.
+///
+/// A node key authorizes hosting; this key authorizes **publishing under your
+/// name**, and every package you ever ship is bound to it. Kept in a separate
+/// file so handing a node key to an operator does not hand them your publisher
+/// identity.
+///
+/// Precedence: `MAGNETITE_DEVELOPER_SEED`, then `--key`, then
+/// `MAGNETITE_DEVELOPER_KEY_FILE`, then `$MAGNETITE_HOME/developer.key`, then
+/// `~/.magnetite/developer.key` — loaded if present, generated 0600 on first
+/// use. Returns the key and where it came from (`None` = from the env var).
+fn developer_identity(
+    key_file: Option<&Path>,
+) -> Result<(magnetite_seams::identity::RawKeypairAuth, Option<PathBuf>)> {
+    use magnetite_seams::identity::RawKeypairAuth;
+
+    if let Ok(hex_seed) = std::env::var("MAGNETITE_DEVELOPER_SEED") {
+        let seed = parse_seed_hex(&hex_seed).context(
+            "MAGNETITE_DEVELOPER_SEED is malformed. Refusing to fall back to a different \
+             identity — publishing under an unexpected key produces packages nobody can \
+             tie to you.",
+        )?;
+        return Ok((RawKeypairAuth::from_seed(seed), None));
+    }
+
+    let path = key_file
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("MAGNETITE_DEVELOPER_KEY_FILE")
+                .ok()
+                .filter(|p| !p.trim().is_empty())
+                .map(PathBuf::from)
+        })
+        .or_else(default_developer_key_path)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no developer key location could be determined (no HOME, no \
+                 MAGNETITE_HOME, no --key). Pass --key <file> or set \
+                 MAGNETITE_DEVELOPER_SEED. Deriving a publishing key from anything \
+                 ambient would silently change who your releases are signed by."
+            )
+        })?;
+
+    if path.exists() {
+        warn_if_key_file_is_loose(&path);
+        let contents = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading developer key `{}`", path.display()))?;
+        let seed = parse_seed_hex(&contents)
+            .with_context(|| format!("developer key `{}` is malformed", path.display()))?;
+        return Ok((RawKeypairAuth::from_seed(seed), Some(path)));
+    }
+
+    let identity = RawKeypairAuth::generate();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating `{}`", parent.display()))?;
+    }
+    std::fs::write(&path, format!("{}\n", hex::encode(identity.seed())))
+        .with_context(|| format!("writing developer key `{}`", path.display()))?;
+    secure_key_file(&path)?;
+    eprintln!(
+        "note: generated a new developer publishing key at {} (mode 0600).\n\
+         Back it up. Losing it means you cannot publish an update anyone can tie to \
+         your earlier releases; leaking it means someone else can.",
+        path.display()
+    );
+    Ok((identity, Some(path)))
+}
+
+/// Where the developer publishing key lives when no path was given.
+fn default_developer_key_path() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("MAGNETITE_HOME") {
+        if !home.trim().is_empty() {
+            return Some(PathBuf::from(home).join("developer.key"));
+        }
+    }
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.trim().is_empty())?;
+    Some(PathBuf::from(home).join(".magnetite").join("developer.key"))
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -1734,6 +2230,88 @@ fn write_file(path: &Path, content: String) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ------------------------------------------------------------------ //
+    // package build argument parsing                                       //
+    // ------------------------------------------------------------------ //
+
+    const HEX_A: &str = "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737";
+    const HEX_B: &str = "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e";
+
+    #[test]
+    fn price_spec_parsing() {
+        assert_eq!(parse_price("free", "USDC").unwrap().model, PriceModel::Free);
+        assert_eq!(
+            parse_price("fixed:500", "USDC").unwrap().model,
+            PriceModel::Fixed { amount: 500 }
+        );
+        assert_eq!(
+            parse_price("pwyw:250:900", "SOL").unwrap().model,
+            PriceModel::Pwyw {
+                min: 250,
+                suggested: 900
+            }
+        );
+        assert_eq!(parse_price("pwyw:0:0", "USDC").unwrap().currency, "USDC");
+
+        for bad in [
+            "",
+            "gratis",
+            "fixed",
+            "fixed:",
+            "fixed:abc",
+            "fixed:1:2",
+            "pwyw",
+            "pwyw:1",
+            "pwyw:1:2:3",
+            "pwyw:-1:2",
+        ] {
+            assert!(parse_price(bad, "USDC").is_err(), "--price {bad:?}");
+        }
+    }
+
+    #[test]
+    fn leg_spec_parsing_and_sum_check() {
+        let plan = parse_legs(&[
+            format!("developer:9500:{HEX_A}"),
+            format!("stewards:500:{HEX_B}"),
+        ])
+        .unwrap();
+        assert_eq!(plan.legs.len(), 2);
+        assert_eq!(plan.legs[0].share_bps, 9_500);
+        assert_eq!(plan.legs[0].role, Role::Developer);
+        assert_eq!(plan.legs[1].role, Role::Stewards);
+
+        let with_label = parse_legs(&[format!("other:10000:{HEX_A}:asset-pack")]).unwrap();
+        assert_eq!(
+            with_label.legs[0].role,
+            Role::Other("asset-pack".to_string())
+        );
+
+        // Sum-exactness is enforced in the CLI too, so a bad split is reported
+        // against the flag the user typed rather than as a manifest error.
+        assert!(parse_legs(&[format!("developer:9000:{HEX_A}")]).is_err());
+        assert!(parse_legs(&[
+            format!("developer:9000:{HEX_A}"),
+            format!("stewards:2000:{HEX_B}")
+        ])
+        .is_err());
+
+        for bad in [
+            "developer:9000".to_string(),
+            format!("developer:{HEX_A}"),
+            format!("wizard:10000:{HEX_A}"),
+            format!("other:10000:{HEX_A}"),
+            format!("developer:10000:{HEX_A}:label"),
+            "developer:10000:not-hex".to_string(),
+            format!("developer:notanumber:{HEX_A}"),
+        ] {
+            assert!(
+                parse_legs(std::slice::from_ref(&bad)).is_err(),
+                "--leg {bad:?}"
+            );
+        }
+    }
 
     // ------------------------------------------------------------------ //
     // to_pascal_case                                                       //
