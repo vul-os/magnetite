@@ -359,8 +359,9 @@ above deliberately does not set those headers.)
   the mistake this is avoiding).
 - **Still open:** WAN validation of the rest of the stack (shard migration,
   membership, session-follow, the attested wire) across two real internet
-  hosts, and a node deploy recipe distinct from the legacy central backend's —
-  both separate items already tracked in `ALIGNMENT.md` §2.
+  hosts — tracked in `ALIGNMENT.md` §2 (item 7). A node deploy recipe distinct
+  from the legacy central backend's (item 8) is addressed below, in
+  "[Deploying a node in production](#deploying-a-node-in-production)".
 
 ## Node identity is a key file, not an address
 
@@ -594,3 +595,211 @@ address" would quietly remove that node from every placement decision.
   attract or repel shards it was already authorized to hold — every actual
   handoff to it is still membership-checked, key-pinned, two-phase and
   epoch-fenced — but placement is not defence against a dishonest *member*.
+
+## Deploying a node in production
+
+`ALIGNMENT.md` §2 item 8 asked for a node deploy recipe distinct from the
+legacy backend's, because `fly.toml` genuinely does target that legacy
+backend, not a node. This section establishes that, then gives the recipe.
+
+### `fly.toml` targets `magnetite-backend`, not a node — checked directly
+
+`fly.toml`'s `[build]` points at `Dockerfile.fly`, which:
+
+```dockerfile
+COPY backend/Cargo.toml backend/Cargo.lock ./
+...
+COPY backend/src ./src
+COPY backend/migrations ./migrations
+COPY backend/tools/migrate.sh ./migrate.sh
+...
+COPY --from=builder /app/target/release/magnetite-backend /app/magnetite
+```
+
+builds and ships the `magnetite-backend` binary (`backend/Cargo.toml`'s
+`[package] name = "magnetite-backend"`) — the Axum monolith whose
+`main.rs` wires up 30+ route modules (auth, wallet, marketplace, oauth,
+matchmaking, discovery, replays, tournaments, …), needs a Postgres pool
+(`fly.toml`'s `release_command = "/app/migrate.sh up"`) and Redis, and
+answers `fly.toml`'s own `[health_check]` at `/health` and `[metrics]` at
+`/metrics`. `deploy/k8s/` and `deploy/nomad/` orchestrate the same binary
+plus `frontend`, `postgres`, `redis` and optional `mediamtx` — see
+`docs/self-hosting/deploy.md`, which is honest about this being the central
+platform, not a node deploy path. None of this is what "bring any server, no
+cloud required" (this doc's own opening line) means, and none of it is
+required to run one.
+
+### What a node operator actually needs — and the two binaries that exist
+
+A node needs exactly: **one binary**, a compiled `.wasm` game module (or a
+buildable game crate), and one place to persist a small key file. No
+Postgres, no Redis, no migration, no HTTP health route — a node's own
+listener is a bare `TcpListener` speaking only the WS protocol
+(`magnetite-runtime/src/server.rs` has no axum, no `/health`, no `/metrics`
+anywhere; verified by reading it, not assumed).
+
+But there are **two different binaries** in this repo that both fit "run a
+node," with different feature sets, and conflating them would overstate what
+either one ships:
+
+| | `magnetite-serve` | `magnetite node` |
+|---|---|---|
+| Crate | `magnetite-runtime` (`src/bin/serve.rs`) | `magnetite-cli` (the `magnetite` binary's `node` subcommand) |
+| Node identity, tracker announce, cluster peers | **No** — `fleet: None` is hard-coded in `serve.rs`; no `TRACKER_URL` handling | Yes — persists an Ed25519 keypair, can announce to a tracker, can join a cluster via `--cluster-peer` |
+| Dockerfile shipped | **Yes** — `magnetite-runtime/Dockerfile` | **No** — no Dockerfile anywhere in this repo builds `magnetite-cli` (checked: `find . -iname Dockerfile*` returns only `Dockerfile.fly`, `Dockerfile.backend`, `Dockerfile.frontend`, `frontend/Dockerfile.fly.frontend`, and `magnetite-runtime/Dockerfile` — none for the CLI) |
+| Verified here | Yes — this is the binary A19's `wss://` recipe ran, end to end, through Caddy | Yes — booted below, this session |
+
+If you don't need node identity, tracker announcement or clustering — a
+single standalone server for your own game, on your own box — `magnetite-serve`
+plus its existing Dockerfile plus A19's Caddy recipe (above) is the whole
+answer, already proven. If you want the decentralized story this doc leads
+with — capacity self-measurement, discovery, an optional cluster — that is
+`magnetite node`, and it ships as source only: build it once
+(`cargo build --release -p magnetite-cli` from the repo root) and run the
+resulting `magnetite` binary as a long-running process. No image to pull
+exists for it, matching flowstock's own honest disclosure for its container
+option ("There is no published image to pull… Build the Dockerfile yourself" —
+[`flowstock/docs/CLOUD-NODE.md`](https://github.com/vul-os/flowstock/blob/main/docs/CLOUD-NODE.md#5-deploy-artifact)):
+here the gap is one step earlier, there is no Dockerfile for this binary at all
+yet, so building from source is today's only path, not an alternative to one.
+
+### Verified here (2026-07-30): `magnetite node` actually boots and binds
+
+A prebuilt release binary already existed in this checkout
+(`magnetite-cli/target/release/magnetite`, built 2026-07-28). Run against an
+already-compiled `.wasm` (`game-templates/authoritative`'s prebuilt
+`wasm32-wasip1` artifact) with a scratch `MAGNETITE_HOME`:
+
+```bash
+MAGNETITE_HOME=/tmp/scratch-home ./magnetite-cli/target/release/magnetite node \
+  --wasm ./game-templates/authoritative/target/wasm32-wasip1/release/game_template_authoritative.wasm \
+  --host 127.0.0.1 --port 19123
+```
+
+produced the real banner (not paraphrased):
+
+```
+Magnetite node — capacity-elastic, self-advertising
+
+  Game id (BLAKE3) : ef71335d257100f3f9858165ac57d576dbe07ea65d08bd2e21537f89388145fb
+  Connect URL      : ws://127.0.0.1:19123
+  Node pubkey      : 674fbcbe8af7ecbaea9818f686eb4120e70a62ff0db4e96c67e9b00179ad8765
+  Node key         : generated → /tmp/scratch-home/node.key (stable from now on)
+  Topology         : Sharded { tick_hz: 20, cell_size: 500.0, max_per_shard: 64 }
+  Measured HW      : 8 cores, 16384 MB RAM
+  Emergent cap     : 8 shards, 512 player slots (derived from HW, not a constant)
+  Advertised       : 1 session(s) discoverable by hash
+  Tracker          : none configured (set TRACKER_URL to opt in)
+  Lease            : renewed every 60s while serving; retracted on shutdown
+  Cluster          : none configured — this node hands shards to nobody (pass --cluster-peer <hex> to join a cluster)
+  Checkpointing    : OFF — nothing is made durable; a node death loses that node's shard state (pass --checkpoint-dir <path> to enable)
+```
+
+`lsof` confirmed a real listener (`magnetite … TCP localhost:19123 (LISTEN)`),
+and `/tmp/scratch-home/node.key` materialized, `0600`, exactly as documented
+above under "Node identity is a key file, not an address." **What this does
+and does not prove:** the process starts, measures the host, generates and
+persists its identity, binds the port and self-advertises — that is what a
+deploy recipe needs to be true. It does **not** prove the bundled game
+template plays correctly: that specific prebuilt `.wasm` trapped on every
+tick (`wasm trap … mag_step … slice_index_fail`) once a player would have
+connected — a pre-existing defect in that build artifact (most likely stale
+against an ABI change elsewhere in this tree; see wibbly's vendoring notes
+about a newly-required `mag_abi_version` export), unrelated to the deploy
+recipe and out of scope here. Not fixed; flagged for whoever next touches
+`game-templates/authoritative`.
+
+### The recipe: binary + systemd, fronted by A19's Caddy
+
+Matching flowstock's and pango's "Binary + systemd" shape
+([`flowstock/docs/CLOUD-NODE.md` §5](https://github.com/vul-os/flowstock/blob/main/docs/CLOUD-NODE.md#5-deploy-artifact),
+[`pango/docs/CLOUD-NODE.md` §2](https://github.com/vul-os/pango/blob/main/docs/CLOUD-NODE.md#2-the-shapes-a-node-comes-in))
+rather than a fourth shape:
+
+```ini
+# /etc/systemd/system/magnetite-node.service
+[Unit]
+Description=Magnetite game node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=magnetite
+Group=magnetite
+Environment=MAGNETITE_HOME=/var/lib/magnetite
+Environment=RUST_LOG=info
+# Loopback only — the Caddy recipe above ("Running players over wss://")
+# is the only path in.
+ExecStart=/usr/local/bin/magnetite node \
+  --wasm /var/lib/magnetite/game.wasm \
+  --host 127.0.0.1 --port 9000
+Restart=on-failure
+RestartSec=2
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/var/lib/magnetite
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+useradd --system --home /var/lib/magnetite --shell /usr/sbin/nologin magnetite
+install -d -o magnetite -g magnetite -m 0750 /var/lib/magnetite
+cargo build --release -p magnetite-cli   # produces target/release/magnetite
+install -m 0755 target/release/magnetite /usr/local/bin/magnetite
+install -m 0644 path/to/game.wasm /var/lib/magnetite/game.wasm
+systemctl enable --now magnetite-node
+journalctl -u magnetite-node -f
+```
+
+Then terminate TLS in front of it with the exact Caddy recipe already
+verified above — `magnetite-runtime/deploy/Caddyfile.example`, pointed at
+`127.0.0.1:9000`.
+
+**Firewall — only the proxy's ports are public:**
+
+| Port | Who needs it |
+|---|---|
+| 443 | Players, via Caddy. |
+| 80 | ACME only. |
+| 9000 (game port) | **Nobody.** Not even if the proxy is on the same host — see above. |
+| 9001 (`<port>+1`, the handoff port — only bound if `--cluster-peer` is set) | Only the peer node keys you named. Never the public internet; `ClusterMembership` is deny-by-default, but there is no reason to expose the listener to strangers at all. |
+
+**Container option, for the narrower feature set:** if node identity, tracker
+announcement and clustering are not needed, `magnetite-runtime/Dockerfile`
+(the one Docker image that exists here) builds `magnetite-serve` and was
+already verified end to end with Caddy (above):
+
+```bash
+docker build -f magnetite-runtime/Dockerfile -t magnetite-runtime .
+docker run -d --name magnetite-node \
+  -p 127.0.0.1:9000:9000 \
+  -v "$(pwd)/game.wasm:/game.wasm:ro" \
+  --restart unless-stopped \
+  magnetite-runtime --wasm /game.wasm --host 0.0.0.0 --port 9000
+```
+
+`-p 127.0.0.1:9000:9000` publishes to loopback only — the same reasoning
+flowstock gives for its own `-p 127.0.0.1:8787:8787`
+([§5](https://github.com/vul-os/flowstock/blob/main/docs/CLOUD-NODE.md#5-deploy-artifact)):
+publishing `-p 9000:9000` binds every interface and punches a hole a host
+firewall would otherwise close. There is, again, no container image for
+`magnetite node`'s fuller feature set — say that honestly rather than
+implying the container covers everything the CLI does.
+
+### Durability — what actually needs a backup
+
+Unlike the legacy backend (a Postgres database), a node's only durable state
+by default is the identity key file described above
+(`~/.magnetite/node.key` or `$MAGNETITE_HOME/node.key`) — back it up like a
+secret, because losing it loses who this node *is* to every peer that has
+pinned it. Shard/game state itself is **not** durable unless `--checkpoint-dir`
+is set, and even then a checkpoint only helps a *different* box if that
+directory is a shared/network mount (see the flags table above) — a node
+death still loses in-memory state that was never checkpointed, by design, not
+by omission. There is no database to back up and nothing to restore into: a
+fresh box with the same key file and the same `game.wasm` *is* a working
+replacement node, it just starts with zero live shards.
