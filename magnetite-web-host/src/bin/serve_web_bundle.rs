@@ -130,7 +130,10 @@ async fn run() -> Result<(), String> {
             .checkout_for_item(
                 &buyer,
                 item,
-                PaymentSplit::to_developer(RawKeypairAuth::from_seed([43u8; 32]).node_pubkey(), 500),
+                PaymentSplit::to_developer(
+                    RawKeypairAuth::from_seed([43u8; 32]).node_pubkey(),
+                    500,
+                ),
             )
             .await
             .map_err(|e| e.to_string())?;

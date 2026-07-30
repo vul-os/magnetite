@@ -191,11 +191,8 @@ mod tests {
     }
 
     async fn receipt_for(rail: &MockPaymentRail, buyer: PubKey) -> Receipt {
-        rail.checkout(
-            &buyer,
-            PaymentSplit::to_developer(key(200), 500),
-        )
-        .await
+        rail.checkout(&buyer, PaymentSplit::to_developer(key(200), 500))
+            .await
     }
 
     #[tokio::test]
