@@ -186,7 +186,19 @@ where
     /// new protocol, it needs a key the node holds, and inventing it inside a
     /// file server would be the wrong place. What is built is the boundary —
     /// [`crate::entitlement::evaluate`] is one function with one call site, so
-    /// the exchange has exactly one place to land.
+    /// the exchange has exactly one place to land (backlog A15).
+    ///
+    /// A14's [`crate::entitlement::Verdict::Granted`] /
+    /// [`crate::entitlement::Verdict::GrantedUnsettled`] split adds a
+    /// constraint to that future design, not a reason to build it now: the
+    /// token would have to be stamped with the [`magnetite_seams::payment::Settlement`]
+    /// tier it was minted under, and a cache lookup would have to re-check
+    /// that stamp rather than assume every cached token means `Settled` —
+    /// otherwise the token layer would silently launder a signed-but-unsettled
+    /// grant into an indistinguishable-from-settled one on the second and
+    /// later requests, exactly the conflation this repo's fail-closed rule
+    /// forbids at the receipt layer. Naming the constraint here is the whole
+    /// contribution; the token itself is still not built.
     ///
     /// Until then: free bundles are fully usable, and paid bundles are usable
     /// with a rail whose verification is local.

@@ -138,7 +138,7 @@ impl Refusal {
 ///
 /// A14: [`Self::Granted`] and [`Self::GrantedUnsettled`] are **two distinct
 /// variants**, not one `Granted` carrying a `bool` or an `Option` a caller
-/// could ignore. [`crate::respond::Response::respond`]'s `match` on this enum
+/// could ignore. [`crate::respond::HostedBundle::respond`]'s `match` on this enum
 /// has to name both arms — the compiler refuses to compile a `match` that
 /// silently falls through an unsettled receipt as if it were settled. There is
 /// deliberately no `is_granted()` collapsing both into one boolean; that
