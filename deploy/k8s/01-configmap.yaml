@@ -34,6 +34,17 @@ data:
   # ── Game server WebSocket ──────────────────────────────────────────────────
   # Should point to the LoadBalancer/NodePort address of the runtime service.
   # Override per-deployment or via Kustomize overlay.
+  #
+  # ⚠️ This value ASSUMES a TLS-terminating proxy sits in front of the
+  # runtime — the `wss://` scheme only becomes true once one does. As shipped
+  # in `08-runtime.yaml`, the `magnetite-runtime` Service is a bare
+  # `LoadBalancer` on plaintext port 9000 with no TLS anywhere; nothing here
+  # provisions the proxy this URL presumes. See the warning at the top of
+  # `08-runtime.yaml` for the gap and why it is flagged rather than silently
+  # fixed. Until that proxy exists, either change this to
+  # `ws://runtime.magnetite.gg:9000` (honest, but reintroduces the
+  # mixed-content problem `docs/hosting-a-server.md` describes) or stand up
+  # the TLS layer that warning points at.
   GAME_SERVER_WS_BASE: "wss://runtime.magnetite.gg"
 
   # ── Anti-cheat ────────────────────────────────────────────────────────────

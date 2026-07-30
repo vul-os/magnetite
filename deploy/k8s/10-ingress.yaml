@@ -19,6 +19,17 @@
 #   Alternatively, use the nginx TCP proxy ConfigMap:
 #     data: {"9000": "magnetite/magnetite-runtime:9000"}
 #   See: https://kubernetes.github.io/ingress-nginx/user-guide/exposing-tcp-udp-services/
+#
+#   ⚠️ NO TLS on that path, either directly or through the ConfigMap
+#   alternative above — both hand players a bare `ws://runtime.magnetite.gg:9000`.
+#   This contradicts `docs/hosting-a-server.md`'s "Running players over
+#   wss://", which requires a TLS-terminating reverse proxy (Caddy, per
+#   `magnetite-runtime/deploy/Caddyfile.example`) in front of the runtime for
+#   any browser client to be able to connect at all. Cert-manager and the
+#   `letsencrypt-prod` ClusterIssuer are already set up in THIS file for the
+#   HTTP hosts below, but nothing analogous exists yet for the runtime's raw
+#   TCP port — see the longer warning in `08-runtime.yaml` for why that is
+#   flagged here rather than silently fabricated. Known, unfixed, loud.
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

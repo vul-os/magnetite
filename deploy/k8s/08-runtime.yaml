@@ -5,6 +5,39 @@
 #   Port: 9000 (WebSocket)
 #   Startup: CMD ["--host", "0.0.0.0", "--port", "9000"]
 #
+# ⚠️  NO TLS — THIS MANIFEST CONTRADICTS docs/hosting-a-server.md, KNOWINGLY
+#     UNFIXED (found 2026-07-30, see that commit's message for the reasoning).
+#
+#     The Service below is `type: LoadBalancer` on port 9000 directly, so it
+#     hands players a bare `ws://runtime.magnetite.gg:9000` — plaintext, no
+#     TLS anywhere between the client and this Pod. `docs/hosting-a-server.md`
+#     "Running players over wss://" tells operators to run the node behind a
+#     TLS-terminating reverse proxy (Caddy — see the committed, verified
+#     `magnetite-runtime/deploy/Caddyfile.example`) precisely because a
+#     browser on an `https://` page cannot open a `ws://` socket at all
+#     (mixed-content blocking, no operator-side workaround). Deploying THIS
+#     file as-is gives every such client a dead connection, and any WS
+#     traffic that does connect (e.g. `http://`-served or native clients) is
+#     unencrypted on the wire.
+#
+#     This was NOT silently left this way: reconciling it properly means
+#     terminating TLS in front of every replica behind this one LoadBalancer
+#     IP, which for a fleet (not the single loopback-bound host the Caddyfile
+#     recipe assumes) means either (a) a Caddy/nginx sidecar in this same Pod
+#     with a certificate the sidecars share rather than each independently
+#     ACME-issuing against one shared hostname — a `cert-manager` `Certificate`
+#     resource reusing the `letsencrypt-prod` `ClusterIssuer` already declared
+#     in `10-ingress.yaml`, mounted read-only into the sidecar, is the correct
+#     shape — or (b) a dedicated TLS-passthrough/SNI-routing load-balancer
+#     tier in front of this Service. Either is a real, additional piece of
+#     infrastructure this repo cannot verify without a real cluster, a real
+#     domain and cert-manager actually running (this environment has none of
+#     the three), and authoring it unverified would be exactly the kind of
+#     unproven claim this project has had to retract before. Left as an
+#     explicit, loud gap rather than a fabricated "fix": DO NOT expose this
+#     Service to real players until a TLS-terminating layer sits in front of
+#     it.
+#
 # Design:
 #   - One Pod per live game session is the ideal (Dedicated topology).
 #   - In the current implementation, the runtime supports SharedRoom (many sessions
@@ -38,6 +71,10 @@ spec:
   # On clusters without a LoadBalancer controller (bare-metal), change to
   # NodePort and configure an external proxy (nginx/HAProxy) to route ws://
   # traffic to the cluster node. See docs/self-hosting/deploy.md §bare-metal.
+  #
+  # ⚠️ Plaintext ws://, no TLS — see the file-header warning above. Do not
+  # point real player traffic at this Service until something in front of it
+  # terminates TLS.
   type: LoadBalancer
 ---
 apiVersion: apps/v1

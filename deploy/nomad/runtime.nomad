@@ -3,6 +3,31 @@
 # Port: 9000 (WebSocket, TCP)
 # Binary: /usr/local/bin/magnetite-serve
 #
+# ⚠️  NO TLS — THIS JOB CONTRADICTS docs/hosting-a-server.md, KNOWINGLY
+#     UNFIXED (found 2026-07-30). The static port below is plaintext
+#     `ws://` with nothing terminating TLS in front of it, so a browser on an
+#     `https://` page cannot open a socket to it at all (mixed-content
+#     blocking — no operator-side workaround), and any traffic that does
+#     connect is unencrypted. `docs/hosting-a-server.md` "Running players
+#     over wss://" and the committed, verified
+#     `magnetite-runtime/deploy/Caddyfile.example` are the documented fix for
+#     a single host: bind the node to loopback, run Caddy in front of it.
+#     `backend.nomad`'s `GAME_SERVER_WS_BASE = "wss://runtime.magnetite.gg"`
+#     already ASSUMES that proxy exists — this job does not provision it.
+#
+#     Reconciling this properly for a Nomad fleet (not the single loopback
+#     host the Caddyfile recipe assumes) means adding a TLS-terminating task
+#     — a Caddy/nginx task in this same group bound to the public port, with
+#     `runtime` itself moved to a loopback-only dynamic port and reached via
+#     Consul Connect / the group network namespace, plus a real certificate
+#     (Let's Encrypt via that Caddy task, or one provisioned out-of-band and
+#     mounted) — and there is no cluster, domain, or Consul/Vault instance in
+#     this environment to actually run and verify that end to end. Authoring
+#     it unverified would be exactly the kind of unproven claim this project
+#     has had to retract before, so it is left as an explicit, loud gap
+#     instead: DO NOT point real players at this job's port until something
+#     in front of it terminates TLS.
+#
 # Scaling strategy:
 #   - count = 1 for a single-node / light deployment.
 #   - Increase count manually, or use Nomad autoscaler
@@ -31,6 +56,8 @@ job "magnetite-runtime" {
   group "runtime" {
     count = 1
 
+    # ⚠️ Plaintext ws:// on this static port — no TLS. See the file-header
+    # warning above; do not expose this port directly to players.
     network {
       port "ws" {
         static = 9000

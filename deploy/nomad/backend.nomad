@@ -96,6 +96,10 @@ EOT
         REDIS_URL            = "redis://{{ env "NOMAD_UPSTREAM_ADDR_redis" }}"
         # Optional: only set when THIS node hosts media.
         MEDIA_SERVER_BASE_URL = "http://{{ env "NOMAD_UPSTREAM_ADDR_mediamtx" }}"
+        # ⚠️ Assumes a TLS-terminating proxy in front of the runtime job —
+        # `runtime.nomad` as committed exposes plaintext ws:// on a static
+        # port with no such proxy. See the warning at the top of
+        # `runtime.nomad` for the gap; this is not yet true as deployed.
         GAME_SERVER_WS_BASE  = "wss://runtime.magnetite.gg"
         EMAIL_PROVIDER       = "resend"
         EMAIL_FROM_ADDRESS   = "noreply@magnetite.gg"

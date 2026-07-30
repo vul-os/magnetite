@@ -26,7 +26,7 @@
 |---------|-------|------|-------|
 | backend | `ghcr.io/magnetite/backend` | 8080 | Axum REST + WebSocket; `/api/v1/*`, `/ws/*` |
 | frontend | `ghcr.io/magnetite/frontend` | 80 | nginx SPA; reverse-proxies `/api/`, `/ws` → backend |
-| magnetite-runtime | `ghcr.io/magnetite/runtime` | 9000 | Authoritative WASM game-server; WebSocket only |
+| magnetite-runtime | `ghcr.io/magnetite/runtime` | 9000 | Authoritative WASM game-server; WebSocket only. **Plaintext `ws://` as shipped in `deploy/k8s/08-runtime.yaml` / `deploy/nomad/runtime.nomad` — no TLS.** See [Running players over `wss://`](hosting-a-server.md#running-players-over-wss) for why that blocks any browser client served over `https://`, and the warning comments in those two manifests for the gap between this doc's `ws://` instructions below and that requirement. |
 | mediamtx | `bluenviron/mediamtx:latest` | 8888/1935/8889/8554 | **Optional.** HLS, RTMP, WebRTC/WHIP, RTSP. Per-operator; behind the `media` compose profile and no backend dependency |
 | postgres | `postgres:16-alpine` | 5432 | Stateful; replace with managed RDS/Neon for scale |
 | redis | `redis:7-alpine` | 6379 | Stateful; replace with ElastiCache/Upstash for scale |
@@ -179,6 +179,12 @@ Add Fabio or Traefik as a Nomad load balancer job to route:
 - `magnetite.gg` → `frontend` service (port 80)
 - `api.magnetite.gg` → `backend` service (port 8080)
 - `runtime.magnetite.gg:9000` → `magnetite-runtime` service (port 9000, TCP pass-through)
+
+  ⚠️ That pass-through is plaintext `ws://` — see the warning in
+  `deploy/nomad/runtime.nomad` and
+  [Running players over `wss://`](hosting-a-server.md#running-players-over-wss).
+  A production fleet needs a TLS-terminating layer in front of this route,
+  which is not provisioned by this job set.
 
 ---
 
