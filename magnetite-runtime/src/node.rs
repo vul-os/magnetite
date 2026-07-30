@@ -619,8 +619,10 @@ mod tests {
         use super::*;
         use magnetite_seams::identity::RawKeypairAuth;
         use magnetite_seams::package::{
-            DeterminismClass, FileEntry, PackageManifest, PackagePrice, Role, SplitPlan,
+            DeterminismClass, FileEntry, PackageManifest, PackagePrice, SplitPlan,
         };
+        // One shared `Role` across both split layers — `ALIGNMENT.md` §4.
+        use magnetite_seams::Role;
 
         pub fn key() -> RawKeypairAuth {
             RawKeypairAuth::from_seed([0x2A; 32])

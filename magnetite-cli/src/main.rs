@@ -1796,8 +1796,11 @@ fn cmd_deploy(crate_path: &Path) -> Result<()> {
 
 use magnetite_seams::package::{
     DeterminismClass, DirFiles, Package, PackageKind, PackageManifest, PackagePrice, PackageTerms,
-    PriceModel, Role, SplitLeg, SplitPlan, BPS_TOTAL,
+    PriceModel, SplitLeg, SplitPlan, BPS_TOTAL,
 };
+// `Role` is the payment seam's type, shared by the manifest and rail split
+// layers — one definition, per `ALIGNMENT.md` §4.
+use magnetite_seams::Role;
 
 fn cmd_package(cmd: PackageCmd) -> Result<()> {
     match cmd {
@@ -1992,7 +1995,7 @@ fn print_package(pkg: &Package, checked_dir: Option<&Path>) {
         println!(
             "    {:>5} bps  {:<12} {}",
             leg.share_bps,
-            leg.role.label(),
+            leg.role.tag(),
             leg.wallet.to_hex()
         );
     }
