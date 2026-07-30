@@ -218,6 +218,150 @@ on a heartbeat and retracts its ad on exit.
 There is no cloud account to create and no capacity to request — the box you
 run it on *is* the capacity.
 
+## Running players over `wss://`
+
+**The node's listener is plaintext `ws://` only.** `magnetite-runtime/src/server.rs`
+binds a bare `TcpListener` and calls `tokio_tungstenite::accept_async` on the raw
+socket — there is no TLS anywhere in the accept path, and that is a real limit
+rather than an omission: a page served over `https://` cannot open a `ws://`
+socket at all. Mixed-content blocking has no operator-side workaround, so
+**every** browser game — a three.js client, Godot's HTML5 export, a `wibbly`
+page — hits this the moment it is not `http://localhost` or `127.0.0.1`
+(those two count as a secure context, which is why local development needs
+nothing extra). This is the R1 blocker `ALIGNMENT.md` §2 names, and it is
+accurate: nothing here builds TLS into the node.
+
+Node-to-node traffic (shard handoff, cluster membership) is a different case
+and does **not** need this: `magnetite-runtime/src/follow.rs` already says "run
+behind TLS" for that path, and FlowStock's shipped answer — a trusted network
+(LAN, VPN/overlay, or a tunnel) rather than in-process TLS — applies there
+unchanged, because both ends are Magnetite's own binary. Browsers are the part
+that cannot be told to trust a network; they enforce the secure-context rule
+unconditionally.
+
+### The options, and which one this ships
+
+Three routes exist for a player-facing `wss://` endpoint:
+
+1. **A reverse proxy terminating TLS in front of the node** (this section, verified below).
+2. **A tunnel** (ngrok, cloudflared, or the suite's own
+   [Ephor](https://github.com/vul-os/ephor)) — reachability without renting or
+   configuring anything, at the cost of a content-visible L7 hop and, on free
+   tiers, a URL that changes on restart.
+3. **rustls + ACME built into the node binary** — the most self-contained
+   story (no separate proxy process) but the largest change, and it needs a
+   real internet-routable domain to exercise the ACME HTTP-01/TLS-ALPN-01
+   challenge. **Not built here, and explicitly unexercised** — there is no
+   domain available in this environment to prove an ACME issuance actually
+   completes, and claiming the path works without running it would be exactly
+   the kind of unverified status claim this project has repeatedly had to
+   retract. Left as future work if an operator wants one process instead of two.
+
+This adopts route 1, matching the pattern already shipped for the same problem
+elsewhere in the family rather than inventing a third recipe:
+[flowstock's `docs/CLOUD-NODE.md`](https://github.com/vul-os/flowstock/blob/main/docs/CLOUD-NODE.md)
+and [pango's `docs/CLOUD-NODE.md`](https://github.com/vul-os/pango/blob/main/docs/CLOUD-NODE.md)
+both terminate TLS with a proxy in front of a loopback-bound process, document
+a tunnel as the zero-infrastructure alternative, and are explicit that the app
+itself does not speak TLS. The recipe below copies that shape, not any code —
+Magnetite gains no new dependency on either sibling.
+
+### The recipe
+
+Bind the node to loopback so the proxy is the only path in:
+
+```bash
+magnetite node --wasm game.wasm --host 127.0.0.1 --port 9000
+```
+
+Then terminate TLS with Caddy — the shortest honest version, same as the
+siblings' recipe — using the file committed at
+[`magnetite-runtime/deploy/Caddyfile.example`](../magnetite-runtime/deploy/Caddyfile.example):
+
+```caddyfile
+your-node.example.com {
+	reverse_proxy 127.0.0.1:9000
+}
+```
+
+```bash
+caddy run --config Caddyfile.example
+```
+
+Caddy obtains and renews a Let's Encrypt certificate for the real domain on its
+own. Players connect to `wss://your-node.example.com` — never to port `9000`
+directly, which a firewall should not expose:
+
+| Port | Who needs it |
+|---|---|
+| 443 | Players, via the proxy. |
+| 80 | ACME only. |
+| 9000 | **Nobody.** Do not open it if the proxy is on the same host. |
+
+nginx or HAProxy work the same way; bring your own certificate with those
+instead of Caddy's automatic one.
+
+### What was actually verified here (2026-07-30)
+
+No domain is reachable from this machine, so the ACME path above is
+documented, not exercised. What **was** run, end to end, on this host:
+
+1. `magnetite-serve --host 127.0.0.1 --port 9000` (the NopGame smoke-test
+   binary — no `.wasm` required) — plaintext, exactly as shipped today.
+2. Caddy in front of it with `tls internal` instead of a real domain — Caddy's
+   own local CA mints a certificate for `localhost`, which is enough to prove
+   the `wss://` code path without owning a domain (see the commented block at
+   the bottom of `Caddyfile.example`).
+3. A Python client (`websockets` 16.0) opened `wss://localhost:9443/`, with
+   the TLS chain verified against Caddy's local root — not `--insecure`.
+
+Result: the TLS handshake completed, the WebSocket upgrade completed, and the
+node's own connection-tracking log lines fired for a real player:
+
+```
+WSS HANDSHAKE OK — TLS verified, WebSocket upgrade complete
+negotiated: 1
+received first server frame, len= 146
+```
+
+```
+2026-07-30T17:48:01.904154Z  INFO magnetite_runtime::server: player connected peer_addr=127.0.0.1:54581 player_id=Player(1)
+2026-07-30T17:48:01.904893Z  INFO magnetite_runtime::server: player disconnected player_id=Player(1)
+```
+
+The 146-byte frame is the real `ServerNet::Welcome` sent by
+`magnetite-runtime/src/server.rs`, not a proxy-level stand-in — it only exists
+if the TLS layer, the WS upgrade, and the node's own accept path all worked.
+(A first attempt with an explicit `header_up Upgrade`/`Connection` override in
+the Caddyfile produced a 502 — Caddy's automatic WebSocket detection handles
+this correctly on its own and the override interfered with it; the recipe
+above deliberately does not set those headers.)
+
+### What this does and does not prove
+
+- **`wss://` through a proxy is a genuine, verified unblock for R1** — a
+  browser on an `https://` page can reach a magnetite node once a
+  TLS-terminating proxy sits in front of it, which is exactly what was
+  missing.
+- **The node itself still speaks plaintext `ws://` on its own listener.**
+  Nothing in `magnetite-runtime/src/server.rs` changed. TLS terminates one hop
+  before the node, not in it — say it that way, not "the node supports TLS".
+- **The ACME path is unexercised.** The verification above used Caddy's local
+  CA, not a real Let's Encrypt issuance against a public domain, because no
+  such domain is reachable from this environment. Treat that as untested until
+  someone runs it against a real DNS name.
+- **A tunnel is optional and third-party, never a default.** If you use one,
+  the tunnel operator is a content-visible L7 hop in the path — the same
+  caveat pango's `CLOUD-NODE.md` §5 states for its own tunnel option. Ephor is
+  one tunnel provider among several here, not a dependency: nothing in
+  `magnetite-runtime`, `magnetite-cli` or their build files references it, and
+  it must stay that way (see `wede`'s hard, undeclared Ephor dependency for
+  the mistake this is avoiding).
+- **Still open:** WAN validation of the rest of the stack (shard migration,
+  membership, session-follow, the attested wire) across two real internet
+  hosts, and a node deploy recipe distinct from the legacy central backend's —
+  both separate items already tracked in `ALIGNMENT.md` §2.
+
 ## Node identity is a key file, not an address
 
 On first run a node generates an Ed25519 keypair and writes the seed to

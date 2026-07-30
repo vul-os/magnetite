@@ -86,6 +86,19 @@ zero third parties in the whole path. The honest blockers for R1 are:
    `reachability-adapter` is closer to load-bearing for magnetite than it is
    for FlowStock — worth stating plainly rather than inheriting the sibling's
    posture unexamined.
+
+   > **Update, 2026-07-30 — partially addressed, not closed.** The reverse-proxy
+   > route above is now documented and verified:
+   > `magnetite-runtime/deploy/Caddyfile.example` plus
+   > `docs/hosting-a-server.md` §"Running players over `wss://`", following the
+   > same shape flowstock's and pango's own `CLOUD-NODE.md` already ship. A real
+   > TLS handshake and WebSocket upgrade were completed end-to-end against the
+   > actual node process (Caddy's local CA, no internet domain available in
+   > this environment). **The node's own listener did not change** — it is
+   > still bare `ws://`, and TLS terminates one hop before it. rustls + ACME
+   > in-process remains unbuilt and, per the paragraph above, cannot be
+   > end-to-end verified here for lack of a real domain. Point 3 below (a node
+   > deploy recipe) is still open beyond this one piece of it.
 2. **WAN validation.** Shard migration, cluster membership, session follow and
    the attested input wire are tested in-process and over LAN only. They need
    an actual two-host, cross-internet run before any claim changes.

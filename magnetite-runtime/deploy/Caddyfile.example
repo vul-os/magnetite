@@ -1,0 +1,39 @@
+# magnetite-runtime/deploy/Caddyfile.example
+#
+# Terminates TLS in front of a magnetite node so a browser on an `https://`
+# page can open `wss://` to it. The node itself (magnetite-runtime/src/server.rs)
+# speaks plain `ws://` only and has no TLS of its own — this proxy is what
+# supplies the `wss://` layer, not a change to the node.
+#
+# Same shape as flowstock's and pango's own public-node recipes
+# (flowstock/docs/CLOUD-NODE.md §3, pango/docs/CLOUD-NODE.md §5): Caddy on the
+# same host, the node bound to loopback so the proxy is the only path in.
+#
+# Usage:
+#   1. Start the node on loopback only:
+#        magnetite node --wasm game.wasm --host 127.0.0.1 --port 9000
+#      (or, for a smoke test with no game module:
+#        magnetite-serve --host 127.0.0.1 --port 9000)
+#   2. Point DNS for your-node.example.com at this host, then:
+#        caddy run --config Caddyfile.example
+#      Caddy provisions and renews a Let's Encrypt certificate for the real
+#      domain automatically; open only 80 (ACME) and 443.
+#   3. Clients connect to wss://your-node.example.com — never to port 9000
+#      directly, which should not be reachable from outside this host.
+#
+# For a LOCAL verification with no domain and no internet-routable host,
+# replace the site address with `localhost` and the directive `tls internal`
+# — Caddy mints its own local CA and a certificate for `localhost`, which is
+# enough to prove the wss:// code path end-to-end without owning a domain.
+# This is exactly how the recipe below was verified; see
+# docs/hosting-a-server.md "Running players over wss://" for the pasted
+# handshake output.
+#
+#   localhost:9443 {
+#       tls internal
+#       reverse_proxy 127.0.0.1:9000
+#   }
+
+your-node.example.com {
+	reverse_proxy 127.0.0.1:9000
+}
