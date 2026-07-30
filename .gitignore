@@ -36,3 +36,20 @@ target
 
 # Claude Code session state (local only)
 .claude/
+
+# Local environment files. backend/src/main.rs:69 calls dotenvy::dotenv(), so a
+# developer's own .env is loaded at runtime and will hold real values for
+# JWT_SECRET, GITHUB_APP_PRIVATE_KEY, RESEND_API_KEY and the OAuth client
+# secrets. There was NO rule here at all, so such a file showed as untracked
+# and committable in a public repo.
+#
+# Prefix-matched, not exact: a rule matching only `.env` protects nothing once
+# a suffix is appended (.env.bak, .env.local, .env.production) — that exact gap
+# was found across five sibling repos.
+#
+# The two tracked TEMPLATES are kept deliberately: .env.example (URLs only) and
+# .env.docker (docker-compose defaults). Neither is excluded here.
+.env
+.env.*
+!.env.example
+!.env.docker
