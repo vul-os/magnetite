@@ -17,9 +17,11 @@
 use magnetite_seams::identity::{Identity, RawKeypairAuth};
 use magnetite_seams::package::{
     DeterminismClass, FileEntry, MemoryFiles, Package, PackageError, PackageKind, PackageManifest,
-    PackagePrice, PriceModel, Role, SplitLeg, SplitPlan,
+    PackagePrice, PriceModel, SplitLeg, SplitPlan,
 };
-use magnetite_seams::{Hash, PubKey};
+// `Role` is the payment seam's type, shared by both split layers — see
+// `ALIGNMENT.md` §4 and the note at the top of `package.rs`.
+use magnetite_seams::{Hash, PubKey, Role};
 
 /// A fixed developer key, so every byte below is reproducible.
 fn dev() -> RawKeypairAuth {

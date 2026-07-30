@@ -128,10 +128,15 @@ pub use input::{
 // `DeterminismClass` is exported next to the manifest for the same reason
 // `InputClass` is exported next to the input trait: code that decides "may I
 // treat this as replay evidence?" should have to name the guarantee class.
+// `Role` and the resolved `Leg` are NOT re-exported here: they are the payment
+// seam's types, re-exported above from `payment`. `ALIGNMENT.md` §4 specifies one
+// `Role` shared by the manifest and rail layers, so there is one definition and
+// one re-export. This module contributes only the manifest layer's `SplitLeg`
+// (proportional) and the `SplitPlan::resolve` bridge between them.
 pub use package::{
     DeterminismClass, DirFiles, FileEntry, FileSource, MemoryFiles, Package, PackageError,
-    PackageKind, PackageManifest, PackagePrice, PackageTerms, PriceModel, ResolvedLeg, Role,
-    SplitLeg, SplitPlan, VerifiedPackage, BPS_TOTAL, PACKAGE_FORMAT_V1,
+    PackageKind, PackageManifest, PackagePrice, PackageTerms, PriceModel, SplitLeg, SplitPlan,
+    VerifiedPackage, BPS_TOTAL, PACKAGE_FORMAT_V1,
 };
 
 /// Current unix time in whole seconds. Used for token/challenge expiry.

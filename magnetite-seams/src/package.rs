@@ -74,9 +74,14 @@
 //!   settlement window closes, or grant and accept revocation) is *not* a field
 //!   here yet. It belongs in this manifest and is deliberately left out rather
 //!   than guessed at.
-//! * [`crate::payment::PaymentSplit`] is untouched. [`SplitPlan::resolve`]
-//!   produces the sum-exact absolute legs `ALIGNMENT.md` §4 wants that type to
-//!   become, but changing the payment seam is a separate item.
+//! * [`crate::payment::PaymentSplit`] **is now the `Vec<Leg>` shape**
+//!   `ALIGNMENT.md` §4 specifies — that separate item has since landed. This
+//!   module therefore shares its [`Role`] and its resolved [`Leg`] rather than
+//!   declaring parallel copies, and [`SplitPlan::resolve`] is the one bridge from
+//!   the manifest's proportional [`SplitLeg`] to those absolute legs. (An earlier
+//!   revision of this file said `PaymentSplit` "is untouched" and defined its own
+//!   `Role`/`ResolvedLeg`; both were written before the payment refactor landed
+//!   and were false once it did.)
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -84,6 +89,21 @@ use std::path::{Path, PathBuf};
 use crate::blobstore::Hash;
 use crate::cbor::{self, CborError, Cv, MapReader};
 use crate::identity::{Identity, PubKey, RawKeypairAuth, Sig};
+// ONE `Role`, ONE resolved `Leg` — both defined in `crate::payment`, not here.
+//
+// `ALIGNMENT.md` §4 ("Economics: voluntary legs, not a protocol fee") specifies a
+// single `Role { Developer, Operator, Stewards, Other(String) }` shared by both
+// layers, and names the rail-layer type `Leg { wallet, amount, role }`. This
+// module owns only the *manifest* layer — [`SplitLeg`], which is proportional
+// (`share_bps`) because a signature made at publish time cannot commit to an
+// absolute amount for a pay-what-you-want purchase.
+//
+// [`SplitPlan::resolve`] is the bridge between the two, and §4 is explicit that
+// "there must be exactly one implementation of that conversion". A second `Role`
+// here would put a silent mapping at the money boundary — the same class of
+// defect as the duplicate CBOR codecs and the duplicate root hashes recorded in
+// `ALIGNMENT.md` §9.
+use crate::payment::{Leg, Role};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -670,42 +690,21 @@ impl PackagePrice {
 // Split
 // ---------------------------------------------------------------------------
 
-/// Who a leg of a payment belongs to (`ALIGNMENT.md` §4).
+/// The wire code for a [`Role`] inside a signed manifest.
 ///
-/// Co-developers, publishers, asset-pack authors and charity splits are all
-/// [`Role::Other`] and all take the same code path — there is no privileged
-/// "protocol fee" leg, because there is no enforceable mandatory fee in a system
-/// with no central server.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Role {
-    /// The game developer.
-    Developer,
-    /// The hosting operator.
-    Operator,
-    /// Voluntary contribution to the commons. **This destination comes from the
-    /// signed release and nowhere else** — never from node environment.
-    Stewards,
-    /// Anything else, with a developer-chosen label.
-    Other(String),
-}
-
-impl Role {
-    fn code(&self) -> u64 {
-        match self {
-            Role::Developer => 1,
-            Role::Operator => 2,
-            Role::Stewards => 3,
-            Role::Other(_) => 4,
-        }
-    }
-    /// Human label, as shown in a payout breakdown.
-    pub fn label(&self) -> &str {
-        match self {
-            Role::Developer => "developer",
-            Role::Operator => "operator",
-            Role::Stewards => "stewards",
-            Role::Other(s) => s,
-        }
+/// Free function rather than a method because [`Role`] is defined in
+/// [`crate::payment`] — deliberately, see the note on [`SplitLeg`]. Keeping the
+/// codes here keeps manifest wire-format knowledge in the module that owns the
+/// manifest format, instead of pushing it into the rail vocabulary.
+///
+/// These codes are **stable**: they appear in signed bytes. Never renumber; only
+/// append.
+fn role_code(role: &Role) -> u64 {
+    match role {
+        Role::Developer => 1,
+        Role::Operator => 2,
+        Role::Stewards => 3,
+        Role::Other(_) => 4,
     }
 }
 
@@ -725,16 +724,9 @@ pub struct SplitLeg {
     pub role: Role,
 }
 
-/// A resolved, absolute payout leg. `sum(amount) == total` exactly.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedLeg {
-    /// Destination wallet.
-    pub wallet: PubKey,
-    /// Absolute amount in the smallest currency unit.
-    pub amount: u64,
-    /// Whose leg this is.
-    pub role: Role,
-}
+// A resolved, absolute payout leg is `crate::payment::Leg` — imported above, not
+// redeclared here. `ALIGNMENT.md` §4 names it as the rail layer's type, and the
+// rail is the only thing that consumes a resolved leg.
 
 /// The developer's declared revenue split.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -769,8 +761,8 @@ impl SplitPlan {
     /// is `0` only when `total` is too small to reach it. Legs are returned in
     /// declared order, including any that resolved to `0`, so the caller sees
     /// every declared party.
-    pub fn resolve(&self, total: u64) -> Vec<ResolvedLeg> {
-        let mut out: Vec<ResolvedLeg> = Vec::with_capacity(self.legs.len());
+    pub fn resolve(&self, total: u64) -> Vec<Leg> {
+        let mut out: Vec<Leg> = Vec::with_capacity(self.legs.len());
         // (remainder, index) for leftover distribution.
         let mut rems: Vec<(u128, usize)> = Vec::with_capacity(self.legs.len());
         let mut assigned: u64 = 0;
@@ -779,7 +771,7 @@ impl SplitPlan {
             let floor = (num / BPS_TOTAL as u128) as u64;
             rems.push((num % BPS_TOTAL as u128, i));
             assigned = assigned.saturating_add(floor);
-            out.push(ResolvedLeg {
+            out.push(Leg {
                 wallet: leg.wallet,
                 amount: floor,
                 role: leg.role.clone(),
@@ -869,7 +861,7 @@ impl SplitPlan {
                     let mut m = vec![
                         (KL_WALLET, Cv::Bytes(leg.wallet.0.to_vec())),
                         (KL_SHARE_BPS, Cv::U64(leg.share_bps as u64)),
-                        (KL_ROLE, Cv::U64(leg.role.code())),
+                        (KL_ROLE, Cv::U64(role_code(&leg.role))),
                     ];
                     if let Role::Other(label) = &leg.role {
                         m.push((KL_ROLE_LABEL, Cv::Text(label.clone())));
@@ -2370,7 +2362,7 @@ mod tests {
         let back = Package::from_canonical_cbor(&pkg.to_canonical_cbor()).unwrap();
         back.verify().unwrap();
         assert_eq!(back.manifest.split, split);
-        assert_eq!(back.manifest.split.legs[3].role.label(), "asset-pack");
+        assert_eq!(back.manifest.split.legs[3].role.tag(), "asset-pack");
 
         let legs = split.resolve(1_000);
         assert_eq!(
@@ -2756,7 +2748,7 @@ mod tests {
 
     #[test]
     fn package_price_feeds_the_existing_receipt_gate() {
-        use crate::payment::{receipt_admits, MockPaymentRail, PaymentRail, PaymentSplit, Split};
+        use crate::payment::{receipt_admits, MockPaymentRail, PaymentRail, PaymentSplit};
 
         let key = dev_key();
         let pk = key.node_pubkey();
@@ -2776,14 +2768,7 @@ mod tests {
         let rail = MockPaymentRail::new();
         let buyer = PubKey([0xB7; 32]);
         let pay = |amount: u64| {
-            futures_lite_block_on(rail.checkout(
-                &buyer,
-                PaymentSplit {
-                    developer: Split { wallet: pk, amount },
-                    operator: None,
-                    protocol_fee_bps: 0,
-                },
-            ))
+            futures_lite_block_on(rail.checkout(&buyer, PaymentSplit::to_developer(pk, amount)))
         };
 
         let under = pay(249);
