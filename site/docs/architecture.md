@@ -28,7 +28,9 @@
 - `magnetite-sdk::authority::AuthoritativeGame` — deterministic
   `validate`/`step`. Clients send inputs, never state.
 - The WASM sandbox (`magnetite-sandbox`) — same `(state, ordered commands,
-  tick, seed)` → same result, on any host.
+  tick, seed)` → same result, on any host. Its guest boundary is a public,
+  language-agnostic contract: eight C-ABI exports and length-prefixed JSON, no
+  Rust required on the far side. See [The sandbox ABI](./docs.html#sandbox-abi).
 - `ReplayLog` + `verify_replay` (`magnetite-anticheat`) — anyone can
   re-simulate from scratch and prove tampering.
 - The topology ladder `SingleRoom → Dedicated → Sharded` — identical game code
@@ -213,7 +215,7 @@ token — so one login gets you into every room. See [Comms](./docs.html#comms).
 | `magnetite-seams` | The six seam traits (§ above) + non-custodial, non-cloud default implementations |
 | `backend/magnetite-sdk` (`::authority`) | Frozen traits: `AuthoritativeGame`, `GameExecutor`, `Validator`, `ReplayLog`, `verify_replay`, `Topology`, `MatchConfig`, `DeterministicRng` |
 | `magnetite-runtime` | Authoritative game-server host: tick loop, WebSocket connection mgmt, interest-filtered snapshot fan-out, `ShardManager` seam |
-| `magnetite-sandbox` | `WasmExecutor` — Wasmtime host implementing `GameExecutor`; fuel/memory/epoch limits; no clock, no OS rng |
+| `magnetite-sandbox` | `WasmExecutor` — Wasmtime host implementing `GameExecutor`; fuel/memory/epoch limits; no clock, no OS rng. Also `conformance` + the `mag-conformance` binary: check any `.wasm` against [the ABI contract](./docs.html#sandbox-abi) |
 | `magnetite-anticheat` | Composable validators, `TrustScoreMap`, `ReplayVerifier` |
 | `magnetite-cli` | `magnetite new\|build\|dev\|deploy\|serve` binary |
 | `magnetite-web-client` | JS web client speaking `ClientNet`/`ServerNet`; prediction buffer; in-browser replay playback |

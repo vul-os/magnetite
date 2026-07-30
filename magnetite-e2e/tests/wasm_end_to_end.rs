@@ -18,14 +18,19 @@
 //! 5. Using `verify_replay` over the native log to confirm the game is
 //!    `ReplayVerdict::Clean` (tamper-evident replay verification passes).
 //!
-//! ## Why empty inputs?
+//! ## Why the inputs are not empty
 //!
-//! The Sandbox ABI (`mag_init` / `mag_step`) does not expose `on_join`. Players
-//! are joined inside the runtime host (not via the ABI). Both executors therefore
-//! start with an empty player list and receive empty input lists — the game ticks
-//! through the physics loop with no commands. This is the correct baseline for
-//! a parity proof: both sides see identical (empty) state, and the hash must
-//! match.
+//! They used to be, and that is precisely why a guest bug survived for months:
+//! the reference module discarded every input frame it was handed, and a parity
+//! test that steps both sides with `vec![]` agrees perfectly — on nothing
+//! happening. Parity over the empty input list only proves the two executors run
+//! the same idle physics loop.
+//!
+//! These tests therefore drive **non-empty, varying** inputs from several
+//! players. The sandbox ABI has no `on_join`, so first sight of a player id in a
+//! `mag_step` payload is that player's join (see
+//! `AuthoritativeGame::on_join`) — which means real inputs also exercise
+//! spawning, validation, rejection and RNG-minted projectile ids on both sides.
 //!
 //! ## How to run
 //!
@@ -51,7 +56,7 @@ use magnetite_sandbox::{LimitsConfig, WasmExecutor};
 use magnetite_sdk::authority::{
     verify_replay, GameExecutor, MatchConfig, NativeExecutor, ReplayLog, ReplayVerdict, Topology,
 };
-use magnetite_sdk::input::Input;
+use magnetite_sdk::input::{Input, KeyState, MouseState};
 use magnetite_sdk::state::PlayerId;
 
 /// Number of ticks to run in the parity test.
@@ -98,6 +103,42 @@ fn match_config() -> MatchConfig {
         seed: SEED,
         snapshot_every: 10,
     }
+}
+
+/// Number of players whose inputs are submitted each tick.
+const PLAYERS: u64 = 4;
+
+/// Deterministic, non-empty input frames for `tick`.
+///
+/// Varies per (tick, player) so movement, aim and shooting all fire across the
+/// run — including the RNG draw that mints a projectile id, which is the part
+/// that makes snapshot/restore faithfulness observable.
+fn inputs_for_tick(tick: u64) -> Vec<(PlayerId, Input)> {
+    (1..=PLAYERS)
+        .map(|p| {
+            let phase = (tick + p) % 4;
+            (
+                PlayerId::new(p),
+                Input {
+                    keys: KeyState {
+                        forward: phase == 0,
+                        right: phase == 1,
+                        attack: phase == 2,
+                        ..Default::default()
+                    },
+                    mouse: MouseState {
+                        delta_x: if phase == 3 { 1.0 } else { 0.0 },
+                        delta_y: if phase == 3 { 0.5 } else { 0.0 },
+                        ..Default::default()
+                    },
+                    sequence: tick,
+                    // Client-supplied and untrusted: a conforming module must
+                    // never read this as a clock. Non-zero on purpose.
+                    timestamp_ms: 1_000 + tick * 16,
+                },
+            )
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -147,16 +188,17 @@ fn wasm_sandbox_parity_with_native() {
     // ── Replay log for verify_replay ─────────────────────────────────────
     let mut log = ReplayLog::new(cfg.clone());
 
-    // Empty inputs — no players have been joined via on_join.
-    let inputs: Vec<(PlayerId, Input)> = vec![];
-
-    // ── Drive K ticks ────────────────────────────────────────────────────
+    // ── Drive K ticks with real, varying inputs ──────────────────────────
+    let mut distinct_hashes = std::collections::BTreeSet::new();
     for tick in 1..=K_TICKS {
+        let inputs = inputs_for_tick(tick);
+
         let native_out = native.step(tick, &inputs);
         let wasm_out = wasm_exec.step(tick, &inputs);
 
         native_hashes.push((tick, native_out.state_hash));
         wasm_hashes.push((tick, wasm_out.state_hash));
+        distinct_hashes.insert(native_out.state_hash);
 
         // Record for verify_replay.
         log.record(tick, inputs.clone(), native_out.state_hash);
@@ -166,9 +208,29 @@ fn wasm_sandbox_parity_with_native() {
             "state_hash MISMATCH at tick {tick}: native={} wasm={}",
             native_out.state_hash, wasm_out.state_hash
         );
+        assert_eq!(
+            native_out.rejects.len(),
+            wasm_out.rejects.len(),
+            "reject count MISMATCH at tick {tick}: native={:?} wasm={:?}",
+            native_out.rejects,
+            wasm_out.rejects
+        );
     }
 
+    // The whole point of using non-empty inputs: prove the world actually moved.
+    // A module that discards its inputs produces an idle physics loop whose hash
+    // sequence is short and repetitive, and both executors would still "agree".
+    assert!(
+        distinct_hashes.len() > K_TICKS as usize / 2,
+        "expected the state to keep changing under real inputs, saw only {} distinct hashes over {K_TICKS} ticks — are inputs reaching the simulation?",
+        distinct_hashes.len()
+    );
+
     println!("[PASS] sandbox parity confirmed over {K_TICKS} ticks (seed=0x{SEED:016X})");
+    println!(
+        "       {} distinct state hashes — inputs are reaching the simulation",
+        distinct_hashes.len()
+    );
     println!(
         "       Native hashes sample: {:?}",
         &native_hashes[..K_TICKS.min(5) as usize]
@@ -191,12 +253,10 @@ fn wasm_sandbox_parity_with_native() {
 /// Verify that `WasmExecutor` produces non-empty snapshots and that running
 /// the same game twice from fresh executors gives identical state hashes.
 ///
-/// Note on snapshot/restore: the wasm module's `mag_restore` receives the
-/// snapshot bytes wrapped with a 4-byte length prefix (by `WasmExecutor`).
-/// The internal static `CURRENT_TICK` in the guest is not reset by restore,
-/// which is a known trait of the N1/N2 ABI (recorded as M8 in DECISIONS.md).
-/// This test therefore verifies the executable guarantee: two independent
-/// WasmExecutor instances agree on the state_hash sequence.
+/// Snapshot/restore is covered by
+/// [`wasm_snapshot_restore_resumes_the_same_trajectory`] below: the guest now
+/// strips the 4-byte length prefix `WasmExecutor` writes and re-seeds its tick
+/// counter from `ArenaSnapshot::tick`, so a restored module resumes correctly.
 ///
 /// This test requires the wasm artifact.
 #[test]
@@ -216,14 +276,12 @@ fn wasm_state_hash_is_reproducible_across_instances() {
         epoch_tick_ms: 50,
     };
 
-    let inputs: Vec<(PlayerId, Input)> = vec![];
-
     // Instance A — run K ticks, record hashes.
     let mut exec_a = WasmExecutor::from_file(&wasm, cfg.clone(), limits.clone())
         .expect("WasmExecutor A must load successfully");
     let mut hashes_a: Vec<u64> = Vec::new();
     for tick in 1..=K_TICKS {
-        let out = exec_a.step(tick, &inputs);
+        let out = exec_a.step(tick, &inputs_for_tick(tick));
         assert_ne!(
             out.state_hash, 0,
             "state_hash must be non-zero at tick {tick}"
@@ -247,7 +305,7 @@ fn wasm_state_hash_is_reproducible_across_instances() {
         .expect("WasmExecutor B must load successfully");
     let mut hashes_b: Vec<u64> = Vec::new();
     for tick in 1..=K_TICKS {
-        let out = exec_b.step(tick, &inputs);
+        let out = exec_b.step(tick, &inputs_for_tick(tick));
         hashes_b.push(out.state_hash);
     }
 
@@ -287,11 +345,10 @@ fn native_verify_replay_clean_baseline() {
     let mut exec = NativeExecutor::<ArenaShooter>::new(cfg.clone());
     let mut log = ReplayLog::new(cfg.clone());
 
-    let inputs: Vec<(PlayerId, Input)> = vec![];
-
     for tick in 1..=K_TICKS {
+        let inputs = inputs_for_tick(tick);
         let out = exec.step(tick, &inputs);
-        log.record(tick, inputs.clone(), out.state_hash);
+        log.record(tick, inputs, out.state_hash);
     }
 
     let verdict = verify_replay::<ArenaShooter>(&log);
@@ -300,5 +357,75 @@ fn native_verify_replay_clean_baseline() {
         ReplayVerdict::Clean,
         "native ArenaShooter must produce a Clean replay over {K_TICKS} ticks"
     );
-    println!("[PASS] native verify_replay Clean ({K_TICKS} ticks)");
+    println!("[PASS] native verify_replay Clean ({K_TICKS} ticks, non-empty inputs)");
+}
+
+// ---------------------------------------------------------------------------
+// Test 4: snapshot / restore resumes the same trajectory (wasm)
+// ---------------------------------------------------------------------------
+
+/// The property shard handoff and replay-from-checkpoint actually depend on:
+/// take a snapshot mid-run, install it in a **fresh** executor, and the two must
+/// then step forward identically.
+///
+/// This is strictly stronger than "restore(snapshot()) is idempotent", which also
+/// passes on a module that ignores `mag_restore` altogether — the shape of the bug
+/// this test was written to catch.
+#[test]
+fn wasm_snapshot_restore_resumes_the_same_trajectory() {
+    let wasm = wasm_path();
+    if !wasm.exists() {
+        panic!(
+            "wasm artifact missing — run `cargo build --release --target wasm32-wasip1 --features wasm` in game-templates/authoritative/ first"
+        );
+    }
+
+    let cfg = match_config();
+    let limits = LimitsConfig {
+        fuel_per_step: 50_000_000,
+        max_memory_bytes: 64 * 1024 * 1024,
+        max_epochs_per_step: 10,
+        epoch_tick_ms: 50,
+    };
+    let split = K_TICKS / 2;
+
+    // A runs the whole match, snapshotting at the halfway point.
+    let mut a = WasmExecutor::from_file(&wasm, cfg.clone(), limits.clone())
+        .expect("WasmExecutor A must load");
+    for tick in 1..=split {
+        a.step(tick, &inputs_for_tick(tick));
+    }
+    let snap = a.snapshot();
+    assert!(!snap.is_empty(), "snapshot must not be empty");
+
+    let continued: Vec<u64> = ((split + 1)..=K_TICKS)
+        .map(|tick| a.step(tick, &inputs_for_tick(tick)).state_hash)
+        .collect();
+
+    // B starts fresh, adopts the snapshot, and runs only the second half.
+    let mut b =
+        WasmExecutor::from_file(&wasm, cfg.clone(), limits).expect("WasmExecutor B must load");
+    b.restore(&snap);
+    assert_eq!(
+        b.snapshot(),
+        snap,
+        "restore must install the snapshot it was given"
+    );
+
+    let resumed: Vec<u64> = ((split + 1)..=K_TICKS)
+        .map(|tick| b.step(tick, &inputs_for_tick(tick)).state_hash)
+        .collect();
+
+    assert_eq!(
+        continued, resumed,
+        "a wasm executor restored from a tick-{split} snapshot must resume the same trajectory"
+    );
+    assert!(
+        !continued.contains(&0),
+        "state_hash 0 means a guest call failed: {continued:?}"
+    );
+    println!(
+        "[PASS] wasm snapshot at tick {split} resumes identically for {} ticks",
+        continued.len()
+    );
 }

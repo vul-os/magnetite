@@ -13,21 +13,43 @@
 //!
 //! ## Sandbox ABI
 //!
+//! The `mag_*` boundary is a **public, language-agnostic contract**, specified
+//! normatively in `site/docs/sandbox-abi.md`. Nothing Rust-specific crosses it:
+//! it is a C-shaped calling convention over linear memory with length-prefixed
+//! JSON payloads, and any language targeting `wasm32-wasip1` can implement it.
+//! `conformance/reference.wat` is a fully conforming module hand-written in
+//! WebAssembly text with no Rust and no imports.
+//!
+//! To check a module against the contract, use [`conformance::run`] or the
+//! bundled binary:
+//!
+//! ```sh
+//! cargo run -p magnetite-sandbox --bin mag-conformance -- game.wasm
+//! ```
+//!
 //! The guest module must export:
 //!
 //! ```text
-//! mag_alloc(len: i32) -> i32          bump allocator — host writes inputs here
+//! mag_abi_version() -> i32            declared ABI version; must equal abi::MAG_ABI_VERSION
+//! mag_alloc(len: i32) -> i32          bump allocator — host writes payloads here
 //! mag_free(ptr: i32, len: i32)        release a previously allocated region
-//! mag_init(cfg_ptr: i32, cfg_len: i32)          initialise from JSON MatchConfig
-//! mag_step(inputs_ptr: i32, inputs_len: i32) -> i32   run one tick; returns packed StepOutput ptr
+//! mag_init(cfg_ptr: i32, cfg_len: i32)                initialise from JSON MatchConfig
+//! mag_step(payload_ptr: i32, payload_len: i32) -> i32 run one tick; returns StepOutput ptr
 //! mag_snapshot() -> i32               serialise state; returns ptr to length-prefixed bytes
-//! mag_restore(ptr: i32, len: i32)     replace state from length-prefixed bytes
+//! mag_restore(ptr: i32, len: i32)     replace state from bare JSON snapshot bytes
 //! mag_view(player_id: i64) -> i32     per-player view; returns ptr to length-prefixed bytes
 //! ```
 //!
-//! All guest-owned buffers are length-prefixed: a 4-byte little-endian `u32` followed by the
-//! payload bytes.  The host reads the length, copies the payload, then calls `mag_free` on the
-//! returned pointer (including the 4-byte prefix).
+//! Every buffer the **guest returns** is length-prefixed: a 4-byte little-endian `u32` followed
+//! by the payload bytes.  The host reads the length, copies the payload, then calls `mag_free` on
+//! the returned pointer with `4 + payload_len`.
+//!
+//! Every buffer the **host passes in** is bare — the length is already a parameter.
+//!
+//! The `mag_step` payload carries the authoritative tick alongside the inputs
+//! (`{"tick": N, "inputs": [...]}`), and the guest echoes the tick it simulated in its
+//! `StepOutput`.  The host compares the two and fails the step on disagreement, which is what
+//! makes a guest that has lost track of its tick detectable rather than silently wrong.
 //!
 //! ## Determinism constraints
 //!
@@ -44,6 +66,10 @@
 //! 5. **Epoch timeout** — a background thread increments the engine epoch every
 //!    [`LimitsConfig::epoch_tick_ms`] milliseconds; the store is configured to trap after
 //!    [`LimitsConfig::max_epochs_per_step`] epochs, bounding wall time.
+//! 6. **Declared ABI version** — `mag_abi_version()` is called at load and must return
+//!    [`abi::MAG_ABI_VERSION`]; anything else, or a missing export, is
+//!    [`SandboxError::AbiVersionMismatch`] / [`SandboxError::MissingExport`] and the module
+//!    never runs.
 //!
 //! ## Example (conceptual — requires a real `.wasm` at runtime)
 //!
@@ -63,6 +89,7 @@
 //! ```
 
 pub mod abi;
+pub mod conformance;
 pub mod executor;
 pub mod limits;
 
@@ -83,6 +110,24 @@ pub enum SandboxError {
     /// A required guest export (`mag_init`, `mag_step`, etc.) was not found.
     #[error("missing guest export `{name}`")]
     MissingExport { name: &'static str },
+
+    /// The module declared an ABI version this host does not speak.
+    #[error("guest declares ABI version {got}, host speaks {expected}")]
+    AbiVersionMismatch {
+        /// What this host requires — [`abi::MAG_ABI_VERSION`].
+        expected: u32,
+        /// What `mag_abi_version()` returned.
+        got: u32,
+    },
+
+    /// The guest reported simulating a different tick than the host asked for.
+    #[error("tick mismatch: host asked for {expected}, guest simulated {got}")]
+    TickMismatch {
+        /// The tick the host sent in the `mag_step` payload.
+        expected: magnetite_sdk::authority::Tick,
+        /// The tick the guest echoed in its `StepOutput`.
+        got: magnetite_sdk::authority::Tick,
+    },
 
     /// The guest exhausted its per-step fuel budget.
     #[error("guest exhausted fuel budget per step")]

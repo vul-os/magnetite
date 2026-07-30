@@ -505,8 +505,24 @@ impl ShardedRuntime {
             }
 
             // Restore state on the target executor so it has the full world.
+            //
+            // Fail closed: if the target cannot decode the snapshot it does not
+            // have the world, and telling the seam layer the handoff landed would
+            // hand authority to an executor holding the wrong state. Abandon this
+            // handoff instead — the source keeps authority, which is the
+            // documented resolution for every partial handoff failure.
             if let Some(dst_exec) = self.executors.get_mut(&event.to_shard) {
-                dst_exec.restore(&state_blob);
+                if let Err(e) = dst_exec.try_restore(&state_blob) {
+                    warn!(
+                        player = %event.player,
+                        from = %event.from_shard,
+                        to = %event.to_shard,
+                        blob_len = state_blob.len(),
+                        error = %e,
+                        "handoff: target rejected the snapshot — source keeps authority"
+                    );
+                    continue;
+                }
                 info!(
                     player = %event.player,
                     from = %event.from_shard,

@@ -10,10 +10,27 @@
 //! [ payload bytes … ]
 //! ```
 //!
-//! The host writes payload bytes at `ptr + 4` where `ptr` is obtained from
-//! `mag_alloc(4 + payload_len)`.  Guest functions that return data return only
-//! the base pointer; the host reads the 4-byte prefix to know how many payload
-//! bytes follow.
+//! The prefix applies to buffers the **guest returns**, and only to those.
+//! Guest functions that return data return only the base pointer, and the host
+//! reads the 4-byte prefix to know how many payload bytes follow.
+//!
+//! Buffers the **host passes in** are never prefixed. For `mag_init`,
+//! `mag_step` and `mag_restore` alike the host calls `mag_alloc(payload_len)`,
+//! writes the payload at `ptr + 0`, and passes `payload_len` as the second
+//! argument. The length is a parameter, so a prefix would only duplicate it —
+//! and that redundancy is exactly what let two drivers disagree about
+//! `mag_restore`'s framing for as long as they did.
+//!
+//! The normative statement of all of this is `site/docs/sandbox-abi.md`.
+//!
+//! ## Versioning
+//!
+//! A conforming module exports `mag_abi_version() -> u32` and returns
+//! [`MAG_ABI_VERSION`]. The host reads it at load time, before any payload is
+//! exchanged, and refuses a module that declares anything else or omits the
+//! export. Absence is a refusal, not a default — a module built against the
+//! undeclared predecessor of this ABI has no version and is rejected rather
+//! than having its bytes misinterpreted.
 //!
 //! ## ABI codec tests
 //!
@@ -22,21 +39,42 @@
 
 use serde::{Deserialize, Serialize};
 
-use magnetite_sdk::authority::{MatchConfig, RejectReason, StepOutput};
+use magnetite_sdk::authority::{MatchConfig, RejectReason, StepOutput, Tick};
 use magnetite_sdk::input::Input;
 use magnetite_sdk::state::PlayerId;
+
+/// The ABI version this host speaks, and the value a conforming module must
+/// return from `mag_abi_version()`.
+///
+/// `1` is the first *declared* version. It is not "the first ABI" — it is the
+/// first one that can be identified at load time. Modules built against the
+/// undeclared predecessor return nothing at all and are refused.
+pub const MAG_ABI_VERSION: u32 = 1;
 
 // ---------------------------------------------------------------------------
 // Types that cross the boundary (host-side representations)
 // ---------------------------------------------------------------------------
 
-/// A single (player_id, input) frame as sent to `mag_step`.
-///
-/// JSON-serialised and written into guest memory as a JSON array.
+/// A single (player_id, input) frame inside a [`StepPayload`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputFrame {
     pub player_id: u64,
     pub input: Input,
+}
+
+/// The complete `mag_step` payload: the authoritative tick, and the inputs for it.
+///
+/// The tick is carried explicitly so that the guest does not have to infer it by
+/// counting calls. A guest that counts has a second source of truth for the same
+/// number, and nothing can detect it drifting; a guest that is *told* the tick can
+/// be checked, because it echoes back the tick it used in
+/// [`GuestStepOutput::tick`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepPayload {
+    /// The authoritative tick this step advances to. Monotonic within a match.
+    pub tick: Tick,
+    /// Inputs for this tick, ordered by ascending `player_id`.
+    pub inputs: Vec<InputFrame>,
 }
 
 /// The packed `StepOutput` that the guest writes into memory and returns
@@ -50,6 +88,14 @@ pub struct GuestStepOutput {
     pub rejects: Vec<GuestReject>,
     /// FNV-1a 64-bit hash of game state after this tick.
     pub state_hash: u64,
+    /// The tick the guest actually simulated.
+    ///
+    /// The host compares this against the tick it asked for and treats a
+    /// mismatch as a failed step. This is the whole point of carrying the tick
+    /// across the boundary: a guest that restored a snapshot without adopting
+    /// its tick, or that is counting calls instead of reading the payload,
+    /// reports the wrong number here and stops being silently wrong.
+    pub tick: Tick,
 }
 
 /// A single rejection entry inside [`GuestStepOutput`].
@@ -81,18 +127,22 @@ pub fn encode_config(cfg: &MatchConfig) -> Result<Vec<u8>, serde_json::Error> {
     serde_json::to_vec(cfg)
 }
 
-/// Serialise a slice of `(PlayerId, Input)` pairs to JSON bytes for `mag_step`.
-///
-/// The guest receives a JSON array of [`InputFrame`] objects.
-pub fn encode_inputs(inputs: &[(PlayerId, Input)]) -> Result<Vec<u8>, serde_json::Error> {
-    let frames: Vec<InputFrame> = inputs
-        .iter()
-        .map(|(pid, inp)| InputFrame {
-            player_id: pid.as_u64(),
-            input: *inp,
-        })
-        .collect();
-    serde_json::to_vec(&frames)
+/// Serialise the `mag_step` payload: the tick plus this tick's inputs.
+pub fn encode_step_payload(
+    tick: Tick,
+    inputs: &[(PlayerId, Input)],
+) -> Result<Vec<u8>, serde_json::Error> {
+    let payload = StepPayload {
+        tick,
+        inputs: inputs
+            .iter()
+            .map(|(pid, inp)| InputFrame {
+                player_id: pid.as_u64(),
+                input: *inp,
+            })
+            .collect(),
+    };
+    serde_json::to_vec(&payload)
 }
 
 // ---------------------------------------------------------------------------
@@ -100,9 +150,13 @@ pub fn encode_inputs(inputs: &[(PlayerId, Input)]) -> Result<Vec<u8>, serde_json
 // ---------------------------------------------------------------------------
 
 /// Decode a [`GuestStepOutput`] from raw JSON bytes returned by `mag_step`.
-pub fn decode_step_output(bytes: &[u8]) -> Result<StepOutput, serde_json::Error> {
+///
+/// Returns the [`StepOutput`] and the tick the guest reported simulating. The
+/// caller is expected to compare that tick against the one it asked for.
+pub fn decode_step_output(bytes: &[u8]) -> Result<(StepOutput, Tick), serde_json::Error> {
     let guest: GuestStepOutput = serde_json::from_slice(bytes)?;
-    Ok(guest.into())
+    let tick = guest.tick;
+    Ok((guest.into(), tick))
 }
 
 /// Read and validate a length-prefixed buffer from a raw byte slice.
@@ -130,6 +184,11 @@ pub fn read_length_prefixed(buf: &[u8]) -> Result<&[u8], String> {
 }
 
 /// Build a length-prefixed buffer: 4-byte LE u32 length + payload.
+///
+/// The host does not use this on any outbound call — nothing it passes to the
+/// guest is prefixed. It stays because it is the exact inverse of
+/// [`read_length_prefixed`] and is what tests and reference implementations use
+/// to construct the framing a *guest* is required to produce.
 pub fn write_length_prefixed(payload: &[u8]) -> Vec<u8> {
     let len = payload.len() as u32;
     let mut out = Vec::with_capacity(4 + payload.len());
@@ -221,31 +280,33 @@ mod tests {
         assert_eq!(decoded.snapshot_every, cfg.snapshot_every);
     }
 
-    // ---- encode_inputs -------------------------------------------------------
+    // ---- encode_step_payload -------------------------------------------------
 
     #[test]
-    fn encode_inputs_empty_slice() {
-        let bytes = encode_inputs(&[]).unwrap();
+    fn encode_step_payload_carries_the_tick_with_no_inputs() {
+        let bytes = encode_step_payload(7, &[]).unwrap();
         let val: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert!(val.as_array().unwrap().is_empty());
+        assert_eq!(val["tick"], 7);
+        assert!(val["inputs"].as_array().unwrap().is_empty());
     }
 
     #[test]
-    fn encode_inputs_single_player() {
+    fn encode_step_payload_single_player() {
         let p = PlayerId::new(7);
         let inp = Input {
             sequence: 42,
             ..Default::default()
         };
-        let bytes = encode_inputs(&[(p, inp)]).unwrap();
-        let frames: Vec<InputFrame> = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].player_id, 7);
-        assert_eq!(frames[0].input.sequence, 42);
+        let bytes = encode_step_payload(3, &[(p, inp)]).unwrap();
+        let payload: StepPayload = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(payload.tick, 3);
+        assert_eq!(payload.inputs.len(), 1);
+        assert_eq!(payload.inputs[0].player_id, 7);
+        assert_eq!(payload.inputs[0].input.sequence, 42);
     }
 
     #[test]
-    fn encode_inputs_multiple_players() {
+    fn encode_step_payload_multiple_players() {
         let inputs: Vec<(PlayerId, Input)> = (1..=5)
             .map(|i| {
                 (
@@ -257,23 +318,38 @@ mod tests {
                 )
             })
             .collect();
-        let bytes = encode_inputs(&inputs).unwrap();
-        let frames: Vec<InputFrame> = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(frames.len(), 5);
-        for (i, frame) in frames.iter().enumerate() {
+        let bytes = encode_step_payload(99, &inputs).unwrap();
+        let payload: StepPayload = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(payload.tick, 99);
+        assert_eq!(payload.inputs.len(), 5);
+        for (i, frame) in payload.inputs.iter().enumerate() {
             assert_eq!(frame.player_id, (i + 1) as u64);
             assert_eq!(frame.input.sequence, (i + 1) as u64 * 10);
         }
+    }
+
+    #[test]
+    fn step_payload_puts_tick_before_inputs() {
+        // Not load-bearing for serde, which is order-insensitive, but a guest
+        // parsing JSON by hand (see conformance/reference.wat) benefits from a
+        // stable field order, and serde_json emits declaration order.
+        let bytes = encode_step_payload(5, &[]).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(
+            text.starts_with(r#"{"tick":5,"inputs":"#),
+            "unexpected layout: {text}"
+        );
     }
 
     // ---- decode_step_output --------------------------------------------------
 
     #[test]
     fn decode_step_output_no_rejects() {
-        let json = r#"{"rejects":[],"state_hash":9876543210}"#;
-        let out = decode_step_output(json.as_bytes()).unwrap();
+        let json = r#"{"rejects":[],"state_hash":9876543210,"tick":12}"#;
+        let (out, tick) = decode_step_output(json.as_bytes()).unwrap();
         assert!(out.rejects.is_empty());
         assert_eq!(out.state_hash, 9_876_543_210);
+        assert_eq!(tick, 12);
     }
 
     #[test]
@@ -283,9 +359,10 @@ mod tests {
                 {"player_id": 3, "reason": "RateLimited"},
                 {"player_id": 7, "reason": {"IllegalAction": "speed hack"}}
             ],
-            "state_hash": 42
+            "state_hash": 42,
+            "tick": 1
         }"#;
-        let out = decode_step_output(json.as_bytes()).unwrap();
+        let (out, tick) = decode_step_output(json.as_bytes()).unwrap();
         assert_eq!(out.rejects.len(), 2);
         assert_eq!(out.rejects[0].0.as_u64(), 3);
         assert_eq!(out.rejects[0].1, RejectReason::RateLimited);
@@ -295,12 +372,22 @@ mod tests {
             RejectReason::IllegalAction("speed hack".to_string())
         );
         assert_eq!(out.state_hash, 42);
+        assert_eq!(tick, 1);
     }
 
     #[test]
     fn decode_step_output_invalid_json_returns_err() {
         let bad = b"not json at all";
         assert!(decode_step_output(bad).is_err());
+    }
+
+    #[test]
+    fn decode_step_output_without_a_tick_is_rejected() {
+        // A module that does not report its tick cannot be checked, so the field
+        // is required rather than defaulted. Defaulting it to 0 would make every
+        // pre-versioning module look like it agreed about tick 0.
+        let json = r#"{"rejects":[],"state_hash":7}"#;
+        assert!(decode_step_output(json.as_bytes()).is_err());
     }
 
     // ---- GuestStepOutput → StepOutput conversion ----------------------------
@@ -313,6 +400,7 @@ mod tests {
                 reason: RejectReason::StaleInput,
             }],
             state_hash: 0xDEAD_BEEF,
+            tick: 4,
         };
         let out: StepOutput = guest.into();
         assert_eq!(out.state_hash, 0xDEAD_BEEF);

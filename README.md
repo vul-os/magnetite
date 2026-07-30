@@ -91,9 +91,16 @@ hard guarantees:
 - **Memory cap** (`max_memory_bytes`) — guest cannot exhaust host RAM.
 - **Epoch interrupt** (`epoch_tick_ms × max_epochs_per_step`) — wall-clock timeout per step.
 - **No OS randomness, no wall clock** — `random_get` and `clock_time_get` return `ENOSYS`. The only
-  randomness source is `StepCtx.rng` (seeded `DeterministicRng`, xoshiro256**).
+  randomness source is `StepCtx.rng` (`DeterministicRng`, xoshiro256**), derived per tick from
+  `(MatchConfig::seed, tick)` — so RNG position is implied by the tick rather than carried as hidden
+  state a snapshot cannot capture.
 
 Result: same `(state, ordered commands, tick, seed)` always produces the same result, on any host.
+
+The guest boundary is a documented, language-agnostic contract — eight C-ABI exports and
+length-prefixed JSON, nothing Rust-specific — see
+[site/docs/sandbox-abi.md](site/docs/sandbox-abi.md). `cargo run -p magnetite-sandbox --bin
+mag-conformance -- your.wasm` checks any module against it.
 
 ### Anti-cheat by construction — server-authoritative + deterministic replay verification
 
@@ -104,10 +111,16 @@ Result: same `(state, ordered commands, tick, seed)` always produces the same re
 3. `magnetite-anticheat` adds composable `Validator`s (aimbot snap, position teleport, fire-rate flood)
    and a `TrustScoreMap` (Warn → Kick → Ban escalation with decay).
 
-Proved end to end by `magnetite-e2e` (9 passing tests): `WasmExecutor` and
-`NativeExecutor` produce identical `state_hash` on every tick, `verify_replay`
-returns `Clean`, cheating inputs are rejected and escalate the trust score,
-and a full-stack WebSocket test with 3 real clients confirms convergence.
+Exercised end to end by `magnetite-e2e` (19 passing tests): `WasmExecutor` and
+`NativeExecutor` produce identical `state_hash` on every tick **under non-empty,
+varying inputs from four players**, a snapshot taken mid-match resumes the same
+trajectory in a fresh sandboxed executor, `verify_replay` returns `Clean`,
+cheating inputs are rejected and escalate the trust score, and a full-stack
+WebSocket test with 3 real clients confirms convergence.
+
+The emphasis is load-bearing. The parity test used to step both executors with an
+empty input list, which agrees perfectly on an idle physics loop and hid a guest
+bug that discarded every input frame. Parity over no inputs is not parity.
 
 ---
 

@@ -111,7 +111,10 @@ There is no NAT traversal, no relay and no WAN validation.
 
 - **Wasmtime sandbox** — game logic compiles to `wasm32-wasip1` and runs with a
   fuel budget, a memory cap and an epoch interrupt. No OS randomness and no wall
-  clock inside the guest.
+  clock inside the guest. The guest boundary is a public C-ABI contract, not a
+  Rust interface: [The sandbox ABI](./docs.html#sandbox-abi). Keep your renderer
+  in Godot or three.js and ship only your *rules* as a module in any language
+  that targets `wasm32-wasip1`.
 - **Replay-verified anti-cheat** — the server is authoritative; clients send
   inputs, never state. Every tick's inputs and state hash land in a
   `ReplayLog`, and `verify_replay` re-simulates from scratch to locate tampering.

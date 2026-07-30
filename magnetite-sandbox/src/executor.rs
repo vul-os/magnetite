@@ -51,7 +51,7 @@ use std::time::Duration;
 
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 
-use magnetite_sdk::authority::{GameExecutor, MatchConfig, StepOutput, Tick};
+use magnetite_sdk::authority::{GameExecutor, MatchConfig, RestoreError, StepOutput, Tick};
 use magnetite_sdk::input::Input;
 use magnetite_sdk::state::PlayerId;
 
@@ -64,8 +64,8 @@ use crate::SandboxError;
 // ---------------------------------------------------------------------------
 
 /// Data stored inside the `wasmtime::Store`.
-struct StoreState {
-    limits: StoreLimits,
+pub(crate) struct StoreState {
+    pub(crate) limits: StoreLimits,
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +182,11 @@ impl WasmExecutor {
             cached_views: HashMap::new(),
         };
 
+        // Check the ABI version before exchanging a single payload. A module that
+        // speaks a different version must be refused, not interpreted — that is
+        // the whole reason the export exists.
+        exec.check_abi_version()?;
+
         // Call mag_init with the serialised MatchConfig.
         exec.call_mag_init(&config)?;
 
@@ -194,6 +199,28 @@ impl WasmExecutor {
     // ---------------------------------------------------------------------- //
     // ABI helpers                                                             //
     // ---------------------------------------------------------------------- //
+
+    /// Read `mag_abi_version()` and refuse anything but [`abi::MAG_ABI_VERSION`].
+    ///
+    /// Fail-closed by construction: a missing export is a refusal rather than an
+    /// assumed version, so a module built against the undeclared predecessor of
+    /// this ABI is rejected at load instead of having its payloads misread.
+    fn check_abi_version(&mut self) -> Result<(), SandboxError> {
+        let f = self
+            .instance
+            .get_typed_func::<(), i32>(&mut self.store, "mag_abi_version")
+            .map_err(|_| SandboxError::MissingExport {
+                name: "mag_abi_version",
+            })?;
+        let declared = f.call(&mut self.store, ()).map_err(Self::classify_trap)? as u32;
+        if declared != abi::MAG_ABI_VERSION {
+            return Err(SandboxError::AbiVersionMismatch {
+                expected: abi::MAG_ABI_VERSION,
+                got: declared,
+            });
+        }
+        Ok(())
+    }
 
     /// Write `bytes` into guest memory via `mag_alloc`; return the guest pointer.
     fn alloc_and_write(&mut self, bytes: &[u8]) -> Result<i32, SandboxError> {
@@ -311,27 +338,50 @@ impl WasmExecutor {
     }
 
     /// Classify a wasmtime error into the appropriate [`SandboxError`] variant.
+    ///
+    /// # Why this downcasts instead of matching text
+    ///
+    /// `wasmtime::Error` is an `anyhow::Error`, and for a guest trap wasmtime
+    /// attaches the backtrace as the outermost context. So `Display` — and
+    /// therefore `to_string()` — yields `"error while executing at wasm
+    /// backtrace: …"`, never the words `fuel`, `epoch` or `memory`. Matching on
+    /// that string collapsed *every* resource failure into
+    /// [`SandboxError::Trap`], which is exactly the distinction an operator needs
+    /// when deciding whether a module is looping or leaking.
+    ///
+    /// The trap kind lives in the error's source chain as a [`wasmtime::Trap`],
+    /// so that is what gets inspected here.
     fn classify_trap(err: wasmtime::Error) -> SandboxError {
-        let msg = err.to_string();
-        if msg.contains("all fuel consumed") || msg.contains("fuel") {
-            SandboxError::FuelExhausted
-        } else if msg.contains("epoch") || msg.contains("interrupt") {
-            SandboxError::EpochTimeout
-        } else if msg.contains("out of bounds memory") || msg.contains("memory access") {
-            SandboxError::MemoryLimitExceeded
-        } else {
-            SandboxError::Trap(msg)
+        if let Some(trap) = err.downcast_ref::<wasmtime::Trap>() {
+            return match trap {
+                wasmtime::Trap::OutOfFuel => SandboxError::FuelExhausted,
+                wasmtime::Trap::Interrupt => SandboxError::EpochTimeout,
+                wasmtime::Trap::MemoryOutOfBounds | wasmtime::Trap::HeapMisaligned => {
+                    SandboxError::MemoryLimitExceeded
+                }
+                other => SandboxError::Trap(other.to_string()),
+            };
         }
+
+        // Not a guest trap: a host-side failure (a limiter refusal, a linker
+        // problem). Report the whole chain rather than only its outermost layer,
+        // so the cause is not thrown away.
+        let chain: Vec<String> = err.chain().map(|c| c.to_string()).collect();
+        SandboxError::Trap(chain.join(": "))
     }
 
     // ---------------------------------------------------------------------- //
     // Inner (fallible) implementations of the GameExecutor methods           //
     // ---------------------------------------------------------------------- //
 
-    fn step_inner(&mut self, inputs: &[(PlayerId, Input)]) -> Result<StepOutput, SandboxError> {
+    fn step_inner(
+        &mut self,
+        tick: Tick,
+        inputs: &[(PlayerId, Input)],
+    ) -> Result<StepOutput, SandboxError> {
         self.prepare_step_limits()?;
 
-        let input_bytes = abi::encode_inputs(inputs)?;
+        let input_bytes = abi::encode_step_payload(tick, inputs)?;
         let ptr = self.alloc_and_write(&input_bytes)?;
         let len = input_bytes.len() as i32;
 
@@ -347,7 +397,17 @@ impl WasmExecutor {
         self.free_guest(ptr, len)?;
 
         let out_bytes = self.read_and_free_length_prefixed(out_ptr)?;
-        let output = abi::decode_step_output(&out_bytes)?;
+        let (output, guest_tick) = abi::decode_step_output(&out_bytes)?;
+
+        // The guest echoes the tick it simulated. Disagreement means the two
+        // sides are not describing the same moment, so the step is a failure
+        // rather than a result to be recorded.
+        if guest_tick != tick {
+            return Err(SandboxError::TickMismatch {
+                expected: tick,
+                got: guest_tick,
+            });
+        }
 
         // Refresh the snapshot cache and per-player view caches after each step.
         if let Err(e) = self.refresh_snapshot_cache() {
@@ -389,9 +449,10 @@ impl WasmExecutor {
     }
 
     fn restore_inner(&mut self, bytes: &[u8]) -> Result<(), SandboxError> {
-        let framed = abi::write_length_prefixed(bytes);
-        let ptr = self.alloc_and_write(&framed)?;
-        let len = framed.len() as i32;
+        // Bare payload, exactly like `mag_init` and `mag_step`. `len` already
+        // carries the length; a prefix would only say it twice.
+        let ptr = self.alloc_and_write(bytes)?;
+        let len = bytes.len() as i32;
 
         let mag_restore = self
             .instance
@@ -420,11 +481,14 @@ impl WasmExecutor {
 impl GameExecutor for WasmExecutor {
     /// Advance the guest game by one authoritative tick.
     ///
-    /// Encodes `inputs` as JSON, writes them into guest memory, calls
+    /// Encodes `(tick, inputs)` as JSON, writes it into guest memory, calls
     /// `mag_step` with a fresh fuel budget and epoch deadline, decodes and
     /// returns the [`StepOutput`].  Also refreshes the snapshot and view caches.
-    fn step(&mut self, _tick: Tick, inputs: &[(PlayerId, Input)]) -> StepOutput {
-        match self.step_inner(inputs) {
+    ///
+    /// The guest's reported tick is checked against `tick`; a disagreement is a
+    /// failed step and surfaces as `state_hash = 0`.
+    fn step(&mut self, tick: Tick, inputs: &[(PlayerId, Input)]) -> StepOutput {
+        match self.step_inner(tick, inputs) {
             Ok(out) => out,
             Err(e) => {
                 eprintln!("[magnetite-sandbox] step error: {e}");
@@ -446,10 +510,23 @@ impl GameExecutor for WasmExecutor {
     }
 
     /// Replace the current game state from a previously-serialised snapshot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the guest refuses the snapshot. Use
+    /// [`try_restore`](GameExecutor::try_restore) to fail closed instead — a
+    /// restore that logged and continued would leave this executor authoritative
+    /// over its pre-restore state while its caller believed the transfer landed.
     fn restore(&mut self, bytes: &[u8]) {
         if let Err(e) = self.restore_inner(bytes) {
-            eprintln!("[magnetite-sandbox] restore error: {e}");
+            panic!("[magnetite-sandbox] restore failed: {e}");
         }
+    }
+
+    fn try_restore(&mut self, bytes: &[u8]) -> Result<(), RestoreError> {
+        self.restore_inner(bytes).map_err(|e| RestoreError::Guest {
+            detail: e.to_string(),
+        })
     }
 
     /// Return the interest-filtered view for `player` from the cache.
@@ -489,7 +566,7 @@ impl GameExecutor for WasmExecutor {
 /// Build a [`Linker`] providing only the minimal WASI functions required for
 /// `wasm32-wasip1` module initialisation, with clock and random replaced by
 /// ENOSYS-returning stubs that preserve determinism.
-fn build_linker(engine: &Engine) -> Result<Linker<StoreState>, SandboxError> {
+pub(crate) fn build_linker(engine: &Engine) -> Result<Linker<StoreState>, SandboxError> {
     let mut linker: Linker<StoreState> = Linker::new(engine);
 
     // clock_time_get — always returns ENOSYS (errno 38).
@@ -562,7 +639,7 @@ fn build_linker(engine: &Engine) -> Result<Linker<StoreState>, SandboxError> {
 // ---------------------------------------------------------------------------
 
 /// Spawn a daemon thread that increments the engine epoch every `interval_ms` ms.
-fn spawn_epoch_thread(engine: Engine, interval_ms: u64) {
+pub(crate) fn spawn_epoch_thread(engine: Engine, interval_ms: u64) {
     let engine = Arc::new(engine);
     thread::Builder::new()
         .name("mag-sandbox-epoch".to_string())
@@ -604,9 +681,14 @@ mod tests {
 
     // ---- classify_trap mapping -------------------------------------------------
 
+    // These construct real `wasmtime::Trap` values rather than error strings.
+    // An earlier version of `classify_trap` matched on `err.to_string()` and
+    // these tests passed against hand-written messages that wasmtime never
+    // actually produces — the classifier was green and wrong at the same time.
+
     #[test]
     fn classify_fuel_trap() {
-        let e = wasmtime::Error::msg("all fuel consumed by this instruction");
+        let e = wasmtime::Error::new(wasmtime::Trap::OutOfFuel);
         assert!(matches!(
             WasmExecutor::classify_trap(e),
             SandboxError::FuelExhausted
@@ -615,7 +697,7 @@ mod tests {
 
     #[test]
     fn classify_epoch_trap() {
-        let e = wasmtime::Error::msg("epoch deadline reached for async execution");
+        let e = wasmtime::Error::new(wasmtime::Trap::Interrupt);
         assert!(matches!(
             WasmExecutor::classify_trap(e),
             SandboxError::EpochTimeout
@@ -624,7 +706,7 @@ mod tests {
 
     #[test]
     fn classify_memory_trap() {
-        let e = wasmtime::Error::msg("out of bounds memory access");
+        let e = wasmtime::Error::new(wasmtime::Trap::MemoryOutOfBounds);
         assert!(matches!(
             WasmExecutor::classify_trap(e),
             SandboxError::MemoryLimitExceeded
@@ -632,12 +714,41 @@ mod tests {
     }
 
     #[test]
+    fn classify_trap_survives_a_wasmtime_backtrace_context() {
+        // This is the shape wasmtime really hands back: the trap is the source,
+        // the backtrace is the outermost context. `to_string()` shows only the
+        // latter, which is why the classifier must downcast.
+        let e = wasmtime::Error::new(wasmtime::Trap::OutOfFuel)
+            .context("error while executing at wasm backtrace:\n  0: 0x1a - <unknown>");
+        assert!(
+            !e.to_string().contains("fuel"),
+            "precondition: Display must not mention the trap kind, got {e}"
+        );
+        assert!(matches!(
+            WasmExecutor::classify_trap(e),
+            SandboxError::FuelExhausted
+        ));
+    }
+
+    #[test]
     fn classify_unknown_trap() {
-        let e = wasmtime::Error::msg("some other trap");
+        let e = wasmtime::Error::msg("some host-side failure");
         assert!(matches!(
             WasmExecutor::classify_trap(e),
             SandboxError::Trap(_)
         ));
+    }
+
+    #[test]
+    fn classify_non_trap_error_keeps_the_whole_chain() {
+        let e = wasmtime::Error::msg("root cause").context("outer layer");
+        match WasmExecutor::classify_trap(e) {
+            SandboxError::Trap(msg) => {
+                assert!(msg.contains("outer layer"), "got {msg}");
+                assert!(msg.contains("root cause"), "got {msg}");
+            }
+            other => panic!("expected Trap, got {other:?}"),
+        }
     }
 
     // ---- Engine configuration --------------------------------------------------
