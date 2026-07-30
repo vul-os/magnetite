@@ -423,36 +423,30 @@ mod purchase_history_shape_tests {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6  Settlement split math — developer takes the FULL subtotal
+// 6  Settlement split math — sum-exact legs, no rate anywhere
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// The 70/30 platform cut is gone. Non-custodially the developer receives the
-// whole subtotal and the protocol fee (default 0 bps) rides on top, so the
-// buyer's total is subtotal + fee and the receipt legs must sum to that total.
+// The 70/30 platform cut is gone and so is the "protocol fee": a split is a
+// LIST OF LEGS whose amounts sum exactly to what the buyer is charged
+// (ALIGNMENT.md §4). This module used to re-implement `subtotal * bps / 10_000`
+// in test-local helpers, mirroring rail code that no longer exists — so it was
+// asserting the behaviour of a function it had written itself. It now exercises
+// the real `magnetite_seams::payment` types.
 
 #[cfg(test)]
 mod settlement_split_math_tests {
-    /// Protocol fee in the rail's smallest unit, from basis points.
-    fn protocol_fee(subtotal: u64, bps: u16) -> u64 {
-        subtotal * bps as u64 / 10_000
-    }
+    use magnetite_seams::payment::{Leg, PaymentSplit, Role, ZERO_ONLY_DUST_FLOOR};
 
-    /// What the buyer is charged: the developer's subtotal plus the fee.
-    fn buyer_total(subtotal: u64, bps: u16) -> u64 {
-        subtotal + protocol_fee(subtotal, bps)
-    }
-
-    /// The developer leg of a `PaymentSplit`, mirroring `payment::sale_split`:
-    /// the seller is credited the subtotal itself, regardless of protocol fee.
-    fn developer_leg(subtotal: u64, _bps: u16) -> u64 {
-        subtotal
+    fn dev(b: u8) -> magnetite_seams::identity::PubKey {
+        magnetite_seams::identity::PubKey([b; 32])
     }
 
     #[test]
     fn developer_receives_the_entire_subtotal_not_seventy_percent() {
         for subtotal in [999u64, 499, 99, 2499, 10_000] {
+            let split = PaymentSplit::to_developer(dev(0xD0), subtotal);
             let legacy_70_pct = subtotal * 70 / 100;
-            let actual = developer_leg(subtotal, 0);
+            let actual = split.legs[0].amount;
 
             assert_eq!(
                 actual, subtotal,
@@ -460,58 +454,88 @@ mod settlement_split_math_tests {
             );
             assert!(
                 actual > legacy_70_pct,
-                "the old 70/30 custodial split must be gone (got {actual}, legacy would be {legacy_70_pct})"
+                "the old 70/30 custodial split must be gone (got {actual}, legacy would be \
+                 {legacy_70_pct})"
             );
+            assert_eq!(split.checked_total(), Some(subtotal));
         }
     }
 
     #[test]
-    fn protocol_fee_does_not_shrink_the_developer_leg() {
-        let subtotal = 10_000;
-        assert_eq!(
-            developer_leg(subtotal, 0),
-            developer_leg(subtotal, 500),
-            "raising the protocol fee must not take anything from the seller"
-        );
-    }
-
-    #[test]
-    fn default_protocol_fee_is_zero_so_buyer_pays_exactly_the_price() {
-        let subtotal = 999;
-        assert_eq!(protocol_fee(subtotal, 0), 0);
-        assert_eq!(buyer_total(subtotal, 0), subtotal);
-    }
-
-    #[test]
-    fn receipt_legs_sum_to_total_including_fee() {
-        let subtotal = 10_000;
-        let bps = 250; // 2.5%, if governance ever enables one
-        let fee = protocol_fee(subtotal, bps);
-        let total = buyer_total(subtotal, bps);
-
-        assert_eq!(fee, 250);
-        assert_eq!(
-            subtotal + fee,
-            total,
-            "developer leg + protocol fee must equal the receipt total"
-        );
-    }
-
-    #[test]
-    fn fee_never_comes_out_of_the_developer_leg() {
-        let subtotal = 500;
-        let bps = 1_000; // 10%
-        let total = buyer_total(subtotal, bps);
+    fn legs_always_sum_exactly_to_the_buyers_total() {
+        let split = PaymentSplit::new(vec![
+            Leg::developer(dev(0xD0), 8_000),
+            Leg::operator(dev(0x0B), 1_750),
+            Leg::new(dev(0xC0), 250, Role::Other("asset-pack".into())),
+        ]);
         assert!(
-            total > subtotal,
-            "a protocol fee must be charged ON TOP, never deducted from the developer"
+            split.sums_to(10_000),
+            "the buyer's total IS the sum of the legs — there is no separate field to disagree"
         );
+    }
+
+    #[test]
+    fn there_is_no_rate_in_the_split_at_all() {
+        // A split carries absolute amounts only. Nothing here converts a
+        // proportion into an amount — that is the signed manifest's
+        // `SplitPlan::resolve`, and it must stay the only such place.
+        let split = PaymentSplit::to_developer(dev(0xD0), 999);
+        assert_eq!(split.legs.len(), 1);
+        assert_eq!(split.legs[0].amount, 999, "no fee is added on top of anything");
+        assert_eq!(split.stewards_total(), 0);
+    }
+
+    #[test]
+    fn a_voluntary_stewards_leg_does_not_shrink_the_developer_leg() {
+        // The stewards contribution rides alongside, decided by whoever's money
+        // it is — it is never deducted from the seller.
+        let without = PaymentSplit::to_developer(dev(0xD0), 10_000);
+        let with = PaymentSplit::new(vec![
+            Leg::developer(dev(0xD0), 10_000),
+            Leg::stewards(dev(0x57), 250),
+        ]);
+        assert_eq!(without.legs[0].amount, with.legs[0].amount);
+        assert_eq!(with.checked_total(), Some(10_250));
+        assert_eq!(with.stewards_total(), 250);
+    }
+
+    #[test]
+    fn an_overflowing_split_refuses_to_state_a_total() {
+        let split = PaymentSplit::new(vec![
+            Leg::developer(dev(0xD0), u64::MAX),
+            Leg::operator(dev(0x0B), 1),
+        ]);
+        assert_eq!(
+            split.checked_total(),
+            None,
+            "u64::MAX would be a LIE about what the buyer owes — refuse, never saturate"
+        );
+        assert!(!split.sums_to(u64::MAX));
     }
 
     #[test]
     fn zero_price_settles_to_zero() {
-        assert_eq!(buyer_total(0, 0), 0);
-        assert_eq!(protocol_fee(0, 500), 0);
+        assert_eq!(PaymentSplit::new(vec![]).checked_total(), Some(0));
+        assert_eq!(
+            PaymentSplit::to_developer(dev(0xD0), 0).checked_total(),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn a_dust_leg_is_skipped_and_the_rest_still_sums_exactly() {
+        let split = PaymentSplit::new(vec![
+            Leg::developer(dev(0xD0), 10_000),
+            Leg::stewards(dev(0x57), 0), // dust at any floor
+        ]);
+        let (payable, dust) = split.partition_at(ZERO_ONLY_DUST_FLOOR);
+        assert_eq!(payable.len(), 1);
+        assert_eq!(dust.len(), 1);
+        assert_eq!(
+            PaymentSplit::new(payable).checked_total(),
+            Some(10_000),
+            "the buyer is charged exactly the legs that are actually paid"
+        );
     }
 }
 

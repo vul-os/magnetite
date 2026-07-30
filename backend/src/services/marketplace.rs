@@ -57,7 +57,7 @@ pub struct RefundRequest {
 // ─── Revenue share ───────────────────────────────────────────────────────────
 //
 // There is no 70/30 platform cut any more. The developer receives the whole
-// subtotal; the only optional deduction is `protocol_fee_bps` (default 0),
+// subtotal; the only other leg is a voluntary stewards contribution (0 today),
 // which the rail adds on top of the subtotal and pays to the protocol.
 
 // ─── Domain types ─────────────────────────────────────────────────────────────
@@ -528,8 +528,8 @@ impl MarketplaceService {
             payment::require_wallet(&self.pool, store.developer_id, "store developer").await?;
 
         let amount = payment::units_from_usd(price);
-        // TODO(hosting): when the game is served by a third-party operator, add the
-        // operator's per-sale cut here as `PaymentSplit::operator`.
+        // TODO(hosting): when the game is served by a third-party operator, add an
+        // `Role::Operator` leg here (`sale_split`'s third argument).
         let split = payment::sale_split(dev_wallet, amount, None);
         let receipt = payment::rail().checkout(&buyer_wallet, split).await;
         if !payment::verify_receipt(&receipt) {
@@ -539,7 +539,7 @@ impl MarketplaceService {
         }
 
         let developer_share = price;
-        let platform_fee = Decimal::new(receipt.protocol_fee as i64, 2);
+        let platform_fee = Decimal::new(receipt.stewards_amount as i64, 2);
 
         let purchase_id = Uuid::new_v4();
         let purchase = sqlx::query_as::<_, StorePurchase>(
@@ -695,7 +695,7 @@ impl MarketplaceService {
         let receipt = payment::Receipt {
             buyer,
             payouts: parsed_payouts,
-            protocol_fee: fee as u64,
+            stewards_amount: fee as u64,
             total: total as u64,
             nonce: nonce_arr,
             rail_pubkey,
@@ -1110,7 +1110,7 @@ mod tests {
     use super::*;
 
     /// Non-custodial: the developer receives the whole subtotal — there is no
-    /// 70/30 platform cut. The only deduction is `protocol_fee_bps` (default 0).
+    /// 70/30 platform cut, and no stewards leg unless a signed manifest declares one.
     #[tokio::test]
     async fn developer_receives_full_subtotal() {
         let buyer = payment::PubKey([0xB0; 32]);
@@ -1123,7 +1123,10 @@ mod tests {
             .await;
 
         assert_eq!(receipt.total, 1000, "10.00 USD == 1000 cents");
-        assert_eq!(receipt.protocol_fee, 0, "default protocol fee is 0 bps");
+        assert_eq!(
+            receipt.stewards_amount, 0,
+            "no stewards leg without a signed manifest to declare one"
+        );
         assert_eq!(receipt.payouts.len(), 1);
         assert_eq!(receipt.payouts[0].wallet, dev);
         assert_eq!(receipt.payouts[0].amount, 1000);

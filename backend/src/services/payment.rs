@@ -33,20 +33,95 @@ use std::sync::OnceLock;
 
 pub use magnetite_seams::identity::{PubKey, Sig};
 pub use magnetite_seams::payment::{
-    ChainBinding, Channel, MockPaymentRail, PayOut, PaymentRail, PaymentSplit, Receipt, Split,
+    ChainBinding, Channel, Leg, MockPaymentRail, PayOut, PaymentRail, PaymentSplit, Receipt,
 };
 
-/// Protocol fee in basis points. Default `0` (governance decides any real fee).
-pub fn protocol_fee_bps() -> u16 {
-    std::env::var("PROTOCOL_FEE_BPS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0)
+/// The voluntary stewards contribution, in basis points of the subtotal.
+///
+/// **Always `0` here, and that is not a placeholder for a missing env read —
+/// it is the whole point.** This used to be `PROTOCOL_FEE_BPS`, a node
+/// environment variable, which made the rate neither the developer's choice nor
+/// the player's: the operator of the machine decided what cut came off someone
+/// else's sale (`ALIGNMENT.md` §4).
+///
+/// The rate belongs to whoever's money it is:
+///
+/// | who | sets | where |
+/// |---|---|---|
+/// | developer | own split + stewards bps | the signed manifest |
+/// | operator | their own charge, or nothing | the signed session ad |
+/// | player | an optional tip on top | checkout |
+///
+/// None of those three sources exists in *this* crate's build yet, so there is
+/// no honest source for a nonzero rate today and this returns `0`. When the
+/// signed package manifest lands (`ALIGNMENT.md` §7 Phase 1 item 2), this is
+/// replaced by *reading the manifest*, never by reading the environment.
+///
+/// # This is a REPORTING figure. Do not build a `Leg` from it.
+///
+/// Proportions and absolute amounts live at different layers, and there must be
+/// exactly one place that converts between them:
+///
+/// | layer | carries | why |
+/// |---|---|---|
+/// | signed manifest | proportions in bps, summing to `10_000` | a manifest is signed at publish time, when the total is not yet known — a pay-what-you-want or tipped purchase only has a total at checkout |
+/// | checkout | absolute `Leg` amounts, summing exactly to the total | what a rail can actually pay |
+///
+/// The **only** sanctioned bps → amount conversion is the manifest side's
+/// `SplitPlan::resolve(total)` (largest-remainder allocation, sum-exact for
+/// every total including 0 and 1). Neither this function, nor
+/// [`sale_split`], nor either payment rail performs any proportional
+/// allocation — the rails take amounts as given and only ever check that they
+/// sum exactly. Do not add a second converter here; the old
+/// `subtotal * bps / 10_000` that used to live in both rails is deleted, and
+/// two implementations of this arithmetic would be a bug waiting for a
+/// rounding disagreement.
+pub fn stewards_bps() -> u16 {
+    0
 }
+
+/// Devnet/testnet-only override for the stewards destination, named here so the
+/// DEFAULT build (which links no chain crate at all) can still notice that
+/// someone set it. Authority for the name is
+/// `magnetite_solana_rail::stewards::DEVNET_OVERRIDE_ENV`; a test below asserts
+/// the two agree whenever the `solana` feature is on.
+const STEWARDS_DEVNET_OVERRIDE_ENV: &str = "MAGNETITE_STEWARDS_WALLET_DEVNET";
 
 /// Which rail `PAYMENT_RAIL` selects. Unknown values are FATAL.
 fn rail_kind() -> String {
     std::env::var("PAYMENT_RAIL").unwrap_or_else(|_| "mock".to_string())
+}
+
+/// Report a stewards override that the ACTIVE rail cannot honour, rather than
+/// ignoring it.
+///
+/// Three states, matching beepbite's `payments.NewOnlineGatewayProvider`:
+///
+/// 1. **unset** — normal, nothing to say;
+/// 2. **set and honourable** — the Solana rail resolves it (and refuses it on
+///    mainnet, fatally: see `magnetite_solana_rail::resolve_stewards`);
+/// 3. **set but unhonourable by this build/rail** — the case handled here. The
+///    mock rail moves no money and pays no stewards leg, so there is nothing to
+///    misdirect and this is not fatal; but it must be *said*, because "set and
+///    silently doing nothing" is the defect this three-way split exists to
+///    avoid.
+fn warn_unhonourable_stewards_override() {
+    if std::env::var(STEWARDS_DEVNET_OVERRIDE_ENV).is_err() {
+        return; // state 1: nothing configured.
+    }
+    let kind = rail_kind();
+    if kind == "solana" {
+        return; // state 2: the rail itself resolves and validates it.
+    }
+    // State 3.
+    tracing::warn!(
+        "{STEWARDS_DEVNET_OVERRIDE_ENV} is set, but PAYMENT_RAIL={kind:?} cannot honour it: \
+         only the Solana rail pays a stewards leg, and the mock rail moves no money at all. \
+         The variable is having NO effect — it is being reported rather than silently ignored. \
+         Note that even on the Solana rail this override works on devnet/testnet/localnet \
+         only; on mainnet the stewards destination comes from the signed release and an \
+         override there is a fatal startup error."
+    );
 }
 
 /// The process-wide payment rail. Default `mock` — fully offline.
@@ -59,9 +134,10 @@ fn rail_kind() -> String {
 /// would give every paid item, paid room and hosted server away for nothing.
 pub fn rail() -> &'static dyn PaymentRail {
     static RAIL: OnceLock<Box<dyn PaymentRail + Send + Sync>> = OnceLock::new();
-    RAIL.get_or_init(|| match rail_kind().as_str() {
-        "mock" => Box::new(MockPaymentRail::with_fee_bps(protocol_fee_bps()))
-            as Box<dyn PaymentRail + Send + Sync>,
+    RAIL.get_or_init(|| {
+        warn_unhonourable_stewards_override();
+        match rail_kind().as_str() {
+        "mock" => Box::new(MockPaymentRail::new()) as Box<dyn PaymentRail + Send + Sync>,
         #[cfg(feature = "solana")]
         "solana" => Box::new(solana_rail_from_env().unwrap_or_else(|e| {
             panic!(
@@ -78,6 +154,7 @@ pub fn rail() -> &'static dyn PaymentRail {
             "PAYMENT_RAIL={other:?} is not a known payment rail (expected \"mock\" or \
              \"solana\"). Refusing to start."
         ),
+        }
     })
     .as_ref()
 }
@@ -90,15 +167,21 @@ pub fn rail() -> &'static dyn PaymentRail {
 /// | `SOLANA_CLUSTER` | `mainnet-beta` \| `devnet` \| `testnet` \| `localnet` (required) |
 /// | `SOLANA_COMMITMENT` | `confirmed` \| `finalized` (default `finalized`) |
 /// | `SOLANA_USDC_MINT` | base58 mint; defaults to the canonical mint for the cluster |
-/// | `SOLANA_FEE_WALLET` | base58; REQUIRED when `PROTOCOL_FEE_BPS > 0` |
 /// | `SOLANA_KEYPAIR_PATH` / `SOLANA_KEYPAIR` | optional signer (`chmod 600`); absent ⇒ verify-only |
 ///
-/// The actual chain rail (tx construction, signing, RPC, on-chain
-/// verification) is `patala_solana::SolanaRail`; this only builds the config
-/// and hands it to `magnetite_solana_rail::SolanaPaymentRail`, the thin
-/// adapter (a separate crate, not a `magnetite-seams` feature — see that
-/// crate's docs) that keeps magnetite's own `PaymentRail` seam on top of it
-/// (see `patala/PATALA.md` §7).
+/// There is deliberately **no fee-wallet variable**. `SOLANA_FEE_WALLET` used
+/// to name the destination of the "protocol fee", which put it under the node
+/// operator's control — and verification could not catch the abuse, because it
+/// proves that claimed recipients match the chain, not that they are the right
+/// parties. The stewards destination now comes from the signed release
+/// (compiled in) and is resolved by
+/// `magnetite_solana_rail::SolanaConfig::resolve`, which is where a
+/// misconfiguration becomes fatal at startup.
+///
+/// The chain primitives (keys, signing, RPC, instruction and message encoding)
+/// are `patala_solana`'s; the multi-leg split and its verification are
+/// `magnetite_solana_rail`'s, because `patala_core::PaymentRail` is
+/// single-destination (see that crate's module docs and `patala/PATALA.md` §3).
 #[cfg(feature = "solana")]
 fn solana_rail_from_env() -> std::result::Result<magnetite_solana_rail::SolanaPaymentRail, String> {
     use magnetite_solana_rail::patala_solana::{
@@ -131,22 +214,6 @@ fn solana_rail_from_env() -> std::result::Result<magnetite_solana_rail::SolanaPa
     )
     .map_err(|e| format!("SOLANA_USDC_MINT: {e}"))?;
 
-    // `fee_wallet` stays a magnetite-level concept: `patala_core`'s seam has
-    // no multi-party split, so this is only consulted by `SolanaPaymentRail`
-    // to decide whether a split collapses to one payable recipient — see
-    // `magnetite_solana_rail::SolanaError::MultiPartySplit`.
-    let fee_wallet = match std::env::var("SOLANA_FEE_WALLET") {
-        Ok(w) => Some(
-            pubkey_from_base58(&w)
-                .map(|pk| PubKey(pk.0))
-                .map_err(|e| format!("SOLANA_FEE_WALLET: {e}"))?,
-        ),
-        Err(_) => None,
-    };
-    if protocol_fee_bps() > 0 && fee_wallet.is_none() {
-        return Err("PROTOCOL_FEE_BPS > 0 but SOLANA_FEE_WALLET is not set".into());
-    }
-
     if cluster.is_mainnet() {
         tracing::warn!(
             "PAYMENT_RAIL=solana on MAINNET-BETA: this process moves REAL money. \
@@ -155,15 +222,28 @@ fn solana_rail_from_env() -> std::result::Result<magnetite_solana_rail::SolanaPa
         );
     }
 
-    let cfg = SolanaConfig {
-        inner: magnetite_solana_rail::patala_solana::SolanaConfig {
-            rpc_url: rpc_url.clone(),
-            cluster,
-            commitment,
-            usdc_mint,
-        },
-        fee_wallet,
-    };
+    // Resolving the stewards destination is FALLIBLE and that is the point: an
+    // override on mainnet, or an unparseable address, aborts startup here
+    // rather than surfacing at the first checkout. An absent address is NOT an
+    // error — it means this build pays no stewards leg, and the rail refuses
+    // one rather than inventing a destination.
+    let cfg = SolanaConfig::resolve(magnetite_solana_rail::patala_solana::SolanaConfig {
+        rpc_url: rpc_url.clone(),
+        cluster,
+        commitment,
+        usdc_mint,
+    })
+    .map_err(|e| e.to_string())?;
+    match cfg.stewards {
+        Some(w) => tracing::info!(
+            "stewards destination (from the signed release, not node env): {}",
+            w.to_hex()
+        ),
+        None => tracing::info!(
+            "this build has no compiled-in stewards address; stewards legs will be REFUSED \
+             (not redirected, not dropped)"
+        ),
+    }
     // Signer (if any) is loaded from SOLANA_KEYPAIR_PATH/SOLANA_KEYPAIR by
     // `patala_solana::keys::Keypair::from_env` inside `from_env` below — never
     // logged, never persisted.
@@ -253,7 +333,7 @@ pub async fn store_receipt(
     .bind(item_id)
     .bind(game_id)
     .bind(receipt.total as i64)
-    .bind(receipt.protocol_fee as i64)
+    .bind(receipt.stewards_amount as i64)
     .bind(payouts)
     .bind(hex::encode(receipt.nonce))
     .bind(receipt.rail_pubkey.to_hex())
@@ -450,7 +530,7 @@ pub async fn load_receipt(pool: &PgPool, buyer_id: Uuid, item_id: Uuid) -> Resul
     Ok(Some(Receipt {
         buyer,
         payouts: parsed,
-        protocol_fee: fee.max(0) as u64,
+        stewards_amount: fee.max(0) as u64,
         total: total.max(0) as u64,
         nonce,
         rail_pubkey,
@@ -499,17 +579,20 @@ pub async fn has_verified_receipt(
     }
 }
 
-/// Build the split for a single-seller sale: the developer takes the whole
-/// subtotal, an optional operator takes a hosting cut, protocol fee rides on top.
+/// Build the split for a single-seller sale: a developer leg for the whole
+/// subtotal, plus an optional operator leg.
+///
+/// No stewards leg is added, because [`stewards_bps`] is `0` and there is no
+/// signed manifest to read a real rate from yet. When there is, the stewards
+/// leg is appended here — an absolute amount derived from the manifest's rate,
+/// paid to whatever the *release* compiled in, never to anything this process
+/// could name.
 pub fn sale_split(developer: PubKey, amount: u64, operator: Option<(PubKey, u64)>) -> PaymentSplit {
-    PaymentSplit {
-        developer: Split {
-            wallet: developer,
-            amount,
-        },
-        operator: operator.map(|(wallet, amount)| Split { wallet, amount }),
-        protocol_fee_bps: protocol_fee_bps(),
+    let mut legs = vec![Leg::developer(developer, amount)];
+    if let Some((wallet, amount)) = operator {
+        legs.push(Leg::operator(wallet, amount));
     }
+    PaymentSplit::new(legs)
 }
 
 #[cfg(test)]
@@ -527,14 +610,31 @@ mod tests {
         assert_eq!(units_from_usd(Decimal::ZERO), 0);
     }
 
+    /// The rate is not readable from the environment AT ALL any more — not
+    /// "defaults to 0 unless an operator sets it". Setting the old variable
+    /// must have no effect whatsoever.
     #[test]
-    fn default_protocol_fee_is_zero() {
-        // No PROTOCOL_FEE_BPS in the test env.
-        assert!(
-            std::env::var("PROTOCOL_FEE_BPS").is_err(),
-            "test env must not set PROTOCOL_FEE_BPS"
+    fn the_stewards_rate_cannot_come_from_node_env() {
+        std::env::set_var("PROTOCOL_FEE_BPS", "2500");
+        assert_eq!(
+            stewards_bps(),
+            0,
+            "a node operator must not be able to set a rate on someone else's sale"
         );
-        assert_eq!(protocol_fee_bps(), 0);
+        let split = sale_split(pk(0xD0), 1_000_000, None);
+        assert_eq!(split.legs.len(), 1, "no stewards leg appears from env");
+        assert_eq!(split.checked_total(), Some(1_000_000));
+        std::env::remove_var("PROTOCOL_FEE_BPS");
+    }
+
+    /// The name the default build watches for must match the chain crate's.
+    #[cfg(feature = "solana")]
+    #[test]
+    fn stewards_override_env_name_agrees_with_the_rail() {
+        assert_eq!(
+            STEWARDS_DEVNET_OVERRIDE_ENV,
+            magnetite_solana_rail::stewards::DEVNET_OVERRIDE_ENV
+        );
     }
 
     #[tokio::test]
@@ -544,7 +644,7 @@ mod tests {
         let r = rail().checkout(&buyer, split).await;
 
         assert_eq!(r.total, 1999);
-        assert_eq!(r.protocol_fee, 0);
+        assert_eq!(r.stewards_amount, 0);
         assert_eq!(r.payouts.len(), 1);
         assert_eq!(r.payouts[0].wallet, pk(0xD0));
         assert!(verify_receipt(&r), "receipt must verify against the rail");

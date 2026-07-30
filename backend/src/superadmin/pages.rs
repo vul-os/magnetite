@@ -942,7 +942,7 @@ pub async fn billing_page(State(state): State<Arc<SuperAdminState>>) -> Html<Str
 
     let body = format!(
         "<h1>Billing-model compliance</h1>\
-<p class=\"sub\">Developer takes the full subtotal · protocol fee = PROTOCOL_FEE_BPS (default 0) · every paid entitlement is receipt-backed · receipts verify · custody stays dormant.</p>\
+<p class=\"sub\">Developer takes the full subtotal · stewards contribution is voluntary and 0 · every paid entitlement is receipt-backed · receipts verify · custody stays dormant.</p>\
 {headline}{cards}",
         headline = headline,
         cards = cards,

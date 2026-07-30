@@ -48,6 +48,7 @@ patala-solana = { git = "https://github.com/vul-os/patala", rev = "b4bcc868f27f6
 async-trait = "0.1"
 blake3 = "1"
 hex = "0.4"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }

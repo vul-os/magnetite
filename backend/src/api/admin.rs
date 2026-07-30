@@ -92,7 +92,8 @@ pub struct RevenueDashboard {
     /// Non-custodial: we never held this money, we only witnessed the transfers.
     pub total_settled_units: i64,
     /// Sum of `payment_receipts.protocol_fee` — real, never fabricated. The
-    /// platform takes no cut by default (`PROTOCOL_FEE_BPS=0`), so this is 0
+    /// platform takes no cut, so this is 0 unless a signed manifest declared a
+    /// voluntary stewards contribution
     /// unless an operator has explicitly configured a nonzero fee.
     pub total_protocol_fee_units: i64,
     /// What actually reached developer (and operator) wallets: settled minus
@@ -121,8 +122,9 @@ pub struct AdminTransaction {
     /// Gross amount the rail settled, in dollars (converted from the receipt's
     /// integer smallest-unit `total`).
     pub total: Decimal,
-    /// Real `payment_receipts.protocol_fee`, in dollars — 0 unless an operator
-    /// has configured a nonzero `PROTOCOL_FEE_BPS`. Never fabricated.
+    /// Real `payment_receipts.protocol_fee`, in dollars — the voluntary stewards
+    /// contribution, 0 unless a signed manifest declared one. No node setting can
+    /// create it. Never fabricated.
     pub protocol_fee: Decimal,
     /// Hex wallet the sale was paid to (the developer, or operator for a
     /// hosting-fee receipt) — the first entry of the receipt's `payouts`.
@@ -602,8 +604,8 @@ pub struct AnalyticsOverview {
 #[derive(Debug, Serialize)]
 pub struct RevenueTimeSeries {
     pub date: String,
-    /// Real sum of `payment_receipts.protocol_fee` for the period — 0 unless an
-    /// operator has configured a nonzero `PROTOCOL_FEE_BPS`. Never fabricated.
+    /// Real sum of `payment_receipts.protocol_fee` for the period — the voluntary
+    /// stewards contribution, 0 unless a signed manifest declared one. Never fabricated.
     pub protocol_fee: Decimal,
     /// Settled to developer/operator wallets at checkout (never held by us).
     pub developer_settled: Decimal,
@@ -639,8 +641,8 @@ pub struct RevenueByGame {
     pub total_revenue: Decimal,
     /// Count of settled (non-voided) receipts for this game.
     pub receipt_count: i64,
-    /// Real `payment_receipts.protocol_fee` sum — 0 unless an operator has
-    /// configured a nonzero `PROTOCOL_FEE_BPS`. Never fabricated.
+    /// Real `payment_receipts.protocol_fee` sum — the voluntary stewards
+    /// contribution, 0 unless a signed manifest declared one. Never fabricated.
     pub protocol_fee: Decimal,
     /// Settled to the developer's wallet at checkout (never held by us).
     pub developer_settled: Decimal,
@@ -662,8 +664,8 @@ pub struct RevenueAnalytics {
     pub weekly: Vec<RevenueTimeSeries>,
     pub monthly: Vec<RevenueTimeSeries>,
     pub by_game: Vec<RevenueByGame>,
-    /// Real sum of `payment_receipts.protocol_fee` across all games — 0 unless
-    /// an operator has configured a nonzero `PROTOCOL_FEE_BPS`.
+    /// Real sum of `payment_receipts.protocol_fee` across all games — the voluntary
+    /// stewards contribution, 0 unless a signed manifest declared one.
     pub total_protocol_fee: Decimal,
     pub total_developer_settled: Decimal,
 }
@@ -798,7 +800,7 @@ pub async fn analytics_revenue(
     // `transactions` table (`platform_fee` / `game_fee` rows) has had no writer
     // since the payment pivot, so every query below used to return zero. There
     // is also no platform cut to report any more: `protocol_fee` is real (0
-    // unless an operator sets `PROTOCOL_FEE_BPS`), never a fabricated split.
+    // unless a signed manifest declares a voluntary stewards leg), never fabricated.
     let daily_rows = sqlx::query_as::<_, RevenueTimeSeriesCentsRow>(
         "SELECT
             DATE(r.created_at)::text as date,

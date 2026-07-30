@@ -30,7 +30,7 @@ mod noncustodial_payment_tests {
             .await;
 
         assert_eq!(receipt.total, 10_000);
-        assert_eq!(receipt.protocol_fee, 0);
+        assert_eq!(receipt.stewards_amount, 0);
         assert_eq!(receipt.payouts.len(), 1);
         assert_eq!(receipt.payouts[0].amount, 10_000);
     }

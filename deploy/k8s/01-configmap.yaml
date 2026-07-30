@@ -44,7 +44,10 @@ data:
   # `mock` = deterministic signed receipts, no chain, no external service.
   # Switch to a real rail only when one is configured; there is no fiat path.
   PAYMENT_RAIL: "mock"
-  PROTOCOL_FEE_BPS: "0"
+  # No PROTOCOL_FEE_BPS and no SOLANA_FEE_WALLET: the stewards-contribution rate
+  # belongs to the developer (signed manifest) or the player (checkout), and the
+  # destination comes from the signed release. Neither is an operator setting.
+  # See ALIGNMENT.md §4.
 
   # ── Comms — pluggable (§3.5) ──────────────────────────────────────────────
   # builtin | matrix | jitsi | livekit | owncast. `builtin` needs no external

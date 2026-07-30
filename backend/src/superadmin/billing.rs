@@ -4,7 +4,7 @@
 // reconcile — every sale is an atomic wallet-to-wallet transfer witnessed by a
 // signed `Receipt` (§3.6). The model in force is therefore:
 //   * The developer receives the WHOLE subtotal          (store_purchases)
-//   * The platform takes only `PROTOCOL_FEE_BPS`, default 0
+//   * The platform takes no cut; any stewards contribution is voluntary and 0 today
 //   * Every paid entitlement is backed by a receipt      (entitlements.receipt_id)
 //   * Receipt arithmetic balances and the signature verifies (payment_receipts)
 //   * A voided receipt grants nothing
@@ -56,7 +56,8 @@ pub struct BillingSummary {
     pub gross_store_revenue: Decimal,
     /// Settled straight to developer wallets. We never touched it.
     pub developer_settled: Decimal,
-    /// Protocol fee actually taken (0 unless `PROTOCOL_FEE_BPS` is set).
+    /// Voluntary stewards contribution actually taken. 0 — no manifest declares
+    /// one yet, and no node setting can create one.
     pub protocol_fees: Decimal,
     /// Gross units moved by the rail, from verified receipts.
     pub settled_units: Decimal,
@@ -167,9 +168,10 @@ async fn developer_takes_full_subtotal(pool: &PgPool) -> CheckResult {
     }
 }
 
-/// The platform may take only the configured protocol fee (default 0 bps).
+/// The platform may take only the declared stewards contribution (0 bps today —
+/// see `services::payment::stewards_bps`).
 async fn protocol_fee_matches_configuration(pool: &PgPool) -> CheckResult {
-    let bps = crate::services::payment::protocol_fee_bps();
+    let bps = crate::services::payment::stewards_bps();
     let rate = format!("{:.6}", bps as f64 / 10_000.0);
     let base = "FROM store_purchases WHERE currency='USD' AND status='completed'";
     let c = count_check(
@@ -191,8 +193,10 @@ async fn protocol_fee_matches_configuration(pool: &PgPool) -> CheckResult {
     )
     .await;
     CheckResult {
-        name: format!("Sales — protocol fee is {bps} bps"),
-        description: "The platform may take only PROTOCOL_FEE_BPS (default 0).".into(),
+        name: format!("Sales — stewards contribution is {bps} bps"),
+        description: "The platform takes no cut: the stewards contribution is voluntary, \
+             declared by the developer in a signed manifest, and is 0 until one exists."
+            .into(),
         severity: verdict(c.checked, c.violations, Severity::Fail),
         checked: c.checked,
         violations: c.violations,
