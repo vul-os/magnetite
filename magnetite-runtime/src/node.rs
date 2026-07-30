@@ -5,11 +5,25 @@
 //!
 //! 1. **Measure its own hardware** → a [`Capacity`] (see [`crate::capacity`]).
 //! 2. **Load a content-addressed game** by BLAKE3 [`Hash`] from a [`BlobStore`],
-//!    **verifying the hash before running it** — the game id *is* the hash of
-//!    `(wasm + manifest)`, so a dishonest blob source cannot swap the code.
+//!    **verifying the hash before running it** — the module id *is* the hash of
+//!    its bytes, so a dishonest blob source cannot swap the code
+//!    ([`load_verified_game`]).
 //! 3. **Self-advertise** a [`SessionAd`] via a [`Discovery`] provider instead of
 //!    polling a central `runtime_instances` table.
 //! 4. **Serve** the game with the sandboxed Wasm executor.
+//!
+//! # Two ways in, one trust boundary
+//!
+//! [`load_verified_game`] takes a bare module [`Hash`] — the historical path,
+//! unchanged. [`load_verified_authority`] takes a signed
+//! [`Package`](magnetite_seams::package::Package) and adds the developer's
+//! signature, the bundle root hash and the determinism rule *on top of* the same
+//! re-hash. The second calls the first, so there is one place where bytes become
+//! runnable and it fails closed.
+//!
+//! An existing wasm-only game's id does not change under packaging: the
+//! package's single file hash **is** that id, so a module already in a blob
+//! store is fetched by exactly the address it always had.
 //!
 //! Everything here programs against the seam *traits* only — no provider-specific
 //! type appears — so a node works fully offline with the defaults
@@ -24,6 +38,7 @@ use magnetite_seams::blobstore::{BlobStore, Hash};
 use magnetite_seams::discovery::{
     Capacity, Discovery, NodeAddr, Price, SessionAd, MAX_AD_TTL_SECS,
 };
+use magnetite_seams::package::Package;
 
 use magnetite_sandbox::{LimitsConfig, WasmExecutor};
 use magnetite_sdk::authority::MatchConfig;
@@ -52,6 +67,17 @@ pub enum NodeError {
     Announce(String),
     /// The game server failed to start or crashed.
     Server(ServerError),
+    /// A signed package was refused: bad signature, bad root, unsafe path,
+    /// unknown format version, a determinism claim with no authority to back it,
+    /// or a file that is not what the manifest says it is.
+    ///
+    /// Carried as a string because `PackageError`'s detail is for a human and
+    /// this crate's callers only ever act on "refused".
+    Package(String),
+    /// The package carries no wasm authority, so there is nothing for this node
+    /// to run. A `kind: web` package is served over HTTP with an entitlement
+    /// gate; it is not hosted as an authoritative match.
+    NotAnAuthority(&'static str),
 }
 
 impl std::fmt::Display for NodeError {
@@ -66,6 +92,12 @@ impl std::fmt::Display for NodeError {
             ),
             NodeError::Announce(e) => write!(f, "discovery announce failed: {e}"),
             NodeError::Server(e) => write!(f, "game server error: {e}"),
+            NodeError::Package(e) => write!(f, "package refused: {e}"),
+            NodeError::NotAnAuthority(kind) => write!(
+                f,
+                "package kind `{kind}` carries no wasm authority — there is nothing \
+                 to host as an authoritative match (serve it as a web bundle instead)"
+            ),
         }
     }
 }
@@ -78,8 +110,10 @@ impl std::error::Error for NodeError {}
 
 /// The content address (game id) of a module's bytes.
 ///
-/// The game id is the BLAKE3 hash of the `(wasm + manifest)` bytes — no central
-/// registry row is needed to name a game.
+/// The game id is the BLAKE3 hash of the module bytes — no central registry row
+/// is needed to name a game. This is unchanged by the package format: a
+/// wasm-only package lists exactly this hash for its authority module, so an
+/// already-published id keeps resolving.
 pub fn content_address(bytes: &[u8]) -> Hash {
     Hash::of(bytes)
 }
@@ -98,6 +132,62 @@ pub async fn load_verified_game<B: BlobStore>(
     let got = Hash::of(&bytes);
     if got != *game {
         return Err(NodeError::HashMismatch { want: *game, got });
+    }
+    Ok(bytes)
+}
+
+/// Load the wasm authority out of a **signed package**, verifying the package
+/// and then the module's own content address before use.
+///
+/// This is the packaged form of [`load_verified_game`] and it adds a layer
+/// rather than replacing one:
+///
+/// 1. [`Package::verify`] — the developer's signature over canonical CBOR, the
+///    root hash over the sorted `path → hash` list, path safety, and the rule
+///    that a package with no wasm authority may not claim determinism.
+/// 2. The authority's [`Hash`] is read out of the verified file list, and the
+///    bytes are fetched through [`load_verified_game`], which re-hashes them.
+///
+/// **Nothing about an existing wasm game's identity changes.** A wasm-only
+/// package's single file hash *is* the pre-package game id, so the blob is
+/// fetched by exactly the content address it has always had — an already-stored
+/// module needs no re-upload and no re-addressing.
+///
+/// Fail-closed at every step: a bad signature, an unsafe path, a wrong root, a
+/// `kind: web` package, a missing blob or a hash mismatch all return `Err` and
+/// nothing is executed. The declared `size` is checked too, so a store that
+/// returns a padded or truncated blob is caught by name.
+pub async fn load_verified_authority<B: BlobStore>(
+    blobs: &B,
+    pkg: &Package,
+) -> Result<Vec<u8>, NodeError> {
+    let verified = pkg
+        .verify()
+        .map_err(|e| NodeError::Package(e.to_string()))?;
+    let manifest = verified.manifest();
+
+    if !manifest.kind.has_wasm() {
+        return Err(NodeError::NotAnAuthority(manifest.kind.label()));
+    }
+    // `validate` already proved the entry exists and is listed, so both of these
+    // are structural invariants rather than runtime possibilities — but they are
+    // checked instead of unwrapped, because an unwrap here would be a panic on
+    // untrusted input if that invariant ever loosened.
+    let entry = manifest
+        .wasm_entry
+        .as_deref()
+        .ok_or(NodeError::Package("no wasm entry declared".into()))?;
+    let file = manifest
+        .file(entry)
+        .ok_or_else(|| NodeError::Package(format!("wasm entry {entry:?} is not listed")))?;
+
+    let bytes = load_verified_game(blobs, &file.hash).await?;
+    if bytes.len() as u64 != file.size {
+        return Err(NodeError::Package(format!(
+            "wasm entry {entry:?}: manifest declares {} bytes, store returned {}",
+            file.size,
+            bytes.len()
+        )));
     }
     Ok(bytes)
 }
@@ -520,6 +610,144 @@ mod tests {
         let wanted = Hash::of(b"the honest game");
         let err = load_verified_game(&LyingStore, &wanted).await.unwrap_err();
         assert!(matches!(err, NodeError::HashMismatch { .. }));
+    }
+
+    // -- signed packages ---------------------------------------------------
+
+    mod pkg {
+        //! Loading a wasm authority out of a signed package.
+        use super::*;
+        use magnetite_seams::identity::RawKeypairAuth;
+        use magnetite_seams::package::{
+            DeterminismClass, FileEntry, PackageManifest, PackagePrice, Role, SplitPlan,
+        };
+
+        pub fn key() -> RawKeypairAuth {
+            RawKeypairAuth::from_seed([0x2A; 32])
+        }
+
+        /// A signed wasm-only package over `wasm`.
+        pub fn wasm_package(wasm: &[u8]) -> Package {
+            let k = key();
+            let pk = k.node_pubkey();
+            PackageManifest::wasm_only(
+                "game.wasm",
+                wasm,
+                PackagePrice::free("USDC"),
+                SplitPlan::all_to(pk, Role::Developer),
+                DeterminismClass::Deterministic,
+                pk,
+            )
+            .sign(&k)
+            .unwrap()
+        }
+
+        /// A signed web-only package (rung 0 — no authority to host).
+        pub fn web_package() -> Package {
+            let k = key();
+            let pk = k.node_pubkey();
+            let html = b"<!doctype html>";
+            PackageManifest::web(
+                "index.html",
+                vec![FileEntry {
+                    path: "index.html".into(),
+                    hash: Hash::of(html),
+                    size: html.len() as u64,
+                }],
+                PackagePrice::free("USDC"),
+                SplitPlan::all_to(pk, Role::Developer),
+                pk,
+            )
+            .sign(&k)
+            .unwrap()
+        }
+    }
+
+    #[tokio::test]
+    async fn a_packaged_wasm_game_loads_by_its_existing_content_address() {
+        let blobs = LocalBlobStore::new();
+        let wasm = b"\x00asm\x01\x00\x00\x00 an already-published module";
+
+        // The module is stored exactly as it always was, under its own BLAKE3
+        // content address. Nothing is re-uploaded or re-addressed for packaging.
+        let existing_id = blobs.put(wasm).await;
+        assert_eq!(existing_id, content_address(wasm));
+
+        let pkg = pkg::wasm_package(wasm);
+        assert_eq!(
+            pkg.manifest.legacy_game_id(),
+            Some(existing_id),
+            "the packaged authority keeps the pre-package game id"
+        );
+
+        let got = load_verified_authority(&blobs, &pkg).await.unwrap();
+        assert_eq!(got, wasm);
+    }
+
+    #[tokio::test]
+    async fn a_web_only_package_is_not_hostable_as_an_authority() {
+        let blobs = LocalBlobStore::new();
+        let pkg = pkg::web_package();
+        assert!(!pkg.manifest.is_replay_verifiable());
+        assert!(matches!(
+            load_verified_authority(&blobs, &pkg).await,
+            Err(NodeError::NotAnAuthority("web"))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_tampered_package_is_refused_before_any_blob_is_fetched() {
+        let blobs = LocalBlobStore::new();
+        let wasm = b"\x00asm\x01\x00\x00\x00 module";
+        blobs.put(wasm).await;
+
+        // 1. A flipped signature bit.
+        let mut bad = pkg::wasm_package(wasm);
+        bad.sig.0[3] ^= 0x08;
+        assert!(matches!(
+            load_verified_authority(&blobs, &bad).await,
+            Err(NodeError::Package(_))
+        ));
+
+        // 2. A price changed after signing — the signature covers it.
+        let mut repriced = pkg::wasm_package(wasm);
+        repriced.manifest.price = magnetite_seams::package::PackagePrice::fixed(1, "USDC");
+        assert!(matches!(
+            load_verified_authority(&blobs, &repriced).await,
+            Err(NodeError::Package(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_package_whose_authority_blob_is_absent_or_wrong_is_refused() {
+        let wasm = b"\x00asm\x01\x00\x00\x00 module";
+        let pkg = pkg::wasm_package(wasm);
+
+        // Nothing stored: fail closed, not fall back.
+        let empty = LocalBlobStore::new();
+        assert!(matches!(
+            load_verified_authority(&empty, &pkg).await,
+            Err(NodeError::BlobMissing(_))
+        ));
+
+        // A store that lies about what it holds: the re-hash catches it.
+        struct LyingStore;
+        #[async_trait::async_trait]
+        impl BlobStore for LyingStore {
+            async fn put(&self, bytes: &[u8]) -> Hash {
+                Hash::of(bytes)
+            }
+            async fn get(&self, _hash: &Hash) -> Option<Vec<u8>> {
+                Some(b"\x00asm tampered authority".to_vec())
+            }
+            async fn has(&self, _hash: &Hash) -> bool {
+                true
+            }
+        }
+        assert!(matches!(
+            load_verified_authority(&LyingStore, &pkg).await,
+            Err(NodeError::HashMismatch { .. })
+        ));
     }
 
     #[tokio::test]

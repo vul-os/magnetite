@@ -1,7 +1,12 @@
 //! Seam §3.3 — `BlobStore` (content-addressed games + assets).
 //!
-//! The hash IS the id. A game id is the BLAKE3 hash of its (wasm + manifest)
-//! bytes, so no central registry row is needed to identify a game.
+//! The hash IS the id: a blob is named by the BLAKE3 hash of its own bytes, so
+//! no central registry row is needed to identify anything. A wasm module's id is
+//! `Hash::of(module_bytes)`; a web bundle is many blobs, one per file, named the
+//! same way. What ties a set of blobs together into a publishable unit — the
+//! sorted `path → hash` list, its root hash, the price, the split, the
+//! determinism class and the developer's signature — is
+//! [`crate::package`], not this seam.
 //!
 //! Defaults:
 //! - [`LocalBlobStore`] — in-memory, BLAKE3-addressed (works fully offline).

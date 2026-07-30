@@ -50,7 +50,12 @@ pub struct Price {
 /// A node's advertisement of a hostable/live session (§3.4).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionAd {
-    /// Content address of the game (wasm + manifest).
+    /// Content address of the game being hosted.
+    ///
+    /// Either a bare wasm module id (`Hash::of(module_bytes)`, the historical
+    /// form) or a [`crate::package::Package::id`]. Discovery does not care
+    /// which — it is a phonebook key, and the node verifies the thing itself
+    /// before running it.
     pub game: Hash,
     /// Where to reach the hosting node.
     pub node: NodeAddr,

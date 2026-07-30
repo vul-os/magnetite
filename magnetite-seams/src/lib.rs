@@ -38,8 +38,26 @@
 //! default.
 //!
 //! The [`defaults`] module wires one working provider set for `magnetite dev`.
+//!
+//! ## Two modules here are not seams
+//!
+//! [`package`] and [`cbor`] are *formats*, not pluggable providers, and they
+//! live here because they are the one thing every side of the system has to
+//! agree on byte-for-byte: the CLI builds a package, a node verifies one before
+//! serving it, the storefront reads its price, the payment path reads its split.
+//! This crate is the only one all of those already depend on, and it deliberately
+//! has no provider SDKs in it — so a verifier is not obliged to link wasmtime,
+//! an HTTP client or a chain SDK to check a signature.
+//!
+//! * [`package`] — the **unit of publication**: a signed, content-addressed
+//!   package holding a wasm authority, a web bundle, or both, with per-file
+//!   hashes, a price, a revenue split, and a *checkable* determinism class.
+//! * [`cbor`] — canonical integer-keyed deterministic CBOR, the encoding every
+//!   signed object uses. See `ALIGNMENT.md` §3: signatures over
+//!   non-deterministic bytes are worthless, so signed objects do not use serde.
 
 pub mod blobstore;
+pub mod cbor;
 pub mod comms;
 pub mod discovery;
 mod error;
@@ -48,6 +66,7 @@ pub mod input;
 #[cfg(feature = "keyname")]
 pub mod keyname;
 pub mod naming;
+pub mod package;
 pub mod payment;
 
 pub use error::{Result, SeamError};
@@ -90,6 +109,17 @@ pub use input::{
     AttestedEvent, AttestedEventInput, DeterministicInput, Implausible, InputClass, InputEvent,
     InputProvider, LocalDeviceInput, PlausibilityGate, PlausibilityLimits, SignedAttestedEvent,
     ATTESTED_DOMAIN,
+};
+
+// The package format — the unit of publication (`ALIGNMENT.md` §7 Phase 1.2).
+//
+// `DeterminismClass` is exported next to the manifest for the same reason
+// `InputClass` is exported next to the input trait: code that decides "may I
+// treat this as replay evidence?" should have to name the guarantee class.
+pub use package::{
+    DeterminismClass, DirFiles, FileEntry, FileSource, MemoryFiles, Package, PackageError,
+    PackageKind, PackageManifest, PackagePrice, PackageTerms, PriceModel, ResolvedLeg, Role,
+    SplitLeg, SplitPlan, VerifiedPackage, BPS_TOTAL, PACKAGE_FORMAT_V1,
 };
 
 /// Current unix time in whole seconds. Used for token/challenge expiry.
