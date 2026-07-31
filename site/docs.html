@@ -102,7 +102,11 @@ img{max-width:100%;display:block}
 
 /* Header */
 .site-header{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);background:color-mix(in srgb,var(--bg) 72%, transparent);border-bottom:1px solid var(--border)}
-.nav{display:flex;align-items:center;gap:18px;height:64px}
+/* min-width:0 is load-bearing: without it a flex item refuses to shrink below its
+   content width, and the row silently pushes the document 1px past the viewport
+   at 360px — a horizontal scrollbar with no visible cause. */
+.nav{display:flex;align-items:center;gap:18px;height:64px;min-width:0}
+.nav > *{min-width:0}
 .brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:18px;letter-spacing:-.02em}
 .brand .tile{width:34px;height:34px;border-radius:9px;background:var(--panel-2);display:grid;place-items:center;padding:5px;border:1px solid var(--border-2)}
 .brand .tile img,.brand .tile svg{width:100%;height:100%;object-fit:contain}
@@ -120,7 +124,13 @@ img{max-width:100%;display:block}
   .brand .tile{width:30px;height:30px}
   .theme-seg{padding:2px}
   .theme-seg button{width:26px;height:24px}
-  .vulos-badge{gap:6px;padding:5px 8px;font-size:12px}
+  /* Below 400px the label cannot fit beside the brand, drawer toggle and theme
+     switch. Drop the label, keep the mark and the link — the anchor still
+     carries title="Part of Vulos" and the img alt, so nothing is lost to a
+     screen reader. Keeping the text here overflowed the badge by 8px and took
+     the whole header 1px over the viewport. */
+  .vulos-badge{gap:6px;padding:5px;font-size:12px;flex:none}
+  .vulos-badge-label{display:none}
 }
 
 /* Drawer toggle — hidden on desktop, shown once the sidebar goes off-canvas */
@@ -238,7 +248,7 @@ img{max-width:100%;display:block}
       </button>
     </div>
     <a class="vulos-badge" href="https://vulos.org" target="_blank" rel="noopener" title="Part of Vulos">
-      <img src="./assets/vulos-logo.png" alt="Vulos">Part of Vulos
+      <img src="./assets/vulos-logo.png" alt="Vulos"><span class="vulos-badge-label">Part of Vulos</span>
     </a>
   </div></header>
 <div class="drawer-overlay" id="drawerOverlay" tabindex="-1"></div>
