@@ -1,10 +1,14 @@
 //! Seam §3.6 — a **real** `PaymentRail`: native USDC on Stellar.
 //!
-//! Backlog A12: replaces `magnetite-solana-rail` (deleted in the same change
-//! that added this crate — see `magnetite-solana-rail`'s absence from
-//! `ci/rust-crates.json`/this repo, and `docs/cross-repo-backlog.md`). A12
-//! required the precondition "Stellar rail lands, and a payment has actually
-//! settled" to be met **before** the port — met by the sibling `patala` repo's
+//! Backlog A12: intended to replace `magnetite-solana-rail`, but that
+//! deletion has **not** happened — `magnetite-solana-rail` still exists on
+//! disk and is still listed in `ci/rust-crates.json`. Deletion is *blocked*,
+//! not skipped: `backend/Cargo.toml`'s `solana` feature path-depends on it
+//! and `backend/src/services/payment.rs` wires `PAYMENT_RAIL=solana` to it,
+//! and this rail is not wired into that same selector at all (see
+//! `docs/cross-repo-backlog.md` A12 for the up-to-date status). A12 required
+//! the precondition "Stellar rail lands, and a payment has actually settled"
+//! to be met **before** the port — met by the sibling `patala` repo's
 //! `patala-stellar` crate, which settled one single-leg USDC-shaped payment on
 //! Stellar testnet 2026-07-30 (tx
 //! `32663937fe1407f9de3e781effa6ac9f4b1d29340ea63e72f6335a6c91effb89`, ledger
