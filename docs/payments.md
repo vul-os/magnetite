@@ -21,12 +21,24 @@ trait PaymentRail {
 }
 ```
 
-Two rails ship today:
+Three rail implementations exist in this repo today, but only two are reachable
+from the running `backend` — see the `PAYMENT_RAIL` column:
 
 | rail | `PAYMENT_RAIL` | status | moves money? |
 |---|---|---|---|
 | `MockPaymentRail` | `mock` (**default**) | deterministic, offline, signs its own receipts | no |
-| `SolanaPaymentRail` | `solana` (needs `--features solana`) | builds real SPL USDC transfers; verification re-reads the chain. **Never run against a validator** | **would, on mainnet** |
+| `SolanaPaymentRail` (`magnetite-solana-rail`) | `solana` (needs `--features solana`) | builds real SPL USDC transfers; verification re-reads the chain. **Never run against a validator** | **would, on mainnet** |
+| `StellarPaymentRail` (`magnetite-stellar-rail`) | **not wired in** — `backend`'s rail selector only recognizes `mock`/`solana`; `PAYMENT_RAIL=stellar` panics with "not a known payment rail" | builds real native-USDC-on-Stellar transactions; **never run against Horizon** | **would, on mainnet, once wired** |
+
+The Stellar rail is a landed, tested, standalone crate (backlog item A12,
+`docs/cross-repo-backlog.md`) — it is not a stub — but plugging it into
+`backend/src/services/payment.rs` and `backend/Cargo.toml`'s `solana` feature
+(replacing `magnetite-solana-rail`, which it is meant to retire) is
+**deliberately not done yet**: that edit touches `backend/`, which was held by
+a concurrent change when the rail landed. Until that swap happens, building
+against the Stellar rail means depending on the `magnetite-stellar-rail` crate
+directly, not passing an env var to the shipped binary. See
+["The Stellar / native-USDC rail"](#the-stellar--native-usdc-rail) below.
 
 ## Three money flows
 
@@ -433,6 +445,67 @@ a validator**: not devnet, not a local `solana-test-validator`, not mainnet. The
 multi-leg construction is newer still and no more exercised than the rest of it.
 Nothing on this page is chain-verified. Do not point it at mainnet before someone
 completes a devnet round-trip (`ALIGNMENT.md` §7, Phase 3 item 12).
+
+## The Stellar / native-USDC rail
+
+`magnetite-stellar-rail` (backlog A12) is a second real rail, native to
+Stellar rather than Solana. It exists because A12's precondition — "a real
+payment has settled on this chain, on *some* implementation of the wire
+format" — was met on 2026-07-30 by the sibling `patala` repo's
+`patala-stellar` crate (Stellar testnet, tx
+`32663937fe1407f9de3e781effa6ac9f4b1d29340ea63e72f6335a6c91effb89`, ledger
+`3882739`). **That settlement is patala's, not magnetite's — read the next
+paragraph before assuming it transfers.**
+
+### Honest status — read this before promising anything
+
+**No payment has ever settled through this crate.** Its transaction
+construction has never run against a real Horizon instance — not testnet, not
+mainnet. Everything is exercised offline against a scripted fake Horizon only.
+The testnet settlement above belongs to `patala-stellar`, a sibling
+implementation of the same wire format, built independently in a different
+repo; its evidence does not transfer to this crate's own code. Do not point it
+at mainnet, or claim testnet capability for it specifically, before someone
+completes a real Horizon round trip through *this* crate's `HorizonRpc`.
+
+**It is also not reachable from the `backend` binary today.** Unlike the
+Solana rail, there is no `PAYMENT_RAIL=stellar` — `backend`'s rail selector
+(`backend/src/services/payment.rs`) still only recognizes `mock` and `solana`.
+Wiring it in means swapping `backend/Cargo.toml`'s `magnetite-solana-rail`
+path dependency for `magnetite-stellar-rail` and updating the rail-selection
+match — tracked as the remainder of A12 in
+[`docs/cross-repo-backlog.md`](cross-repo-backlog.md), not done yet.
+
+### What is standalone about it
+
+Unlike `magnetite-solana-rail` (which depends on the sibling `patala` repo's
+`patala-core`/`patala-solana` crates via a pinned git rev), `magnetite-stellar-rail`
+has **no dependency, path or git, on `patala` at all** — every module (keys,
+transaction construction/signing, the Horizon REST client) is written fresh,
+copying `patala-stellar`'s wire-format *design* by hand, the same way
+`rotation.rs` and `chunktree.rs` copied evermesh's semantics without a
+dependency (owner directive #1, `FANOUT-LOOP-STATE.md` §1). It shares only the
+same third-party, Apache-2.0 upstream crates (`stellar-xdr`/`stellar-strkey`,
+published by the Stellar Development Foundation) that `patala-stellar` also
+depends on.
+
+### What is real
+
+The same shape as the Solana rail, re-expressed over Stellar's wire format:
+the same ten fail-closed verification checks (chain binding, issuer match,
+distribution-binding hash, item binding, sum-exactness, transaction-known,
+no-`meta.err`, buyer-is-signer, memo match, and exact balance deltas with no
+unaccounted party), a `DUST_FLOOR_STROOPS = 1_000` dust floor, the same
+compiled-in stewards address pattern (`MAGNETITE_STEWARDS_WALLET_STELLAR`, with
+a devnet/testnet-only override that is fatal on `Network::Public`), and the
+same `open_channel`/`escrow` refusals (`PaymentError::Unsupported`) — the
+hosting-fee and wager flows are mock-rail-only on Stellar too. `STELLAR_SECRET_KEY`
+supplies the signing key when the rail needs to sign for its own wallet; with
+it unset the rail is verify-only.
+
+```sh
+cd magnetite-stellar-rail && cargo test
+```
 
 ## There is no protocol fee
 

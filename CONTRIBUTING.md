@@ -49,7 +49,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 | Tool | Version | Notes |
 |------|---------|-------|
-| Rust | 1.75+ | Install via [rustup](https://rustup.rs) |
+| Rust | 1.82+ | Install via [rustup](https://rustup.rs); see [README.md](README.md#development) — there is no root `Cargo.toml`, build per-crate |
 | Node.js | 18+ | LTS recommended |
 | PostgreSQL | 15+ | Or use Docker |
 | Docker | Latest | For local database services |
@@ -57,7 +57,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 #### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/anomalyco/magnetite.git
+git clone https://github.com/vul-os/magnetite.git
 cd magnetite
 ```
 
@@ -665,7 +665,7 @@ Join our Discord server for real-time discussions:
 ### GitHub Discussions
 
 For questions, ideas, and longer discussions, use GitHub Discussions:
-- **Link**: https://github.com/anomalyco/magnetite/discussions
+- **Link**: https://github.com/vul-os/magnetite/discussions
 
 ### Bug Reports
 

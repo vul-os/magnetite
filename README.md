@@ -28,6 +28,21 @@
 
 ## What is magnetite?
 
+**The sharpest claim here: every match is reproducible.** The server records
+one `ReplayLog` per match — inputs plus a `state_hash` per tick
+(`backend/magnetite-sdk/src/authority.rs:1093`) — and anyone can re-run it
+through `verify_replay` (`authority.rs:1205`) to get back the same hashes or a
+named `Divergence`. That is not an aspiration: a unit test tampers with a
+recorded hash and asserts `verify_replay` catches it
+(`authority.rs:1534`, "tampered hash must yield Divergence at tick 3"), and an
+end-to-end test drives real, varying, non-empty inputs from four players
+through both a native and a WASM-sandboxed executor and asserts every tick's
+hash matches between them (`magnetite-e2e/tests/wasm_end_to_end.rs`,
+`wasm_sandbox_parity_with_native`) — deliberately not the empty-input version
+of that test that used to pass while hiding a guest bug that discarded every
+input frame. A match log is not a black box; it is a claim anyone holding it
+can check.
+
 Magnetite is a decentralized, self-hostable Rust game platform: write a game
 once against a deterministic authoritative-server SDK, and run it anywhere
 from a laptop to a fleet you own — no central cloud, no fiat custody, and no
@@ -154,7 +169,7 @@ only the seam. Every seam ships a working, non-custodial, non-cloud default.
 | `BlobStore` | content-addressed games and assets | `LocalBlobStore` + `HttpBlobStore` | `DmtapPubBlobStore` (MOTE); Iroh/BitTorrent |
 | `Discovery` | the phonebook — never an authority | `TrackerDiscovery` + `LanDiscovery` (mDNS) | DHT adapter |
 | `CommsProvider` | chat / voice / video / streaming | `BuiltinProvider` (fallback) | Matrix, Jitsi, LiveKit, Owncast/PeerTube |
-| `PaymentRail` | non-custodial crypto checkout, hosting fees, wagers | `MockPaymentRail` (CI-safe) | on-chain rail (USDC on L2, or Solana) |
+| `PaymentRail` | non-custodial crypto checkout, hosting fees, wagers | `MockPaymentRail` (CI-safe) | `SolanaPaymentRail` (real, wired into `backend`, never run against a validator); `magnetite-stellar-rail` (real, standalone, **not yet wired into `backend`**) — neither has ever settled a payment itself |
 
 No fiat, no custody, no platform-held balances anywhere in the payment path —
 see [docs/payments.md](docs/payments.md). No home-grown chat/voice/streaming
@@ -220,20 +235,31 @@ for the full walkthrough.
 
 ### Repo development (this checkout)
 
-The Rust workspace and the legacy React marketplace frontend still build the
-same way as before:
+There is **no root `Cargo.toml`** — this repo is 14 standalone crates linked
+by path dependencies, each with its own manifest, on purpose (see the comment
+at the top of [`magnetite-seams/Cargo.toml`](magnetite-seams/Cargo.toml)). A
+bare `cargo build --workspace` at the repo root fails with "could not find
+`Cargo.toml`"; `.github/workflows/ci.yml` builds and tests each crate from its
+own directory via the matrix in [`ci/rust-crates.json`](ci/rust-crates.json),
+and local development follows the same shape:
 
 ```bash
 # Frontend (pre-decentralization marketplace UI, being rebuilt against the seams)
 npm install
 npm run dev          # http://localhost:5173
 
-# Rust workspace
-cargo build --workspace
-cargo test --workspace
+# Any Rust crate — cd into it first, e.g.:
+cd magnetite-runtime && cargo build && cargo test
+cd magnetite-seams && cargo build --all-features && cargo test --all-features
+
+# Every crate, the same way CI does it:
+jq -c '.[]' ci/rust-crates.json | while read -r c; do
+  dir=$(echo "$c" | jq -r .dir); flags=$(echo "$c" | jq -r .flags)
+  (cd "$dir" && cargo test --locked $flags)
+done
 
 # Authoritative runtime standalone (smoke-test mode, no wasm required)
-cargo run --package magnetite-runtime --bin serve
+cd magnetite-runtime && cargo run --bin serve
 ```
 
 ---
@@ -271,6 +297,10 @@ Full redesign spec + program backlog: [`DECENTRALIZATION.md`](DECENTRALIZATION.m
 | `magnetite-anticheat` | Composable validators, `TrustScoreMap`, `ReplayVerifier` |
 | `magnetite-cli` | `magnetite new\|build\|dev\|deploy\|serve` binary |
 | `magnetite-web-client` | JS web client speaking `ClientNet`/`ServerNet`; prediction buffer; canvas renderer; in-browser replay playback |
+| `magnetite-web-host` | Serves a content-addressed three.js/Godot/Unity/Bevy-web build over HTTP with an entitlement check — no tick loop, no authority, deliberately not a game host |
+| `magnetite-solana-rail` | Real SPL-USDC-on-Solana `PaymentRail`; wired into `backend` behind `--features solana` / `PAYMENT_RAIL=solana`; **never run against a validator** |
+| `magnetite-stellar-rail` | Real native-USDC-on-Stellar `PaymentRail`; standalone (no `patala` dependency); **landed but not yet wired into `backend`'s rail selector**, and never run against Horizon — see [docs/payments.md](docs/payments.md) |
+| `magnetite-kotva` | A narrow, unselected binding of the Identity/Naming seams to the kotva substrate — demonstrates the seams are bindable; nothing in the default build depends on it |
 | `game-template-authoritative` | Reference game (top-down arena shooter) implementing `AuthoritativeGame`; canonical wasm ABI exports behind `--features wasm` |
 | `game-client-bevy` | Bevy client with prediction/reconciliation (`PredictionBuffer` + `ClientPredictor`) wired to `ServerNet` |
 | `magnetite-e2e` | Integration tests: convergence + `verify_replay` clean + anti-cheat WS rejection + wasm parity vs native + full-stack WS + scale bench |
@@ -368,9 +398,10 @@ Interactive docs site (static, no build step): open
 ```bash
 rustup target add wasm32-wasip1
 
-cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace
+# No root Cargo.toml (14 standalone crates) — build/test/lint per crate, e.g.:
+cd magnetite-seams && cargo build --all-features && cargo test --all-features && cargo clippy --all-features -- -D warnings
+cd ../magnetite-sandbox && cargo build && cargo test && cargo clippy -- -D warnings
+# ...or every crate exactly as CI does it, see ci/rust-crates.json + .github/workflows/ci.yml
 
 npm install
 npm run dev              # legacy marketplace frontend (Vite, :5173)
