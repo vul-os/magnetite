@@ -16,6 +16,8 @@
 [![Decentralized](https://img.shields.io/badge/Decentralized-no%20cloud-ff4d9d)](DECENTRALIZATION.md)
 [![Self-hostable](https://img.shields.io/badge/Self--hostable-single%20node%20binary-7b61ff)](docs/hosting-a-server.md)
 
+<sub><img src="docs/assets/vulos-logo.png" height="14" alt="VulOS"> Part of <strong><a href="https://vulos.org">VulOS</a></strong> — the open, self-hostable web OS &amp; app suite. Runs standalone, or as an app hosted by the Vulos OS.</sub>
+
 <br/>
 
 <img src="docs/screenshots/landing-dark.png" alt="Magnetite — the decentralized, self-hostable Rust game platform" width="900">
@@ -24,7 +26,7 @@
 
 ---
 
-## Overview
+## What is magnetite?
 
 Magnetite is a decentralized, self-hostable Rust game platform: write a game
 once against a deterministic authoritative-server SDK, and run it anywhere
@@ -46,6 +48,21 @@ owns outright, and it was decentralization-ready from day one. See
 [`DECENTRALIZATION.md`](DECENTRALIZATION.md) for the full redesign spec.
 
 [GitHub](https://github.com/vul-os/magnetite) · [Quick start](#quick-start) · [Docs](#documentation) · [Architecture](#architecture) · [License](#license)
+
+---
+
+## Part of VulOS
+
+magnetite is an independent [VulOS](https://vulos.org) product — a game platform,
+not the OS itself. It runs fully standalone: the `magnetite` binary needs no
+Vulos account, no Vulos infrastructure, and no network beyond whatever seams
+you choose to enable. It can also be hosted as an app inside the Vulos OS shell,
+the same way any other VulOS product is.
+
+VulOS publishes one thing outright — the OS — free and open source (MIT OR
+Apache-2.0). There is no managed hosting and nothing sold or operated by Vulos;
+every product, magnetite included, is self-provisioned and self-paid for by
+whoever runs it. See [vulos.org](https://vulos.org) for the rest of the suite.
 
 ---
 
@@ -302,6 +319,23 @@ canonical `AuthoritativeGame` reference implementation.
 
 ---
 
+## Configuration
+
+The node binary (`magnetite serve` / `magnetite node`) is configured entirely
+by CLI flags — `--wasm`, `--advertise`, `--cluster-peer`, `--handoff-addr` — see
+[Quick start](#quick-start) and [docs/hosting-a-server.md](docs/hosting-a-server.md).
+There is no config file and no environment variable it reads: capacity (shard
+count, player budget) is measured from the box's own cores and RAM, not set.
+
+The pre-redesign backend and legacy React marketplace frontend (Postgres,
+Redis, JWT, OAuth) still read `.env` — copy [`.env.example`](.env.example) to
+`.env` and fill in the values before running `docker-compose.yml` or
+`npm run dev`. That surface predates the decentralized redesign; see
+[docs/self-hosting/index.md](docs/self-hosting/index.md) for what still
+depends on it.
+
+---
+
 ## Documentation
 
 | Guide | File |
@@ -361,16 +395,16 @@ drawing and no second copy to drift.
 Copy it outward, never edit a derived copy, and never edit `brand/` to match
 something downstream.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE) — © VulOS. Magnetite is a VulOS
 project; source and issues at
 [github.com/vul-os/magnetite](https://github.com/vul-os/magnetite). Platform, SDK,
 and game templates are all dual-licensed.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
