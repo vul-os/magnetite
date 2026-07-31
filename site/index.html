@@ -321,7 +321,7 @@
   .legend-grid { display: flex; flex-wrap: wrap; gap: 8px 10px; }
   .lg { display: inline-flex; align-items: baseline; gap: 7px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); }
   .lg .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; align-self: center; }
-  .lg b { font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ct); }
+  .lg b { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ct); }
   .lg span { color: var(--ink-2); font-size: 12.5px; }
   .lg.f { --c: var(--field); --ct: var(--field-text); }
   .lg.b { --c: var(--boundary); --ct: var(--boundary-text); }
@@ -420,7 +420,7 @@
     opacity: 0; transition: opacity .2s var(--ease); }
   .seam:hover { background: var(--surface-2); }
   .seam:hover::before { opacity: .8; }
-  .seam .no { color: var(--ink-3-aa); font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; }
+  .seam .no { color: var(--ink-3-aa); font-family: var(--mono); font-size: 12px; letter-spacing: .1em; }
   .seam h3 { font-family: var(--mono); font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; margin: 10px 0 0; color: var(--field-text); }
   .seam p { color: var(--ink-2); font-size: 13.5px; margin: 8px 0 0; }
   .seam .chip { display: inline-block; margin-top: 12px; }
@@ -439,13 +439,13 @@
 
   /* small inline screenshot inset, used once beside the payment seam */
   .inset-shot { margin-top: 14px; max-width: 320px; }
-  .inset-shot .frame-bar span { font-size: 11.5px; }
+  .inset-shot .frame-bar span { font-size: 12px; }
 
   /* ── Status ledger ─────────────────────────────────────────────────── */
   .ledger-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
   table.ledger { width: 100%; border-collapse: collapse; min-width: 640px; font-size: 13.5px; }
   table.ledger th, table.ledger td { padding: 11px 15px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
-  table.ledger th { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3-aa); font-weight: 400; background: var(--sunk); }
+  table.ledger th { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3-aa); font-weight: 400; background: var(--sunk); }
   table.ledger tr:last-child td { border-bottom: 0; }
   table.ledger td:first-child { font-weight: 500; white-space: nowrap; }
   table.ledger td.d { color: var(--ink-2); font-size: 13px; }
@@ -457,7 +457,7 @@
   @media (max-width: 780px) { .gaps li { grid-template-columns: minmax(0, 1fr); gap: 7px; } }
   .gaps b { font-size: 14.5px; font-weight: 500; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .gaps span { color: var(--ink-2); font-size: 13.5px; }
-  .gaps code { font-family: var(--mono); font-size: .88em; color: var(--field-text); }
+  .gaps code { font-family: var(--mono); font-size: max(12px, .88em); color: var(--field-text); }
 
   /* ── Terminal ──────────────────────────────────────────────────────── */
   .term {
@@ -752,7 +752,7 @@
           <div>
             <span class="idx m-xs">03 · Wallet</span>
             <h3>Non-custodial by construction</h3>
-            <p>No balances to hold — only signed receipts, each independently verifiable against the rail's own signing key. The API reports <code style="color:var(--field-text);font-size:.88em">custodial: false</code>, and the protocol fee defaults to 0&nbsp;bps.</p>
+            <p>No balances to hold — only signed receipts, each independently verifiable against the rail's own signing key. The API reports <code style="color:var(--field-text);font-size:max(12px, .88em)">custodial: false</code>, and the protocol fee defaults to 0&nbsp;bps.</p>
             <span class="caveat">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
               <span class="t">Rail: <b>MOCK</b>. A deterministic offline stub so CI runs with no network — no real payment has ever settled through magnetite.</span>
@@ -868,7 +868,7 @@
       <div class="sec-head">
         <span class="eyebrow-tag m-sm">Audited, not pitched</span>
         <h2>Component by component.</h2>
-        <p class="lead">Checked against the tree, not the pitch. <code style="font-family:var(--mono);font-size:.88em;color:var(--field-text)">DECENTRALIZATION.md</code> is the authority on what's intended; this table is what exists right now.</p>
+        <p class="lead">Checked against the tree, not the pitch. <code style="font-family:var(--mono);font-size:max(12px, .88em);color:var(--field-text)">DECENTRALIZATION.md</code> is the authority on what's intended; this table is what exists right now.</p>
       </div>
 
       <div class="ledger-scroll">
@@ -949,9 +949,9 @@
 <span class="p">$</span> magnetite node --advertise lan</pre>
         </div>
         <ol class="steps">
-          <li><span class="n">1</span><div><b>Write the game once</b><span>Implement <code style="font-family:var(--mono);font-size:.88em;color:var(--field-text)">AuthoritativeGame</code> — deterministic by construction. No clock, no RNG, because those are what break replay.</span></div></li>
-          <li><span class="n">2</span><div><b>Run it with no backend</b><span><code style="font-family:var(--mono);font-size:.88em">magnetite dev</code> compiles to wasm and serves a playable match locally. No database, no account, no cloud.</span></div></li>
-          <li><span class="n">3</span><div><b>Bring your own box</b><span><code style="font-family:var(--mono);font-size:.88em">magnetite node</code> measures cores and RAM and advertises what it can hold — the player cap is emergent from hardware, not a config constant.</span></div></li>
+          <li><span class="n">1</span><div><b>Write the game once</b><span>Implement <code style="font-family:var(--mono);font-size:max(12px, .88em);color:var(--field-text)">AuthoritativeGame</code> — deterministic by construction. No clock, no RNG, because those are what break replay.</span></div></li>
+          <li><span class="n">2</span><div><b>Run it with no backend</b><span><code style="font-family:var(--mono);font-size:max(12px, .88em)">magnetite dev</code> compiles to wasm and serves a playable match locally. No database, no account, no cloud.</span></div></li>
+          <li><span class="n">3</span><div><b>Bring your own box</b><span><code style="font-family:var(--mono);font-size:max(12px, .88em)">magnetite node</code> measures cores and RAM and advertises what it can hold — the player cap is emergent from hardware, not a config constant.</span></div></li>
         </ol>
       </div>
     </div>
