@@ -65,8 +65,8 @@ listening socket. A developer with a laptop runs the whole thing alone.
 | Entitlement gate on a paid bundle | <span class="mg-s mock">Mock only</span> — the gate is real; the only rail it has been exercised against is `MockPaymentRail` |
 | Booted from a real engine export | <span class="mg-s no">Not built</span> |
 | Signed manifests (canonical CBOR) | <span class="mg-s no">Not built</span> |
-| TLS on the bundle host | <span class="mg-s no">Not built</span> — see [Secure context](#secure-context-is-not-optional) |
-| Receipt→session token exchange | <span class="mg-s no">Not built</span> — see [The cost of receipt-per-request](#the-cost-of-receipt-per-request) |
+| TLS on the bundle host | <span class="mg-s no">Not built</span> — see [Secure context](#sec-secure-context-is-not-optional) |
+| Receipt→session token exchange | <span class="mg-s no">Not built</span> — see [The cost of receipt-per-request](#sec-the-cost-of-receipt-per-request) |
 
 ## Try it
 

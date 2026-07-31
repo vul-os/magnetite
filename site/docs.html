@@ -123,19 +123,62 @@ img{max-width:100%;display:block}
   .vulos-badge{gap:6px;padding:5px 8px;font-size:12px}
 }
 
+/* Drawer toggle — hidden on desktop, shown once the sidebar goes off-canvas */
+.drawer-toggle{display:none;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--border-2);border-radius:9px;background:var(--panel-2);color:var(--text);cursor:pointer;flex:none}
+.drawer-toggle svg{width:18px;height:18px}
+@media(max-width:860px){.drawer-toggle{display:inline-flex}}
+.drawer-overlay{display:none;position:fixed;inset:0;z-index:59;background:rgba(4,5,8,.5);backdrop-filter:blur(2px)}
+@media(max-width:860px){body.drawer-open .drawer-overlay{display:block}}
+
 /* Docs viewer */
-.docs-shell{display:grid;grid-template-columns:248px 1fr;gap:36px;align-items:start;padding:34px 0 70px}
+.docs-shell{display:grid;grid-template-columns:252px 1fr;gap:36px;align-items:start;padding:34px 0 70px}
 @media(max-width:860px){.docs-shell{grid-template-columns:1fr}}
-.docs-nav{position:sticky;top:84px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);padding:14px}
-.docs-nav .label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:6px 10px}
+.docs-nav{position:sticky;top:84px;max-height:calc(100vh - 104px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);padding:14px;overscroll-behavior:contain}
+@media(max-width:860px){
+  .docs-nav{
+    position:fixed;top:0;left:0;bottom:0;z-index:60;width:min(320px,84vw);max-height:none;
+    border-radius:0;border-right:1px solid var(--border);border-top:0;border-bottom:0;border-left:0;
+    transform:translateX(-104%);transition:transform .28s cubic-bezier(.16,1,.3,1);
+    padding:16px 14px calc(16px + env(safe-area-inset-bottom));
+    box-shadow:0 12px 40px -12px rgba(0,0,0,.5);
+  }
+  body.drawer-open .docs-nav{transform:translateX(0)}
+}
+.docs-nav-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.docs-nav-head .label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:6px 10px 6px 0;margin:0}
+.docs-nav-close{display:none;width:28px;height:28px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:7px}
+@media(max-width:860px){.docs-nav-close{display:inline-flex;align-items:center;justify-content:center}}
+.docs-nav-close svg{width:16px;height:16px}
+.docs-search{position:relative;margin-bottom:10px}
+.docs-search input{width:100%;padding:9px 11px 9px 32px;border:1px solid var(--border-2);border-radius:9px;background:var(--bg-soft);color:var(--text);font-family:var(--sans);font-size:13.5px}
+.docs-search input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.docs-search input::placeholder{color:var(--faint)}
+.docs-search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--faint);pointer-events:none}
+.docs-search .kbd{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;color:var(--faint);border:1px solid var(--border-2);border-radius:4px;padding:1px 5px;pointer-events:none}
+@media(max-width:860px){.docs-search .kbd{display:none}}
+.docs-nav-group{margin-top:4px}
+.docs-nav-group + .docs-nav-group{margin-top:14px}
+.docs-nav .label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:6px 10px;margin:0}
 /* --faint reads ~3.5:1 here — short of AA at this size. Local override, doesn't touch --faint elsewhere. */
 :root[data-theme="light"] .docs-nav .label{color:#5A6171}
 :root[data-theme="dark"] .docs-nav .label{color:#768096}
 .docs-nav a{display:block;padding:8px 11px;border-radius:9px;color:var(--muted);font-size:14.5px;font-weight:500;transition:.15s}
 .docs-nav a:hover{background:color-mix(in srgb,var(--text) 6%, transparent);color:var(--text)}
 .docs-nav a.active{background:color-mix(in srgb,var(--accent) 16%, transparent);color:var(--text)}
-@media(max-width:860px){.docs-nav{position:static}}
+.docs-nav a.no-match{display:none}
+.docs-nav-empty{padding:10px 11px;color:var(--faint);font-size:13.5px}
 .docs-main{min-width:0}
+
+/* On-page table of contents */
+.doc-toc{border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-bottom:22px}
+.doc-toc summary{cursor:pointer;list-style:none;padding:11px 14px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.doc-toc summary::-webkit-details-marker{display:none}
+.doc-toc summary::before{content:'';width:7px;height:7px;border-right:1.5px solid var(--faint);border-bottom:1.5px solid var(--faint);transform:rotate(-45deg);transition:transform .15s;flex:none}
+.doc-toc[open] summary::before{transform:rotate(45deg)}
+.doc-toc-list{margin:0;padding:2px 14px 12px;list-style:none;display:grid;gap:2px}
+.doc-toc-list li[data-lvl="3"]{padding-left:14px}
+.doc-toc-list a{display:block;padding:5px 8px;border-radius:7px;font-size:13.5px;color:var(--accent);transition:background .15s}
+.doc-toc-list a:hover{background:color-mix(in srgb,var(--text) 6%, transparent)}
 .markdown{font-size:16px;overflow-wrap:break-word}
 .markdown>*:first-child{margin-top:0}
 .markdown h1{font-size:34px;letter-spacing:-.03em;margin:.2em 0 .5em;border-bottom:1px solid var(--border);padding-bottom:.3em}
@@ -172,6 +215,9 @@ img{max-width:100%;display:block}
 </head>
 <body>
 <header class="site-header"><div class="wrap nav">
+    <button type="button" class="drawer-toggle" id="drawerOpen" aria-label="Open documentation menu" aria-expanded="false" aria-controls="docsNav">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
     <a class="brand" href="./index.html"><span class="tile"><img src="./assets/magnetite-mark.svg" alt="Magnetite logo"></span>magnetite</a>
     <div class="nav-spacer"></div>
     <nav class="nav-links">
@@ -195,23 +241,28 @@ img{max-width:100%;display:block}
       <img src="./assets/vulos-logo.png" alt="Vulos">Part of Vulos
     </a>
   </div></header>
+<div class="drawer-overlay" id="drawerOverlay" tabindex="-1"></div>
 <div class="wrap docs-shell">
-  <aside class="docs-nav">
-    <div class="label">magnetite docs</div>
-        <a data-slug="overview" href="#overview">Overview</a>
-        <a data-slug="status" href="#status">Status</a>
-        <a data-slug="getting-started" href="#getting-started">Getting started</a>
-        <a data-slug="architecture" href="#architecture">Architecture</a>
-        <a data-slug="sandbox-abi" href="#sandbox-abi">The sandbox ABI</a>
-        <a data-slug="seams" href="#seams">The seams</a>
-        <a data-slug="hosting-a-server" href="#hosting-a-server">Hosting a server</a>
-        <a data-slug="web-bundles" href="#web-bundles">Web bundles</a>
-        <a data-slug="payments" href="#payments">Payments</a>
-        <a data-slug="comms" href="#comms">Comms</a>
-        <a data-slug="screenshots" href="#screenshots">Screenshots</a>
+  <aside class="docs-nav" id="docsNav" aria-label="Documentation chapters">
+    <div class="docs-nav-head">
+      <p class="label">magnetite docs</p>
+      <button type="button" class="docs-nav-close" id="drawerClose" aria-label="Close documentation menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="docs-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="search" id="docsSearch" placeholder="Filter chapters…" aria-label="Filter documentation chapters" autocomplete="off">
+      <span class="kbd" aria-hidden="true">/</span>
+    </div>
+    <div id="navList"></div>
   </aside>
   <main class="docs-main">
     <div class="docs-title" id="crumb"></div>
+    <details class="doc-toc" id="docToc" open>
+      <summary>On this page</summary>
+      <ul class="doc-toc-list" id="docTocList"></ul>
+    </details>
     <article class="markdown" id="content">Loading…</article>
   </main>
 </div>
@@ -225,18 +276,179 @@ img{max-width:100%;display:block}
     </div>
   </div></footer>
 <script>
-const DOCS = [{"slug":"overview","title":"Overview"},{"slug":"status","title":"Status"},{"slug":"getting-started","title":"Getting started"},{"slug":"architecture","title":"Architecture"},{"slug":"sandbox-abi","title":"The sandbox ABI"},{"slug":"seams","title":"The seams"},{"slug":"hosting-a-server","title":"Hosting a server"},{"slug":"web-bundles","title":"Web bundles"},{"slug":"payments","title":"Payments"},{"slug":"comms","title":"Comms"},{"slug":"screenshots","title":"Screenshots"}];
+/* Grouped, user-first order: a reader lands on "what is this / how do I start"
+   before "how do I self-host the legacy backend" before "how does it work
+   internally" before "advanced / for developers" — advanced material LAST.
+   Group is the single source of truth for both the sidebar and (implicitly)
+   reading order; there is no separate hand-maintained nav markup to drift. */
+const DOCS = [
+  { slug:'overview',               title:'What is magnetite?',        group:'Start here' },
+  { slug:'getting-started',        title:'Getting started',           group:'Start here' },
+  { slug:'playing-a-game',         title:'Playing a game',            group:'Start here' },
+  { slug:'hosting-a-server',       title:'Hosting a server',          group:'Start here' },
+
+  { slug:'self-hosting',           title:'Self-hosting (legacy backend)', group:'Playing & hosting' },
+  { slug:'troubleshooting',        title:'Troubleshooting',           group:'Playing & hosting' },
+  { slug:'notification-preferences', title:'Notification preferences', group:'Playing & hosting' },
+  { slug:'content-rating',         title:'Content rating',            group:'Playing & hosting' },
+  { slug:'moderation',             title:'Moderation',                group:'Playing & hosting' },
+  { slug:'blocking',               title:'Blocking users',            group:'Playing & hosting' },
+
+  { slug:'architecture',           title:'Architecture',              group:'How it works' },
+  { slug:'seams',                  title:'The seams',                 group:'How it works' },
+  { slug:'sandbox-abi',            title:'The sandbox ABI',           group:'How it works' },
+  { slug:'payments',               title:'Payments',                  group:'How it works' },
+  { slug:'economy-marketplace',    title:'Economy & marketplace',     group:'How it works' },
+  { slug:'comms',                  title:'Comms',                     group:'How it works' },
+  { slug:'web-bundles',            title:'Web bundles',               group:'How it works' },
+  { slug:'status',                 title:'Status ledger',             group:'How it works' },
+  { slug:'screenshots',            title:'Screenshots',               group:'How it works' },
+
+  { slug:'for-developers',         title:'For developers',            group:'Advanced / for developers' },
+  { slug:'api-reference',          title:'API reference',             group:'Advanced / for developers' },
+  { slug:'security',               title:'Security',                  group:'Advanced / for developers' },
+  { slug:'decentralization',       title:'Decentralization spec',     group:'Advanced / for developers' },
+  { slug:'moat',                   title:'The moat',                  group:'Advanced / for developers' },
+  { slug:'assessments',            title:'Assessments & spikes',      group:'Advanced / for developers' },
+  { slug:'cross-repo-backlog',     title:'Cross-repo backlog',        group:'Advanced / for developers' },
+  { slug:'roadmap',                title:'Roadmap',                   group:'Advanced / for developers' },
+];
 const bySlug = Object.fromEntries(DOCS.map(d=>[d.slug,d]));
 const content = document.getElementById('content');
 const crumb = document.getElementById('crumb');
+const navList = document.getElementById('navList');
+const docToc = document.getElementById('docToc');
+const docTocList = document.getElementById('docTocList');
 let mermaidReady = false;
 try { mermaid.initialize({ startOnLoad:false, theme: document.documentElement.getAttribute('data-theme')==='light' ? 'default' : 'dark', securityLevel:'loose', themeVariables:{ fontFamily:'var(--sans)' } }); mermaidReady = true; } catch(e){}
 
 if (window.marked && marked.setOptions) marked.setOptions({ gfm:true, breaks:false });
 
-function setActive(slug){
-  document.querySelectorAll('.docs-nav a').forEach(a=>a.classList.toggle('active', a.dataset.slug===slug));
+/* ── Sidebar: build once from DOCS, grouped in array order ────────────── */
+function buildNav(){
+  const groups = [];
+  const bySlugGroup = new Map();
+  DOCS.forEach(d=>{
+    if(!bySlugGroup.has(d.group)){ bySlugGroup.set(d.group, []); groups.push(d.group); }
+    bySlugGroup.get(d.group).push(d);
+  });
+  const frag = document.createDocumentFragment();
+  groups.forEach(g=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'docs-nav-group';
+    const label = document.createElement('p');
+    label.className = 'label';
+    label.textContent = g;
+    wrap.appendChild(label);
+    bySlugGroup.get(g).forEach(d=>{
+      const a = document.createElement('a');
+      a.href = '#'+d.slug;
+      a.dataset.slug = d.slug;
+      a.textContent = d.title;
+      wrap.appendChild(a);
+    });
+    frag.appendChild(wrap);
+  });
+  navList.appendChild(frag);
 }
+buildNav();
+
+function setActive(slug){
+  document.querySelectorAll('.docs-nav a[data-slug]').forEach(a=>a.classList.toggle('active', a.dataset.slug===slug));
+}
+
+/* ── Chapter search filter ─────────────────────────────────────────────── */
+const searchInput = document.getElementById('docsSearch');
+function filterNav(){
+  const q = searchInput.value.trim().toLowerCase();
+  let anyVisible = false;
+  document.querySelectorAll('.docs-nav-group').forEach(group=>{
+    let groupHasMatch = false;
+    group.querySelectorAll('a[data-slug]').forEach(a=>{
+      const match = !q || a.textContent.toLowerCase().includes(q);
+      a.classList.toggle('no-match', !match);
+      if(match) groupHasMatch = true;
+    });
+    group.style.display = groupHasMatch ? '' : 'none';
+    if(groupHasMatch) anyVisible = true;
+  });
+  let empty = document.getElementById('navEmpty');
+  if(!anyVisible){
+    if(!empty){ empty = document.createElement('p'); empty.id='navEmpty'; empty.className='docs-nav-empty'; empty.textContent='No chapters match.'; navList.appendChild(empty); }
+  } else if(empty){ empty.remove(); }
+}
+searchInput.addEventListener('input', filterNav);
+
+/* Keyboard: "/" focuses the chapter filter from anywhere on the page,
+   unless the user is already typing into a field. Nav links themselves are
+   ordinary anchors, so they are already reachable and activatable by Tab/Enter. */
+window.addEventListener('keydown', (e)=>{
+  if(e.key === '/' && document.activeElement !== searchInput){
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+    e.preventDefault();
+    openDrawer(); // no-op on desktop widths (drawer is static there)
+    searchInput.focus();
+  }
+});
+
+/* ── Mobile drawer: the sidebar goes off-canvas instead of squashing the
+   page. Opened by the header hamburger, closed by its own close button, the
+   overlay, Escape, or picking a chapter. ──────────────────────────────── */
+const drawerOpenBtn = document.getElementById('drawerOpen');
+const drawerCloseBtn = document.getElementById('drawerClose');
+const overlay = document.getElementById('drawerOverlay');
+const docsNavEl = document.getElementById('docsNav');
+function openDrawer(){
+  if(window.innerWidth > 860) return;
+  document.body.classList.add('drawer-open');
+  drawerOpenBtn.setAttribute('aria-expanded','true');
+}
+function closeDrawer(){
+  document.body.classList.remove('drawer-open');
+  drawerOpenBtn.setAttribute('aria-expanded','false');
+}
+drawerOpenBtn.addEventListener('click', openDrawer);
+drawerCloseBtn.addEventListener('click', closeDrawer);
+overlay.addEventListener('click', closeDrawer);
+window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && document.body.classList.contains('drawer-open')) closeDrawer(); });
+navList.addEventListener('click', (e)=>{ if(e.target.closest('a[data-slug]')) closeDrawer(); });
+
+/* ── On-page table of contents, built from whatever h2/h3 the chapter has.
+   marked doesn't assign heading ids, so we mint them (slug + de-dupe) and
+   link the TOC to them. ─────────────────────────────────────────────── */
+function slugifyHeading(text, seen){
+  /* "sec-" prefix is load-bearing, not decorative: DOCS slugs (e.g. "payments")
+     double as page-router hashes, and a heading literally titled "Payments"
+     inside some OTHER chapter would otherwise mint id="payments" and collide —
+     clicking that TOC entry would then reroute to the Payments chapter instead
+     of scrolling to the heading. The prefix makes that collision impossible. */
+  let s = 'sec-'+text.toLowerCase().trim().replace(/[^\w\s-]/g,'').replace(/\s+/g,'-');
+  if(s === 'sec-') s = 'sec-section';
+  let out = s, n = 2;
+  while(seen.has(out)){ out = s+'-'+n; n++; }
+  seen.add(out);
+  return out;
+}
+function renderToc(){
+  const heads = [...content.querySelectorAll('h2, h3')];
+  docTocList.innerHTML = '';
+  if(!heads.length){ docToc.style.display = 'none'; return; }
+  docToc.style.display = '';
+  const seen = new Set();
+  heads.forEach(h=>{
+    if(!h.id) h.id = slugifyHeading(h.textContent, seen); else seen.add(h.id);
+    const li = document.createElement('li');
+    li.dataset.lvl = h.tagName === 'H3' ? '3' : '2';
+    const a = document.createElement('a');
+    a.href = '#'+h.id;
+    a.textContent = h.textContent;
+    li.appendChild(a);
+    docTocList.appendChild(li);
+  });
+}
+/* Collapse the TOC by default on narrow screens so it doesn't eat the fold. */
+if(window.innerWidth <= 640) docToc.removeAttribute('open');
 
 async function renderMermaid(){
   if(!mermaidReady) return;
@@ -254,8 +466,9 @@ async function renderMermaid(){
 async function load(slug){
   const doc = bySlug[slug] || DOCS[0];
   setActive(doc.slug);
-  crumb.textContent = doc.title;
+  crumb.textContent = doc.group + ' / ' + doc.title;
   content.innerHTML = 'Loading…';
+  docToc.style.display = 'none';
   try {
     const res = await fetch('./docs/'+doc.slug+'.md', {cache:'no-cache'});
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -269,14 +482,27 @@ async function load(slug){
     });
     content.querySelectorAll('a[href^="http"]').forEach(a=>{a.target='_blank';a.rel='noopener';});
     await renderMermaid();
+    renderToc();
     window.scrollTo({top:0});
   } catch(err){
     content.innerHTML = '<div class="docs-error">Could not load <code>'+doc.slug+'.md</code> — '+err.message+'</div>';
   }
 }
 
-function current(){ return (location.hash||'').replace('#','') || DOCS[0].slug; }
-window.addEventListener('hashchange', ()=>load(current()));
+function current(){
+  const h = (location.hash||'').replace('#','');
+  return bySlug[h] ? h : DOCS[0].slug;
+}
+/* A hash that names a chapter routes to it. A hash that doesn't (an
+   in-page heading anchor from the TOC, or from a chapter's own
+   "[Payments](#payments)"-style cross-reference landing mid-scroll) is left
+   alone — the browser's native fragment scroll handles those without a
+   reload. Cross-reference links that DO name a chapter still work via the
+   normal route. */
+window.addEventListener('hashchange', ()=>{
+  const slug = (location.hash||'').replace('#','');
+  if(bySlug[slug]) load(slug);
+});
 load(current());
 </script>
 <script>
