@@ -17,6 +17,7 @@ Build Rust games on Magnetite — from a weekend jam to a COD-scale AAA title.
 | [Developer Marketplace](./marketplace.md) | In-game stores, items, non-custodial purchase, entitlements |
 | [FPS Starter Template](./fps-starter.md) | `game-template-fps` — Bevy + rapier3d FPS, hitscan, gamepad |
 | [Motorsport Starter Template](./motorsport-starter.md) | `game-template-motorsport` — vehicle physics, lap → points |
+| [Submission & Review](./submission.md) | Storefront review flow, CI-driven submission checks |
 | [API Reference](../api-reference/index.md) | All REST endpoints |
 | [Hosting a server](../hosting-a-server.md) | `magnetite node`, capacity-elastic hosting, discovery |
 | [Payments](../payments.md) | Non-custodial checkout and signed receipts |

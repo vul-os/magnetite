@@ -47,6 +47,59 @@ database, no payment provider.
 
 ---
 
+## Platform feature docs
+
+Each documents one backend surface. None of these needs its own hub page —
+they're linked here directly so every chapter in the tree is reachable from
+this index.
+
+| Chapter | Description |
+|---------|-------------|
+| [Analytics](./analytics.md) | Developer dashboard, per-game player/session/revenue series |
+| [Blocking](./blocking.md) | User block/unblock system |
+| [Content Rating](./content-rating.md) | Content rating enum + scaffold flow |
+| [Economy & Marketplace](./economy-marketplace.md) | Points economy + developer marketplace, non-custodial |
+| [i18n](./i18n.md) | `I18nProvider` / `useTranslation`, en/es/fr locales |
+| [Moderation](./moderation.md) | Review-report moderation pipeline |
+| [Notification Preferences](./notification-preferences.md) | Per-user category/channel preferences |
+| [Refunds](./refunds.md) | A refund is a void of a signed receipt — non-custodial, no chargeback |
+| [Requirements](./requirements.md) | Server hardware minimums; capacity is emergent, not tiered |
+| [Search](./search.md) | Full-text search endpoint |
+| [Stellar History Retention](./stellar-history-retention.md) | A26: what degrades if Horizon prunes chain history, and why it fails closed |
+| [Subscriptions (removed)](./subscriptions-lifecycle.md) | Documents that the subscriptions REST API/UI were removed; the data model is dormant |
+| [Troubleshooting](./troubleshooting.md) | Deployment/DB/OAuth/payment issues, platform-wide |
+| [Color Palette](./color-palette.md) | Brand color swatches |
+
+## MOAT deep dives
+
+[`MOAT-ARCHITECTURE.md`](./MOAT-ARCHITECTURE.md) is canonical; these are
+readable guides into specific parts of it.
+
+| Chapter | Description |
+|---------|-------------|
+| [Architecture Overview](./moat/architecture-overview.md) | Readable crate-map guide (defers to MOAT-ARCHITECTURE.md for the frozen interfaces) |
+| [Quickstart](./moat/quickstart.md) | 5-minute CLI path: new → build → dev → deploy |
+| [Develop in the browser](./moat/develop-in-browser.md) | Studio → wasm → dev → web-client, no local toolchain |
+| [Develop in the browser — Studio UI](./moat/develop-in-browser-studio.md) | The in-browser IDE (`/developers/studio`) |
+| [Play in the browser](./moat/play-in-browser.md) | Web client play path, `ClientNet`/`ServerNet` protocol |
+| [Replay & Spectator](./moat/replay-spectator.md) | `ReplayLog` recording/verification, replay playback, tournaments |
+| [Scaling design](./moat/scaling.md) | The `SingleRoom`/`Dedicated`/`Sharded` topology ladder |
+| [Scale report](./moat/scale-report.md) | `magnetite-e2e` test suite + bench numbers backing the ladder |
+
+## Program history & assessments
+
+| Chapter | Description |
+|---------|-------------|
+| [Cross-repo backlog](./cross-repo-backlog.md) | The live A1–A26 backlog spanning magnetite/patala/kotva/evermesh/vuna/wibbly — start here for "what's actually in progress" |
+| [Handover, 2026-07-30](./HANDOVER.md) | **Historical** — a one-time session handover, superseded by the backlog above |
+| [Walrus assessment](./walrus-assessment.md) | Research note, dated: `BlobStore` backend candidate assessment |
+| [Sui binding spike](./sui-binding-spike.md) | Research note, dated: item-binding spike, no code changed |
+| [Folder-transport assessment](./folder-transport-assessment.md) | Research note: FlowStock's folder-transport pattern, applicability to magnetite |
+| [A25 storefront/TRACT assessment](./a25-storefront-tract-assessment.md) | Research note, dated: TRACT-shaped storefront gap — a map, not a build |
+| [Chain candidates](./chain-candidates.md) | Research note: 16+11-chain sweep for offline-signing/payment chain selection |
+
+---
+
 ## What Magnetite Provides
 
 | Concern | What the platform handles |

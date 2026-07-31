@@ -1,5 +1,10 @@
 # The zero-third-party path (A22)
 
+> Written 2026-07-30 against the code as it stood that day
+> (`docs/cross-repo-backlog.md` A22). Re-verify the per-seam claims below
+> against the current default implementations in `magnetite-seams` before
+> relying on this page — this is a point-in-time map, not a live-tested guard.
+
 `ALIGNMENT.md` §2 item 9 asked for the self-hostable tracker to be documented
 as "the zero-third-party path." That framing is too narrow to answer honestly
 on its own — the tracker is one of several places a third party can enter (or

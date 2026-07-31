@@ -1,5 +1,17 @@
 # Handover — 2026-07-30
 
+> **[2026-07-31] HISTORICAL — a one-time session handover, already superseded.**
+> Written to hand a specific in-flight session to its successor; several of its
+> own claims were overtaken within the same day by later commits in this repo
+> (e.g. item 5's "A19 wss/TLS still needed" was closed by `97fa148`, and its
+> closing line about no economic claim ever settling is contradicted by the
+> Stellar testnet settlement `docs/cross-repo-backlog.md` A12/A26 record,
+> which landed after this file was written). Kept for the record of that
+> handover, not as current status — read
+> [`docs/cross-repo-backlog.md`](cross-repo-backlog.md) for the live backlog
+> and [`docs/project/DECENTRALIZATION_PROGRESS.md`](project/DECENTRALIZATION_PROGRESS.md)
+> for the active wave log instead.
+
 **You are taking over an in-flight, multi-repo effort.** Written for whoever picks it
 up. Accurate as of writing; **verify before acting** — two repos have uncommitted work
 and at least one has a concurrent session.

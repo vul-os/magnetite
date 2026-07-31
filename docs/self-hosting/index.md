@@ -45,13 +45,19 @@ including dev-only extras (MailHog email preview, pgAdmin).
 | Guide | Description |
 |-------|-------------|
 | [Quickstart](./quickstart.md) | Full stack up in three commands |
+| [Run it all — local E2E runbook](./run-it-all.md) | The authoritative local walkthrough: full stack, build a game, run `magnetite-runtime`, play in the browser, go live |
+| [Local infrastructure](./local-infra.md) | Run every optional service locally (MediaMTX, MailHog, pgAdmin, …) with no cloud accounts |
 | [Docker Deployment](./docker.md) | Complete Compose reference with backups |
+| [Production Deploy (Kubernetes / Nomad)](./deploy.md) | Manifests, image build references, and the honest gap between them and a working `kubectl apply` |
 | [Environment Variables](./environment-variables.md) | All configuration options |
 | [External Dependencies](./external-dependencies.md) | What is required (Postgres, Redis) vs optional (email, OAuth, MediaMTX, external comms providers) |
 | [Database](./database.md) | PostgreSQL setup, migrations, backups |
 | [SSL/TLS](./ssl.md) | Let's Encrypt and HTTPS configuration |
 | [Fly.io](./fly-io.md) | Deploy to Fly.io with autoscaling |
 | [Monitoring](./monitoring.md) | Logging, health probes, metrics |
+| [Streaming (MediaMTX)](./streaming.md) | The optional media plane — HLS/RTMP/WebRTC, behind the `media` compose profile |
+| [Smoke testing](./smoke.md) | `scripts/smoke.sh` — a fast local sanity check after standing up the stack |
+| [Troubleshooting](./troubleshooting.md) | DB/auth/payment/performance issues specific to a self-hosted deploy |
 | [Updating](./updating.md) | Upgrade procedures and rollback |
 
 ---
