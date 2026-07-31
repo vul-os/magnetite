@@ -1,5 +1,21 @@
 # Streaming — Go Live & Watch
 
+> **STALE — superseded, not linked from any index on purpose.** This file's
+> "REST API" section below (`GET/POST/DELETE /api/comms/streams`) does not
+> match the real backend. Found while building
+> `scripts/check-docs-links.mjs` (2026-07-31): `backend/src/main.rs` nests the
+> streaming router at the top-level `/api/v1/streams` (not under
+> `/api/v1/comms/`), with real routes `POST /streams`, `POST
+> /streams/:id/go-live`, `POST /streams/:id/stop`, `GET /streams/:id/me`,
+> `POST /streams/:id/join`, `GET /streams`, `GET /streams/:id`, `GET
+> /streams/:id/hls`, `GET /streams/:id/watch`, `POST /streams/:id/leave` —
+> none of which appear below, and there is no `DELETE /streams/:id`. The
+> "How it works", "Data model" and "Frontend components" sections describe the
+> real architecture reasonably and are not the issue; only the REST API table
+> is wrong. [`docs/comms/index.md`](./index.md#streaming-go-live--watch) is
+> the current chapter's "Streaming" section. Kept only as a historical
+> artifact; do not treat the REST API table below as accurate.
+
 Magnetite supports **game streaming** as a first-class platform feature. Any player can go
 live from a voice room, sharing their screen or game capture; other players can watch
 in-platform or via an external service (Twitch, YouTube).

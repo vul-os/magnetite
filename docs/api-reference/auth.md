@@ -1,5 +1,18 @@
 # Authentication Endpoints
 
+> **STALE — superseded, not linked from any index on purpose.** This file
+> predates the decentralization redesign and was never updated. Found while
+> building `scripts/check-docs-links.mjs` (2026-07-31): it fabricates a
+> `wallet: { balance: 1500, currency: "MGNT" }` field on `GET /auth/me` that
+> contradicts the platform's real non-custodial invariant (the platform holds
+> no balances — see [Payments](../payments.md)), documents `POST /auth/logout`
+> with a body when the real route is `DELETE /logout` with no body, and is
+> missing `/forgot-password`, `/reset-password`, `/resend-verification`,
+> `/logout-all`, `/sessions`, `/linked-accounts` and `/api-keys` entirely. The
+> correct, current auth endpoint table is
+> [`docs/api-reference/index.md`](./index.md#auth--apiv1auth). Kept only as a
+> historical artifact; do not treat anything below this notice as accurate.
+
 ## POST /api/v1/auth/register
 
 Create a new user account.

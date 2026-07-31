@@ -99,6 +99,22 @@ jobs:
       - run: npm run test:a11y
       - run: npm run build
 
+  # ── Every docs/ chapter reachable, every relative doc link resolves ────────
+  #
+  # An earlier audit found 16 real doc chapters with zero inbound links —
+  # readable only by guessing the URL or grepping the repo — hand-fixed by
+  # linking them into docs/index.md. Nothing stopped that from regressing
+  # until scripts/check-docs-links.mjs existed to check it on every push. No
+  # Node dependencies needed beyond the runtime itself (fs/path only).
+  docs-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/check-docs-links.mjs
+
   release-checksums:
     # The release integrity gate is only worth having if its REFUSALS are
     # exercised, and a `v*` tag is far too late to find out that the verifier

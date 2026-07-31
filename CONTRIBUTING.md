@@ -700,4 +700,4 @@ Looking to contribute but not sure where to start? Check out issues labeled:
 
 ## License
 
-By contributing to Magnetite, you agree that your contributions will be licensed under the MIT License. See [LICENSE](LICENSE) for details.
+By contributing to Magnetite, you agree that your contributions will be dual-licensed under MIT OR Apache-2.0, matching the rest of the project. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE) for details.

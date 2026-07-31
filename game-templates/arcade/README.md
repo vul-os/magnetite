@@ -189,4 +189,6 @@ To deploy manually: **Actions → Game CI → Run workflow → deploy: true**.
 
 ## License
 
-MIT — see [LICENSE](../../LICENSE).
+MIT — see [LICENSE-MIT](../../LICENSE-MIT). (`Cargo.toml` for this template
+declares `license = "MIT"`, not the repo's dual MIT OR Apache-2.0 — there is
+no root-level `LICENSE` file, only `LICENSE-MIT` and `LICENSE-APACHE`.)

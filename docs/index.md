@@ -34,6 +34,7 @@ database, no payment provider.
 
 | Section | Description |
 |---------|-------------|
+| [For Developers (hub)](./for-developers/index.md) | All developer guides in one place — quickstart, SDK, controllers, graphics tiers, points economy, marketplace, starters, submission |
 | [Developer Quickstart](./for-developers/quickstart.md) | Clone template → implement → build WASM → publish |
 | [SDK Reference](./for-developers/sdk.md) | `magnetite-sdk` crate reference |
 | [Build & Distribution Pipeline](./for-developers/build-pipeline.md) | How games go from source to players |
