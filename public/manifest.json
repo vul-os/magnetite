@@ -1,7 +1,7 @@
 {
   "name": "Magnetite Gaming Platform",
   "short_name": "Magnetite",
-  "description": "Open source games. Real money. No middlemen.",
+  "description": "Open source, self-hostable Rust games. Deterministic, replay-verified matches. Non-custodial by design — no platform-held balances.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -29,7 +29,7 @@
     {
       "name": "Wallet",
       "short_name": "Wallet",
-      "description": "View your USDC balance",
+      "description": "Your linked address and signed, verifiable receipts — no platform-held balance",
       "url": "/wallet",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }

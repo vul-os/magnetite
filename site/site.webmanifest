@@ -1,0 +1,19 @@
+{
+  "name": "magnetite — a re-simulatable Rust game platform",
+  "short_name": "magnetite",
+  "description": "A Rust game platform built on deterministic authoritative simulation: anyone can re-run the match log and check the result.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "browser",
+  "orientation": "any",
+  "background_color": "#07080C",
+  "theme_color": "#07080C",
+  "lang": "en",
+  "icons": [
+    { "src": "./assets/magnetite-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
