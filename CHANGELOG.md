@@ -82,14 +82,17 @@
   `magnetite-seams/Cargo.toml`), confirmed by running each command against a
   clean checkout. Replaced with the per-crate commands `.github/workflows/
   ci.yml` actually uses.
-- **`docs/self-hosting/quickstart.md`, `docker.md`, `updating.md`** referenced
-  container images (`magnetite/app`, `magnetite/backend:latest`,
-  `magnetite/api`, `magnetite/game-host`) that are not published anywhere —
-  no workflow in this repo pushes to Docker Hub or GHCR; `deploy.yml` deploys
-  straight to Fly.io. Rewrote the compose examples to build from the tracked
-  `Dockerfile.backend`/`Dockerfile.frontend`, matching the real
-  `docker-compose.yml`; added the same gap as an explicit caveat in
-  `deploy.md`'s k8s/Nomad image table.
+- **`docs/self-hosting/quickstart.md`, `docker.md`, `updating.md`, `deploy.md`**
+  referenced container images (`magnetite/app`, `magnetite/backend:latest`,
+  `magnetite/api`, `magnetite/game-host`, `ghcr.io/magnetite/*`) that are
+  published under none of those names. The one real published image is
+  `magnetite/magnetite` (backend) / `magnetite/magnetite:vX.Y.Z-frontend` on
+  Docker Hub, pushed only on a tagged `v*` release by `release.yml`'s
+  `docker` job (with no `:latest` tag) — `deploy.yml` is unrelated and
+  deploys straight to Fly.io. Rewrote the compose examples to build from the
+  tracked `Dockerfile.backend`/`Dockerfile.frontend`, matching the real
+  `docker-compose.yml`; corrected the k8s/Nomad image table's gap explicitly
+  rather than silently.
 - **Fabricated commands removed**: `docker-compose exec backend migrate` /
   `create-admin` (the runtime image contains only the compiled binary —
   migrations run automatically via `sqlx::migrate!` at startup, and there is

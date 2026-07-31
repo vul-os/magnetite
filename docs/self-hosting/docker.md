@@ -9,9 +9,13 @@ Deploy Magnetite's pre-decentralization backend/frontend using Docker Compose.
 > (`PROTOCOL_FEE_BPS` — deleted, see [payments.md](../payments.md);
 > `S3_BUCKET`/AWS SES creds under the wrong names; `RATE_LIMIT_*`), and backup
 > commands against container names Compose never assigns (`magnetite-db-1`
-> — the real service is named `postgres`, not `db`). None of it was ever
-> published or built by any workflow in `.github/workflows/`. This page now
-> matches the actual, tracked [`docker-compose.yml`](../../docker-compose.yml)
+> — the real service is named `postgres`, not `db`). None of those specific
+> names is ever published or built by any workflow in `.github/workflows/` —
+> the one real published image is `magnetite/magnetite` (backend) /
+> `magnetite/magnetite:vX.Y.Z-frontend`, pushed by `release.yml`'s `docker`
+> job only on a tagged release; see [quickstart.md](./quickstart.md) for the
+> exact conditions. This page now matches the actual, tracked
+> [`docker-compose.yml`](../../docker-compose.yml)
 > at the repo root.
 
 ## docker-compose.yml Reference

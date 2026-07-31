@@ -5,13 +5,19 @@
 > orchestration, fleet scaling) is described below with a clear distinction
 > between what is **implemented** and what is a **design/roadmap** item.
 >
-> **Corrected 2026-07-31: the `ghcr.io/magnetite/*` images below are not
-> published by any workflow in this repo.** `.github/workflows/deploy.yml`
-> deploys straight to Fly.io via `fly deploy`; nothing pushes to GHCR or
-> Docker Hub. Follow [§8](#8-image-build-references) to build and push these
-> images to your own registry before the manifests in §2/§3 can pull anything
-> — they are correct as a **target shape**, not as a working `kubectl apply`
-> against an image that already exists.
+> **Corrected 2026-07-31: the `ghcr.io/magnetite/*` image names below are not
+> published under those names by any workflow in this repo.** Nothing pushes
+> to GHCR at all. `.github/workflows/deploy.yml` deploys straight to Fly.io
+> via `fly deploy` and is unrelated to container images.
+> `.github/workflows/release.yml` does have a real `docker` job, but it
+> pushes to **Docker Hub**, as `magnetite/magnetite` (backend) /
+> `magnetite/magnetite:vX.Y.Z-frontend` — different registry, different
+> repository name — and only on a tagged `v*` release with
+> `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` configured. Follow
+> [§8](#8-image-build-references) to build and push the `ghcr.io/magnetite/*`
+> names this page actually uses to your own registry before the manifests in
+> §2/§3 can pull anything — they are correct as a **target shape**, not as a
+> working `kubectl apply` against an image that already exists.
 
 ---
 

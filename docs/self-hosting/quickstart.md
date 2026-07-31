@@ -5,13 +5,18 @@ Docker Compose.
 
 > **Corrected 2026-07-31.** This page previously referenced `magnetite/app`,
 > `magnetite/backend:latest` and `magnetite/frontend:latest` as pre-built
-> images to `docker run`/`docker pull`. **No such images are published
-> anywhere** — `.github/workflows/deploy.yml` deploys straight to Fly.io via
-> `fly deploy`, and no workflow in this repo pushes to Docker Hub or GHCR. The
+> images to `docker run`/`docker pull`. **None of those specific names are
+> published.** `.github/workflows/release.yml` does have a real `docker` job
+> that pushes to Docker Hub — but as `magnetite/magnetite:vX.Y.Z` (backend)
+> and `magnetite/magnetite:vX.Y.Z-frontend`, only on a tagged `v*` release,
+> only if the repo's `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets are set,
+> and with **no `:latest` tag** (`docker/metadata-action`'s only pattern is
+> `type=semver`). `.github/workflows/deploy.yml` is unrelated to that job and
+> deploys straight to Fly.io via `fly deploy`. For local development, the
 > only way to run this stack today is to build the images yourself from the
 > `Dockerfile.backend` / `Dockerfile.frontend` in this repo, which is exactly
 > what the real, tracked [`docker-compose.yml`](../../docker-compose.yml) at
-> the repo root already does. This page now matches it.
+> the repo root already does. This page now matches that.
 
 ## Docker-Compose Setup (build from source)
 

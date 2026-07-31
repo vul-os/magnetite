@@ -58,9 +58,12 @@ cp -r nginx.conf nginx.conf.backup.$(date +%Y%m%d)
 ### Docker Update
 
 > **Corrected 2026-07-31.** No `magnetite/backend`/`magnetite/frontend` image
-> is published anywhere (no workflow in `.github/workflows/` pushes to Docker
-> Hub or GHCR — see [docker.md](./docker.md)), so there is nothing to `pull` or
-> to compare tags of. The runtime image also does not contain
+> is published under those names (the one real published image is
+> `magnetite/magnetite`/`magnetite/magnetite:vX.Y.Z-frontend`, pushed only on
+> a tagged release by `release.yml`'s `docker` job — see
+> [docker.md](./docker.md)/[quickstart.md](./quickstart.md)). Compose-driven
+> local development still has nothing to `pull` — it builds locally, both
+> before and after a release exists. The runtime image also does not contain
 > `backend/tools/migrate.sh` — `Dockerfile.backend` only copies the compiled
 > `magnetite-backend` binary — and there is no `/app/migrate.sh` inside the
 > container to run.
