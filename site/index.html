@@ -401,6 +401,20 @@
   :root[data-theme='dark'] .frame img.light { display: none; }
   :root[data-theme='dark'] .frame img.dark { display: block; }
 
+  /* ── Hand-authored inline-SVG illustrations (authoritative simulation,
+        node capacity self-measurement, the attested-input boundary).
+        min-width on the SVG plus overflow-x on its own wrapper (same idiom
+        as .resim-scroll above) is load-bearing, not decorative: without a
+        floor, the viewBox would scale down with the viewport and every
+        label inside it would shrink below the 12px floor on a phone. This
+        way the diagram scrolls horizontally at a fixed, always-legible
+        size instead of shrinking its type. ─────────────────────────────── */
+  .diagram-scroll { overflow-x: auto; }
+  .diagram-svg { width: 100%; min-width: 860px; height: auto; display: block; background: var(--paper); }
+  .diagram-svg rect, .diagram-svg circle, .diagram-svg path { vector-effect: non-scaling-stroke; }
+  .diagram-svg text { font-family: var(--mono); }
+  .diagram figcaption { font-size: 12.5px; line-height: 1.55; max-width: 74ch; }
+
   /* ── Terminal ──────────────────────────────────────────────────────── */
   .term {
     /* locally-scoped palette: the terminal stays dark in both themes */
@@ -740,6 +754,64 @@
             <p>Game logic compiles to WASM and runs under a sandbox with a fuel budget, a memory cap and an epoch interrupt — with no wall clock and no OS randomness reachable from the guest. Those absences are the point: they are what make a log checkable at all.</p>
           </div>
         </div>
+
+        <!-- Illustration: authoritative simulation. The one arrow a client is
+             not given — direct state writes — is drawn and struck out, not
+             just described. -->
+        <figure class="diagram" style="margin: 34px 0 0;">
+          <div class="frame">
+            <div class="frame-bar"><i></i><i></i><i></i><span>authoritative simulation</span></div>
+            <div class="diagram-scroll">
+            <svg class="diagram-svg" viewBox="0 0 860 210" role="img" aria-labelledby="asimTitle asimDesc">
+              <title id="asimTitle">Authoritative simulation diagram</title>
+              <desc id="asimDesc">A client sends input to the host, which validates and steps the sandboxed simulation to produce state and a hash. A dashed, crossed-out line shows the client has no path to write state directly.</desc>
+              <g font-family="var(--mono)" font-size="14" letter-spacing=".04em">
+                <!-- client -->
+                <rect x="18" y="66" width="168" height="58" rx="7" fill="var(--sunk)" stroke="var(--line-2)"/>
+                <text x="102" y="90" text-anchor="middle" fill="var(--ink)" font-weight="600">CLIENT</text>
+                <text x="102" y="107" text-anchor="middle" fill="var(--ink-3)" font-size="13">keyboard · gamepad · bot</text>
+
+                <!-- host / sandbox -->
+                <rect x="332" y="34" width="234" height="122" rx="9" fill="var(--field-tint)" stroke="var(--field-line)" stroke-dasharray="3 5"/>
+                <text x="449" y="54" text-anchor="middle" fill="var(--field-text)" font-weight="600" letter-spacing=".08em">HOST · WASM SANDBOX</text>
+                <rect x="352" y="66" width="194" height="26" rx="5" fill="var(--paper)" stroke="var(--line)"/>
+                <text x="449" y="83" text-anchor="middle" fill="var(--ink-2)">validate(input) → command</text>
+                <rect x="352" y="100" width="194" height="26" rx="5" fill="var(--paper)" stroke="var(--line)"/>
+                <text x="449" y="117" text-anchor="middle" fill="var(--ink-2)">step(state, commands)</text>
+                <text x="449" y="146" text-anchor="middle" fill="var(--ink-3)" font-size="13">fuel-budgeted · no clock · no OS rng</text>
+
+                <!-- state -->
+                <rect x="674" y="66" width="168" height="58" rx="7" fill="var(--sunk)" stroke="var(--line-2)"/>
+                <text x="758" y="90" text-anchor="middle" fill="var(--ink)" font-weight="600">STATE + HASH</text>
+                <text x="758" y="107" text-anchor="middle" fill="var(--ink-3)" font-size="13">tick N → state_hash</text>
+
+                <!-- real path: client -> host -> state -->
+                <g stroke="var(--field)" stroke-width="1.6" fill="none">
+                  <path d="M186 95 H326" marker-end="url(#asimArrow)"/>
+                  <path d="M566 95 H668" marker-end="url(#asimArrow)"/>
+                </g>
+                <text x="256" y="86" text-anchor="middle" fill="var(--field-text)" font-size="13">input only</text>
+                <text x="617" y="86" text-anchor="middle" fill="var(--field-text)" font-size="13">deterministic</text>
+
+                <!-- blocked path: client -> state directly -->
+                <path d="M100 124 C 220 190, 640 190, 760 124" stroke="var(--ink-3)" stroke-width="1.3" stroke-dasharray="2 6" fill="none"/>
+                <g transform="translate(430,178)">
+                  <circle r="9" fill="var(--paper)" stroke="var(--boundary)" stroke-width="1.4"/>
+                  <path d="M-4 -4 L4 4 M4 -4 L-4 4" stroke="var(--boundary)" stroke-width="1.4" stroke-linecap="round"/>
+                </g>
+                <text x="430" y="200" text-anchor="middle" fill="var(--boundary-text)" font-size="13">no direct state writes — ever</text>
+
+                <defs>
+                  <marker id="asimArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--field)"/>
+                  </marker>
+                </defs>
+              </g>
+            </svg>
+            </div>
+          </div>
+          <figcaption class="m-xs" style="margin-top:10px;color:var(--ink-3-aa)">A client proposes; the sandboxed host disposes. The only arrow into <b style="color:var(--field-text)">STATE</b> runs through <code style="font-family:var(--mono);font-size:.88em">validate</code> and <code style="font-family:var(--mono);font-size:.88em">step</code> — there is no second arrow to forge.</figcaption>
+        </figure>
       </div>
     </div>
   </section>
@@ -854,6 +926,53 @@
                 <p style="margin-top:12px">The wire ingress is real: <a class="link" href="https://github.com/vul-os/wibbly" target="_blank" rel="noopener">wibbly</a> — a camera-gesture game built on magnetite, where your webcam is the controller — signs pose-derived events and a live magnetite node accepts them. <code style="font-family:var(--mono);font-size:.88em">attested_ack</code> comes back, pinned to a shared golden vector at both ends. That proves the seam carries traffic and nothing more: <b>no game in either repo consumes those events yet.</b> This is a validated transport, not gesture multiplayer. <a class="link" href="https://vulos.org/projects/magnetite/wibbly/play/" target="_top">Play it in your browser →</a></p>
               </div>
             </div>
+
+            <!-- Illustration: the boundary itself. Two lanes, drawn to
+                 different destinations — one reaches the verified core, the
+                 other stops at a signature gate and goes no further. -->
+            <figure class="diagram" style="margin: 26px 0 0;">
+              <div class="frame">
+                <div class="frame-bar"><i></i><i></i><i></i><span>InputProvider · where verification stops</span></div>
+                <div class="diagram-scroll">
+                <svg class="diagram-svg" viewBox="0 0 860 200" role="img" aria-labelledby="bndTitle bndDesc">
+                  <title id="bndTitle">The attested-input boundary diagram</title>
+                  <desc id="bndDesc">Deterministic input from keyboard, gamepad, or a bot travels an unbroken line into the replay-verifiable core. Attested, sensor-derived input travels a dashed line that stops at a signature gate — authorship is checked, but truth is not, and no replay reaches past this point.</desc>
+                  <g font-family="var(--mono)" font-size="14" letter-spacing=".03em">
+                    <!-- deterministic lane -->
+                    <rect x="16" y="24" width="200" height="46" rx="7" fill="var(--sunk)" stroke="var(--line-2)"/>
+                    <text x="116" y="52" text-anchor="middle" fill="var(--ink)" font-weight="600" font-size="13.5">DETERMINISTIC</text>
+                    <text x="116" y="66" text-anchor="middle" fill="var(--ink-3)" font-size="12.5">keyboard · gamepad · bot</text>
+                    <path d="M216 47 H600" stroke="var(--field)" stroke-width="1.7" marker-end="url(#bndArrowLive)"/>
+                    <text x="408" y="39" text-anchor="middle" fill="var(--field-text)" font-size="13">replay-verifiable</text>
+                    <rect x="610" y="18" width="234" height="150" rx="9" fill="var(--live-tint)" stroke="var(--live)" stroke-opacity=".5"/>
+                    <text x="727" y="42" text-anchor="middle" fill="var(--live-text)" font-weight="600" font-size="13.5" letter-spacing=".06em">VERIFIED CORE</text>
+                    <text x="727" y="62" text-anchor="middle" fill="var(--ink-2)" font-size="13">ReplayLog · verify_replay</text>
+                    <text x="727" y="78" text-anchor="middle" fill="var(--ink-2)" font-size="13">anyone can re-simulate and</text>
+                    <text x="727" y="92" text-anchor="middle" fill="var(--ink-2)" font-size="13">compare the resulting hash</text>
+
+                    <!-- attested lane -->
+                    <rect x="16" y="120" width="200" height="46" rx="7" fill="var(--boundary-tint)" stroke="var(--boundary)" stroke-opacity=".55"/>
+                    <text x="116" y="142" text-anchor="middle" fill="var(--boundary-text)" font-weight="600" font-size="13.5">ATTESTED</text>
+                    <text x="116" y="156" text-anchor="middle" fill="var(--ink-3)" font-size="12.5">camera · pose model · sensor</text>
+                    <path d="M216 143 H430" stroke="var(--boundary)" stroke-width="1.6" stroke-dasharray="3 6"/>
+                    <g transform="translate(452,143)">
+                      <circle r="15" fill="var(--paper)" stroke="var(--boundary)" stroke-width="1.6"/>
+                      <path d="M-5 -5 L5 5 M5 -5 L-5 5" stroke="var(--boundary)" stroke-width="1.6" stroke-linecap="round"/>
+                    </g>
+                    <text x="452" y="176" text-anchor="middle" fill="var(--boundary-text)" font-size="13">signature checked here — not truth</text>
+                    <text x="452" y="122" text-anchor="middle" fill="var(--ink-3)" font-size="12.5">a genuine key can sign a fabricated event</text>
+                  </g>
+                  <defs>
+                    <marker id="bndArrowLive" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                      <path d="M0 0 L10 5 L0 10 z" fill="var(--field)"/>
+                    </marker>
+                  </defs>
+                </svg>
+                </div>
+              </div>
+              <figcaption class="m-xs" style="margin-top:10px;color:var(--ink-3-aa)">A signature proves who sent an event, never what it depicts. That is why the attested lane ends at a gate instead of reaching the core — no amount of replaying gets you back to ground truth for a sensor reading.</figcaption>
+            </figure>
+
             <span class="chip bnd">Transport validated · no producer, no consumer</span>
           </div>
         </div>
@@ -989,6 +1108,66 @@
             <li><span class="n">3</span><div><b>Bring your own box</b><span><code style="font-family:var(--mono);font-size:.88em">magnetite node</code> measures cores and RAM, derives its shard and player budget from them, and advertises what it can hold. The player cap is emergent from hardware rather than a config constant. Read the gaps below before planning an internet-wide fleet.</span></div></li>
           </ol>
         </div>
+
+        <!-- Illustration: a node measuring its own hardware and filling it.
+             The gauges are drawn as read, not decoration — three inputs go
+             in, a capacity comes out; nothing here is a config constant. -->
+        <figure class="diagram" style="margin: 40px 0 0;">
+          <div class="frame">
+            <div class="frame-bar"><i></i><i></i><i></i><span>magnetite node · capacity self-measurement</span></div>
+            <div class="diagram-scroll">
+            <svg class="diagram-svg" viewBox="0 0 860 196" role="img" aria-labelledby="capTitle capDesc">
+              <title id="capTitle">Node capacity self-measurement diagram</title>
+              <desc id="capDesc">A node reads its own CPU cores, RAM, and bandwidth, then derives a shard ceiling and player budget from those readings — nothing here is a config constant.</desc>
+              <g font-family="var(--mono)" font-size="14" letter-spacing=".03em">
+                <rect x="16" y="18" width="330" height="160" rx="9" fill="var(--sunk)" stroke="var(--line-2)"/>
+                <text x="34" y="40" fill="var(--ink)" font-weight="600" letter-spacing=".08em">THIS BOX</text>
+
+                <!-- gauge: cpu -->
+                <text x="34" y="66" fill="var(--ink-2)" font-size="13">CPU CORES</text>
+                <rect x="34" y="72" width="290" height="10" rx="5" fill="var(--paper)" stroke="var(--line)"/>
+                <rect x="34" y="72" width="205" height="10" rx="5" fill="var(--field)" opacity=".8"/>
+                <text x="324" y="81" text-anchor="end" fill="var(--ink-3)" font-size="13">read from OS</text>
+
+                <!-- gauge: ram -->
+                <text x="34" y="102" fill="var(--ink-2)" font-size="13">RAM</text>
+                <rect x="34" y="108" width="290" height="10" rx="5" fill="var(--paper)" stroke="var(--line)"/>
+                <rect x="34" y="108" width="150" height="10" rx="5" fill="var(--field)" opacity=".8"/>
+                <text x="324" y="117" text-anchor="end" fill="var(--ink-3)" font-size="13">read from OS</text>
+
+                <!-- gauge: bandwidth -->
+                <text x="34" y="138" fill="var(--ink-2)" font-size="13">BANDWIDTH</text>
+                <rect x="34" y="144" width="290" height="10" rx="5" fill="var(--paper)" stroke="var(--line)"/>
+                <rect x="34" y="144" width="95" height="10" rx="5" fill="var(--field)" opacity=".8"/>
+                <text x="324" y="153" text-anchor="end" fill="var(--ink-3)" font-size="13">self-declared</text>
+
+                <!-- arrow -->
+                <path d="M356 98 H494" stroke="var(--field)" stroke-width="1.6" marker-end="url(#capArrow)"/>
+                <text x="425" y="90" text-anchor="middle" fill="var(--field-text)" font-size="13">derives</text>
+
+                <!-- output -->
+                <rect x="504" y="18" width="340" height="160" rx="9" fill="var(--field-tint)" stroke="var(--field-line)"/>
+                <text x="522" y="40" fill="var(--field-text)" font-weight="600" letter-spacing=".08em">ADVERTISED CAPACITY</text>
+                <text x="522" y="68" fill="var(--ink)" font-size="12">Shard ceiling</text>
+                <text x="822" y="68" text-anchor="end" fill="var(--ink)" font-size="12">6</text>
+                <text x="522" y="96" fill="var(--ink)" font-size="12">Player budget</text>
+                <text x="822" y="96" text-anchor="end" fill="var(--ink)" font-size="12">128</text>
+                <text x="522" y="124" fill="var(--ink)" font-size="12">Hosting price</text>
+                <text x="822" y="124" text-anchor="end" fill="var(--ink)" font-size="12">operator-set</text>
+                <text x="522" y="156" fill="var(--ink-3)" font-size="13">signed and leased in the SessionAd —</text>
+                <text x="522" y="170" fill="var(--ink-3)" font-size="13">never a config constant, never a promise a tracker made for you</text>
+
+                <defs>
+                  <marker id="capArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--field)"/>
+                  </marker>
+                </defs>
+              </g>
+            </svg>
+            </div>
+          </div>
+          <figcaption class="m-xs" style="margin-top:10px;color:var(--ink-3-aa)">Three real numbers go in; a shard ceiling and a player budget come out. There is no dial for either — grow the box, and the advertised capacity grows with it.</figcaption>
+        </figure>
       </div>
     </div>
   </section>
