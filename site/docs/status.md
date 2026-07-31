@@ -13,11 +13,11 @@
 :root[data-theme="dark"] .mg-light{display:none}
 :root[data-theme="dark"] .mg-dark{display:block}
 .mg-cap{padding:11px 15px;border-top:1px solid var(--dv-border);background:var(--dv-code-bg);font-family:var(--doc-mono);font-size:.76rem;line-height:1.6;color:var(--dv-ink-3)}
-.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.68rem;display:block;margin-bottom:3px}
+.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.76rem;display:block;margin-bottom:3px}
 .mg-cap code,.mg-cap b code{font-size:1em}
 .mg-bar{display:flex;align-items:center;gap:6px;padding:8px 13px;border-bottom:1px solid var(--dv-border);background:var(--dv-code-bg)}
 .mg-bar i{width:8px;height:8px;border-radius:50%;background:var(--dv-border-2)}
-.mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.68rem;color:var(--dv-ink-faint)}
+.mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.76rem;color:var(--dv-ink-faint)}
 /* --dv-ink-faint reads ~3.4:1 on --dv-code-bg at this size — short of AA. */
 :root[data-theme="light"] .mg-bar span{color:#5A6171}
 :root[data-theme="dark"] .mg-bar span{color:#768096}
@@ -27,7 +27,7 @@
 @media(max-width:420px){.mg-key{grid-template-columns:1fr}}
 .mg-k{background:var(--dv-surface);padding:15px}
 .mg-k i{display:block;width:24px;height:3px;border-radius:2px;background:var(--kc);margin-bottom:9px}
-.mg-k b{display:block;font-family:var(--doc-mono);font-size:.68rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--kc)}
+.mg-k b{display:block;font-family:var(--doc-mono);font-size:.76rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--kc)}
 .mg-k span{display:block;font-size:.8rem;line-height:1.5;color:var(--dv-ink-3);margin-top:5px}
 .mg-k.live{--kc:#17803D} .mg-k.lan{--kc:#A45B00} .mg-k.mock{--kc:#C4006B} .mg-k.no{--kc:#5A6171}
 :root[data-theme="dark"] .mg-k.live{--kc:#6EE79B}

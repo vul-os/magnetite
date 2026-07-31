@@ -10,18 +10,18 @@
 /* magnetite docs — figure + theme-aware screenshot styles.
    Scoped to .mg-* so nothing here can collide with the docs shell.
    All colour reads the shell's own tokens, so both themes work. */
-.mg-plate{margin:1.9rem 0;border:1px solid var(--dv-border);border-radius:10px;overflow:hidden;background:var(--dv-surface);box-shadow:var(--dv-shadow-sm)}
-.mg-plate > svg{display:block;width:100%;height:auto;background:var(--dv-surface)}
+.mg-plate{margin:1.9rem 0;border:1px solid var(--dv-border);border-radius:10px;overflow-x:auto;overflow-y:hidden;background:var(--dv-surface);box-shadow:var(--dv-shadow-sm)}
+.mg-plate > svg{display:block;width:100%;min-width:900px;height:auto;background:var(--dv-surface)}
 .mg-plate img{display:block;width:100%;height:auto;margin:0}
 .mg-dark{display:none}
 :root[data-theme="dark"] .mg-light{display:none}
 :root[data-theme="dark"] .mg-dark{display:block}
 .mg-cap{padding:11px 15px;border-top:1px solid var(--dv-border);background:var(--dv-code-bg);font-family:var(--doc-mono);font-size:.76rem;line-height:1.6;color:var(--dv-ink-3);letter-spacing:.01em}
-.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.68rem;display:block;margin-bottom:3px}
+.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.76rem;display:block;margin-bottom:3px}
 .mg-cap code,.mg-cap b code{font-size:1em}
 .mg-bar{display:flex;align-items:center;gap:6px;padding:8px 13px;border-bottom:1px solid var(--dv-border);background:var(--dv-code-bg)}
 .mg-bar i{width:8px;height:8px;border-radius:50%;background:var(--dv-border-2)}
-.mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.68rem;color:var(--dv-ink-faint)}
+.mg-bar span{margin-left:7px;font-family:var(--doc-mono);font-size:.76rem;color:var(--dv-ink-faint)}
 /* --dv-ink-faint reads ~3.4:1 on --dv-code-bg at this size — short of AA. */
 :root[data-theme="light"] .mg-bar span{color:#5A6171}
 :root[data-theme="dark"] .mg-bar span{color:#768096}
@@ -44,41 +44,41 @@ outright, and it is the part that was decentralization-ready from day one.
 
 <div class="mg-plate">
 <svg viewBox="0 0 900 250" role="img" aria-label="Three-part diagram: a game is a hash-identified portable object; a node is generic compute that measures and fills its own hardware; discovery is a phonebook of signed self-advertisements, not an authority.">
-<g font-family="var(--doc-mono)" font-size="11">
+<g font-family="var(--doc-mono)" font-size="13">
 <!-- 1. portable object -->
-<text x="40" y="34" fill="var(--accent)" font-size="10" letter-spacing="1.6">01 — PORTABLE OBJECT</text>
+<text x="40" y="34" fill="var(--accent)" font-size="12.5" letter-spacing="1.6">01 — PORTABLE OBJECT</text>
 <rect x="40" y="52" width="200" height="86" rx="8" fill="none" stroke="var(--dv-border-2)"/>
 <text x="60" y="80" fill="var(--dv-ink-2)">game.wasm + manifest</text>
 <line x1="60" y1="94" x2="220" y2="94" stroke="var(--dv-border)"/>
-<text x="60" y="114" fill="var(--accent)" font-size="10">blake3 7f41c0a8…938ab1</text>
-<text x="60" y="130" fill="var(--dv-ink-faint)" font-size="10">the hash IS the id</text>
-<text x="40" y="168" fill="var(--dv-ink-3)" font-size="10.5">No registry row is</text>
-<text x="40" y="184" fill="var(--dv-ink-3)" font-size="10.5">needed to identify it.</text>
+<text x="60" y="114" fill="var(--accent)" font-size="12.5">blake3 7f41c0a8…938ab1</text>
+<text x="60" y="130" fill="var(--dv-ink-faint)" font-size="12.5">the hash IS the id</text>
+<text x="40" y="168" fill="var(--dv-ink-3)" font-size="12.5">No registry row is</text>
+<text x="40" y="184" fill="var(--dv-ink-3)" font-size="12.5">needed to identify it.</text>
 <!-- 2. generic node -->
-<text x="350" y="34" fill="var(--accent)" font-size="10" letter-spacing="1.6">02 — GENERIC NODE</text>
+<text x="350" y="34" fill="var(--accent)" font-size="12.5" letter-spacing="1.6">02 — GENERIC NODE</text>
 <rect x="350" y="52" width="200" height="86" rx="8" fill="none" stroke="var(--dv-border-2)"/>
 <text x="370" y="78" fill="var(--dv-ink-2)">measures its own box</text>
 <line x1="370" y1="90" x2="530" y2="90" stroke="var(--dv-border)"/>
-<text x="370" y="108" fill="var(--dv-ink-3)" font-size="10">32 cores · 128 GB</text>
+<text x="370" y="108" fill="var(--dv-ink-3)" font-size="12.5">32 cores · 128 GB</text>
 <g>
 <rect x="370" y="118" width="26" height="12" rx="2" fill="var(--accent)" opacity=".8"/>
 <rect x="400" y="118" width="26" height="12" rx="2" fill="var(--accent)" opacity=".6"/>
 <rect x="430" y="118" width="26" height="12" rx="2" fill="var(--accent)" opacity=".4"/>
 <rect x="460" y="118" width="26" height="12" rx="2" fill="var(--dv-border-2)"/>
 </g>
-<text x="350" y="168" fill="var(--dv-ink-3)" font-size="10.5">Player cap is emergent</text>
-<text x="350" y="184" fill="var(--dv-ink-3)" font-size="10.5">from hardware, never</text>
-<text x="350" y="200" fill="var(--dv-ink-3)" font-size="10.5">a config constant.</text>
+<text x="350" y="168" fill="var(--dv-ink-3)" font-size="12.5">Player cap is emergent</text>
+<text x="350" y="184" fill="var(--dv-ink-3)" font-size="12.5">from hardware, never</text>
+<text x="350" y="200" fill="var(--dv-ink-3)" font-size="12.5">a config constant.</text>
 <!-- 3. phonebook -->
-<text x="660" y="34" fill="var(--accent)" font-size="10" letter-spacing="1.6">03 — PHONEBOOK</text>
+<text x="660" y="34" fill="var(--accent)" font-size="12.5" letter-spacing="1.6">03 — PHONEBOOK</text>
 <rect x="660" y="52" width="200" height="86" rx="8" fill="none" stroke="var(--dv-border-2)"/>
 <text x="680" y="78" fill="var(--dv-ink-2)">signed SessionAd</text>
 <line x1="680" y1="90" x2="840" y2="90" stroke="var(--dv-border)"/>
-<text x="680" y="108" fill="var(--dv-ink-3)" font-size="10">node · capacity · price</text>
-<text x="680" y="126" fill="var(--dv-ink-faint)" font-size="10">leased · TTL-capped</text>
-<text x="660" y="168" fill="var(--dv-ink-3)" font-size="10.5">A tracker can refuse a</text>
-<text x="660" y="184" fill="var(--dv-ink-3)" font-size="10.5">forgery, but gains no say</text>
-<text x="660" y="200" fill="var(--dv-ink-3)" font-size="10.5">over who may host what.</text>
+<text x="680" y="108" fill="var(--dv-ink-3)" font-size="12.5">node · capacity · price</text>
+<text x="680" y="126" fill="var(--dv-ink-faint)" font-size="12.5">leased · TTL-capped</text>
+<text x="660" y="168" fill="var(--dv-ink-3)" font-size="12.5">A tracker can refuse a</text>
+<text x="660" y="184" fill="var(--dv-ink-3)" font-size="12.5">forgery, but gains no say</text>
+<text x="660" y="200" fill="var(--dv-ink-3)" font-size="12.5">over who may host what.</text>
 </g>
 <g stroke="var(--dv-border-2)" stroke-width="1.4" fill="none">
 <path d="M256 95 H334" marker-end="url(#mgar)"/>

@@ -15,7 +15,7 @@
 :root[data-theme="dark"] .mg-s.no{color:#8892A6}
 .mg-plate{margin:1.9rem 0;border:1px solid var(--dv-border);border-radius:10px;overflow:hidden;background:var(--dv-surface);box-shadow:var(--dv-shadow-sm)}
 .mg-cap{padding:11px 15px;border-top:1px solid var(--dv-border);background:var(--dv-code-bg);font-family:var(--doc-mono);font-size:.76rem;line-height:1.6;color:var(--dv-ink-3)}
-.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.68rem;display:block;margin-bottom:3px}
+.mg-cap b{color:var(--accent);font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:.76rem;display:block;margin-bottom:3px}
 .mg-cap.edge b{color:var(--mg-bnd)}
 :root[data-theme="dark"] .mg-cap.edge b{color:#FF74B2}
 .mg-plate pre{margin:0;border:0;border-radius:0}
