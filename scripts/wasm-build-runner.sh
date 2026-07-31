@@ -6,8 +6,11 @@
 # (wasm32-wasip1 + the mag_* ABI) and POSTs the resulting game.wasm artifact
 # back to the Magnetite distribution API.
 #
-# Use this script when you have registered a game repo with `magnetite register`
-# (magnetite-cli) and want to compile and upload it using a self-hosted machine
+# Use this script when you have a game repo registered with the Magnetite
+# distribution API (see docs/self-hosting/deploy.md — registration happens
+# through the API/dashboard, not magnetite-cli, which has no `register`
+# subcommand; its subcommands are `new / build / dev / node / deploy /
+# package`) and want to compile and upload it using a self-hosted machine
 # instead of a GitHub Actions CI runner.
 #
 # DIFFERENCE FROM run-wasm-build.sh
@@ -32,8 +35,11 @@
 # ─── Environment ─────────────────────────────────────────────────────────────
 # Required:
 #   MAGNETITE_API_URL    — Backend base URL, e.g. https://api.magnetite.gg
-#   BUILD_RUNNER_TOKEN   — API bearer token with build-runner scope
-#                          (generate with: magnetite token create --scope build-runner)
+#   BUILD_RUNNER_TOKEN   — API bearer token with build-runner scope. There is
+#                          no CLI command to generate this (magnetite-cli has
+#                          no `token` subcommand); it is an operator-
+#                          provisioned secret — see docs/self-hosting/
+#                          deploy.md's env var table.
 #
 # Required for single-shot mode (-g / -p):
 #   (pass game ID and repo path as arguments — see usage below)
@@ -152,7 +158,7 @@ check_env() {
     errors=$((errors + 1))
   fi
   if [[ -z "$BUILD_RUNNER_TOKEN" && "$DRY_RUN" != "1" ]]; then
-    err "BUILD_RUNNER_TOKEN is not set. Generate one with: magnetite token create --scope build-runner"
+    err "BUILD_RUNNER_TOKEN is not set. This is an operator-provisioned bearer token (no CLI command generates it) — see docs/self-hosting/deploy.md."
     errors=$((errors + 1))
   fi
   [[ $errors -eq 0 ]] || exit 1
