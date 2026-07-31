@@ -36,7 +36,7 @@ the `media` profile.
 ## Quick start: everything in one command
 
 ```bash
-git clone https://github.com/magnetite-platform/magnetite.git
+git clone https://github.com/vul-os/magnetite.git
 cd magnetite
 cp .env.example .env      # no edits required for local dev
 docker compose up -d
@@ -347,7 +347,7 @@ build time. To remove it:
 ### 1. Clone and start
 
 ```bash
-git clone https://github.com/magnetite-platform/magnetite.git
+git clone https://github.com/vul-os/magnetite.git
 cd magnetite
 cp .env.example .env
 docker compose up -d

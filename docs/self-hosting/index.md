@@ -59,7 +59,7 @@ including dev-only extras (MailHog email preview, pgAdmin).
 ## Quickstart (three commands)
 
 ```bash
-git clone https://github.com/magnetite-platform/magnetite.git
+git clone https://github.com/vul-os/magnetite.git
 cd magnetite
 cp .env.example .env        # edit JWT_SECRET and database passwords
 docker compose up -d

@@ -1,33 +1,46 @@
 # Quickstart Guide
 
-Deploy Magnetite in minutes using Docker.
+Deploy Magnetite's pre-decentralization backend/frontend in minutes using
+Docker Compose.
 
-## One-Command Setup (Docker)
+> **Corrected 2026-07-31.** This page previously referenced `magnetite/app`,
+> `magnetite/backend:latest` and `magnetite/frontend:latest` as pre-built
+> images to `docker run`/`docker pull`. **No such images are published
+> anywhere** — `.github/workflows/deploy.yml` deploys straight to Fly.io via
+> `fly deploy`, and no workflow in this repo pushes to Docker Hub or GHCR. The
+> only way to run this stack today is to build the images yourself from the
+> `Dockerfile.backend` / `Dockerfile.frontend` in this repo, which is exactly
+> what the real, tracked [`docker-compose.yml`](../../docker-compose.yml) at
+> the repo root already does. This page now matches it.
 
-The fastest way to get Magnetite running:
+## Docker-Compose Setup (build from source)
+
+From the repo root, using the tracked `docker-compose.yml` directly:
 
 ```bash
-docker run -d \
-  --name magnetite \
-  -p 80:80 \
-  -p 8080:8080 \
-  -e DATABASE_URL=postgresql://user:password@host:5432/magnetite \
-  -e JWT_SECRET=your-secure-secret-here \
-  -e SERVER_HOST=0.0.0.0 \
-  -e SERVER_PORT=8080 \
-  magnetite/app
+git clone https://github.com/vul-os/magnetite.git
+cd magnetite
+cp .env.example .env   # fill in DATABASE_URL / JWT_SECRET / etc — see environment-variables.md
+
+docker compose up -d --build
 ```
 
-## Docker-Compose Setup
+That builds `backend` from [`Dockerfile.backend`](../../Dockerfile.backend)
+and `frontend` from [`Dockerfile.frontend`](../../Dockerfile.frontend)
+(`context: .` in both cases — see `docker-compose.yml`), and brings up
+`postgres` (`postgres:16-alpine`) and `redis` (`redis:7-alpine`) alongside
+them. `mediamtx` is an **opt-in profile**, not part of the default stack —
+add `--profile media` if you want it.
 
-Create a `docker-compose.yml` file:
+If you want a *minimal* compose file of your own rather than the repo's, keep
+the same shape — `build:` context, not an `image:` pull:
 
 ```yaml
-version: '3.8'
-
 services:
   backend:
-    image: magnetite/backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -40,8 +53,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./data/backend:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -49,7 +60,9 @@ services:
       retries: 3
 
   frontend:
-    image: magnetite/frontend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     restart: unless-stopped
     ports:
       - "80:80"
@@ -65,7 +78,6 @@ services:
       POSTGRES_DB: magnetite
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U magnetite"]
       interval: 10s
@@ -75,8 +87,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -86,35 +96,29 @@ volumes:
   redis_data:
 ```
 
-Start all services:
-
-```bash
-docker-compose up -d
-```
-
 ## Initial Configuration
 
-### 1. Run Database Migrations
+### 1. Database migrations run automatically
+
+There is no `migrate` subcommand and no manual per-file loop to run: the
+backend calls `sqlx::migrate!("./migrations").run(pool)` at startup
+(`backend/src/db/pool.rs`), so every `docker compose up` (or plain `cargo run`)
+applies any migration not yet recorded, in order, before the server starts
+accepting traffic. If it fails, the process exits — check `docker compose
+logs backend`.
+
+### 2. First admin user
+
+There is no `create-admin` CLI. `is_admin` is a plain boolean column on
+`users`, and the only endpoint that flips it (`PATCH` in
+`backend/src/api/admin.rs`) itself requires an existing admin — so the very
+first admin has to be set directly against the database:
 
 ```bash
-docker-compose exec backend migrate
-```
-
-Or manually:
-
-```bash
-for migration in backend/migrations/*.sql; do
-  docker-compose exec -T postgres psql -U magnetite -d magnetite -f "$migration"
-done
-```
-
-### 2. Create Admin User
-
-```bash
-docker-compose exec backend create-admin \
-  --email admin@example.com \
-  --username admin \
-  --password your-secure-password
+# 1. Register a normal account through the frontend or POST /auth/register.
+# 2. Promote it directly (one-time, chicken-and-egg bootstrap):
+docker compose exec postgres psql -U magnetite -d magnetite \
+  -c "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
 ```
 
 ### 3. Verify Deployment
@@ -136,20 +140,22 @@ docker-compose exec backend create-admin \
 
 Check logs:
 ```bash
-docker-compose logs backend
+docker compose logs backend
 ```
 
 ### Database Connection Failed
 
 Ensure PostgreSQL is healthy:
 ```bash
-docker-compose ps postgres
-docker-compose logs postgres
+docker compose ps postgres
+docker compose logs postgres
 ```
 
 ### Migration Errors
 
-Verify migrations ran in order:
+Migrations are applied automatically on backend startup — a failed migration
+shows up in the backend's own logs, not a separate migration container:
+
 ```bash
-docker-compose exec postgres psql -U magnetite -d magnetite -c "SELECT * FROM _migrations;"
+docker compose logs backend | grep -i migrat
 ```

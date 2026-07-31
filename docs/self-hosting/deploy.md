@@ -4,6 +4,14 @@
 > real, coherent, and reflect the actual stack. The **design** (cloud-runner
 > orchestration, fleet scaling) is described below with a clear distinction
 > between what is **implemented** and what is a **design/roadmap** item.
+>
+> **Corrected 2026-07-31: the `ghcr.io/magnetite/*` images below are not
+> published by any workflow in this repo.** `.github/workflows/deploy.yml`
+> deploys straight to Fly.io via `fly deploy`; nothing pushes to GHCR or
+> Docker Hub. Follow [§8](#8-image-build-references) to build and push these
+> images to your own registry before the manifests in §2/§3 can pull anything
+> — they are correct as a **target shape**, not as a working `kubectl apply`
+> against an image that already exists.
 
 ---
 

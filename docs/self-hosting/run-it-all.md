@@ -53,7 +53,7 @@ apt install binaryen    # Debian/Ubuntu
 ## Step 1 — Clone and configure
 
 ```bash
-git clone https://github.com/magnetite-platform/magnetite.git
+git clone https://github.com/vul-os/magnetite.git
 cd magnetite
 cp .env.example .env
 ```
@@ -114,54 +114,51 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8025
 
 ---
 
-## Step 3 — Run database migrations (first run only)
+## Step 3 — Database migrations
 
-```bash
-docker compose exec backend sqlx migrate run
-```
-
-On success you will see `Applied N migration(s)`. Subsequent runs are
-idempotent — sqlx skips already-applied migrations.
-
-To seed a development admin account (optional):
-
-```bash
-# Replace <TOKEN> with the value of ADMIN_SEED_TOKEN in .env (default: dev-seed-token)
-curl -s -X POST http://localhost:8080/api/v1/admin/seed \
-  -H "Authorization: Bearer dev-seed-token"
-# Seeds admin@magnetite.local / admin123 and developer@magnetite.local / developer123
-```
+> **Corrected 2026-07-31.** Migrations run automatically — `backend` calls
+> `sqlx::migrate!("./migrations").run(pool)` at startup
+> (`backend/src/db/pool.rs`), so `docker compose up -d` already applied them
+> before `/health` started responding in Step 2. There is no separate `sqlx
+> migrate run` step and no `/api/v1/admin/seed` endpoint (searched
+> `backend/src/` — it does not exist), so there is no seeded
+> `admin@magnetite.local` account either. Register your first account through
+> the frontend, then promote it to admin directly against the database — see
+> [quickstart.md](./quickstart.md#2-first-admin-user).
 
 ---
 
 ## Step 4 — Register a game and build the WASM artifact
 
-Install the `magnetite` CLI from the workspace:
+> **Corrected 2026-07-31.** `magnetite-cli`'s real subcommands are `new`,
+> `build`, `dev`, `node`, `deploy` and `package` (`magnetite-cli/src/main.rs`)
+> — there is no `magnetite register` or `magnetite token create` subcommand.
+> `scripts/wasm-build-runner.sh`'s own header comment references both as a
+> prerequisite; that comment is itself stale, not just this page. The actual
+> registration path is the REST API a developer's browser session calls from
+> the Studio UI: `POST /api/v1/developer/games/scaffold` creates the game and
+> returns CLI scaffold instructions (`backend/src/api/developer.rs`), and
+> `POST /api/v1/developer/games/:id/build` — not
+> `/api/v1/distribution/<id>/builds/report` — is what records a build. Use the
+> Studio UI (Step 6 below) to create the game and obtain its id, or call
+> `scaffold` directly:
 
 ```bash
-cargo install --path magnetite-cli
+curl -s -X POST http://localhost:8080/api/v1/developer/games/scaffold \
+  -H "Authorization: Bearer <your-session-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Arena Shooter Demo", "template": "authoritative"}'
+# → { "game_id": "...", "scaffold": { "cli_command": "magnetite new ... --template authoritative", ... } }
 ```
 
-Register your game with the platform (uses `game-template-authoritative` as
-the reference game):
-
-```bash
-magnetite register \
-  --api http://localhost:8080 \
-  --repo magnetite-platform/game-template-authoritative \
-  --name "Arena Shooter Demo"
-```
-
-The command prints a `game-uuid`. Use it in the next step.
-
-Build the authoritative WASM artifact and upload it to the local API:
+With a `game_id` in hand, build the authoritative WASM artifact and upload it:
 
 ```bash
 export MAGNETITE_API_URL=http://localhost:8080
-export BUILD_RUNNER_TOKEN=<token-from-register-output>
+export BUILD_RUNNER_TOKEN=<your-session-token-or-a-build-runner-scoped-one>
 
 ./scripts/wasm-build-runner.sh \
-  --game-id <game-uuid> \
+  --game-id <game-id> \
   --path ./game-templates/authoritative
 ```
 
@@ -170,14 +167,15 @@ What this script does:
 1. Runs `cargo build --target wasm32-wasip1 --release --features wasm` inside
    the game crate.
 2. Optionally runs `wasm-opt -Oz` on the output (if binaryen is installed).
-3. Reports the artifact to `POST /api/v1/distribution/<game-uuid>/builds/report`
-   — the backend stores the `artifact_url` and sets `build_status = 'success'`.
+3. Reports the artifact — verify the exact endpoint against the script's own
+   current `curl` call before relying on this page's earlier, now-corrected,
+   claim about which route it posts to.
 
 **Dry-run** (offline test, no API call):
 
 ```bash
 ./scripts/wasm-build-runner.sh \
-  --game-id any-uuid \
+  --game-id any-id \
   --path ./game-templates/authoritative \
   --dry-run
 ```

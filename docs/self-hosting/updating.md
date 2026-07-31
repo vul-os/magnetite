@@ -57,52 +57,33 @@ cp -r nginx.conf nginx.conf.backup.$(date +%Y%m%d)
 
 ### Docker Update
 
-#### 1. Pull Latest Images
+> **Corrected 2026-07-31.** No `magnetite/backend`/`magnetite/frontend` image
+> is published anywhere (no workflow in `.github/workflows/` pushes to Docker
+> Hub or GHCR — see [docker.md](./docker.md)), so there is nothing to `pull` or
+> to compare tags of. The runtime image also does not contain
+> `backend/tools/migrate.sh` — `Dockerfile.backend` only copies the compiled
+> `magnetite-backend` binary — and there is no `/app/migrate.sh` inside the
+> container to run.
+
+#### 1. Pull latest source and rebuild
 
 ```bash
-docker-compose pull
+git pull origin main
+docker compose up -d --build
 ```
 
-#### 2. Review Image Tags
+#### 2. Migrations run automatically
+
+The backend calls `sqlx::migrate!("./migrations").run(pool)` at startup
+(`backend/src/db/pool.rs`) — any migration not yet recorded applies before the
+server accepts traffic. There is nothing separate to run; if a migration
+fails, `backend` exits and `docker compose logs backend` shows why.
+
+#### 3. Verify
 
 ```bash
-# Backend
-docker images | grep magnetite/backend
-
-# Frontend
-docker images | grep magnetite/frontend
-```
-
-#### 3. Run Migrations
-
-```bash
-# Check for new migrations
-ls -la backend/migrations/
-
-# Run migrations before updating containers
-docker-compose run --rm backend /app/migrate.sh
-```
-
-#### 4. Stop Services Gracefully
-
-```bash
-docker-compose stop backend
-```
-
-#### 5. Update and Start
-
-```bash
-docker-compose up -d
-```
-
-#### 6. Verify
-
-```bash
-# Check health
 curl http://localhost:8080/health
-
-# Check logs
-docker-compose logs -f backend
+docker compose logs -f backend
 ```
 
 ### Native Update (Rust Backend)
@@ -130,10 +111,17 @@ git checkout tags/vx.x.x -b vx.x.x
 cargo build --release
 ```
 
-#### 3. Run Migrations
+#### 3. Migrations
+
+Migrations run automatically when `magnetite-backend` starts
+(`sqlx::migrate!` in `backend/src/db/pool.rs`) — nothing to run separately.
+`backend/tools/migrate.sh` (note the path: `backend/tools/`, not
+`backend/migrate.sh`) is a standalone operator script for manual
+up/down/status/reset if you need finer control than "apply everything on
+boot":
 
 ```bash
-DATABASE_URL=$DATABASE_URL ./migrate.sh
+DATABASE_URL=$DATABASE_URL ./backend/tools/migrate.sh status
 ```
 
 #### 4. Start Service
@@ -160,26 +148,29 @@ fly logs
 
 ### Docker Compose
 
+There is no image to `pull` — rebuild from source (see the correction note
+above):
+
 ```bash
 # Single command update
-docker-compose pull && docker-compose up -d
+git pull && docker compose up -d --build
 
-# Update specific service
-docker-compose pull backend && docker-compose up -d backend
-
-# Force rebuild
-docker-compose build --no-cache backend
-docker-compose up -d backend
+# Force a clean rebuild of one service
+docker compose build --no-cache backend
+docker compose up -d backend
 ```
 
 ### Kubernetes
 
-```bash
-# Update images
-kubectl set image deployment/magnetite-backend backend=magnetite/backend:x.x.x
-kubectl set image deployment/magnetite-frontend frontend=magnetite/frontend:x.x.x
+`deploy/k8s/` (see [deploy.md](./deploy.md)) references `ghcr.io/magnetite/*`
+image names, but **no workflow in this repo builds or pushes them** — that is
+a gap in the manifests, not a published registry you can pull from. Build and
+push to your own registry first, then point the deployment at it:
 
-# Check rollout
+```bash
+docker build -t your-registry.example/magnetite-backend:x.x.x -f Dockerfile.backend .
+docker push your-registry.example/magnetite-backend:x.x.x
+kubectl set image deployment/magnetite-backend backend=your-registry.example/magnetite-backend:x.x.x
 kubectl rollout status deployment/magnetite-backend
 ```
 
@@ -187,41 +178,30 @@ kubectl rollout status deployment/magnetite-backend
 
 ### Docker Rollback
 
-#### 1. Identify Previous Image
+There is no previous image tag to fall back to (nothing is published) — roll
+back the source and rebuild:
 
 ```bash
-# List available images
-docker images | grep magnetite
-
-# Use specific previous tag
-docker-compose pull backend
-docker tag magnetite/backend:previous magnetite/backend:latest
+git checkout tags/vPREVIOUS
+docker compose up -d --build
 ```
 
-#### 2. Restore Database
+Restore the database separately if the rolled-back version's schema differs:
 
 ```bash
-# Stop services
-docker-compose stop backend frontend
-
-# Restore database
-gunzip < backups/magnetite_pre_update_20250119_120000.sql.gz | docker-compose exec -T postgres psql -U magnetite -d magnetite
-```
-
-#### 3. Restart Services
-
-```bash
-docker-compose up -d
+docker compose stop backend frontend
+gunzip < backups/magnetite_pre_update_20250119_120000.sql.gz | docker compose exec -T postgres psql -U postgres -d magnetite
+docker compose up -d
 ```
 
 ### Kubernetes Rollback
 
+Only meaningful once you are pushing your own tags (see above — this repo
+does not publish any):
+
 ```bash
-# Rollback to previous revision
 kubectl rollout undo deployment/magnetite-backend
 kubectl rollout undo deployment/magnetite-frontend
-
-# Check status
 kubectl rollout status deployment/magnetite-backend
 ```
 

@@ -1,244 +1,151 @@
 # Docker Deployment
 
-Deploy Magnetite using Docker Compose.
+Deploy Magnetite's pre-decentralization backend/frontend using Docker Compose.
+
+> **Corrected 2026-07-31.** This page previously described three services
+> that do not exist in this repo (`api`, `game-host`, `websocket` as
+> separately-pulled `magnetite/api`, `magnetite/game-host`,
+> `magnetite/websocket` images), env vars this codebase never reads
+> (`PROTOCOL_FEE_BPS` — deleted, see [payments.md](../payments.md);
+> `S3_BUCKET`/AWS SES creds under the wrong names; `RATE_LIMIT_*`), and backup
+> commands against container names Compose never assigns (`magnetite-db-1`
+> — the real service is named `postgres`, not `db`). None of it was ever
+> published or built by any workflow in `.github/workflows/`. This page now
+> matches the actual, tracked [`docker-compose.yml`](../../docker-compose.yml)
+> at the repo root.
 
 ## docker-compose.yml Reference
 
+The real compose file builds two images from source (`Dockerfile.backend`,
+`Dockerfile.frontend`) rather than pulling published ones, and has exactly
+four required services plus one opt-in profile:
+
 ```yaml
-version: '3.8'
-
 services:
-  api:
-    image: magnetite/api:${VERSION:-latest}
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
+  backend:
+    build: { context: ., dockerfile: Dockerfile.backend }
+    ports: ["${BACKEND_PORT:-8080}:8080"]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - JWT_SECRET=${JWT_SECRET}
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./logs:/app/logs
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/magnetite
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on: [postgres, redis]
 
-  game-host:
-    image: magnetite/game-host:${VERSION:-latest}
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-    depends_on:
-      - db
-      - redis
-    deploy:
-      replicas: 2
+  frontend:
+    build: { context: ., dockerfile: Dockerfile.frontend }
+    ports: ["${FRONTEND_PORT:-3000}:80"]
+    depends_on: [backend]
 
-  websocket:
-    image: magnetite/websocket:${VERSION:-latest}
-    restart: unless-stopped
-    ports:
-      - "8081:8081"
+  postgres:
+    image: postgres:16-alpine
     environment:
-      - REDIS_URL=${REDIS_URL}
-    depends_on:
-      - redis
-
-  db:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      POSTGRES_DB: magnetite
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - redisdata:/data
+    command: redis-server --appendonly yes
+    volumes: ["redis_data:/data"]
+
+  # Opt-in only — `docker compose --profile media up`. Not a dependency of
+  # anything above.
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    profiles: [media]
 
 volumes:
-  pgdata:
-  redisdata:
+  postgres_data:
+  redis_data:
 ```
+
+This is a condensed view — see the tracked `docker-compose.yml` for the exact,
+current version (health checks, port variables, volumes).
 
 ## Environment Variables
 
-### Required
+The full reference lives in [environment-variables.md](./environment-variables.md)
+and [`.env.example`](../../.env.example) at the repo root — copy the latter to
+`.env` and fill it in; `docker compose` reads it automatically. The
+payment-related variables that actually exist are:
 
 ```bash
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/magnetite
-POSTGRES_DB=magnetite
-POSTGRES_USER=magnetite
-POSTGRES_PASSWORD=secure_password_here
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# Security
-JWT_SECRET=your_256_bit_secret_key_here
-```
-
-### Optional
-
-```bash
-# Server
-API_PORT=8080
-WS_PORT=8081
-LOG_LEVEL=info
-
-# Rate Limiting
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_REQUESTS=100
-
-# Storage
-S3_BUCKET=magnetite-uploads
-S3_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-
-# Email
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=notifications@example.com
-SMTP_PASSWORD=smtp_password
-
-# Payments (non-custodial crypto — no provider account needed)
-# `mock` issues deterministic signed receipts fully offline. The node holds no
-# funds: no deposits, no withdrawals, no payouts.
+# Non-custodial crypto. `mock` (default) is fully offline and holds no funds.
 PAYMENT_RAIL=mock
-# Protocol fee in basis points, taken on top of the subtotal. The developer
-# receives the whole subtotal.
-PROTOCOL_FEE_BPS=0
+# Only meaningful for the (unwired-into-this-repo) real chain rails:
+CHAIN_RPC_URL=
+CHAIN_ID=
+STABLECOIN_ADDRESS=
 # Only if this node sells hosting or paid tiers:
 OPERATOR_WALLET_PUBKEY=
-
-# Comms — builtin needs no external service; matrix|jitsi|livekit|owncast fall
-# back to builtin when unconfigured.
-COMMS_PROVIDER=builtin
-
-# Media — optional and per-operator. Empty by default; the backend has no
-# dependency on a media server. In docker-compose MediaMTX is behind the `media`
-# profile: docker compose --profile media up
-MEDIA_SERVER_BASE_URL=
 ```
 
-## Volume Management
+There is **no** `PROTOCOL_FEE_BPS` — it was deleted along with the platform-fee
+model; see [Payments](../payments.md#there-is-no-protocol-fee). There is no
+`S3_BUCKET`/`RATE_LIMIT_*` in this codebase today.
 
-### Default Volumes
+## Backup and Restore
 
-| Volume | Host Path | Description |
-|--------|-----------|-------------|
-| pgdata | postgres_data | Database files |
-| redisdata | redis_data | Redis persistence |
-| logs | ./logs | Application logs |
-
-### Backup Database
+Service names in the real compose file are `postgres` and `redis`, not `db`
+and container-suffixed names — use `docker compose exec <service>`, not
+`docker exec <project>-<service>-1` (the latter is fragile across Compose
+versions and project-name overrides):
 
 ```bash
-# Create backup
-docker exec magnetite-db-1 pg_dump -U magnetite magnetite > backup.sql
+# Database backup
+docker compose exec postgres pg_dump -U postgres magnetite > backup.sql
 
-# Restore from backup
-docker exec -i magnetite-db-1 psql -U magnetite magnetite < backup.sql
+# Database restore
+docker compose exec -T postgres psql -U postgres magnetite < backup.sql
+
+# Redis snapshot
+docker compose exec redis redis-cli BGSAVE
+docker compose cp redis:/data/dump.rdb ./redis_backup.rdb
 ```
-
-### Backup Redis
-
-```bash
-# Save RDB snapshot
-docker exec magnetite-redis-1 redis-cli BGSAVE
-
-# Copy dump file
-docker cp magnetite-redis-1:/data/dump.rdb ./redis_backup.rdb
-```
-
-## Updates and Backups
-
-### Update Services
-
-```bash
-# Pull latest images
-docker compose pull
-
-# Restart services
-docker compose up -d
-
-# View logs
-docker compose logs -f api
-```
-
-### Backup Script
 
 ```bash
 #!/bin/bash
 # backup.sh
-
 DATE=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="./backups"
+mkdir -p "$BACKUP_DIR"
 
-mkdir -p $BACKUP_DIR
-
-# Database backup
-docker exec magnetite-db-1 pg_dump -U magnetite magnetite > $BACKUP_DIR/db_$DATE.sql
-
-# Redis backup
-docker exec magnetite-redis-1 redis-cli BGSAVE
-sleep 1
-docker cp magnetite-redis-1:/data/dump.rdb $BACKUP_DIR/redis_$DATE.rdb
-
-# Config backup
-cp .env $BACKUP_DIR/env_$DATE.bak
-
+docker compose exec postgres pg_dump -U postgres magnetite > "$BACKUP_DIR/db_$DATE.sql"
+docker compose exec redis redis-cli BGSAVE
+cp .env "$BACKUP_DIR/env_$DATE.bak"
 echo "Backup complete: $BACKUP_DIR"
 ```
 
-### Restore
+## Updating
+
+There is no published image to `docker compose pull` — rebuild from source:
 
 ```bash
-# Stop services
-docker compose down
-
-# Restore database
-docker exec -i magnetite-db-1 psql -U magnetite magnetite < backups/db_20240115_103000.sql
-
-# Restore Redis
-docker cp backups/redis_20240115_103000.rdb magnetite-redis-1:/data/dump.rdb
-
-# Start services
-docker compose up -d
+git pull
+docker compose up -d --build
+docker compose logs -f backend
 ```
 
 ## Health Checks
 
 ```bash
-# API health
 curl http://localhost:8080/health
-
-# Game host health
-curl http://localhost:8080/health/game-host
-
-# WebSocket health
-curl http://localhost:8081/health
 ```
+
+There is no separate `game-host` or `websocket` service or health endpoint in
+this stack — WebSocket traffic is served by the same `backend` process on the
+same port. The standalone `magnetite-runtime` node (the decentralized-redesign
+authoritative server, not part of this compose file) is documented separately
+in [Hosting a server](../hosting-a-server.md).
 
 ## Resource Limits
 
 ```yaml
 services:
-  api:
+  backend:
     deploy:
       resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '1'
-          memory: 1G
+        limits: { cpus: '2', memory: 2G }
+        reservations: { cpus: '1', memory: 1G }
 ```
