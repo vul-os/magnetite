@@ -159,9 +159,19 @@ struct PaymentSplit { developer: Split, operator: Option<Split>, protocol_fee_bp
     `verify_replay`-settles-a-wager story is a design intent, not a code path.
 - **Chain:** stablecoin (USDC) on an L2 (Base/Arbitrum) + payment channels for micro-txns, OR Solana
   (Ed25519-native → identity key can double as wallet key). Keep on-chain state minimal. Configurable.
+  **Superseded, 2026-07-30: the chain decision is Stellar** — see `ALIGNMENT.md`'s "DECISION: Stellar"
+  block for the full reasoning. `magnetite-stellar-rail` exists as a landed, tested, standalone crate
+  (`docs/cross-repo-backlog.md` A12) but is **not yet wired into `backend`'s `PAYMENT_RAIL` selector**,
+  which today still only recognizes `mock`/`solana` — see `docs/payments.md` for the current, accurate
+  per-rail status. `magnetite-solana-rail` has not been deleted (blocked, see A12) and both crates coexist
+  in the tree right now.
 - **Default (dev/test):** `MockPaymentRail` — deterministic signed receipts, no chain, so CI runs offline.
 - **Points/XP:** stay OFF-chain, signed per-game ledgers. Not money. Not tokenized by default.
-- Protocol fee: checkout has a `protocol_fee_bps` param, **default 0** (decide later via governance).
+- ~~Protocol fee: checkout has a `protocol_fee_bps` param, **default 0**~~ — **stale.** There is no
+  protocol fee and no `protocol_fee_bps` field anywhere in the money path today (the `PaymentSplit`
+  struct above is the pre-redesign shape too: the real one is `Vec<Leg>`, not
+  `{developer, operator, protocol_fee_bps}`). See `docs/payments.md` — a system with no central server
+  cannot enforce a mandatory fee; what replaced it is a voluntary `Role::Stewards` leg.
 
 ### 3.7 `InputProvider` (where input comes from — and what it can be proven to be)
 

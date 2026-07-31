@@ -1,5 +1,130 @@
 # Changelog
 
+## [Unreleased] — Brand, docs restructure, Stellar rail landed
+
+### Added
+
+- **`magnetite-stellar-rail`** (backlog A12): a real, standalone native-USDC-on-
+  Stellar `PaymentRail` — the ten fail-closed verification checks ported from
+  `magnetite-solana-rail`, a compiled-in stewards address
+  (`MAGNETITE_STEWARDS_WALLET_STELLAR`) with the same devnet-only-override
+  pattern, and `DUST_FLOOR_STROOPS`. No dependency, path or git, on the
+  sibling `patala` repo. **Not wired into `backend`'s `PAYMENT_RAIL` selector
+  yet** (blocked on a `backend/` territory conflict, see
+  `docs/cross-repo-backlog.md` A12) and has never settled a payment itself —
+  the one verified Stellar testnet settlement to date belongs to the sibling
+  `patala-stellar` crate, not this one. See `docs/payments.md`.
+- **A26 — tiered settlement wired into the Stellar rail.** A Horizon miss or
+  RPC failure now degrades to `Settlement::SignedUnsettled` rather than a hard
+  refusal; a chain-confirmed failure still refuses outright.
+  `magnetite-web-host` keeps a conservative refuse-by-default policy for the
+  unsettled tier by deliberate choice, documented in `entitlement.rs`.
+- **Full PNG icon set rendered from `brand/logo.svg`** and wired into the
+  site/app manifests, favicons and docs assets — no icon in this repo is
+  hand-drawn or re-derived from anything but the one approved source file.
+- **Research notes**: `docs/a25-storefront-tract-assessment.md` (A25 — the
+  TRACT-shaped storefront gap; recommendation is a disclosure, not a
+  migration), `docs/folder-transport-assessment.md` (A23 — FlowStock's
+  folder-transport pattern), `docs/zero-third-party-path.md` (A22 — what
+  needs nobody else, and where a third party is genuinely unavoidable),
+  `docs/stellar-history-retention.md` (A26 — what degrades if Horizon prunes
+  history, and why it fails closed), and a node-deploy recipe distinct from
+  the legacy backend's (A21, `97fa148`/`9f00917`).
+- **`site/docs.html` nav rebuilt user-first** from a single `DOCS`
+  source-of-truth array (slug/title/group), promoting 16 chapters that
+  previously existed only under `docs/` (self-hosting, troubleshooting,
+  notification preferences, content rating, moderation, blocking,
+  economy/marketplace, security, API reference, the moat, cross-repo
+  backlog, roadmap, decentralization) into the interactive site.
+- Three hand-authored inline-SVG illustrations added to the landing page.
+
+### Changed
+
+- **README.md restructured to the VulOS product-repo standard**: added the
+  "Part of VulOS" banner and a dedicated section, renamed `## Overview` to
+  `## What is magnetite?`, reordered Contributing ahead of License, and added
+  a `## Configuration` section distinguishing the CLI-flag-only node binary
+  from the legacy `.env`-driven backend/frontend. Its "What is magnetite?"
+  opening now leads with the reproducibility claim this product is actually
+  sharpest about — `verify_replay` and its tamper-detection test — cited by
+  file:line rather than asserted.
+- Site meta tags, manifest, robots.txt and sitemap added/corrected; a stale
+  app-manifest claim fixed; the OG card fixed (the description was being
+  clipped mid-sentence); label crowding and sub-12px type fixed across the
+  landing and docs after actually rendering and measuring the pages, not just
+  reading the source.
+- `magnetite-seams`'s `PaymentSplit` moved from a fixed
+  `{developer, operator, protocol_fee_bps}` shape to `Vec<Leg>` (A13/A14) —
+  co-developers, publishers, operator shares and the voluntary stewards
+  contribution are now the same code path and the same sum-exact arithmetic,
+  with a per-rail dust floor (skipped, never fatal) rather than a seam-wide
+  constant.
+- `magnetite-seams`: Identity verification now follows the live provider
+  (A7) instead of a hard-coded check; a rotated key keeps the same identity
+  (A8); `BlobStore::get_range` added so range reads are expressible (A9, not
+  yet wired into the tamper-checked serving path — deliberately, see
+  `magnetite-web-host`'s A9 commit); adopted evermesh's EM-1 chunk-tree
+  primitive with no dependency (A24).
+
+### Fixed
+
+- **A live 10,000× scale bug in payment-analytics reporting (B5)** — and the
+  test that would have hidden it, in the same pattern this suite has now
+  found more than once: a test asserting the wrong unit rather than the
+  right one.
+- `docs/self-hosting/index.md`, `run-it-all.md`, `local-infra.md` still
+  cloned `github.com/magnetite-platform/magnetite` — the wrong org, missed
+  when `site/docs/self-hosting.md` was corrected to `vul-os` earlier.
+  `CONTRIBUTING.md` had the same defect twice.
+- **README.md documented `cargo build/test/clippy --workspace` and
+  `cargo run --package … `, none of which run** — there is no root
+  `Cargo.toml` (14 standalone crates, by design; see the comment atop
+  `magnetite-seams/Cargo.toml`), confirmed by running each command against a
+  clean checkout. Replaced with the per-crate commands `.github/workflows/
+  ci.yml` actually uses.
+- **`docs/self-hosting/quickstart.md`, `docker.md`, `updating.md`** referenced
+  container images (`magnetite/app`, `magnetite/backend:latest`,
+  `magnetite/api`, `magnetite/game-host`) that are not published anywhere —
+  no workflow in this repo pushes to Docker Hub or GHCR; `deploy.yml` deploys
+  straight to Fly.io. Rewrote the compose examples to build from the tracked
+  `Dockerfile.backend`/`Dockerfile.frontend`, matching the real
+  `docker-compose.yml`; added the same gap as an explicit caveat in
+  `deploy.md`'s k8s/Nomad image table.
+- **Fabricated commands removed**: `docker-compose exec backend migrate` /
+  `create-admin` (the runtime image contains only the compiled binary —
+  migrations run automatically via `sqlx::migrate!` at startup, and there is
+  no admin-creation CLI); `run-it-all.md`'s `sqlx migrate run`,
+  `/api/v1/admin/seed`, and `magnetite register --repo …` (the real CLI has
+  no `register`/`token create` subcommand — replaced with the actual
+  `POST /api/v1/developer/games/scaffold` flow).
+- `docs/payments.md` predated `magnetite-stellar-rail` — added a full section
+  with the same "read this before promising anything" honesty as the
+  existing Solana section, and corrected the two-rail table to three,
+  including the fact that the Stellar rail is not yet reachable from
+  `PAYMENT_RAIL` at all.
+- `docs/self-hosting/deploy.md` had two `hosting-a-server.md` links missing
+  the `../` needed to resolve from `docs/self-hosting/` — found by a
+  coverage-counted link checker (346 relative links/images across 83 files).
+- `docs/index.md` was missing 16 real, current chapters with no inbound link
+  from anywhere in the tree (7 of 8 `docs/moat/*.md` files, and 14 standalone
+  feature/assessment pages) — added three new index sections linking all of
+  them. `docs/HANDOVER.md`, a one-time session note whose own claims were
+  already overtaken same-day by later commits, marked historical rather than
+  left to be mistaken for current status.
+- `ci/rust-crates.json` now the enforced single source of truth for which
+  Rust crates CI gates — `scripts/ci-crate-coverage.sh` fails the build if a
+  crate on disk is missing from it, closing the hole where 13 of 14 crates
+  compiled, tested and linted nowhere until this wave.
+- `app-screenshots.mjs` no longer rewrites its own tracked subject when run.
+- Local `.env` files had no `.gitignore` rule at all in this repo; added.
+
+### Security
+
+- Fly.io deploy workflow reviewed; `deploy/k8s`/`deploy/nomad` manifests'
+  plaintext `ws://` shipped as-is is now a loud, documented gap rather than a
+  silent one (`b647328`), and a verified `wss://` reverse-proxy recipe for
+  the standalone node is documented (A19, `97fa148`).
+
 ## [Unreleased] — Repository structure
 
 ### Security
