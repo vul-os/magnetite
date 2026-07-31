@@ -225,16 +225,6 @@
   .theme-seg button:hover { color: var(--ink-2); }
   .theme-seg button svg { width: 15px; height: 15px; }
   .theme-seg button[aria-pressed='true'] { background: var(--elevated); color: var(--field-text); box-shadow: var(--sh-1); }
-
-  .vulos {
-    display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px;
-    border: 1px solid var(--line); border-radius: 3px; background: var(--sunk);
-    color: var(--ink-2); font-size: 12.5px; transition: border-color .18s, color .18s;
-  }
-  .vulos:hover { border-color: var(--line-2); color: var(--ink); }
-  .vulos img { width: 16px; height: 16px; border-radius: 3px; }
-  @media (max-width: 640px) { .vulos .label { display: none; } }
-
   /* ── Sections ──────────────────────────────────────────────────────── */
   .section { padding: clamp(46px, 6vw, 84px) 0; border-top: 1px solid var(--line); }
   .section.tinted { background: linear-gradient(180deg, transparent, var(--surface-2) 6%, var(--surface-2) 94%, transparent); }
@@ -534,6 +524,17 @@
     :root.motion .resim.armed .rrow { opacity: 1; }
     *, *::before, *::after { transition-duration: .001ms !important; }
   }
+
+  /* ── Vulos suite chrome — identical on every product landing ───────────────
+     Two elements, and only two: a logo-only home button in the top bar, and
+     one line in the footer. Deliberately free of repo variables so the block
+     is byte-identical across the suite and can be diffed as one thing. */
+  .vulos-home { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto; opacity: .72; transition: opacity .15s ease, transform .15s ease; }
+  .vulos-home:hover, .vulos-home:focus-visible { opacity: 1; transform: translateY(-1px); }
+  .vulos-home img { display: block; width: 22px; height: 22px; border-radius: 6px; }
+  .vulos-foot { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; line-height: 1.45; text-decoration: none; color: inherit; opacity: .85; transition: opacity .15s ease; }
+  .vulos-foot:hover { opacity: 1; text-decoration: none; }
+  .vulos-foot img { display: block; width: 18px; height: 18px; border-radius: 5px; flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -576,10 +577,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
         </button>
       </div>
-      <a class="vulos" href="https://vulos.org/projects" target="_top" aria-label="Back to the Vulos suite">
-        <img src="./assets/vulos-logo.png" alt="" aria-hidden="true" width="16" height="16" />
-        <span class="label">Vulos</span>
-      </a>
+      <a class="vulos-home" href="https://vulos.org" target="_blank" rel="noopener" title="Vulos — open, self-hostable software" aria-label="Vulos — open, self-hostable software"><img src="./assets/vulos-logo.png" alt="" width="22" height="22"></a>
     </div>
   </div>
 </header>
@@ -927,7 +925,7 @@
       <div class="sec-head">
         <span class="eyebrow-tag m-sm">Get started</span>
         <h2>A game is a crate that implements <em>one trait</em>.</h2>
-        <p class="lead">The dev loop needs no server, no account and no network — and it's the path most exercised in the repository.</p>
+        <p class="lead">The dev loop needs no server, no account and no network — and it's the path most exercised in the repository. Licensed <a href="https://github.com/vul-os/magnetite/blob/main/LICENSE-MIT" target="_blank" rel="noopener noreferrer">MIT OR Apache-2.0</a>.</p>
       </div>
       <div class="two" style="margin-top: 8px">
         <div class="term">
@@ -957,31 +955,14 @@
     </div>
   </section>
 
-  <!-- ══ Vulos ════════════════════════════════════════════════════════ -->
-  <section class="section">
-    <div class="wrap">
-      <div class="band">
-        <img src="./assets/vulos-logo.png" alt="Vulos" width="44" height="44" />
-        <div>
-          <h3>Listed alongside the Vulos suite</h3>
-          <p><a href="https://vulos.org/projects" target="_top" style="color:var(--ink);font-weight:500">Vulos</a> is a family of open, self-hostable software. magnetite is fully independent — it runs on hardware you control, needs no Vulos account and no Vulos infrastructure — and shares the suite's position that software should work on your own machine first and reach for a network second.</p>
-          <a class="more" href="https://vulos.org/projects" target="_top">Explore Vulos →</a>
-        </div>
-      </div>
-    </div>
-  </section>
 </main>
 
 <footer class="foot">
   <div class="wrap foot-in">
-    <div class="l">
-      <img src="./assets/vulos-logo.png" alt="Vulos" width="17" height="17" />
-      <span>Listed on <a href="https://vulos.org/projects" target="_top" style="color:var(--ink)">Vulos</a> — open, self-hostable software. magnetite is standalone and mid-redesign.</span>
-    </div>
+    <a class="vulos-foot" href="https://vulos.org" target="_blank" rel="noopener"><img src="./assets/vulos-logo.png" alt="" width="18" height="18"><span>Part of <strong>Vulos</strong> — open, self-hostable software</span></a>
     <nav>
       <a href="./docs.html">Docs</a>
       <a href="https://github.com/vul-os/magnetite" target="_blank" rel="noopener noreferrer">GitHub</a>
-      <a href="https://vulos.org/projects" target="_top">Vulos suite</a>
     </nav>
   </div>
 </footer>
