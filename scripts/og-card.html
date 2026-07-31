@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  magnetite — OG/Twitter share card source.
+
+  This is the single source of truth for site/assets/og-card.png. Never
+  hand-edit the PNG — regenerate it from this file with
+  `node scripts/render-og-card.mjs` (see that script's header). Copy is
+  card-specific (short, landing the one differentiator worth sharing), not
+  the long meta description reused verbatim — that produced a card that read
+  as clipped mid-sentence.
+
+  Brand mark reproduced verbatim from brand/logo.svg (do not redraw it — see
+  brand/logo.svg's own standing rule). Amber #F5A524 / tile #1A1A25 are the
+  brand mark's own colours, not the site's violet/magenta "field record"
+  editorial palette — the card represents the brand, the site represents the
+  page.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face {
+    font-family: 'Instrument Serif';
+    src: url('../site/fonts/instrument-serif.woff2') format('woff2');
+    font-weight: 400; font-style: normal;
+  }
+  @font-face {
+    font-family: 'IBM Plex Sans Var';
+    src: url('../site/fonts/ibm-plex-sans-var.woff2') format('woff2-variations');
+    font-weight: 100 700; font-style: normal;
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    src: url('../site/fonts/ibm-plex-mono-600.woff2') format('woff2');
+    font-weight: 600; font-style: normal;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; background: #F5A524; overflow: hidden; }
+  .wrap { width: 1200px; height: 630px; display: flex; align-items: center; padding: 0 88px; gap: 56px; }
+  .tile { flex: none; width: 220px; height: 220px; border-radius: 46px; background: #1A1A25; }
+  .copy { flex: 1; }
+  .word {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400; color: #14121A; font-size: 92px; letter-spacing: -0.01em; line-height: 1;
+  }
+  .desc {
+    margin-top: 28px;
+    font-family: 'IBM Plex Sans Var', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-weight: 500;
+    color: #2B2410; font-size: 32px; line-height: 1.4; max-width: 760px;
+  }
+  .foot {
+    margin-top: 40px;
+    font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    font-weight: 600;
+    font-size: 21px; letter-spacing: 0.14em; color: #5C4B12;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <svg class="tile" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="magnetite">
+      <rect width="120" height="120" rx="26" fill="#1A1A25"/>
+      <g transform="translate(60,48)">
+        <path d="M -20 -6 V -22 A 20 20 0 0 1 20 -22 V -6" fill="none" stroke="#F5A524" stroke-width="15" stroke-linecap="round"/>
+        <rect x="-27" y="-6" width="14" height="18" rx="4" fill="#F5A524"/>
+        <rect x="13" y="-6" width="14" height="18" rx="4" fill="#9CA3AF"/>
+      </g>
+      <path d="M60 70 L71 84 L60 98 L49 84 Z" fill="#F5A524"/>
+    </svg>
+    <div class="copy">
+      <div class="word">magnetite</div>
+      <div class="desc">Anyone can re-run the match and check the result.<br>Clients send inputs; a WASM sandbox steps the world.</div>
+      <div class="foot">VULOS.ORG</div>
+    </div>
+  </div>
+</body>
+</html>
