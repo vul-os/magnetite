@@ -20,7 +20,7 @@ gamepad input and automatic lap → points integration.
 
 ## Requirements
 
-- Rust 1.75+
+- Rust 1.91+
 - No extra tooling for `cargo check --no-default-features`
 - Bevy render dependencies for native builds (see Bevy docs)
 - `wasm-bindgen-cli` for WASM builds

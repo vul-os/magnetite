@@ -22,7 +22,7 @@ redesign.
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Rust | 1.82+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Rust | 1.91+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | `wasm32-wasip1` target | — | `rustup target add wasm32-wasip1` |
 | `magnetite` CLI | — | `cargo install --path magnetite-cli` |
 

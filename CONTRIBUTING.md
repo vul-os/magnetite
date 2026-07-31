@@ -49,7 +49,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 | Tool | Version | Notes |
 |------|---------|-------|
-| Rust | 1.82+ | Install via [rustup](https://rustup.rs); see [README.md](README.md#development) — there is no root `Cargo.toml`, build per-crate |
+| Rust | 1.91+ | Install via [rustup](https://rustup.rs); see [README.md](README.md#development) — there is no root `Cargo.toml`, build per-crate |
 | Node.js | 18+ | LTS recommended |
 | PostgreSQL | 15+ | Or use Docker |
 | Docker | Latest | For local database services |

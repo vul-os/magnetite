@@ -28,7 +28,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — build
 # ---------------------------------------------------------------------------
-FROM rust:1.82-slim-bookworm AS builder
+FROM rust:1.91-slim-bookworm AS builder
 
 # Build dependencies (Wasmtime needs a C toolchain for linking).
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -21,7 +21,7 @@ Magnetite SDK.
 
 ## Requirements
 
-- Rust 1.75+
+- Rust 1.91+
 - `cargo` (no other tooling needed for `cargo check`)
 - For a full native build: Bevy render dependencies (SDL2 / Vulkan drivers — see Bevy docs)
 - For WASM: `wasm-pack` or `wasm-bindgen-cli`

@@ -97,7 +97,7 @@ max_machines_running = 3
 The `Dockerfile.fly` creates smaller images using multi-stage builds:
 
 ```dockerfile
-FROM rust:1.75-slim as builder
+FROM rust:1.91-slim as builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev curl && rm -rf /var/lib/apt/lists/*
 COPY backend/Cargo.toml backend/Cargo.lock ./

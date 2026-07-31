@@ -22,7 +22,7 @@ the Studio diverges.
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Rust | 1.75+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Rust | 1.91+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | `wasm32-wasip1` target | — | `rustup target add wasm32-wasip1` |
 | `magnetite` CLI | — | `cargo install --path magnetite-cli` |
 | Docker + Compose | 24+ / 2.20+ | https://docs.docker.com (for the local platform stack) |

@@ -37,7 +37,7 @@ internal network). Matchmaking routes players to the runtime via
 | Tool | Minimum version | Install |
 |------|-----------------|---------|
 | Docker + Docker Compose | v24+ | [docker.com/get-started](https://www.docker.com/get-started/) |
-| Rust + cargo | stable 1.75+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Rust + cargo | stable 1.91+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | rustup `wasm32-wasip1` target | — | `rustup target add wasm32-wasip1` |
 | curl, jq, git | any recent | OS package manager |
 

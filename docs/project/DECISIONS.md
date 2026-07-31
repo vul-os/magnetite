@@ -88,7 +88,7 @@ Note: these are debug-profile numbers. A release build will be ~3-5× faster. Th
   `--host`, `--port`, `--workers`, `--tick-hz`, `--max-players`, `--seed`, `--snapshot-every`;
   loads the wasm via `GameServer::serve_wasm(path, LimitsConfig::default(), cfg)` or falls back
   to an in-process `NativeExecutor::<NopGame>` when `--wasm` is omitted (smoke-test mode).
-- `magnetite-runtime/Dockerfile` — multi-stage (builder: `rust:1.82-slim-bookworm`, runtime:
+- `magnetite-runtime/Dockerfile` — multi-stage (builder: `rust:1.91-slim-bookworm`, runtime:
   `debian:bookworm-slim`); copies the four moat crates + workspace lockfile; builds via
   `cargo build --release --package magnetite-runtime --bin serve`; exposes port 9000.
 - `scripts/run-runtime.sh` — updated to reference `target/release/serve` (not the old name),

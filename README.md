@@ -11,7 +11,7 @@
 **Content-addressed games, deterministic WASM sandboxing, replay-verified anti-cheat, and non-custodial crypto payments.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7b61ff.svg)](LICENSE-MIT)
-[![Rust](https://img.shields.io/badge/Rust-1.82+-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.91+-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![WASM](https://img.shields.io/badge/WASM-wasmtime-654FF0?logo=webassembly&logoColor=white)](https://wasmtime.dev)
 [![Decentralized](https://img.shields.io/badge/Decentralized-no%20cloud-ff4d9d)](DECENTRALIZATION.md)
 [![Self-hostable](https://img.shields.io/badge/Self--hostable-single%20node%20binary-7b61ff)](docs/hosting-a-server.md)
@@ -393,7 +393,10 @@ Interactive docs site (static, no build step): open
 
 ## Development
 
-**Prerequisites:** Rust 1.82+ (with `wasm32-wasip1` target), Node.js 18+.
+**Prerequisites:** Rust 1.91+ (with `wasm32-wasip1` target), Node.js 18+. `backend/`'s
+locked dependency tree (AWS SDK crates) currently requires rustc 1.91.1 or newer
+to even parse — verified by building `backend` with pinned toolchains; anything
+below that fails before compilation starts.
 
 ```bash
 rustup target add wasm32-wasip1

@@ -9,7 +9,7 @@ This guide walks through the complete Magnetite pipeline:
 
 ## Prerequisites
 
-- Rust stable toolchain (1.75+)
+- Rust stable toolchain (1.91+)
 - `wasm32-wasip1` target: `rustup target add wasm32-wasip1`
 - `magnetite` CLI installed (from the workspace): `cargo install --path magnetite-cli`
 
