@@ -349,12 +349,12 @@
 
   /* ── Proof strip: the re-simulation demo, compact ────────────────────── */
   .resim { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); overflow: hidden; box-shadow: var(--sh-2); }
-  .resim-head { display: grid; grid-template-columns: minmax(0, 56px) minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); background: var(--sunk); }
-  .resim-head > div { padding: 10px 13px; color: var(--ink-3-aa); border-right: 1px solid var(--line); }
+  .resim-head { display: grid; grid-template-columns: minmax(0, 68px) minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); background: var(--sunk); }
+  .resim-head > div { padding: 10px 13px; color: var(--ink-3-aa); white-space: nowrap; border-right: 1px solid var(--line); }
   .resim-head > div:last-child { border-right: 0; }
   .resim-scroll { overflow-x: auto; }
   .resim-body { min-width: 480px; }
-  .rrow { display: grid; grid-template-columns: minmax(0, 56px) minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; }
+  .rrow { display: grid; grid-template-columns: minmax(0, 68px) minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; }
   .rrow:last-child { border-bottom: 0; }
   .rrow > div { padding: 8px 13px; border-right: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rrow > div:last-child { border-right: 0; }
@@ -405,8 +405,9 @@
   .shot h3 { font-size: clamp(21px, 2.4vw, 27px); }
   .shot .idx { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; color: var(--ink-3-aa); }
   .shot p { color: var(--ink-2); font-size: 14.5px; margin: 10px 0 0; }
-  .shot .caveat { display: inline-flex; align-items: flex-start; gap: 7px; margin-top: 14px; color: var(--ink-3); font-size: 12.5px; max-width: 46ch; }
+  .shot .caveat { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px; color: var(--ink-3); font-size: 12.5px; max-width: 46ch; }
   .shot .caveat svg { width: 13px; height: 13px; margin-top: 2px; flex: none; color: var(--spec-text); }
+  .shot .caveat .t { flex: 1 1 auto; }
   .shot .frame { transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
   .shot .frame:hover { transform: translateY(-4px); box-shadow: var(--sh-2), 0 0 0 1px var(--field-line); }
 
@@ -430,6 +431,11 @@
   @media (max-width: 860px) { .seam.edge .cols { grid-template-columns: minmax(0, 1fr); gap: 22px; } }
   .seam.edge .cols p { font-size: 13.5px; color: var(--ink-2); margin: 0 0 10px; }
   .seam.edge .frame { margin-top: 4px; }
+  /* This is the one pill whose label is a full sentence rather than a
+     word or two — .pill's global nowrap would run it straight off a
+     360px viewport, and since .page keeps overflow-x:clip that's real
+     lost content, not a scrollbar. Let it wrap here specifically. */
+  .seam.edge .chip { white-space: normal; max-width: 100%; }
 
   /* small inline screenshot inset, used once beside the payment seam */
   .inset-shot { margin-top: 14px; max-width: 320px; }
@@ -600,7 +606,7 @@
 
     <div class="wrap hero-grid">
       <div>
-        <span class="eyebrow m-sm rise d1"><span class="pip"></span>Mid-redesign · the core is real · the network layer is LAN-only</span>
+        <span class="eyebrow m-sm rise d1"><span class="pip"></span>Mid-redesign · the core is real · the network layer is LAN&#8209;only</span>
 
         <h1 class="rise d1">Anyone can <em class="live-ink">re-run</em> the match and check the result.</h1>
 
@@ -654,8 +660,8 @@
       <div class="resim" data-resim>
         <div class="resim-head">
           <div class="m-xs">Tick</div>
-          <div class="m-xs">Host — authoritative</div>
-          <div class="m-xs">Anyone — re-simulated</div>
+          <div class="m-xs">Host</div>
+          <div class="m-xs">Replay</div>
         </div>
         <div class="resim-scroll">
           <div class="resim-body">
@@ -705,7 +711,7 @@
             <p>Nodes advertise themselves; discovery is a phonebook, never an authority. A node measures its own cores and RAM and derives its own shard and player capacity — never a config constant someone assigned it.</p>
             <span class="caveat">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-              Fixture data. Cross-operator routing over the open internet is <b>not built</b> — proven on a LAN only.
+              <span class="t">Fixture data. Cross-operator routing over the open internet is <b>not built</b> — proven on a LAN only.</span>
             </span>
           </div>
           <div class="shot-media">
@@ -727,7 +733,7 @@
             <p>Every game states what's checkable and what isn't, on the page itself: signed build, replay verification, and playable-artifact status, each marked honestly rather than implied by a green checkmark.</p>
             <span class="caveat">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-              This listing: signed build and replay verification both read <b>not attested</b>, plainly, in the UI.
+              <span class="t">This listing: signed build and replay verification both read <b>not attested</b>, plainly, in the UI.</span>
             </span>
           </div>
           <div class="shot-media">
@@ -749,7 +755,7 @@
             <p>No balances to hold — only signed receipts, each independently verifiable against the rail's own signing key. The API reports <code style="color:var(--field-text);font-size:.88em">custodial: false</code>, and the protocol fee defaults to 0&nbsp;bps.</p>
             <span class="caveat">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-              Rail: <b>MOCK</b>. A deterministic offline stub so CI runs with no network — no real payment has ever settled through magnetite.
+              <span class="t">Rail: <b>MOCK</b>. A deterministic offline stub so CI runs with no network — no real payment has ever settled through magnetite.</span>
             </span>
           </div>
           <div class="shot-media">
@@ -883,7 +889,7 @@
             <tr><td>Cluster membership</td><td class="d">Deny-by-default operator allowlist of node public keys, checked at three separate points</td><td><span class="pill live">Running <span style="color:var(--spec-text)">· LAN</span></span></td></tr>
             <tr><td>Session follow</td><td class="d">Signed, single-use redirects move players with their shard; a forged redirect is inert</td><td><span class="pill live">Running <span style="color:var(--spec-text)">· LAN</span></span></td></tr>
             <tr><td>Attested input wire</td><td class="d">Signed events reach a live node over a real socket, rate-limited then verified then gated</td><td><span class="pill live">Running <span style="color:var(--spec-text)">· LAN</span></span></td></tr>
-            <tr><td>WAN / internet fleets</td><td class="d">NAT traversal, relaying, real-world routing between operators not on one LAN</td><td><span class="pill plain">Not built</span></td></tr>
+            <tr><td>WAN / internet fleets</td><td class="d">NAT traversal, relaying, real-world routing between operators not on one LAN</td><td><span class="pill plain">Absent</span></td></tr>
             <tr><td>On-chain payment rail</td><td class="d">Real settlement behind <code>PaymentRail</code>. The Stellar testnet rail lands 70/70 crate tests but is <b>not wired into the backend</b> — <code>payment.rs</code> still panics without <code>mock</code>/<code>solana</code></td><td><span class="pill spec">Mock only</span></td></tr>
             <tr><td>Multi-node Sharded</td><td class="d">The full "Bucket D" topology rung above a single operator's cluster</td><td><span class="pill spec">Specified</span></td></tr>
             <tr><td>DHT discovery</td><td class="d">Trackerless peer discovery behind the same <code>Discovery</code> trait</td><td><span class="pill spec">Specified</span></td></tr>
@@ -896,7 +902,7 @@
 
       <ul class="gaps">
         <li>
-          <b>Internet-scale clusters <span class="pill plain">Not built</span></b>
+          <b>Internet-scale clusters <span class="pill plain">Absent</span></b>
           <span>Shard handoff and cluster membership are real, tested code — over a LAN. No NAT traversal, no relay, no WAN validation. Nodes must already be directly reachable.</span>
         </li>
         <li>
