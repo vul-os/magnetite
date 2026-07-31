@@ -186,7 +186,12 @@
   @media (max-width: 560px) { .wrap { padding: 0 18px; } }
 
   /* Mono tracking ladder — the smaller the label, the wider the tracking. */
-  .m-xs { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; }
+  /* letter-spacing applies AFTER the final character too, so a tracked-out
+     label sits ~.18em wider than its glyphs and pushed the page 3px past a
+     360px viewport. The negative end margin reclaims exactly that trailing
+     space; wrapping keeps long labels from doing it again. */
+  .m-xs { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+          margin-inline-end: -.18em; overflow-wrap: anywhere; }
   .m-sm { font-family: var(--mono); font-size: 12px; letter-spacing: .15em; text-transform: uppercase; }
   .m-md { font-family: var(--mono); font-size: 12.5px; letter-spacing: .11em; text-transform: uppercase; }
 
@@ -233,7 +238,7 @@
 
   /* ── Plate layout: a lab-notebook margin + the content ──────────────── */
   .plate { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 40px; align-items: start; }
-  @media (max-width: 940px) { .plate { grid-template-columns: 1fr; gap: 18px; } }
+  @media (max-width: 940px) { .plate { grid-template-columns: minmax(0, 1fr); gap: 18px; } }
   .margin { position: sticky; top: 92px; color: var(--ink-3-aa); }
   @media (max-width: 940px) { .margin { position: static; display: flex; align-items: center; gap: 12px; } }
   .margin .no { font-family: var(--display); font-size: 34px; line-height: 1; color: var(--line-2); display: block; }
@@ -341,7 +346,7 @@
   .resim-foot b { color: var(--boundary-text); font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
 
   .two { display: grid; grid-template-columns: 1fr 1.12fr; gap: clamp(30px, 4vw, 56px); align-items: start; }
-  @media (max-width: 940px) { .two { grid-template-columns: 1fr; } }
+  @media (max-width: 940px) { .two { grid-template-columns: minmax(0, 1fr); } }
   .two p { color: var(--ink-2); font-size: 15px; }
   .two h3 { font-size: 22px; margin-bottom: 8px; }
 
@@ -364,8 +369,8 @@
 
   /* ── Seam cards ────────────────────────────────────────────────────── */
   .seams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-  @media (max-width: 940px) { .seams { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 640px) { .seams { grid-template-columns: 1fr; } }
+  @media (max-width: 940px) { .seams { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  @media (max-width: 640px) { .seams { grid-template-columns: minmax(0, 1fr); } }
   .seam { background: var(--paper); padding: 24px; transition: background .2s; }
   .seam:hover { background: var(--surface-2); }
   .seam .no { color: var(--ink-3-aa); }
@@ -379,12 +384,12 @@
   .seam.edge { grid-column: 1 / -1; background: var(--paper); border-top: 2px solid var(--boundary); padding: 30px; }
   .seam.edge h3 { color: var(--boundary-text); font-size: 17px; }
   .seam.edge .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 6px; }
-  @media (max-width: 780px) { .seam.edge .cols { grid-template-columns: 1fr; gap: 14px; } }
+  @media (max-width: 780px) { .seam.edge .cols { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
 
   /* ── Plates: screenshots ───────────────────────────────────────────── */
   .shots { display: grid; gap: clamp(34px, 4.6vw, 62px); }
   .shot { display: grid; grid-template-columns: 1fr 1.35fr; gap: clamp(24px, 3.4vw, 46px); align-items: center; }
-  @media (max-width: 940px) { .shot { grid-template-columns: 1fr; } }
+  @media (max-width: 940px) { .shot { grid-template-columns: minmax(0, 1fr); } }
   .shot:nth-child(even) .shot-media { order: -1; }
   @media (max-width: 940px) { .shot:nth-child(even) .shot-media { order: 0; } }
   .shot h3 { font-size: clamp(21px, 2.6vw, 27px); margin-bottom: 10px; }
@@ -438,7 +443,7 @@
   /* ── Gaps ──────────────────────────────────────────────────────────── */
   .gaps { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; margin: 0; padding: 0; }
   .gaps li { list-style: none; background: var(--paper); padding: 20px 22px; display: grid; grid-template-columns: 190px 1fr; gap: 24px; }
-  @media (max-width: 780px) { .gaps li { grid-template-columns: 1fr; gap: 7px; } }
+  @media (max-width: 780px) { .gaps li { grid-template-columns: minmax(0, 1fr); gap: 7px; } }
   .gaps b { font-size: 15px; font-weight: 500; }
   .gaps b .st { display: flex; margin-top: 7px; }
   .gaps span { color: var(--ink-2); font-size: 14px; }
