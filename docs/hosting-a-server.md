@@ -247,7 +247,7 @@ Three routes exist for a player-facing `wss://` endpoint:
 
 1. **A reverse proxy terminating TLS in front of the node** (this section, verified below).
 2. **A tunnel** (ngrok, cloudflared, or the suite's own
-   [Ephor](https://github.com/vul-os/ephor)) — reachability without renting or
+   [Pier](https://github.com/vul-os/pier)) — reachability without renting or
    configuring anything, at the cost of a content-visible L7 hop and, on free
    tiers, a URL that changes on restart.
 3. **rustls + ACME built into the node binary** — the most self-contained
@@ -354,10 +354,10 @@ above deliberately does not set those headers.)
   someone runs it against a real DNS name.
 - **A tunnel is optional and third-party, never a default.** If you use one,
   the tunnel operator is a content-visible L7 hop in the path — the same
-  caveat pango's `CLOUD-NODE.md` §5 states for its own tunnel option. Ephor is
+  caveat pango's `CLOUD-NODE.md` §5 states for its own tunnel option. Pier is
   one tunnel provider among several here, not a dependency: nothing in
   `magnetite-runtime`, `magnetite-cli` or their build files references it, and
-  it must stay that way (see `wede`'s hard, undeclared Ephor dependency for
+  it must stay that way (see `wede`'s hard, undeclared Pier dependency for
   the mistake this is avoiding).
 - **Still open:** WAN validation of the rest of the stack (shard migration,
   membership, session-follow, the attested wire) across two real internet

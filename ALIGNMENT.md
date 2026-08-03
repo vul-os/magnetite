@@ -1,4 +1,4 @@
-# Alignment — kotva substrate, patala rails, ephor optional
+# Alignment — kotva substrate, patala rails, pier optional
 
 **Status: plan, not state.** This document describes a direction agreed in
 design and the work it implies. Nothing here is claimed as built. The audited
@@ -16,12 +16,12 @@ states it in one line:
 > and **never load-bearing**. Coordinators add reach; they never gate function.
 
 Applied to magnetite, that forbids a design in which magnetite needs
-[ephor](https://github.com/vul-os/ephor). If a magnetite node could not host a
+[pier](https://github.com/vul-os/pier). If a magnetite node could not host a
 game without a broker, the broker would be load-bearing and the contract would
 be violated. So:
 
 **Magnetite MUST function completely with zero coordinators.** A developer with
-a laptop, or an operator with a $5 VPS, runs the whole thing alone. Ephor is
+a laptop, or an operator with a $5 VPS, runs the whole thing alone. Pier is
 something you *hire for reach* — never something you wait for.
 
 This also splits magnetite cleanly in two, and the split matters:
@@ -29,12 +29,12 @@ This also splits magnetite cleanly in two, and the split matters:
 | | What it is | Coordinator? |
 |---|---|---|
 | **The authoritative node** | Runs the match. Load-bearing for that match by definition; not swappable mid-match. | **No** — it is a *peer the players chose*, like a TRACT seller's own node. |
-| Relay, indexer, matcher, labeler, arbiter, oracle, payment gateway | Reach, search, moderation, adjudication | **Yes** — ephor's job, all optional |
+| Relay, indexer, matcher, labeler, arbiter, oracle, payment gateway | Reach, search, moderation, adjudication | **Yes** — pier's job, all optional |
 
 Calling the game server a coordinator would claim a swappability it does not
 have. It is a peer. Self-hosting is not the fallback here; it is the default.
 
-## 2. Reachability rungs — ephor is needed for none of the first two
+## 2. Reachability rungs — pier is needed for none of the first two
 
 The current tree is LAN-only, and `status.md` is right about that. But the gap
 is **not primarily a NAT problem** — it is an unvalidated-deployment problem.
@@ -82,7 +82,7 @@ zero third parties in the whole path. The honest blockers for R1 are:
    its own binaries. So for browser↔node, real TLS is **mandatory rather than a
    trusted-network concern**, and the options narrow to: built-in rustls + ACME
    (best for the one-binary-anyone-can-host story), an operator's own reverse
-   proxy, or a tunnel. This is also the one place ephor's
+   proxy, or a tunnel. This is also the one place pier's
    `reachability-adapter` is closer to load-bearing for magnetite than it is
    for FlowStock — worth stating plainly rather than inheriting the sibling's
    posture unexamined.
@@ -106,14 +106,14 @@ zero third parties in the whole path. The honest blockers for R1 are:
    the legacy central backend (port 8080, `/health`, `migrate.sh`), not the
    node.
 
-R2 is where a relay becomes necessary, and then ephor's `relay` kind (built,
+R2 is where a relay becomes necessary, and then pier's `relay` kind (built,
 libp2p Circuit Relay v2 + DCUtR, with a real two-peer loopback proof) is *one*
 option alongside any other Circuit Relay v2 node or your own. Pure reach,
 strictly optional.
 
 ## 3. kotva enters as linked crates, not as a service
 
-This is the part that makes "don't wait for ephor" concrete. kotva ships four
+This is the part that makes "don't wait for pier" concrete. kotva ships four
 real crates, and consumers pin a tag rather than tracking HEAD:
 
 ```toml
@@ -604,7 +604,7 @@ still wrong here, for reasons in Seal's own security docs:
 
 Against §1's coordinator test: accountable yes, self-hostable yes, swappable **no**,
 never-load-bearing **no** — below threshold a paid bundle is *dead*, not degraded.
-Worse than the ephor dependencies §2 is careful about.
+Worse than the pier dependencies §2 is careful about.
 
 **The partial rescue:** if the key vendor is *the developer themselves*, that is the
 same shape §1 already accepts for the authoritative node — a peer the players chose.
@@ -1075,22 +1075,22 @@ provides:
 |---|---|
 | Identity / Auth | `kotva_core::identity` |
 | Naming | `kotva_core::keyname` |
-| Discovery | `kotva_core::pubobj` / `pubsub`; ephor `indexer` for search (optional) |
+| Discovery | `kotva_core::pubobj` / `pubsub`; pier `indexer` for search (optional) |
 | BlobStore | Walrus (hot) / Arweave (permanent) / Filecoin (bulk) bindings |
 | PaymentRail | patala |
-| CommsProvider | ephor `media-relay` + SFrame/MLS (optional) |
-| Reachability | direct at R1; ephor `relay` at R2 (optional) |
+| CommsProvider | pier `media-relay` + SFrame/MLS (optional) |
+| Reachability | direct at R1; pier `relay` at R2 (optional) |
 | Storefront | kotva **TRACT** profile |
-| Moderation | ephor `labeler` (optional) |
-| Matchmaking | ephor `matcher` (optional) |
-| Escrow / dispute | kotva ESCROW + ephor `arbiter` (optional) |
+| Moderation | pier `labeler` (optional) |
+| Matchmaking | pier `matcher` (optional) |
+| Escrow / dispute | kotva ESCROW + pier `arbiter` (optional) |
 
 The ~36 feature modules in `backend/src/api/` are largely absorbed by TRACT and
 DMTAP profiles rather than reimplemented.
 
 ### A contribution back to kotva
 
-Ephor's `compute` kind is marked **provisional** in CONTRACT §5, and its crate
+Pier's `compute` kind is marked **provisional** in CONTRACT §5, and its crate
 is explicit that job submission, execution, result delivery and TEE attestation
 are all future work. Its honest limit is that `attested` visibility trades
 operator-trust for chip-vendor-trust (THREAT-MODEL R-4).
@@ -1103,7 +1103,7 @@ compute, where correctness is *proved* rather than attested.
 
 ## 7. Phases
 
-Each phase is independently useful. Nothing waits on ephor.
+Each phase is independently useful. Nothing waits on pier.
 
 ### Phase 1 — bind and unblock (no coordinators, no chain)
 
@@ -1201,7 +1201,7 @@ what fixes that class of bug rather than the instance. See §4.
 
 ### Phase 5 — hire coordinators, when they are real
 
-16. ephor `relay` for R2 / CGNAT.
+16. pier `relay` for R2 / CGNAT.
 17. `indexer`, `labeler`, `matcher`, `arbiter` as each stops being a scaffold.
 18. Propose the deterministic-`compute` sub-profile.
 
@@ -1212,11 +1212,11 @@ them before writing anything in the same area.
 
 | Repo | Solved | Where |
 |---|---|---|
-| **flowstock** | Reachability: only one side needs to be reachable; pair and hub-and-spoke topologies; `http://` *or* `https://` peer URLs; encryption delegated to LAN/VPN/tunnel; ephor as optional convenience only. Also folder-as-transport. | `docs/SYNC.md` §Topologies, §Network, §Independence first, §Folder sync |
+| **flowstock** | Reachability: only one side needs to be reachable; pair and hub-and-spoke topologies; `http://` *or* `https://` peer URLs; encryption delegated to LAN/VPN/tunnel; pier as optional convenience only. Also folder-as-transport. | `docs/SYNC.md` §Topologies, §Network, §Independence first, §Folder sync |
 | **beepbite** | A shipping patala binding: provider-agnostic interface, build-tag gating so the default build links no gateway code, one env var selects the processor, loud on misconfiguration. Also `canon/`, `money/`, `oplog/`, `nodeid/`, `idempotency/`. | `backend/internal/payments/` |
 | **patala** | The rail substrate itself: `RailClass`, `Settlement`, 20 fiat processors, the crypto rails. | `patala-core/src/capabilities.rs`, `patala-fiat/` |
 | **wibbly** | Rung 1 in practice — a JS/three.js render loop stepping a magnetite wasm authority as `SingleRoom`, no server. | `packages/wibbly-authority` |
-| **kotva / ephor** | The substrate crates and the coordinator kinds. | `crates/kotva-core`, ephor `crates/` |
+| **kotva / pier** | The substrate crates and the coordinator kinds. | `crates/kotva-core`, pier `crates/` |
 
 Two of these change the plan materially: FlowStock's §Network makes Phase 2
 smaller, and BeepBite's `payments/` makes Phase 3's binding a port rather than a
@@ -1299,7 +1299,7 @@ status discipline exists to prevent.
 ## 10. The risk to hold in view
 
 Everything being bound to is pre-alpha. kotva is v0.1.0 "early and evolving".
-Ephor is a pre-alpha reference with six of ten kinds as scaffolds. patala has
+Pier is a pre-alpha reference with six of ten kinds as scaffolds. patala has
 no rail validated against a live network. Magnetite has no payment settled
 through any rail. **Binding four unproven systems together does not produce one
 proven system** — it produces a dependency graph in which nothing ships until

@@ -549,7 +549,7 @@ Score a Seal-gated paid bundle against that:
 
 So this scheme **does reintroduce a load-bearing coordinator**, and it puts it on
 the path of the one thing the player paid for. That is a harder violation than
-anything else in magnetite's design, and it is worse than the two ephor
+anything else in magnetite's design, and it is worse than the two pier
 dependencies §2 worries about, because a relay outage costs you reach and a key
 server outage costs you the product.
 

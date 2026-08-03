@@ -108,7 +108,7 @@ more nuanced than "anyone can run a dumb tracker":
     general public: each player's browser has to be made to trust that root
     first (import it, or click through a per-host exception), which is
     workable for a small invited group and a bad experience for anyone else.
-  - **A tunnel** (ngrok, cloudflared, or the suite's own Ephor) is already
+  - **A tunnel** (ngrok, cloudflared, or the suite's own Pier) is already
     labelled a third party in `docs/hosting-a-server.md` — "the tunnel
     operator is a content-visible L7 hop in the path" — and that stands
     unchanged here. It substitutes one third party (the tunnel operator) for
