@@ -1090,16 +1090,21 @@ DMTAP profiles rather than reimplemented.
 
 ### A contribution back to kotva
 
-Pier's `compute` kind is marked **provisional** in CONTRACT §5, and its crate
-is explicit that job submission, execution, result delivery and TEE attestation
-are all future work. Its honest limit is that `attested` visibility trades
-operator-trust for chip-vendor-trust (THREAT-MODEL R-4).
+There is no `compute` coordinator kind. It was a provisional draft kind that
+**folded into `infra-service`** (CONTRACT §5, "Why there is no separate `compute`
+kind"): hosted/outsourced computation is an `edge-fn` with
+`artifact-source = operator` on a class declaring `gpu-count` — an attribute, not
+a kind — and `"compute"` is now a hard decode-time reject on the wire
+(kotva `18-wire-format.md` §18.8a.1). Pier's `pier-infra-service` crate is a
+scaffold: job submission, execution, result delivery and TEE attestation are all
+future work. Its honest limit is that `attested` visibility trades operator-trust
+for chip-vendor-trust (THREAT-MODEL R-4).
 
 Magnetite's sandbox plus `verify_replay` gives something a TEE cannot:
 **structural verifiability with no hardware trust**, for the class of jobs that
 are deterministic. Anyone re-simulates and locates tampering. That is a
-`compute` sub-profile worth proposing — deterministic, replay-verifiable
-compute, where correctness is *proved* rather than attested.
+DEPOT `edge-fn` sub-profile worth proposing — deterministic, replay-verifiable
+execution, where correctness is *proved* rather than attested.
 
 ## 7. Phases
 
@@ -1203,7 +1208,7 @@ what fixes that class of bug rather than the instance. See §4.
 
 16. pier `relay` for R2 / CGNAT.
 17. `indexer`, `labeler`, `matcher`, `arbiter` as each stops being a scaffold.
-18. Propose the deterministic-`compute` sub-profile.
+18. Propose the deterministic, replay-verifiable `edge-fn` sub-profile (DEPOT/`infra-service`, not a `compute` kind — there is none).
 
 ## 8. Prior art in the family — check here before designing
 
@@ -1299,7 +1304,8 @@ status discipline exists to prevent.
 ## 10. The risk to hold in view
 
 Everything being bound to is pre-alpha. kotva is v0.1.0 "early and evolving".
-Pier is a pre-alpha reference with six of ten kinds as scaffolds. patala has
+Pier is a pre-alpha reference with six of the canonical eleven kinds as
+scaffolds, four built, and one (`custodial-escrow`) not implemented at all. patala has
 no rail validated against a live network. Magnetite has no payment settled
 through any rail. **Binding four unproven systems together does not produce one
 proven system** — it produces a dependency graph in which nothing ships until

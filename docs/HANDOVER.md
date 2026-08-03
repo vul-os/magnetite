@@ -82,7 +82,7 @@ not revert it.
   implementations was the entire point.
 - Finish rewiring `kotva-core` onto `kotva-cbor` and delete its own `cbor.rs`, **keeping
   `kotva-core`'s public API byte-for-byte unchanged** — it is tag-pinned by envoir,
-  ephor and the Go/WASM bindings. If the API cannot be preserved, stop rather than
+  pier and the Go/WASM bindings. If the API cannot be preserved, stop rather than
   change it.
 - The agent reported `cargo package` succeeds, i.e. publication-ready. **It was told not
   to publish.** Crates.io publication is approved in principle and is what lets
