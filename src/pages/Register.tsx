@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getOAuthUrl } from '../api/client';
@@ -19,9 +20,9 @@ export default function Register() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(null);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     if (!termsAccepted) {
@@ -32,12 +33,12 @@ export default function Register() {
     try {
       await register(username, email, password);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
     }
   };
 
-  const handleOAuth = (provider) => {
+  const handleOAuth = (provider: string) => {
     setOauthLoading(provider);
     setError('');
     window.location.href = getOAuthUrl(provider);
@@ -52,7 +53,7 @@ export default function Register() {
         <div className="auth-hero-grain" aria-hidden="true" />
 
         <div className="auth-hero-content">
-          <Link to="/" className="auth-hero-logo" tabIndex="-1">
+          <Link to="/" className="auth-hero-logo" tabIndex={-1}>
             <img src={magnetiteLogo} className="auth-hero-logo-mark" aria-hidden="true" alt="" />
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
