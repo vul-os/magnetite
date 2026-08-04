@@ -11,7 +11,7 @@ import {
 } from '../assets/icons';
 import './CategoryFilter.css';
 
-const categoryIcons = {
+const categoryIcons: Record<string, typeof GameIcon> = {
   Action: GameIcon,
   Adventure: GlobeIcon,
   Strategy: TrophyIcon,
@@ -20,17 +20,24 @@ const categoryIcons = {
   Sports: ChartIcon,
 };
 
+export interface CategoryFilterProps {
+  categories?: string[];
+  selectedCategories?: string[];
+  onCategoryChange: (category: string) => void;
+  onClose?: () => void;
+}
+
 export default function CategoryFilter({
   categories = [],
   selectedCategories = [],
   onCategoryChange,
   onClose,
-}) {
-  const ref = useRef(null);
+}: CategoryFilterProps) {
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (ref.current && !ref.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         onClose?.();
       }
     }
