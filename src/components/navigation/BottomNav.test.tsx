@@ -10,7 +10,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import BottomNav from '../BottomNav';
 
-function renderAt(path) {
+function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <BottomNav />
