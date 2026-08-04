@@ -197,8 +197,11 @@ function App() {
                       <Route path="/privacy" element={<Privacy />} />
                       <Route path="/terms" element={<Terms />} />
                       <Route path="/cookies" element={<Cookies />} />
-                      <Route path="/403" element={<Forbidden />} />
-                      <Route path="/500" element={<ServerError />} />
+                      {/* Forbidden/ServerError (still .jsx) infer a required prop from their
+                          undefaulted destructure — pass explicit undefined to match the prior
+                          no-prop call exactly without touching the untyped page components. */}
+                      <Route path="/403" element={<Forbidden reason={undefined} />} />
+                      <Route path="/500" element={<ServerError onRetry={undefined} />} />
                       <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
                       <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
                       <Route path="/admin/games" element={<AdminRoute><AdminGames /></AdminRoute>} />
