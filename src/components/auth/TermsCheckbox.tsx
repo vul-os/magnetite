@@ -1,4 +1,14 @@
 import { useState } from 'react';
+import type { ChangeEvent } from 'react';
+
+export interface TermsCheckboxProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  error?: string;
+  termsHref?: string;
+  privacyHref?: string;
+  required?: boolean;
+}
 
 export default function TermsCheckbox({
   checked,
@@ -7,10 +17,10 @@ export default function TermsCheckbox({
   termsHref = '/terms',
   privacyHref = '/privacy',
   required = true,
-}) {
+}: TermsCheckboxProps) {
   const [showError, setShowError] = useState(false);
 
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.checked);
     if (e.target.checked) setShowError(false);
   };
