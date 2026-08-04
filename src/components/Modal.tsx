@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from '../i18n/useTranslation';
 import './Modal.css';
 
-type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 
 const sizeClasses: Record<ModalSize, string> = {
   sm: 'modal-sm',

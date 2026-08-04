@@ -1,6 +1,24 @@
-import { useState, useMemo } from 'react';
-import Modal from './Modal';
+import { useState, useMemo, type ReactNode, type Key } from 'react';
+import Modal, { type ModalSize } from './Modal';
 import './Modal.css';
+
+export interface SelectOption {
+  value?: string | number;
+  label: string;
+  description?: string;
+}
+
+interface SelectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: ReactNode;
+  options?: SelectOption[];
+  value?: string | number;
+  onChange: (value: string | number | SelectOption) => void;
+  placeholder?: string;
+  emptyMessage?: string;
+  size?: ModalSize;
+}
 
 export default function SelectModal({
   isOpen,
@@ -12,7 +30,7 @@ export default function SelectModal({
   placeholder = 'Search...',
   emptyMessage = 'No items found',
   size = 'md',
-}) {
+}: SelectModalProps) {
   const [search, setSearch] = useState('');
 
   const filteredOptions = useMemo(() => {
@@ -25,7 +43,7 @@ export default function SelectModal({
     );
   }, [options, search]);
 
-  const handleSelect = (option) => {
+  const handleSelect = (option: SelectOption) => {
     onChange(option.value ?? option);
     onClose();
   };
@@ -72,7 +90,7 @@ export default function SelectModal({
               const isSelected = value === (option.value ?? option);
               return (
                 <button
-                  key={option.value ?? option}
+                  key={(option.value ?? option) as Key}
                   className={`select-item ${isSelected ? 'select-item-selected' : ''}`}
                   onClick={() => handleSelect(option)}
                   role="option"
