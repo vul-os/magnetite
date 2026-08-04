@@ -12,7 +12,25 @@ const colors = {
 
 const SERIES_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, '#a78bfa', '#f472b6'];
 
-function CustomTooltip({ active, payload, label }) {
+export interface ChartSeriesConfig {
+  yKey: string;
+  xKey?: string;
+  name?: string;
+}
+
+interface CustomTooltipPayloadEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: CustomTooltipPayloadEntry[];
+  label?: string | number;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   return (
@@ -32,11 +50,22 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-function formatTimeAxis(value) {
+function formatTimeAxis(value: string | number): string {
   if (!value) return '';
   const date = new Date(value);
-  if (isNaN(date.getTime())) return value;
+  if (isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export interface AreaChartProps {
+  data: Array<Record<string, string | number>>;
+  series?: ChartSeriesConfig[];
+  title?: string;
+  showGrid?: boolean;
+  showLegend?: boolean;
+  showTooltip?: boolean;
+  height?: number;
+  stack?: boolean;
 }
 
 export default function AreaChart({
@@ -48,7 +77,7 @@ export default function AreaChart({
   showTooltip = true,
   height = 300,
   stack = false,
-}) {
+}: AreaChartProps) {
   const xKey = series.length > 0 ? series[0].xKey || 'date' : 'date';
 
   return (
