@@ -62,6 +62,74 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
+// The vi.mock() factory above mocks a broader surface than the real api client
+// currently exposes: `social.blockedUsers` and `auth.logout` are exercised here
+// but do not exist on src/api/client.ts today (pre-existing gap between this
+// suite and the client — noted, not fixed, since that's runtime behavior).
+interface MockedApiExtras {
+  social: { blockedUsers: () => Promise<unknown> };
+  auth: { logout: () => Promise<unknown> };
+}
+const apiExtras = api as unknown as MockedApiExtras;
+
+const mockRefundTransaction = vi.mocked(api.admin.refundTransaction);
+const mockGamesCreate = vi.mocked(api.games.create);
+const mockGamesUpdate = vi.mocked(api.games.update);
+const mockGamesGet = vi.mocked(api.games.get);
+const mockGamesList = vi.mocked(api.games.list);
+const mockBlockUser = vi.mocked(api.social.blockUser);
+const mockUnblockUser = vi.mocked(api.social.unblockUser);
+const mockBlockedUsers = vi.mocked(apiExtras.social.blockedUsers);
+const mockAnalytics = vi.mocked(api.developer.analytics);
+const mockAuthLogout = vi.mocked(apiExtras.auth.logout);
+const mockAuthMe = vi.mocked(api.auth.me);
+
+/** Narrow an unknown catch value down to whatever shape a test needs to read off it. */
+function errInfo(e: unknown): { status?: number; message?: string } {
+  return (e as { status?: number; message?: string } | null) ?? {};
+}
+
+interface RefundResponse {
+  refund_id: string;
+  transaction_id: string;
+  user_id: string;
+  amount: string;
+  provider: string;
+  provider_ref: string | null;
+  status: string;
+}
+
+interface GameResponse {
+  id: string;
+  title?: string;
+  content_rating?: string;
+  developer_id?: string;
+}
+
+interface OkResponse {
+  ok: boolean;
+}
+
+interface BlockedUser {
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+}
+
+interface AnalyticsResponse {
+  game_id: string;
+  daily_active_players: unknown[];
+  session_duration_stats: { avg_duration_secs: number; total_sessions: number };
+  revenue_breakdown: {
+    total_revenue: string;
+    platform_fee: string;
+    developer_earnings: string;
+    session_count: number;
+  };
+  daily_revenue: { date: string; revenue: string; developer_earnings: string; sessions: number }[];
+  daily_playtime: { date: string; total_seconds: number; session_count: number }[];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Refunds
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,16 +148,16 @@ describe('Admin refunds API', () => {
       provider_ref: 'rail_refund_abc',
       status: 'completed',
     };
-    api.admin.refundTransaction.mockResolvedValue(mockResponse);
+    mockRefundTransaction.mockResolvedValue(mockResponse);
 
-    const result = await api.admin.refundTransaction('txn-uuid-456', { reason: 'Customer request' });
+    const result = await api.admin.refundTransaction('txn-uuid-456', { reason: 'Customer request' }) as RefundResponse;
     expect(result.refund_id).toBe('refund-uuid-123');
     expect(result.status).toBe('completed');
     expect(result.provider).toBe('mock');
   });
 
   it('refundTransaction returns provider_unconfigured when no keys set', async () => {
-    api.admin.refundTransaction.mockResolvedValue({
+    mockRefundTransaction.mockResolvedValue({
       refund_id: 'refund-uuid-001',
       transaction_id: 'txn-uuid-001',
       user_id: 'user-uuid-001',
@@ -99,13 +167,13 @@ describe('Admin refunds API', () => {
       status: 'provider_unconfigured',
     });
 
-    const result = await api.admin.refundTransaction('txn-uuid-001', {});
+    const result = await api.admin.refundTransaction('txn-uuid-001', {}) as RefundResponse;
     expect(result.status).toBe('provider_unconfigured');
     expect(result.provider_ref).toBeNull();
   });
 
   it('refundTransaction propagates error on 404 (transaction not found)', async () => {
-    api.admin.refundTransaction.mockRejectedValue(new Error('Transaction not found'));
+    mockRefundTransaction.mockRejectedValue(new Error('Transaction not found'));
 
     await expect(
       api.admin.refundTransaction('nonexistent-txn', {})
@@ -113,7 +181,7 @@ describe('Admin refunds API', () => {
   });
 
   it('refundTransaction propagates error on 403 (non-admin)', async () => {
-    api.admin.refundTransaction.mockRejectedValue(new Error('Forbidden'));
+    mockRefundTransaction.mockRejectedValue(new Error('Forbidden'));
 
     await expect(
       api.admin.refundTransaction('txn-id', {})
@@ -121,7 +189,7 @@ describe('Admin refunds API', () => {
   });
 
   it('refundTransaction supports wise provider for payouts', async () => {
-    api.admin.refundTransaction.mockResolvedValue({
+    mockRefundTransaction.mockResolvedValue({
       refund_id: 'refund-wise-001',
       transaction_id: 'txn-wise-001',
       user_id: 'user-uuid-001',
@@ -131,7 +199,7 @@ describe('Admin refunds API', () => {
       status: 'provider_unconfigured',
     });
 
-    const result = await api.admin.refundTransaction('txn-wise-001', { reason: 'Duplicate payout' });
+    const result = await api.admin.refundTransaction('txn-wise-001', { reason: 'Duplicate payout' }) as RefundResponse;
     expect(result.provider).toBe('wise');
   });
 });
@@ -144,7 +212,7 @@ describe('Content rating in game API', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('games.create sends content_rating field in body', async () => {
-    api.games.create.mockResolvedValue({
+    mockGamesCreate.mockResolvedValue({
       id: 'game-uuid-001',
       title: 'Test Game',
       content_rating: 'teen',
@@ -154,7 +222,7 @@ describe('Content rating in game API', () => {
       title: 'Test Game',
       github_repo: 'https://github.com/user/test',
       content_rating: 'teen',
-    });
+    }) as GameResponse;
 
     expect(result.content_rating).toBe('teen');
     expect(api.games.create).toHaveBeenCalledWith(
@@ -163,58 +231,58 @@ describe('Content rating in game API', () => {
   });
 
   it('games.create accepts "everyone" rating', async () => {
-    api.games.create.mockResolvedValue({
+    mockGamesCreate.mockResolvedValue({
       id: 'game-uuid-002',
       title: 'Kids Game',
       content_rating: 'everyone',
     });
 
-    const result = await api.games.create({ title: 'Kids Game', content_rating: 'everyone' });
+    const result = await api.games.create({ title: 'Kids Game', content_rating: 'everyone' }) as GameResponse;
     expect(result.content_rating).toBe('everyone');
   });
 
   it('games.create accepts "mature" rating', async () => {
-    api.games.create.mockResolvedValue({
+    mockGamesCreate.mockResolvedValue({
       id: 'game-uuid-003',
       title: 'Adult Game',
       content_rating: 'mature',
     });
 
-    const result = await api.games.create({ title: 'Adult Game', content_rating: 'mature' });
+    const result = await api.games.create({ title: 'Adult Game', content_rating: 'mature' }) as GameResponse;
     expect(result.content_rating).toBe('mature');
   });
 
   it('games.update can update content_rating', async () => {
-    api.games.update.mockResolvedValue({
+    mockGamesUpdate.mockResolvedValue({
       id: 'game-uuid-001',
       content_rating: 'mature',
     });
 
-    const result = await api.games.update('game-uuid-001', { content_rating: 'mature' });
+    const result = await api.games.update('game-uuid-001', { content_rating: 'mature' }) as GameResponse;
     expect(result.content_rating).toBe('mature');
   });
 
   it('games.get returns content_rating field', async () => {
-    api.games.get.mockResolvedValue({
+    mockGamesGet.mockResolvedValue({
       id: 'game-uuid-001',
       title: 'Some Game',
       content_rating: 'teen',
       developer_id: 'dev-uuid-001',
     });
 
-    const result = await api.games.get('game-uuid-001');
+    const result = await api.games.get('game-uuid-001') as GameResponse;
     expect(result).toHaveProperty('content_rating');
     expect(['everyone', 'teen', 'mature']).toContain(result.content_rating);
   });
 
   it('games.list returns games with content_rating field', async () => {
-    api.games.list.mockResolvedValue([
+    mockGamesList.mockResolvedValue([
       { id: '1', title: 'Game 1', content_rating: 'everyone' },
       { id: '2', title: 'Game 2', content_rating: 'teen' },
       { id: '3', title: 'Game 3', content_rating: 'mature' },
     ]);
 
-    const games = await api.games.list();
+    const games = await api.games.list() as GameResponse[];
     expect(games.every(g => g.content_rating !== undefined)).toBe(true);
   });
 });
@@ -227,43 +295,43 @@ describe('Block / unblock API', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('blockUser resolves on success', async () => {
-    api.social.blockUser.mockResolvedValue({ ok: true });
+    mockBlockUser.mockResolvedValue({ ok: true });
 
-    const result = await api.social.blockUser('user-to-block');
+    const result = await api.social.blockUser('user-to-block') as OkResponse;
     expect(result.ok).toBe(true);
     expect(api.social.blockUser).toHaveBeenCalledWith('user-to-block');
   });
 
   it('blockUser propagates error when trying to block self', async () => {
-    api.social.blockUser.mockRejectedValue(new Error('Cannot block yourself'));
+    mockBlockUser.mockRejectedValue(new Error('Cannot block yourself'));
 
     await expect(api.social.blockUser('self-id')).rejects.toThrow('Cannot block yourself');
   });
 
   it('unblockUser resolves on success', async () => {
-    api.social.unblockUser.mockResolvedValue({ ok: true });
+    mockUnblockUser.mockResolvedValue({ ok: true });
 
-    const result = await api.social.unblockUser('user-to-unblock');
+    const result = await api.social.unblockUser('user-to-unblock') as OkResponse;
     expect(result.ok).toBe(true);
     expect(api.social.unblockUser).toHaveBeenCalledWith('user-to-unblock');
   });
 
   it('blockedUsers returns list of blocked users', async () => {
-    api.social.blockedUsers.mockResolvedValue([
+    mockBlockedUsers.mockResolvedValue([
       { user_id: 'blocked-1', username: 'bad_actor_1', avatar_url: null },
       { user_id: 'blocked-2', username: 'bad_actor_2', avatar_url: null },
     ]);
 
-    const result = await api.social.blockedUsers();
+    const result = await apiExtras.social.blockedUsers() as BlockedUser[];
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(2);
     expect(result[0].username).toBe('bad_actor_1');
   });
 
   it('blockedUsers returns empty array when no one is blocked', async () => {
-    api.social.blockedUsers.mockResolvedValue([]);
+    mockBlockedUsers.mockResolvedValue([]);
 
-    const result = await api.social.blockedUsers();
+    const result = await apiExtras.social.blockedUsers() as BlockedUser[];
     expect(result).toEqual([]);
   });
 
@@ -290,7 +358,7 @@ describe('Analytics time-series', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('developer.analytics returns daily_revenue array', async () => {
-    api.developer.analytics.mockResolvedValue({
+    mockAnalytics.mockResolvedValue({
       game_id: 'game-uuid-001',
       daily_active_players: [],
       session_duration_stats: { avg_duration_secs: 240, total_sessions: 100 },
@@ -310,7 +378,7 @@ describe('Analytics time-series', () => {
       ],
     });
 
-    const result = await api.developer.analytics('game-uuid-001');
+    const result = await api.developer.analytics('game-uuid-001') as AnalyticsResponse;
     expect(Array.isArray(result.daily_revenue)).toBe(true);
     expect(result.daily_revenue.length).toBe(2);
     expect(result.daily_revenue[0]).toHaveProperty('date');
@@ -319,7 +387,7 @@ describe('Analytics time-series', () => {
   });
 
   it('developer.analytics returns daily_playtime array', async () => {
-    api.developer.analytics.mockResolvedValue({
+    mockAnalytics.mockResolvedValue({
       game_id: 'game-uuid-001',
       daily_playtime: [
         { date: '2026-06-01', total_seconds: 7200, session_count: 20 },
@@ -330,7 +398,7 @@ describe('Analytics time-series', () => {
       revenue_breakdown: { total_revenue: '0', platform_fee: '0', developer_earnings: '0', session_count: 0 },
     });
 
-    const result = await api.developer.analytics('game-uuid-001');
+    const result = await api.developer.analytics('game-uuid-001') as AnalyticsResponse;
     expect(Array.isArray(result.daily_playtime)).toBe(true);
     expect(result.daily_playtime[0]).toHaveProperty('total_seconds');
     expect(result.daily_playtime[0]).toHaveProperty('session_count');
@@ -344,7 +412,7 @@ describe('Analytics time-series', () => {
       sessions: 42,
     };
 
-    api.developer.analytics.mockResolvedValue({
+    mockAnalytics.mockResolvedValue({
       game_id: 'game-uuid-001',
       daily_revenue: [mockRevPoint],
       daily_playtime: [],
@@ -353,7 +421,7 @@ describe('Analytics time-series', () => {
       revenue_breakdown: { total_revenue: '0', platform_fee: '0', developer_earnings: '0', session_count: 0 },
     });
 
-    const result = await api.developer.analytics('game-uuid-001');
+    const result = await api.developer.analytics('game-uuid-001') as AnalyticsResponse;
     const point = result.daily_revenue[0];
     expect(typeof point.date).toBe('string');
     expect(point.date).toMatch(/\d{4}-\d{2}-\d{2}/);
@@ -365,7 +433,7 @@ describe('Analytics time-series', () => {
   it('revenue_breakdown takes no platform cut — developer gets 100%', async () => {
     // Non-custodial model (DECISIONS.md §"platform takes no cut"): the developer
     // receives the whole subtotal; the platform fee is PROTOCOL_FEE_BPS, default 0.
-    api.developer.analytics.mockResolvedValue({
+    mockAnalytics.mockResolvedValue({
       game_id: 'game-uuid-001',
       daily_revenue: [],
       daily_playtime: [],
@@ -379,7 +447,7 @@ describe('Analytics time-series', () => {
       },
     });
 
-    const { revenue_breakdown: rb } = await api.developer.analytics('game-uuid-001');
+    const { revenue_breakdown: rb } = await api.developer.analytics('game-uuid-001') as AnalyticsResponse;
     const total = parseFloat(rb.total_revenue);
     const fee = parseFloat(rb.platform_fee);
     const earnings = parseFloat(rb.developer_earnings);
@@ -390,7 +458,7 @@ describe('Analytics time-series', () => {
   });
 
   it('analytics propagates error for unknown game id', async () => {
-    api.developer.analytics.mockRejectedValue(new Error('Game not found'));
+    mockAnalytics.mockRejectedValue(new Error('Game not found'));
 
     await expect(api.developer.analytics('nonexistent-game')).rejects.toThrow('Game not found');
   });
@@ -403,7 +471,7 @@ describe('Analytics time-series', () => {
 describe('CORS origin validation logic', () => {
   // Mirrors the origin-allowlist logic used in cors.rs and documented in AUDIT.md.
 
-  function isAllowedOrigin(origin, allowedOrigins) {
+  function isAllowedOrigin(origin: string, allowedOrigins: string[] | null): boolean {
     if (!allowedOrigins) return false; // null/undefined → deny all
     if (allowedOrigins.includes('*')) return true; // explicit wildcard
     return allowedOrigins.includes(origin);
@@ -461,17 +529,17 @@ describe('Session revocation - token lifecycle', () => {
   });
 
   it('logout removes token from localStorage', async () => {
-    api.auth.logout.mockResolvedValue({});
+    mockAuthLogout.mockResolvedValue({});
 
     // Simulate what logout should do.
-    await api.auth.logout();
+    await apiExtras.auth.logout();
     localStorage.removeItem('token');
 
     expect(localStorage.getItem('token')).toBeNull();
   });
 
   it('auth.me returns 401 after session is revoked', async () => {
-    api.auth.me.mockRejectedValue(new Error('Session has been revoked or expired'));
+    mockAuthMe.mockRejectedValue(new Error('Session has been revoked or expired'));
 
     await expect(api.auth.me()).rejects.toThrow('Session has been revoked or expired');
   });
@@ -479,13 +547,14 @@ describe('Session revocation - token lifecycle', () => {
   it('401 response from API signals session revocation', async () => {
     // Simulate the scenario where a valid token becomes invalid after logout
     // (session deleted from DB → next request returns 401).
-    api.auth.me.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
+    mockAuthMe.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
 
     let wasRevoked = false;
     try {
       await api.auth.me();
     } catch (e) {
-      if (e.status === 401 || e.message.includes('Unauthorized')) {
+      const { status, message } = errInfo(e);
+      if (status === 401 || message?.includes('Unauthorized')) {
         wasRevoked = true;
         localStorage.removeItem('token');
       }
@@ -500,8 +569,8 @@ describe('Session revocation - token lifecycle', () => {
   });
 
   it('token key is cleared on logout', async () => {
-    api.auth.logout.mockResolvedValue({});
-    await api.auth.logout();
+    mockAuthLogout.mockResolvedValue({});
+    await apiExtras.auth.logout();
     localStorage.removeItem('token');
     expect(localStorage.getItem('token')).toBeNull();
   });
@@ -519,20 +588,20 @@ describe('Rate limiting — client error handling', () => {
       new Error('Too Many Requests'),
       { status: 429, message: 'Too Many Requests' }
     );
-    api.auth.me.mockRejectedValue(rateLimitError);
+    mockAuthMe.mockRejectedValue(rateLimitError);
 
-    let status = null;
+    let status: number | undefined;
     try {
       await api.auth.me();
     } catch (e) {
-      status = e.status;
+      status = errInfo(e).status;
     }
 
     expect(status).toBe(429);
   });
 
   it('rate limit error message is descriptive', async () => {
-    api.auth.me.mockRejectedValue(
+    mockAuthMe.mockRejectedValue(
       Object.assign(new Error('Too Many Requests'), { status: 429 })
     );
 
@@ -540,7 +609,7 @@ describe('Rate limiting — client error handling', () => {
     try {
       await api.auth.me();
     } catch (e) {
-      errMsg = e.message;
+      errMsg = errInfo(e).message ?? '';
     }
 
     expect(errMsg).toContain('Too Many Requests');
