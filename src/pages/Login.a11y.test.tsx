@@ -15,7 +15,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { axe, toHaveNoViolations } from 'vitest-axe';
+import { axe } from 'vitest-axe';
+// Imported directly from the shim (rather than via the 'vitest-axe' bare
+// specifier Vite aliases it to) because the real vitest-axe package's own
+// typings don't export toHaveNoViolations from its main entry — only the
+// shim does. Same module at runtime either way; see vitest-axe-shim.ts.
+import { toHaveNoViolations } from '../test/vitest-axe-shim';
 
 import Login from './Login';
 
@@ -26,7 +31,7 @@ vi.mock('../hooks/useAuth', () => ({
 }));
 
 vi.mock('../api/client', () => ({
-  getOAuthUrl: (provider) => `https://auth.example.test/${provider}`,
+  getOAuthUrl: (provider: string) => `https://auth.example.test/${provider}`,
 }));
 
 const AXE_OPTIONS = {
