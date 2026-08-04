@@ -1,10 +1,19 @@
+import type { InputHTMLAttributes } from 'react';
+
+export interface EmailInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  placeholder?: string;
+}
+
 export default function EmailInput({
   value,
   onChange,
   error,
   placeholder = 'Email',
   ...props
-}) {
+}: EmailInputProps) {
   return (
     <div className="email-input-wrapper">
       <div className="email-input-container">
