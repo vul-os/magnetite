@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import type { ReplayScrubberProps } from '../components/ReplayScrubber';
 
 // ── Mock CSS imports ──────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ vi.mock('../../magnetite-web-client/src/renderer.js', () => ({
 // ── Mock the ReplayScrubber ───────────────────────────────────────────────────
 
 vi.mock('../components/ReplayScrubber', () => ({
-  default: ({ currentTick, totalTicks, playing, speed, onPlay, onSeek, onSpeedChange }) => (
+  default: ({ currentTick, totalTicks, playing, speed, onPlay, onSeek, onSpeedChange }: ReplayScrubberProps) => (
     <div data-testid="replay-scrubber">
       <span data-testid="scrubber-tick">{currentTick}</span>
       <span data-testid="scrubber-total">{totalTicks}</span>
@@ -71,7 +72,55 @@ if (typeof globalThis.requestAnimationFrame === 'undefined') {
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const MOCK_REPLAY = {
+interface MockKeyState {
+  forward: boolean;
+  backward: boolean;
+  left: boolean;
+  right: boolean;
+  attack: boolean;
+  secondary_attack: boolean;
+  jump: boolean;
+  interact: boolean;
+  sprint: boolean;
+  crouch: boolean;
+}
+
+interface MockMouseState {
+  x: number;
+  y: number;
+  delta_x: number;
+  delta_y: number;
+  left_button: boolean;
+  right_button: boolean;
+  middle_button: boolean;
+  scroll: number;
+}
+
+interface MockInput {
+  keys: MockKeyState;
+  mouse: MockMouseState;
+  sequence: number;
+  timestamp_ms: number;
+}
+
+interface MockReplayLog {
+  id: string;
+  config: {
+    game_id: string;
+    tick_hz: number;
+    max_players: number;
+    duration_ticks: number;
+    seed: number;
+    topology: string;
+    snapshot_every: number;
+  };
+  frames: [number, [string, MockInput][]][];
+  state_hashes: [number, number][];
+  recorded_at: string;
+  verdict: string;
+}
+
+const MOCK_REPLAY: MockReplayLog = {
   id: 'replay-abc-1234-5678',
   config: {
     game_id: 'game-xyz',
@@ -113,7 +162,7 @@ function renderReplay(replayId = 'replay-abc-1234-5678') {
 describe('Replay page — loading state', () => {
   beforeEach(() => {
     // Never resolves during "loading" tests
-    api.replays.get.mockReturnValue(new Promise(() => {}));
+    vi.mocked(api.replays.get).mockReturnValue(new Promise(() => {}));
   });
 
   afterEach(() => {
@@ -133,7 +182,7 @@ describe('Replay page — loading state', () => {
 
 describe('Replay page — error state', () => {
   beforeEach(() => {
-    api.replays.get.mockRejectedValue(new Error('Replay not found'));
+    vi.mocked(api.replays.get).mockRejectedValue(new Error('Replay not found'));
   });
 
   afterEach(() => {
@@ -164,7 +213,7 @@ describe('Replay page — error state', () => {
 
 describe('Replay page — loaded state', () => {
   beforeEach(() => {
-    api.replays.get.mockResolvedValue(MOCK_REPLAY);
+    vi.mocked(api.replays.get).mockResolvedValue(MOCK_REPLAY);
   });
 
   afterEach(() => {
@@ -246,7 +295,7 @@ describe('Replay page — loaded state', () => {
 
 describe('Replay page — API client called with correct ID', () => {
   beforeEach(() => {
-    api.replays.get.mockResolvedValue(MOCK_REPLAY);
+    vi.mocked(api.replays.get).mockResolvedValue(MOCK_REPLAY);
   });
 
   afterEach(() => {
@@ -261,7 +310,7 @@ describe('Replay page — API client called with correct ID', () => {
   });
 
   it('unwraps { data: ... } API response shape', async () => {
-    api.replays.get.mockResolvedValue({ data: MOCK_REPLAY });
+    vi.mocked(api.replays.get).mockResolvedValue({ data: MOCK_REPLAY });
     renderReplay();
     await waitFor(() => {
       // Scrubber mounts only when replay is set
