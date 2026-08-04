@@ -2,53 +2,58 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import ServerRail from '../components/comms/ServerRail';
 import ChannelList from '../components/comms/ChannelList';
+import type { ChannelListChannel, ChannelListParticipant } from '../components/comms/ChannelList';
 import MessageList from '../components/comms/MessageList';
+import type { MessageListMessage } from '../components/comms/MessageList';
 import MessageComposer from '../components/comms/MessageComposer';
 import MemberList from '../components/comms/MemberList';
+import type { MemberListMember } from '../components/comms/MemberList';
 import VoicePanel from '../components/comms/VoicePanel';
 import { useComms } from '../context/CommsContext';
 import { useCommunityMembers } from '../hooks/useCommunities';
 import { useAuth } from '../hooks/useAuth';
 import { useTranslation } from '../i18n/useTranslation';
+import type { Channel, ChatMessage, CommunityMember } from '../types/comms';
 import './Communities.css';
 
 // ─── Normalise API data shapes to what the visual components expect ───────────
 
 /** Channels from the API use `kind`; components expect `type`. */
-function normaliseChannel(ch) {
+function normaliseChannel<T extends Channel | null | undefined>(ch: T): T {
   if (!ch) return ch;
   return { ...ch, type: ch.type ?? ch.kind ?? 'text' };
 }
 
 /** Messages from the API use nested `author` obj; MessageList expects flat fields. */
-function normaliseMessage(msg) {
-  if (!msg) return msg;
+function normaliseMessage(msg: ChatMessage): MessageListMessage {
   if (typeof msg.author === 'object' && msg.author !== null) {
     return {
       ...msg,
-      authorId: msg.author.id ?? msg.author_id ?? null,
+      authorId: msg.author.id ?? (msg as unknown as { author_id?: string }).author_id ?? undefined,
       author: msg.author.display_name ?? msg.author.username ?? 'Unknown',
-      createdAt: msg.created_at ?? msg.createdAt ?? new Date().toISOString(),
+      createdAt: msg.created_at ?? (msg as unknown as { createdAt?: string }).createdAt ?? new Date().toISOString(),
     };
   }
   // Already flat (mock fallback)
-  return { ...msg, createdAt: msg.created_at ?? msg.createdAt ?? new Date().toISOString() };
+  return {
+    ...msg,
+    createdAt: msg.created_at ?? (msg as unknown as { createdAt?: string }).createdAt ?? new Date().toISOString(),
+  } as unknown as MessageListMessage;
 }
 
 /** Members from the API have `display_name`; MemberList uses `username`. */
-function normaliseMember(m) {
-  if (!m) return m;
+function normaliseMember(m: CommunityMember & { activity?: string | null }): MemberListMember {
   return {
     ...m,
     username: m.display_name ?? m.username ?? 'Unknown',
     status: m.status ?? 'offline',
-    game: m.activity ?? m.game ?? null,
+    game: m.activity ?? (m as unknown as { game?: string | null }).game ?? null,
   };
 }
 
 // ─── Typing indicator banner ──────────────────────────────────────────────────
 
-function TypingBanner({ typingUsers }) {
+function TypingBanner({ typingUsers }: { typingUsers?: Record<string, string> }) {
   const { t } = useTranslation();
   const names = Object.values(typingUsers ?? {});
   if (names.length === 0) return null;
@@ -72,7 +77,7 @@ function TypingBanner({ typingUsers }) {
 
 // ─── Connection status pill ───────────────────────────────────────────────────
 
-function ConnectionStatus({ isConnected }) {
+function ConnectionStatus({ isConnected }: { isConnected: boolean }) {
   const { t } = useTranslation();
   return (
     <span
@@ -115,7 +120,7 @@ function CommunitiesSkeleton() {
 
 // ─── Empty state when no communities ─────────────────────────────────────────
 
-function NoCommunities({ onCreate }) {
+function NoCommunities({ onCreate }: { onCreate: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="communities-empty" role="region" aria-label={t('communities.emptyLabel')}>
@@ -200,7 +205,7 @@ export default function Communities() {
   const { members: rawMembers } = useCommunityMembers(activeCommunityId);
 
   // Local voice channel selection (for UI only — voice room join is async)
-  const [selectedVoiceChannelId, setSelectedVoiceChannelId] = useState(null);
+  const [selectedVoiceChannelId, setSelectedVoiceChannelId] = useState<string | null>(null);
 
   // Normalise data shapes
   const channels = rawChannels.map(normaliseChannel);
@@ -237,14 +242,14 @@ export default function Communities() {
     unread: 0,
   }));
 
-  const handleSelectServer = useCallback((id) => {
+  const handleSelectServer = useCallback((id: string) => {
     if (id === '__home') return; // DMs — handled by social agent's /messages route
     selectCommunity(id);
     setSelectedVoiceChannelId(null);
   }, [selectCommunity]);
 
-  const handleSelectChannel = useCallback((channel) => {
-    const norm = normaliseChannel(channel);
+  const handleSelectChannel = useCallback((channel: ChannelListChannel) => {
+    const norm = normaliseChannel(channel as unknown as Channel);
     if (norm.type === 'voice') {
       setSelectedVoiceChannelId(norm.id);
       // Don't select as text channel
@@ -254,7 +259,7 @@ export default function Communities() {
     }
   }, [selectChannel]);
 
-  const handleSend = useCallback(async (text) => {
+  const handleSend = useCallback(async (text: string) => {
     if (!text.trim()) return;
     // Send over socket for real-time broadcast + persist via REST
     sendChatMessage(text);
@@ -272,7 +277,7 @@ export default function Communities() {
   }, [leaveVoiceRoom]);
 
   // Scroll-to-load-more ref
-  const topRef = useRef(null);
+  const topRef = useRef<HTMLDivElement>(null);
 
   // Loading state
   if (communitiesLoading && communities.length === 0) {
@@ -303,7 +308,7 @@ export default function Communities() {
   // Build voice participants from context (real-time) or mock from channel
   const vParticipants = inVoiceRoom && voiceParticipants.length > 0
     ? voiceParticipants
-    : (selectedVoiceChannel?.participants ?? []);
+    : ((selectedVoiceChannel?.participants as ChannelListParticipant[] | undefined) ?? []);
 
   return (
     <div className="communities-page">
@@ -354,7 +359,7 @@ export default function Communities() {
               {(activeChannel || selectedVoiceChannel) && (
                 <p className="channel-header__topic">
                   {isTextChannel
-                    ? (activeChannel?.topic ?? activeCommunity?.description ?? t('communities.welcome'))
+                    ? ((activeChannel?.topic as string | undefined) ?? activeCommunity?.description ?? t('communities.welcome'))
                     : t('communities.voiceConnected', { count: vParticipants.length })}
                 </p>
               )}
@@ -391,15 +396,23 @@ export default function Communities() {
           </header>
 
           {/* Active voice panel (shown above chat when in voice room) */}
+          {/* NOTE (pre-existing bug, not fixed here — VoicePanel manages its
+              own voice client internally via useVoiceClient and its props are
+              only {channel, communityId, onLeave}; participants/muted/deafened/
+              onToggleMute/onToggleDeafen below are not part of VoicePanelProps
+              and were always silently dropped). Cast preserves that exact
+              prior shape through the type checker. */}
           {inVoiceRoom && currentRoom && (
             <VoicePanel
               channel={currentRoom}
-              participants={vParticipants}
               onLeave={handleLeaveVoice}
-              muted={muted}
-              deafened={deafened}
-              onToggleMute={toggleMute}
-              onToggleDeafen={toggleDeafen}
+              {...({
+                participants: vParticipants,
+                muted,
+                deafened,
+                onToggleMute: toggleMute,
+                onToggleDeafen: toggleDeafen,
+              } as Record<string, unknown>)}
             />
           )}
 
