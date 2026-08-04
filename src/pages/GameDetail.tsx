@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import GameCard from '../components/GameCard';
@@ -6,12 +7,92 @@ import GameGallery from '../components/GameGallery';
 import ReviewList from '../components/ReviewList';
 import { api } from '../api/client';
 import { formatUSDC } from '../utils/currency';
+import type { Game, Review } from '../types/domain';
 import './GameDetail.css';
+
+interface GameSession {
+  id?: string;
+  node?: string;
+  node_key?: string;
+  operator?: string;
+  region?: string;
+  players?: number;
+  max_players?: number;
+  [key: string]: unknown;
+}
+
+interface LeaderboardRow {
+  user_id?: string;
+  rank?: number;
+  player?: string;
+  username?: string;
+  avatar?: string;
+  score?: number;
+  [key: string]: unknown;
+}
+
+interface GameAchievement {
+  id?: string | number;
+  name: string;
+  description?: string;
+  progress?: number;
+  total?: number;
+}
+
+interface GameDetailData {
+  id?: string | number;
+  title: string;
+  developer?: string;
+  developerId?: string;
+  developer_id?: string;
+  fee_per_session?: number;
+  feePerSession?: number;
+  is_free?: boolean;
+  isFree?: boolean;
+  category?: string;
+  description?: string;
+  thumbnail?: string | null;
+  screenshots?: string[];
+  video?: string | null;
+  github?: string | null;
+  github_repo?: string;
+  githubRepo?: string;
+  release_date?: string;
+  releaseDate?: string;
+  created_at?: string;
+  players_min?: number;
+  players_max?: number;
+  system_requirements?: Record<string, unknown>;
+  achievements?: GameAchievement[];
+  sessions?: GameSession[];
+  similar?: Game[];
+  content_rating?: string;
+  contentRating?: string;
+  live_version?: string;
+  liveVersion?: string;
+  version?: string;
+  content_hash?: string;
+  contentHash?: string;
+  build_hash?: string;
+  buildHash?: string;
+  artifact_type?: string;
+  artifactType?: string;
+  tick_rate?: number;
+  tickRate?: number;
+  replay_verified?: boolean;
+  replayVerified?: boolean;
+  signature_valid?: boolean;
+  signatureValid?: boolean;
+  has_playable_artifact?: boolean;
+  hasPlayableArtifact?: boolean;
+  status?: string;
+  [key: string]: unknown;
+}
 
 // Deterministic field signature for a game with no cover art — generated
 // platform art (never a stock photo), keyed to the game's own identity so the
 // same title always draws the same figure. Mirrors GameCard's BrandTile.
-function fieldPlate(seedText) {
+function fieldPlate(seedText: string) {
   let h = 2166136261;
   const s = seedText || 'magnetite';
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -47,7 +128,7 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
  * fixtures that used to live here were removed for exactly that reason; in mock
  * mode those surfaces render their real empty states.
  */
-const MOCK_GAME = {
+const MOCK_GAME: GameDetailData = {
   id: 1,
   title: 'Cosmic Raiders',
   developer: 'StarForge Studios',
@@ -71,15 +152,15 @@ const MOCK_GAME = {
 const TABS = ['Overview', 'Sessions', 'Leaderboard', 'Reviews'];
 
 /* Content rating is publisher-self-declared — advisory, never verified here. */
-const CONTENT_RATING_META = {
+const CONTENT_RATING_META: Record<string, { label: string; title: string; description: string }> = {
   everyone: { label: 'E', title: 'Everyone', description: 'Suitable for all ages' },
   teen:     { label: 'T', title: 'Teen',     description: 'Suitable for ages 13+' },
   mature:   { label: 'M', title: 'Mature',   description: 'Suitable for ages 17+' },
 };
 
-const AGE_GATE_REQUIRED_AGE = { everyone: 0, teen: 13, mature: 17 };
+const AGE_GATE_REQUIRED_AGE: Record<string, number> = { everyone: 0, teen: 13, mature: 17 };
 
-function ContentRatingBadge({ rating }) {
+function ContentRatingBadge({ rating }: { rating: string }) {
   const key = CONTENT_RATING_META[rating] ? rating : 'everyone';
   const meta = CONTENT_RATING_META[key];
   return (
@@ -94,17 +175,17 @@ function ContentRatingBadge({ rating }) {
 }
 
 /* Renders a value, or an explicit absence marker. Never a plausible stand-in. */
-function DataValue({ value, className = '' }) {
+function DataValue({ value, className = '' }: { value: unknown; className?: string }) {
   const missing =
     value === null || value === undefined || value === '' ||
     (typeof value === 'number' && Number.isNaN(value));
   if (missing) {
     return <span className="gd-unreported">— not reported</span>;
   }
-  return <span className={`font-mono ${className}`}>{value}</span>;
+  return <span className={`font-mono ${className}`}>{value as ReactNode}</span>;
 }
 
-function StarRating({ rating, size = 'md' }) {
+function StarRating({ rating, size = 'md' }: { rating?: number | null; size?: 'sm' | 'md' | 'lg' }) {
   if (typeof rating !== 'number' || Number.isNaN(rating)) return null;
   const fullStars  = Math.floor(rating);
   const hasHalf    = rating % 1 >= 0.5;
@@ -133,9 +214,11 @@ function StarRating({ rating, size = 'md' }) {
   );
 }
 
-function AchievementCard({ achievement }) {
+function AchievementCard({ achievement }: { achievement: GameAchievement }) {
   const has = typeof achievement.progress === 'number' && typeof achievement.total === 'number' && achievement.total > 0;
-  const pct = has ? Math.round((achievement.progress / achievement.total) * 100) : null;
+  // `has` guarantees both are numbers above; TS doesn't carry that narrowing
+  // through the boolean binding, hence the assertions.
+  const pct = has ? Math.round((achievement.progress! / achievement.total!) * 100) : null;
   return (
     <li className="achievement-card">
       <div className="achievement-icon" aria-hidden="true">
@@ -151,7 +234,7 @@ function AchievementCard({ achievement }) {
             <div
               className="progress-bar"
               role="progressbar"
-              aria-valuenow={pct}
+              aria-valuenow={pct ?? undefined}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-label={`${achievement.name} progress`}
@@ -169,11 +252,11 @@ function AchievementCard({ achievement }) {
 export default function GameDetail() {
   const { id } = useParams();
 
-  const [game, setGame]                         = useState(USE_MOCKS ? MOCK_GAME : null);
-  const [leaderboard, setLeaderboard]           = useState([]);
-  const [reviews, setReviews]                   = useState([]);
+  const [game, setGame]                         = useState<GameDetailData | null>(USE_MOCKS ? MOCK_GAME : null);
+  const [leaderboard, setLeaderboard]           = useState<LeaderboardRow[]>([]);
+  const [reviews, setReviews]                   = useState<Review[]>([]);
   const [pageLoading, setPageLoading]           = useState(!USE_MOCKS);
-  const [pageError, setPageError]               = useState(null);
+  const [pageError, setPageError]               = useState<string | null>(null);
 
   const [walletConnected, setWalletConnected]   = useState(false);
   const [inQueue, setInQueue]                   = useState(false);
@@ -182,8 +265,8 @@ export default function GameDetail() {
   const [showShareToast, setShowShareToast]     = useState(false);
   const [stickyBarVisible, setStickyBarVisible] = useState(false);
   const [ageGatePassed, setAgeGatePassed] = useState(false);
-  const heroRef = useRef(null);
-  const tabRefs = useRef({});
+  const heroRef = useRef<HTMLElement>(null);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Show the sticky launch bar once the masthead scrolls out of view.
   useEffect(() => {
@@ -205,33 +288,38 @@ export default function GameDetail() {
       setPageLoading(true);
       setPageError(null);
       try {
+        // Narrowed by `if (!id) return;` above; TS doesn't carry that
+        // narrowing into this nested function declaration.
         const [gameData, lbData, reviewData] = await Promise.allSettled([
-          api.games.get(id),
-          api.games.leaderboard(id),
-          api.reviews.list(id),
+          api.games.get(id!),
+          api.games.leaderboard(id!),
+          api.reviews.list(id!),
         ]);
 
         if (cancelled) return;
 
         if (gameData.status === 'fulfilled') {
-          const g = gameData.value?.data ?? gameData.value;
+          const wrapped = gameData.value as { data?: GameDetailData } & Partial<GameDetailData>;
+          const g = wrapped?.data ?? (wrapped as GameDetailData);
           setGame(g);
         } else {
           throw gameData.reason;
         }
 
         if (lbData.status === 'fulfilled') {
-          const lb = lbData.value?.data ?? lbData.value;
-          setLeaderboard(Array.isArray(lb) ? lb : (lb?.entries ?? []));
+          const wrapped = lbData.value as { data?: LeaderboardRow[] | { entries?: LeaderboardRow[] } } | LeaderboardRow[];
+          const lb = Array.isArray(wrapped) ? wrapped : wrapped?.data;
+          setLeaderboard(Array.isArray(lb) ? lb : ((lb as { entries?: LeaderboardRow[] })?.entries ?? []));
         }
 
         if (reviewData.status === 'fulfilled') {
-          const rv = reviewData.value?.data ?? reviewData.value;
-          setReviews(Array.isArray(rv) ? rv : (rv?.reviews ?? []));
+          const wrapped = reviewData.value as { data?: Review[] | { reviews?: Review[] } } | Review[];
+          const rv = Array.isArray(wrapped) ? wrapped : wrapped?.data;
+          setReviews(Array.isArray(rv) ? rv : ((rv as { reviews?: Review[] })?.reviews ?? []));
         }
       } catch (err) {
         if (!cancelled) {
-          setPageError(err.message || 'Failed to load game');
+          setPageError((err instanceof Error && err.message) || 'Failed to load game');
         }
       } finally {
         if (!cancelled) setPageLoading(false);
@@ -263,7 +351,7 @@ export default function GameDetail() {
     setTimeout(() => setShowShareToast(false), 2000);
   };
 
-  const formatDate = (d) => {
+  const formatDate = (d: string | null | undefined) => {
     if (!d) return null;
     const parsed = new Date(d);
     if (Number.isNaN(parsed.getTime())) return null;
@@ -271,9 +359,9 @@ export default function GameDetail() {
   };
 
   // Roving-tabindex keyboard support for the tablist.
-  const onTabKeyDown = (e) => {
+  const onTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = TABS.indexOf(activeTab);
-    let next = null;
+    let next: string | null = null;
     if (e.key === 'ArrowRight') next = TABS[(i + 1) % TABS.length];
     else if (e.key === 'ArrowLeft') next = TABS[(i - 1 + TABS.length) % TABS.length];
     else if (e.key === 'Home') next = TABS[0];
@@ -408,7 +496,7 @@ export default function GameDetail() {
                        : typeof game.hasPlayableArtifact === 'boolean' ? game.hasPlayableArtifact
                        : null;
 
-  const attestPill = (value, yes, no) =>
+  const attestPill = (value: boolean | null, yes: string, no: string) =>
     value === true  ? <span className="st st-field">{yes}</span>
   : value === false ? <span className="st st-boundary">{no}</span>
   :                   <span className="st st-off">Not attested</span>;
@@ -420,8 +508,8 @@ export default function GameDetail() {
     ? ratedReviews.reduce((s, r) => s + r.rating, 0) / ratedReviews.length
     : null;
 
-  const panelId = (tab) => `gd-panel-${tab.toLowerCase()}`;
-  const tabId   = (tab) => `gd-tab-${tab.toLowerCase()}`;
+  const panelId = (tab: string) => `gd-panel-${tab.toLowerCase()}`;
+  const tabId   = (tab: string) => `gd-tab-${tab.toLowerCase()}`;
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -602,10 +690,12 @@ export default function GameDetail() {
             <section aria-labelledby="gd-h-reviews">
               <h2 id="gd-h-reviews" className="gd-h">Player reviews</h2>
 
+              {/* avgRating is non-null whenever ratedReviews.length > 0 (see its
+                  derivation above), but TS doesn't correlate the two checks. */}
               {ratedReviews.length > 0 ? (
                 <div className="reviews-summary">
                   <div className="rating-overview">
-                    <p className="big-rating font-mono">{avgRating.toFixed(1)}</p>
+                    <p className="big-rating font-mono">{avgRating!.toFixed(1)}</p>
                     <StarRating rating={avgRating} size="lg" />
                     <p className="m-sm gd-rating-caption">
                       Mean of {ratedReviews.length} rated {ratedReviews.length === 1 ? 'review' : 'reviews'}
@@ -645,10 +735,12 @@ export default function GameDetail() {
                     const rId = r.id ?? i;
                     return rId === reviewId ? { ...r, helpful: (r.helpful ?? 0) + 1 } : r;
                   }));
-                  api.reviews.helpful(id, reviewId).catch(() => null);
+                  // id is always present once this page has rendered past its
+                  // not-found gate; reviewId is ReviewList's opaque `unknown` id.
+                  api.reviews.helpful(id!, reviewId as string | number).catch(() => null);
                 }}
                 onReport={(reviewId) => {
-                  api.reviews.report(id, reviewId).catch(() => null);
+                  api.reviews.report(id!, reviewId as string | number).catch(() => null);
                 }}
               />
             </section>
@@ -717,7 +809,7 @@ export default function GameDetail() {
                 {game.category && <span className="m-sm gd-chip">{game.category}</span>}
                 <span className="m-sm gd-chip">{isPaid ? priceLabel : 'Free to play'}</span>
                 {(game.content_rating || game.contentRating) && (
-                  <ContentRatingBadge rating={game.content_rating ?? game.contentRating} />
+                  <ContentRatingBadge rating={(game.content_rating ?? game.contentRating)!} />
                 )}
               </div>
 
