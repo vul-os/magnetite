@@ -15,7 +15,7 @@ describe('PasswordInput', () => {
 
   it('show/hide toggle works', () => {
     render(<PasswordInput value="secret" onChange={vi.fn()} />);
-    const input = document.querySelector('input');
+    const input = document.querySelector<HTMLInputElement>('input')!;
     expect(input.type).toBe('password');
 
     fireEvent.click(screen.getByRole('button', { name: /show password/i }));
@@ -48,7 +48,7 @@ describe('PasswordInput', () => {
   it('handles onChange', () => {
     const handleChange = vi.fn();
     render(<PasswordInput value="" onChange={handleChange} />);
-    fireEvent.change(document.querySelector('input'), { target: { value: 'newpassword' } });
+    fireEvent.change(document.querySelector<HTMLInputElement>('input')!, { target: { value: 'newpassword' } });
     expect(handleChange).toHaveBeenCalledWith('newpassword');
   });
 });
