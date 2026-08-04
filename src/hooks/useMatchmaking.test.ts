@@ -19,14 +19,18 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
+const mockJoin = vi.mocked(api.matchmaking.join);
+const mockLeave = vi.mocked(api.matchmaking.leave);
+const mockStatus = vi.mocked(api.matchmaking.status);
+
 const GAME_ID = 'game-abc-123';
 
 describe('useMatchmaking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.matchmaking.join.mockRejectedValue(new Error('No backend'));
-    api.matchmaking.leave.mockRejectedValue(new Error('No backend'));
-    api.matchmaking.status.mockRejectedValue(new Error('No backend'));
+    mockJoin.mockRejectedValue(new Error('No backend'));
+    mockLeave.mockRejectedValue(new Error('No backend'));
+    mockStatus.mockRejectedValue(new Error('No backend'));
   });
 
   afterEach(() => {
@@ -46,7 +50,7 @@ describe('useMatchmaking', () => {
   // ── joinQueue ─────────────────────────────────────────────────────────────
 
   it('joinQueue: calls the real API with the game ID', async () => {
-    api.matchmaking.join.mockResolvedValue({
+    mockJoin.mockResolvedValue({
       in_queue: true,
       status: 'waiting',
       estimated_wait_seconds: 30,
@@ -62,8 +66,8 @@ describe('useMatchmaking', () => {
   });
 
   it('joinQueue: sets status to searching while in-flight', async () => {
-    let resolveJoin;
-    api.matchmaking.join.mockReturnValue(new Promise((r) => { resolveJoin = r; }));
+    let resolveJoin: (value: unknown) => void = () => {};
+    mockJoin.mockReturnValue(new Promise((r) => { resolveJoin = r; }));
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -89,7 +93,7 @@ describe('useMatchmaking', () => {
       status: 'waiting',
       estimated_wait_seconds: 45,
     };
-    api.matchmaking.join.mockResolvedValue(fakeResponse);
+    mockJoin.mockResolvedValue(fakeResponse);
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -101,7 +105,7 @@ describe('useMatchmaking', () => {
   });
 
   it('joinQueue: sets status from API response', async () => {
-    api.matchmaking.join.mockResolvedValue({ status: 'waiting', estimated_wait_seconds: 30 });
+    mockJoin.mockResolvedValue({ status: 'waiting', estimated_wait_seconds: 30 });
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -113,7 +117,7 @@ describe('useMatchmaking', () => {
   });
 
   it('joinQueue: sets status to searching when API response has no status field', async () => {
-    api.matchmaking.join.mockResolvedValue({ in_queue: true });
+    mockJoin.mockResolvedValue({ in_queue: true });
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -125,7 +129,7 @@ describe('useMatchmaking', () => {
   });
 
   it('joinQueue: sets error and status="error" when API fails', async () => {
-    api.matchmaking.join.mockRejectedValue(new Error('Queue full'));
+    mockJoin.mockRejectedValue(new Error('Queue full'));
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -140,7 +144,7 @@ describe('useMatchmaking', () => {
   // ── leaveQueue ────────────────────────────────────────────────────────────
 
   it('leaveQueue: calls the real API', async () => {
-    api.matchmaking.leave.mockResolvedValue({ ok: true });
+    mockLeave.mockResolvedValue({ ok: true });
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -153,8 +157,8 @@ describe('useMatchmaking', () => {
 
   it('leaveQueue: resets status and matchData on success', async () => {
     // First join so state is non-null.
-    api.matchmaking.join.mockResolvedValue({ status: 'waiting' });
-    api.matchmaking.leave.mockResolvedValue({ ok: true });
+    mockJoin.mockResolvedValue({ status: 'waiting' });
+    mockLeave.mockResolvedValue({ ok: true });
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -172,7 +176,7 @@ describe('useMatchmaking', () => {
   });
 
   it('leaveQueue: silently ignores API errors', async () => {
-    api.matchmaking.leave.mockRejectedValue(new Error('Leave failed'));
+    mockLeave.mockRejectedValue(new Error('Leave failed'));
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -193,7 +197,7 @@ describe('useMatchmaking', () => {
       status: 'waiting',
       estimated_wait_seconds: 90,
     };
-    api.matchmaking.status.mockResolvedValue(fakeStatus);
+    mockStatus.mockResolvedValue(fakeStatus);
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -205,7 +209,7 @@ describe('useMatchmaking', () => {
   });
 
   it('pollStatus: silently ignores errors', async () => {
-    api.matchmaking.status.mockRejectedValue(new Error('Poll failed'));
+    mockStatus.mockRejectedValue(new Error('Poll failed'));
 
     const { result } = renderHook(() => useMatchmaking());
 
@@ -220,7 +224,7 @@ describe('useMatchmaking', () => {
   // ── Wait estimate ─────────────────────────────────────────────────────────
 
   it('matchData carries estimated_wait_seconds from server', async () => {
-    api.matchmaking.join.mockResolvedValue({
+    mockJoin.mockResolvedValue({
       status: 'waiting',
       estimated_wait_seconds: 150,
     });
@@ -231,13 +235,15 @@ describe('useMatchmaking', () => {
       await result.current.joinQueue(GAME_ID);
     });
 
-    expect(result.current.matchData.estimated_wait_seconds).toBe(150);
+    const matchData = result.current.matchData;
+    if (!matchData) throw new Error('expected matchData to be set');
+    expect(matchData.estimated_wait_seconds).toBe(150);
   });
 
   it('wait estimate is not fabricated Math.random (server-sourced)', async () => {
     // The old code used Math.random()*20+5 for queue depth.
     // Now the wait estimate must come from the API response.
-    api.matchmaking.join.mockResolvedValue({
+    mockJoin.mockResolvedValue({
       status: 'waiting',
       estimated_wait_seconds: 30,
     });
@@ -245,7 +251,7 @@ describe('useMatchmaking', () => {
     const { result: r1 } = renderHook(() => useMatchmaking());
     await act(async () => { await r1.current.joinQueue(GAME_ID); });
 
-    api.matchmaking.join.mockResolvedValue({
+    mockJoin.mockResolvedValue({
       status: 'waiting',
       estimated_wait_seconds: 30,
     });
@@ -254,8 +260,12 @@ describe('useMatchmaking', () => {
     await act(async () => { await r2.current.joinQueue(GAME_ID); });
 
     // Both should get exactly the mocked server value, not a random number.
-    expect(r1.current.matchData.estimated_wait_seconds).toBe(30);
-    expect(r2.current.matchData.estimated_wait_seconds).toBe(30);
+    const r1MatchData = r1.current.matchData;
+    const r2MatchData = r2.current.matchData;
+    if (!r1MatchData) throw new Error('expected r1 matchData to be set');
+    if (!r2MatchData) throw new Error('expected r2 matchData to be set');
+    expect(r1MatchData.estimated_wait_seconds).toBe(30);
+    expect(r2MatchData.estimated_wait_seconds).toBe(30);
   });
 
   // ── Return shape ──────────────────────────────────────────────────────────
