@@ -57,7 +57,7 @@ const SOCIAL_LINKS = [
 ];
 
 // Inline Rust-crab-silhouette (simple ferris-style icon)
-function RustIcon({ size = 16 }) {
+function RustIcon({ size = 16 }: { size?: number }) {
   return (
     <svg
       width={size}
