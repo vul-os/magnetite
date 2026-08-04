@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSearch } from './useSearch';
+import type { SearchResults } from '../types/domain';
 
 // ── mock api client ───────────────────────────────────────────────────────────
 
@@ -24,6 +25,8 @@ vi.mock('../api/client', () => ({
 }));
 
 import { api } from '../api/client';
+
+const mockSearchQuery = vi.mocked(api.search.query);
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -86,7 +89,7 @@ describe('useSearch — empty query', () => {
     });
 
     expect(ret).toBeNull();
-    expect(api.search.query).not.toHaveBeenCalled();
+    expect(mockSearchQuery).not.toHaveBeenCalled();
   });
 });
 
@@ -103,7 +106,7 @@ describe('useSearch — successful search', () => {
   });
 
   it('populates game results when API returns games', async () => {
-    api.search.query.mockResolvedValue({
+    mockSearchQuery.mockResolvedValue({
       results: [
         { result_type: 'game', id: 'g1', title: 'Oxide Arena', description: 'A top-down shooter' },
       ],
@@ -112,7 +115,7 @@ describe('useSearch — successful search', () => {
 
     const { result } = renderHook(() => useSearch());
 
-    let searchPromise;
+    let searchPromise: Promise<SearchResults | null> | undefined;
     act(() => {
       searchPromise = result.current.search('oxide');
     });
@@ -124,13 +127,13 @@ describe('useSearch — successful search', () => {
     });
 
     expect(result.current.results).not.toBeNull();
-    expect(result.current.results.games.length).toBe(1);
-    expect(result.current.results.games[0].title).toBe('Oxide Arena');
+    expect(result.current.results!.games.length).toBe(1);
+    expect(result.current.results!.games[0].title).toBe('Oxide Arena');
     expect(result.current.loading).toBe(false);
   });
 
   it('populates user results when API returns users', async () => {
-    api.search.query.mockResolvedValue({
+    mockSearchQuery.mockResolvedValue({
       results: [
         { result_type: 'user', id: 'u1', username: 'alice_dev', avatar_url: null },
       ],
@@ -139,7 +142,7 @@ describe('useSearch — successful search', () => {
 
     const { result } = renderHook(() => useSearch());
 
-    let searchPromise;
+    let searchPromise: Promise<SearchResults | null> | undefined;
     act(() => {
       searchPromise = result.current.search('alice');
     });
@@ -149,16 +152,16 @@ describe('useSearch — successful search', () => {
       await searchPromise;
     });
 
-    expect(result.current.results.users.length).toBe(1);
-    expect(result.current.results.users[0].title).toBe('alice_dev');
+    expect(result.current.results!.users.length).toBe(1);
+    expect(result.current.results!.users[0].title).toBe('alice_dev');
   });
 
   it('returns empty arrays when no results', async () => {
-    api.search.query.mockResolvedValue({ results: [], total: 0 });
+    mockSearchQuery.mockResolvedValue({ results: [], total: 0 });
 
     const { result } = renderHook(() => useSearch());
 
-    let searchPromise;
+    let searchPromise: Promise<SearchResults | null> | undefined;
     act(() => {
       searchPromise = result.current.search('nonexistent_game_xyz');
     });
@@ -168,8 +171,8 @@ describe('useSearch — successful search', () => {
       await searchPromise;
     });
 
-    expect(result.current.results.games).toEqual([]);
-    expect(result.current.results.users).toEqual([]);
+    expect(result.current.results!.games).toEqual([]);
+    expect(result.current.results!.users).toEqual([]);
     expect(result.current.error).toBeNull();
   });
 });
@@ -187,11 +190,11 @@ describe('useSearch — error state', () => {
   });
 
   it('sets error when API call fails', async () => {
-    api.search.query.mockRejectedValue(new Error('Search service unavailable'));
+    mockSearchQuery.mockRejectedValue(new Error('Search service unavailable'));
 
     const { result } = renderHook(() => useSearch());
 
-    let searchPromise;
+    let searchPromise: Promise<SearchResults | null> | undefined;
     act(() => {
       searchPromise = result.current.search('game');
     });
@@ -207,20 +210,20 @@ describe('useSearch — error state', () => {
   });
 
   it('clears error on next successful search', async () => {
-    api.search.query
+    mockSearchQuery
       .mockRejectedValueOnce(new Error('Error'))
       .mockResolvedValueOnce({ results: [], total: 0 });
 
     const { result } = renderHook(() => useSearch());
 
     // First search fails
-    let p1;
+    let p1: Promise<SearchResults | null> | undefined;
     act(() => { p1 = result.current.search('game'); });
     await act(async () => { vi.advanceTimersByTime(400); await p1; });
     expect(result.current.error).toBeTruthy();
 
     // Second search succeeds
-    let p2;
+    let p2: Promise<SearchResults | null> | undefined;
     act(() => { p2 = result.current.search('game2'); });
     await act(async () => { vi.advanceTimersByTime(400); await p2; });
     expect(result.current.error).toBeNull();
@@ -293,7 +296,7 @@ describe('useSearch — API params', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    api.search.query.mockResolvedValue({ results: [], total: 0 });
+    mockSearchQuery.mockResolvedValue({ results: [], total: 0 });
   });
 
   afterEach(() => {
@@ -305,12 +308,12 @@ describe('useSearch — API params', () => {
   it('passes search type to the API client', async () => {
     const { result } = renderHook(() => useSearch());
 
-    let p;
+    let p: Promise<SearchResults | null> | undefined;
     act(() => { p = result.current.search('shooter', 'Games'); });
     await act(async () => { vi.advanceTimersByTime(400); await p; });
 
     // useSearch calls api.search.query(query, searchType, limit, offset[, ...])
-    expect(api.search.query).toHaveBeenCalledWith(
+    expect(mockSearchQuery).toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining('game'),
       expect.any(Number),
@@ -322,10 +325,10 @@ describe('useSearch — API params', () => {
   it('search type "all" uses all results path', async () => {
     const { result } = renderHook(() => useSearch());
 
-    let p;
+    let p: Promise<SearchResults | null> | undefined;
     act(() => { p = result.current.search('rust', 'All'); });
     await act(async () => { vi.advanceTimersByTime(400); await p; });
 
-    expect(api.search.query).toHaveBeenCalled();
+    expect(mockSearchQuery).toHaveBeenCalled();
   });
 });
