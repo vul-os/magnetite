@@ -1,5 +1,10 @@
+import type { ReactNode } from 'react';
 import EmptyState from './EmptyState';
 import Button from '../common/Button';
+
+interface NoFriendsProps {
+  action?: ReactNode;
+}
 
 const UsersIcon = () => (
   <svg
@@ -18,7 +23,7 @@ const UsersIcon = () => (
   </svg>
 );
 
-export default function NoFriends({ action }) {
+export default function NoFriends({ action }: NoFriendsProps) {
   return (
     <EmptyState
       icon={<UsersIcon />}

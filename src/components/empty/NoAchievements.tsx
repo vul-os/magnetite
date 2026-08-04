@@ -1,6 +1,11 @@
 import EmptyState from './EmptyState';
 import Button from '../common/Button';
 
+interface NoAchievementsProps {
+  category?: string;
+  onReset?: () => void;
+}
+
 const TrophyIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -19,7 +24,7 @@ const TrophyIcon = () => (
   </svg>
 );
 
-export default function NoAchievements({ category, onReset }) {
+export default function NoAchievements({ category, onReset }: NoAchievementsProps) {
   return (
     <EmptyState
       icon={<TrophyIcon />}

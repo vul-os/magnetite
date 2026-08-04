@@ -1,5 +1,10 @@
+import type { ReactNode } from 'react';
 import EmptyState from './EmptyState';
 import Button from '../common/Button';
+
+interface NoTransactionsProps {
+  action?: ReactNode;
+}
 
 const WalletIcon = () => (
   <svg
@@ -24,7 +29,7 @@ const WalletIcon = () => (
  * Kept under the `NoTransactions` name so existing imports keep working — but
  * there is no custodial transaction ledger any more, only signed receipts.
  */
-export default function NoTransactions({ action }) {
+export default function NoTransactions({ action }: NoTransactionsProps) {
   return (
     <EmptyState
       icon={<WalletIcon />}

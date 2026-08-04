@@ -1,5 +1,9 @@
 import EmptyState from './EmptyState';
 
+interface NoLeaderboardProps {
+  game?: string;
+}
+
 const TrophyIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -19,7 +23,7 @@ const TrophyIcon = () => (
   </svg>
 );
 
-export default function NoLeaderboard({ game }) {
+export default function NoLeaderboard({ game }: NoLeaderboardProps) {
   return (
     <EmptyState
       icon={<TrophyIcon />}

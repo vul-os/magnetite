@@ -1,4 +1,10 @@
+import type { ReactNode } from 'react';
 import EmptyState from './EmptyState';
+
+interface NoSearchResultsProps {
+  query?: string;
+  action?: ReactNode;
+}
 
 const SearchIcon = () => (
   <svg
@@ -17,7 +23,7 @@ const SearchIcon = () => (
   </svg>
 );
 
-export default function NoSearchResults({ query, action }) {
+export default function NoSearchResults({ query, action }: NoSearchResultsProps) {
   return (
     <EmptyState
       icon={<SearchIcon />}

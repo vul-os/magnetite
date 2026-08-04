@@ -1,5 +1,10 @@
+import type { ReactNode } from 'react';
 import EmptyState from './EmptyState';
 import Button from '../common/Button';
+
+interface NoGamesProps {
+  action?: ReactNode;
+}
 
 const GameControllerIcon = () => (
   <svg
@@ -19,7 +24,7 @@ const GameControllerIcon = () => (
   </svg>
 );
 
-export default function NoGames({ action }) {
+export default function NoGames({ action }: NoGamesProps) {
   return (
     <EmptyState
       icon={<GameControllerIcon />}
