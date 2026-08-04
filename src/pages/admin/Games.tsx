@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
 import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Pagination from '../../components/Pagination';
@@ -7,7 +8,31 @@ import './admin.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+interface AdminGame {
+  id: string | number;
+  title: string;
+  developer: string;
+  status: string;
+  featured: boolean;
+  players: number;
+  revenue: number;
+  submittedAt: string;
+}
+
+interface RawGame {
+  id: string | number;
+  title: string;
+  developer_username?: string;
+  developer?: string;
+  status?: string;
+  featured_at?: string | null;
+  players?: number;
+  fee_per_session?: number | string;
+  revenue?: number | string;
+  created_at?: string;
+}
+
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -20,7 +45,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_GAMES = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_GAMES: AdminGame[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 1, title: 'Cosmic Raiders',  developer: 'StarForge Studios', status: 'active',   featured: true,  players: 8420,  revenue: 12450.00, submittedAt: '2024-01-10' },
       { id: 2, title: 'Galaxy Conquest', developer: 'PixelMaster',       status: 'active',   featured: false, players: 2941,  revenue: 2970.50,  submittedAt: '2024-01-15' },
@@ -36,7 +61,7 @@ const STATUS_OPTIONS = [
   { value: 'rejected', label: 'Rejected'   },
 ];
 
-function normaliseGame(g) {
+function normaliseGame(g: RawGame): AdminGame {
   return {
     id:          g.id,
     title:       g.title,
@@ -44,20 +69,20 @@ function normaliseGame(g) {
     status:      g.status ?? 'pending',
     featured:    g.featured_at != null,
     players:     g.players ?? 0,
-    revenue:     parseFloat(g.fee_per_session ?? g.revenue ?? 0),
+    revenue:     parseFloat(String(g.fee_per_session ?? g.revenue ?? 0)),
     submittedAt: g.created_at ? g.created_at.split('T')[0] : '',
   };
 }
 
 export default function Games() {
-  const [games, setGames]             = useState(MOCK_GAMES ? MOCK_GAMES.map(g => ({ ...g })) : []);
+  const [games, setGames]             = useState<AdminGame[]>(MOCK_GAMES ? MOCK_GAMES.map(g => ({ ...g })) : []);
   const [loading, setLoading]         = useState(!MOCK_GAMES);
-  const [error, setError]             = useState(null);
+  const [error, setError]             = useState<string | null>(null);
   const [statusFilter, setStatusFilter]       = useState('all');
   const [developerFilter, setDeveloperFilter] = useState('');
   const [currentPage, setCurrentPage]         = useState(1);
-  const [actionLoading, setActionLoading]     = useState(null);
-  const [actionError, setActionError]         = useState(null);
+  const [actionLoading, setActionLoading]     = useState<AdminGame['id'] | null>(null);
+  const [actionError, setActionError]         = useState<string | null>(null);
   const perPage = 10;
 
   const fetchGames = useCallback(async () => {
@@ -67,11 +92,11 @@ export default function Games() {
     try {
       const res = await authFetch('/api/admin/games?limit=200');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const raw = json.data ?? json ?? [];
+      const json = await res.json() as { data?: RawGame[] } | RawGame[];
+      const raw = (!Array.isArray(json) ? json.data : json) ?? [];
       setGames(Array.isArray(raw) ? raw.map(normaliseGame) : []);
     } catch (err) {
-      setError(err.message || 'Failed to load games');
+      setError((err instanceof Error && err.message) || 'Failed to load games');
     } finally {
       setLoading(false);
     }
@@ -100,11 +125,11 @@ export default function Games() {
 
   const pendingCount = games.filter(g => g.status === 'pending').length;
 
-  const handleAction = async (action, gameId) => {
+  const handleAction = async (action: string, gameId: AdminGame['id']) => {
     setActionLoading(gameId);
     setActionError(null);
     try {
-      let res;
+      let res: Response | undefined;
       if (action === 'approve') {
         res = await authFetch(`/api/admin/games/${gameId}/approve`, {
           method: 'PUT',
@@ -127,7 +152,7 @@ export default function Games() {
         });
       }
       if (res && !res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { message?: string };
         throw new Error(err.message || `Action failed (HTTP ${res.status})`);
       }
       /* optimistic update */
@@ -140,18 +165,18 @@ export default function Games() {
         return g;
       }));
     } catch (err) {
-      setActionError(err.message);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setActionLoading(null);
     }
   };
 
-  const statusBadgeClass = (status) => ({
+  const statusBadgeClass = (status: string) => ({
     active:   'status-badge active',
     pending:  'status-badge pending',
     rejected: 'status-badge rejected',
     approved: 'status-badge active',
-  }[status] || 'status-badge');
+  } as Record<string, string>)[status] || 'status-badge';
 
   return (
     <Layout>
@@ -191,7 +216,7 @@ export default function Games() {
           <div className="admin-toolbar">
             <select
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
               aria-label="Filter by status"
             >
               {STATUS_OPTIONS.map(opt => (
@@ -200,7 +225,7 @@ export default function Games() {
             </select>
             <select
               value={developerFilter}
-              onChange={(e) => { setDeveloperFilter(e.target.value); setCurrentPage(1); }}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => { setDeveloperFilter(e.target.value); setCurrentPage(1); }}
               aria-label="Filter by developer"
             >
               <option value="">All Developers</option>
@@ -265,21 +290,25 @@ export default function Games() {
                       </td>
                       <td>
                         <div className="action-buttons">
+                          {/* NOTE (pre-existing bug in all three Buttons below, not
+                              fixed here — Button's real loading prop is `isLoading`;
+                              `loading` isn't part of ButtonProps and is silently
+                              forwarded onto the DOM <button> as an unknown attribute). */}
                           {(game.status === 'pending') && (
                             <>
                               <Button
                                 variant="primary"
                                 size="sm"
-                                loading={actionLoading === game.id}
                                 onClick={() => handleAction('approve', game.id)}
+                                {...({ loading: actionLoading === game.id } as Record<string, boolean>)}
                               >
                                 Approve
                               </Button>
                               <Button
                                 variant="danger"
                                 size="sm"
-                                loading={actionLoading === game.id}
                                 onClick={() => handleAction('reject', game.id)}
+                                {...({ loading: actionLoading === game.id } as Record<string, boolean>)}
                               >
                                 Reject
                               </Button>
@@ -289,8 +318,8 @@ export default function Games() {
                             <Button
                               variant={game.featured ? 'secondary' : 'primary'}
                               size="sm"
-                              loading={actionLoading === game.id}
                               onClick={() => handleAction(game.featured ? 'unfeature' : 'feature', game.id)}
+                              {...({ loading: actionLoading === game.id } as Record<string, boolean>)}
                             >
                               {game.featured ? 'Unfeature' : 'Feature'}
                             </Button>
