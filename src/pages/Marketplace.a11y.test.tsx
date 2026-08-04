@@ -16,7 +16,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { axe, toHaveNoViolations } from 'vitest-axe';
+import { axe } from 'vitest-axe';
+// Imported directly from the shim (rather than via the 'vitest-axe' bare
+// specifier Vite aliases it to) because the real vitest-axe package's own
+// typings don't export toHaveNoViolations from its main entry — only the
+// shim does. Same module at runtime either way; see vitest-axe-shim.ts.
+import { toHaveNoViolations } from '../test/vitest-axe-shim';
 
 import { mockGames } from '../data/mockGames';
 import Marketplace from './Marketplace';
