@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import GameHUD from '../components/GameHUD';
+import type { HUDPlayer } from '../components/GameHUD';
 import Modal from '../components/Modal';
 import GameOverlay from '../components/GameOverlay';
 import InGameStore from '../components/store/InGameStore';
@@ -12,11 +13,48 @@ import { usePlayManifest } from '../hooks/usePlayManifest';
 import { useTranslation } from '../i18n/useTranslation';
 import './Playground.css';
 
+interface PlaygroundGameState {
+  score: number;
+  timeRemaining: number;
+  isPaused: boolean;
+  isGameOver: boolean;
+  winner: string | null;
+}
+
+/** Loosely-shaped WS player record — the backend's field set here isn't
+ * formally typed; passed to GameHUD (which wants HUDPlayer) via a boundary
+ * cast, same as the original untyped JS behavior. */
+interface PlaygroundWsPlayer {
+  id: string | number;
+  username?: string;
+  score?: number;
+  [key: string]: unknown;
+}
+
+interface PlaygroundChatMessage {
+  id: number;
+  player: string;
+  message: string;
+  timestamp: number;
+}
+
+interface PlaygroundWsMessage {
+  type: string;
+  state?: PlaygroundGameState;
+  players?: PlaygroundWsPlayer[];
+  player?: PlaygroundWsPlayer;
+  player_id?: string | number;
+  playerId?: string | number;
+  message?: PlaygroundChatMessage;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
 // When the play manifest returns a server_url that looks like a real ws[s]:// URL
 // we hand the connection entirely to the GamePreview / magnetite-web-client pipeline
 // (Welcome → Snapshot → Delta → InputFrame).  The existing raw-canvas path stays as
 // a fallback for the legacy /ws/game/:id game-server endpoint.
-function isWebClientUrl(url) {
+function isWebClientUrl(url: string | null | undefined) {
   if (!url) return false;
   // A "web-client–managed" URL comes from magnetite-runtime and follows the
   // ServerNet protocol; legacy URLs use the older game WS message format.
@@ -24,7 +62,7 @@ function isWebClientUrl(url) {
   return /\/(runtime|play)\//i.test(url) || url.includes(':9001');
 }
 
-function formatTime(seconds) {
+function formatTime(seconds: number) {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -34,9 +72,9 @@ export default function Playground() {
   const { t } = useTranslation();
   const { id: gameId } = useParams();
   const navigate        = useNavigate();
-  const canvasRef       = useRef(null);
-  const wsRef           = useRef(null);
-  const gameLoopRef     = useRef(null);
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const wsRef           = useRef<WebSocket | null>(null);
+  const gameLoopRef     = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auth + economy
   const { user }                    = useAuth();
@@ -46,7 +84,7 @@ export default function Playground() {
   // Stable ref for user id so connectWebSocket doesn't re-mount on user changes.
   // Intentionally kept in sync during render so the latest id is available to
   // imperative WS callbacks without retriggering the connection effect.
-  const userIdRef = useRef(null);
+  const userIdRef = useRef<string | null>(null);
   // eslint-disable-next-line react-hooks/refs
   userIdRef.current = user?.id ?? null;
 
@@ -58,9 +96,9 @@ export default function Playground() {
     reload: reloadManifest,
   } = usePlayManifest(gameId);
 
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'error'>('disconnected');
   const [latency, setLatency]                   = useState(0);
-  const [gameState, setGameState]               = useState({
+  const [gameState, setGameState]               = useState<PlaygroundGameState>({
     score: 0,
     timeRemaining: 600,
     isPaused: false,
@@ -68,15 +106,15 @@ export default function Playground() {
     winner: null,
   });
   // Players are populated from real WS game_state messages
-  const [players, setPlayers]         = useState([]);
+  const [players, setPlayers]         = useState<PlaygroundWsPlayer[]>([]);
   const [showPauseMenu, setShowPauseMenu] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState<PlaygroundChatMessage[]>([]);
   const [minimapData] = useState({ players: [], objectives: [] });
 
-  const connectWebSocket = useCallback((wsEndpoint) => {
+  const connectWebSocket = useCallback((wsEndpoint: string | null) => {
     // Use the live endpoint from the play manifest; fall back to the path-based URL
     // derived from the current host so local dev without a provisioned instance still works.
-    let wsUrl;
+    let wsUrl: string;
     if (wsEndpoint) {
       wsUrl = wsEndpoint;
     } else {
@@ -101,8 +139,8 @@ export default function Playground() {
       // message is needed here.
     };
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    ws.onmessage = (event: MessageEvent<string>) => {
+      const data = JSON.parse(event.data) as PlaygroundWsMessage;
       switch (data.type) {
         // Backend GameMessage with rename_all="snake_case":
         case 'state_update':   // after backend rename fix
@@ -113,7 +151,7 @@ export default function Playground() {
         case 'player_join':    // after backend rename fix
         case 'player_joined':  // legacy alias
           if (data.player || data.player_id) {
-            const p = data.player ?? { id: data.player_id };
+            const p = data.player ?? { id: data.player_id! };
             setPlayers(prev => [...prev, p]);
           }
           break;
@@ -125,10 +163,10 @@ export default function Playground() {
         }
         case 'chat':           // backend GameMessage::Chat
         case 'chat_message':   // legacy alias
-          setChatMessages(prev => [...prev, data.message ?? data]);
+          setChatMessages(prev => [...prev, data.message ?? (data as unknown as PlaygroundChatMessage)]);
           break;
         case 'pong':
-          setLatency(Date.now() - data.timestamp);
+          setLatency(Date.now() - (data.timestamp ?? 0));
           break;
         default:
           break;
@@ -170,7 +208,9 @@ export default function Playground() {
       canvas.width  = window.innerWidth;
       canvas.height = window.innerHeight;
 
-      const ctx = canvas.getContext('2d');
+      // getContext('2d') can return null per spec; non-null asserted to match
+      // the original's unchecked access (which would throw here, same as now).
+      const ctx = canvas.getContext('2d')!;
       ctx.fillStyle = '#08090c';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -205,7 +245,7 @@ export default function Playground() {
   }, []);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setShowPauseMenu(prev => !prev);
         setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }));
@@ -217,7 +257,7 @@ export default function Playground() {
 
   useEffect(() => {
     if (gameState.isPaused || gameState.isGameOver) {
-      clearInterval(gameLoopRef.current);
+      clearInterval(gameLoopRef.current ?? undefined);
       return;
     }
 
@@ -230,10 +270,10 @@ export default function Playground() {
       });
     }, 1000);
 
-    return () => clearInterval(gameLoopRef.current);
+    return () => clearInterval(gameLoopRef.current ?? undefined);
   }, [gameState.isPaused, gameState.isGameOver]);
 
-  const handleSendChat = (message) => {
+  const handleSendChat = (message: string) => {
     setChatMessages(prev => [
       ...prev,
       { id: Date.now(), player: 'You', message, timestamp: Date.now() },
@@ -307,7 +347,7 @@ export default function Playground() {
             </div>
 
             {user && (
-              <div className="player-hud" aria-label={t('game.signedInAs', { name: user.username ?? user.email })}>
+              <div className="player-hud" aria-label={t('game.signedInAs', { name: (user.username ?? user.email)! })}>
                 <span className="player-hud-avatar" aria-hidden="true">
                   {(user.username ?? user.email ?? 'P').charAt(0).toUpperCase()}
                 </span>
@@ -326,7 +366,10 @@ export default function Playground() {
           <GamePreview
             wsEndpoint={resolvedWsUrl}
             token={localStorage.getItem('token')}
-            title={manifest?.name ?? `Game ${gameId}`}
+            // NOTE (pre-existing bug, not fixed here — PlayManifest has no
+            // `name` field, so this always fell through to the `Game ${gameId}`
+            // fallback). Cast preserves that exact prior expression.
+            title={(manifest as { name?: string } | null)?.name ?? `Game ${gameId}`}
             devMode={false}
           />
 
@@ -345,10 +388,14 @@ export default function Playground() {
     <div className="playground-container" role="main" aria-label="Game playground">
       <canvas ref={canvasRef} className="game-canvas" aria-hidden="true" />
 
+      {/* NOTE (pre-existing bug, not fixed here — GameHUDProps has no score/
+          timeRemaining props (score is per-player only); those two were
+          always silently dropped. players is WS data of loose/optional shape
+          cast to GameHUD's required HUDPlayer[] at this boundary, matching
+          the original's unchecked pass-through. */}
       <GameHUD
-        score={gameState.score}
-        timeRemaining={formatTime(gameState.timeRemaining)}
-        players={players}
+        {...({ score: gameState.score, timeRemaining: formatTime(gameState.timeRemaining) } as Record<string, unknown>)}
+        players={players as unknown as HUDPlayer[]}
         minimapData={minimapData}
         chatMessages={chatMessages}
         onSendChat={handleSendChat}
@@ -385,16 +432,18 @@ export default function Playground() {
           <span className="score-value">{gameState.score}</span>
         </div>
 
-        {/* Points HUD */}
-        <div className="points-hud" aria-label={t('game.pointsBalance', { count: balance.points ?? 0 })}>
+        {/* Points HUD. usePoints().balance can be null before it loads; the
+            original never guarded this (a real pre-existing crash risk on an
+            early render), preserved via non-null assertion rather than fixed. */}
+        <div className="points-hud" aria-label={t('game.pointsBalance', { count: balance!.points ?? 0 })}>
           <span className="points-hud-icon" aria-hidden="true">⬡</span>
-          <span className="points-hud-value">{(balance.points ?? 0).toLocaleString()}</span>
+          <span className="points-hud-value">{(balance!.points ?? 0).toLocaleString()}</span>
           <span className="points-hud-label">{t('game.pointsUnit')}</span>
         </div>
 
         {/* Player badge */}
         {user && (
-          <div className="player-hud" aria-label={t('game.signedInAs', { name: user.username ?? user.email })}>
+          <div className="player-hud" aria-label={t('game.signedInAs', { name: (user.username ?? user.email)! })}>
             <span className="player-hud-avatar" aria-hidden="true">
               {(user.username ?? user.email ?? 'P').charAt(0).toUpperCase()}
             </span>
@@ -433,7 +482,7 @@ export default function Playground() {
             storeId={gameId ? `game-${gameId}` : undefined}
             gameTitle="Match Store"
             onClose={() => setShowStore(false)}
-            pointBalance={balance.points ?? 0}
+            pointBalance={balance!.points ?? 0}
           />
         </div>
       )}
