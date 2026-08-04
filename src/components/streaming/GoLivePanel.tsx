@@ -1,6 +1,25 @@
 import { useState, useCallback, useRef } from 'react';
+import type { FormEvent } from 'react';
 import { api } from '../../api/client';
 import './GoLivePanel.css';
+
+export type GoLiveSource = 'screen' | 'rtmp';
+
+export interface LiveStreamInfo {
+  id: string;
+  title: string;
+  game?: string;
+  streamer?: string;
+  viewerCount?: number;
+  [key: string]: unknown;
+}
+
+export interface GoLivePanelProps {
+  communityId?: string | null;
+  channelId?: string | null;
+  onLive?: (stream: LiveStreamInfo) => void;
+  onClose?: () => void;
+}
 
 /**
  * GoLivePanel — "Go Live" setup wizard.
@@ -17,9 +36,9 @@ import './GoLivePanel.css';
  *   onLive       (stream) => void  — called when live session starts
  *   onClose      () => void
  */
-export default function GoLivePanel({ communityId, channelId, onLive, onClose }) {
-  const [step, setStep]       = useState('setup');   // 'setup' | 'live'
-  const [source, setSource]   = useState('screen');  // 'screen' | 'rtmp'
+export default function GoLivePanel({ communityId, channelId, onLive, onClose }: GoLivePanelProps) {
+  const [step, setStep]       = useState<'setup' | 'live'>('setup');
+  const [source, setSource]   = useState<GoLiveSource>('screen');
   const [title, setTitle]     = useState('');
   const [game, setGame]       = useState('');
   const [rtmpUrl, setRtmpUrl] = useState('rtmp://live.twitch.tv/live/');
@@ -27,9 +46,9 @@ export default function GoLivePanel({ communityId, channelId, onLive, onClose })
   const [keyVisible, setKeyVisible] = useState(false);
   const [capturing, setCapturing]   = useState(false);
   const [error, setError]           = useState('');
-  const [streamObj, setStreamObj]   = useState(null);
-  const mediaStreamRef = useRef(null);
-  const previewRef     = useRef(null);
+  const [streamObj, setStreamObj]   = useState<LiveStreamInfo | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const previewRef     = useRef<HTMLVideoElement | null>(null);
 
   // ── Screen capture ───────────────────────────────────────────────────────────
   const startCapture = useCallback(async () => {
@@ -49,7 +68,8 @@ export default function GoLivePanel({ communityId, channelId, onLive, onClose })
         mediaStreamRef.current = null;
       });
     } catch (err) {
-      if (err.name !== 'NotAllowedError') {
+      const errName = (err as { name?: string } | undefined)?.name;
+      if (errName !== 'NotAllowedError') {
         setError('Could not access screen. Check browser permissions.');
       }
     }
@@ -63,7 +83,7 @@ export default function GoLivePanel({ communityId, channelId, onLive, onClose })
   }, []);
 
   // ── Go live ──────────────────────────────────────────────────────────────────
-  const handleGoLive = useCallback(async (e) => {
+  const handleGoLive = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!title.trim()) {
       setError('Please enter a stream title.');
@@ -89,7 +109,7 @@ export default function GoLivePanel({ communityId, channelId, onLive, onClose })
         ...(source === 'rtmp' && { rtmp_url: rtmpUrl, stream_key: '***' }),
       };
       const result = await api.streams.goLive(communityId ?? 'global', payload);
-      const live = result ?? { id: `stream-${Date.now()}`, title: title.trim(), game: game.trim(), streamer: 'You', viewerCount: 0 };
+      const live = (result as LiveStreamInfo | null | undefined) ?? { id: `stream-${Date.now()}`, title: title.trim(), game: game.trim(), streamer: 'You', viewerCount: 0 };
       setStreamObj(live);
       setStep('live');
       onLive?.(live);
