@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Layout from '../components/Layout';
 import { useGamepad } from '../hooks/useGamepad';
+import type { Binding, BindingAction } from '../hooks/useGamepad';
 import './ControllerSettings.css';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ function GamepadIcon() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ACTION_LABELS = {
+const ACTION_LABELS: Record<BindingAction, string> = {
   move_forward:   'Move Forward',
   move_backward:  'Move Backward',
   move_left:      'Move Left',
@@ -46,7 +47,7 @@ const STANDARD_BUTTON_NAMES = [
 
 const AXIS_NAMES = ['LX', 'LY', 'RX', 'RY', 'L2', 'R2'];
 
-function bindingLabel(binding) {
+function bindingLabel(binding?: Binding) {
   if (!binding) return '—';
   if (binding.type === 'button') {
     return STANDARD_BUTTON_NAMES[binding.index] ?? `Btn ${binding.index}`;
@@ -55,7 +56,7 @@ function bindingLabel(binding) {
   return `${name}${binding.invert ? ' (−)' : ' (+)'}`;
 }
 
-function AxisBar({ value }) {
+function AxisBar({ value }: { value: number }) {
   const pct = ((value + 1) / 2) * 100;
   return (
     <div className="axis-bar" role="meter" aria-valuenow={Math.round(value * 100)} aria-valuemin={-100} aria-valuemax={100}>
@@ -250,7 +251,7 @@ export default function ControllerSettings() {
                 <span role="columnheader">Remap</span>
               </div>
 
-              {Object.entries(ACTION_LABELS).map(([action, label]) => {
+              {(Object.entries(ACTION_LABELS) as [BindingAction, string][]).map(([action, label]) => {
                 const isListening = listening === action;
                 const bound = bindings[action];
 
