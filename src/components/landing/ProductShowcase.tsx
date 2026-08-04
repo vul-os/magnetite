@@ -33,7 +33,15 @@ const SHOTS = [
   },
 ];
 
-function ShotFrame({ shot }) {
+interface Shot {
+  name: string;
+  kicker: string;
+  title: string;
+  caption: string;
+  alt: string;
+}
+
+function ShotFrame({ shot }: { shot: Shot }) {
   return (
     <figure className="shot">
       <div className="shot-frame">
