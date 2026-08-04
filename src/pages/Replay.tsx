@@ -12,20 +12,35 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import ReplayScrubber from '../components/ReplayScrubber';
+import type { ArenaView, ShooterPlayer, Input as PlayerInput, MatchConfig } from '../../magnetite-web-client/src/types';
 import './Replay.css';
 import '../components/ReplayScrubber.css';
 
 // ── Mock (VITE_USE_MOCKS=true) ────────────────────────────────────────────────
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-function _buildMockReplay() {
+type ReplayFrame = [number, [string, PlayerInput][]];
+
+interface ReplayLog {
+  id: string;
+  config?: MatchConfig;
+  frames: ReplayFrame[];
+  state_hashes: [number, bigint][];
+  recorded_at?: string;
+  verdict?: string;
+}
+
+/** Renders a canvas frame from an ArenaView; matches renderArenaView's signature. */
+type RenderFn = (ctx: CanvasRenderingContext2D, state: ArenaView, localPlayerId: string | null) => void;
+
+function _buildMockReplay(): ReplayLog {
   const totalTicks = 300;
-  const frames = [];
-  const state_hashes = [];
+  const frames: ReplayFrame[] = [];
+  const state_hashes: [number, bigint][] = [];
   for (let t = 0; t < totalTicks; t++) {
     frames.push([t, [
-      ['player-1', { keys: { forward: t % 20 < 10, backward: false, left: false, right: false, attack: t % 30 === 0 }, mouse: { x: t * 0.5, y: t * 0.3, delta_x: 0.5, delta_y: 0.3, left_button: t % 30 === 0, right_button: false, middle_button: false, scroll: 0 }, sequence: t, timestamp_ms: t * 16 }],
-      ['player-2', { keys: { forward: false, backward: t % 20 < 10, left: t % 15 < 7, right: false, attack: t % 45 === 0 }, mouse: { x: 80 - t * 0.3, y: 60 + t * 0.2, delta_x: -0.3, delta_y: 0.2, left_button: t % 45 === 0, right_button: false, middle_button: false, scroll: 0 }, sequence: t, timestamp_ms: t * 16 }],
+      ['player-1', { keys: { forward: t % 20 < 10, backward: false, left: false, right: false, jump: false, crouch: false, attack: t % 30 === 0, secondary_attack: false, interact: false, sprint: false }, mouse: { x: t * 0.5, y: t * 0.3, delta_x: 0.5, delta_y: 0.3, left_button: t % 30 === 0, right_button: false, middle_button: false, scroll: 0 }, sequence: t, timestamp_ms: t * 16 }],
+      ['player-2', { keys: { forward: false, backward: t % 20 < 10, left: t % 15 < 7, right: false, jump: false, crouch: false, attack: t % 45 === 0, secondary_attack: false, interact: false, sprint: false }, mouse: { x: 80 - t * 0.3, y: 60 + t * 0.2, delta_x: -0.3, delta_y: 0.2, left_button: t % 45 === 0, right_button: false, middle_button: false, scroll: 0 }, sequence: t, timestamp_ms: t * 16 }],
     ]]);
     state_hashes.push([t, BigInt(t * 13370) % BigInt(2 ** 32)]);
   }
@@ -43,11 +58,11 @@ function _buildMockReplay() {
 // We drive the arena manually from ReplayLog.frames without a live WS.
 // The renderer is imported lazily to avoid SSR issues.
 
-function buildArenaState(frames, tick, _config) {
+function buildArenaState(frames: ReplayFrame[], tick: number, _config: MatchConfig | undefined): ArenaView {
   // Reconstruct a synthetic ArenaView from cumulative inputs up to `tick`.
   // Since we don't have the real game WASM here, we build a plausible visual
   // state by integrating position from move inputs (forward = +y, right = +x).
-  const playerStates = {};
+  const playerStates: Record<string, ShooterPlayer> = {};
   const arenaHalf = 90;
 
   for (let t = 0; t <= tick && t < frames.length; t++) {
@@ -66,7 +81,7 @@ function buildArenaState(frames, tick, _config) {
         };
       }
       const ps = playerStates[pid];
-      const k = inp.keys || {};
+      const k = inp.keys || ({} as PlayerInput['keys']);
       const spd = 0.6;
       if (k.forward) ps.y -= spd;
       if (k.backward) ps.y += spd;
@@ -99,14 +114,14 @@ function buildArenaState(frames, tick, _config) {
 
 export default function Replay() {
   const { id } = useParams();
-  const canvasRef = useRef(null);
-  const renderFnRef = useRef(null);
-  const rafRef = useRef(null);
-  const intervalRef = useRef(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderFnRef = useRef<RenderFn | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [replay, setReplay] = useState(null);
+  const [replay, setReplay] = useState<ReplayLog | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [currentTick, setCurrentTick] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -126,7 +141,7 @@ export default function Replay() {
       .then(({ renderArenaView }) => { renderFnRef.current = renderArenaView; })
       .catch(() => {
         // Fallback minimal renderer if the import fails (e.g. path issues in test env)
-        renderFnRef.current = (ctx, state) => {
+        renderFnRef.current = (ctx: CanvasRenderingContext2D, state: ArenaView) => {
           ctx.fillStyle = '#08090c';
           ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
           ctx.fillStyle = '#7b61ff';
@@ -144,16 +159,20 @@ export default function Replay() {
     setCurrentTick(0);
     setPlaying(false);
 
-    const load = USE_MOCKS
+    const load: Promise<unknown> = USE_MOCKS
       ? Promise.resolve(_buildMockReplay())
-      : api.replays.get(id);
+      // id can be undefined per useParams()'s typing (no route match); the
+      // original code called get() with it regardless, producing a
+      // `.../replays/undefined` request in that edge case. Preserved as-is.
+      : api.replays.get(id!);
 
     load
       .then((data) => {
         // data may be wrapped in { data: ... } or plain
-        setReplay(data?.data ?? data);
+        const typed = data as { data?: ReplayLog } | ReplayLog | null | undefined;
+        setReplay(((typed && !('frames' in typed) ? typed.data : typed) ?? null) as ReplayLog | null);
       })
-      .catch((err) => setError(err.message || 'Failed to load replay'))
+      .catch((err) => setError((err instanceof Error && err.message) || 'Failed to load replay'))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -166,6 +185,10 @@ export default function Replay() {
       const renderFn = renderFnRef.current;
       if (!canvas || !renderFn || !replay) return;
       const ctx = canvas.getContext('2d');
+      // getContext('2d') can return null per spec; the try/catch below already
+      // swallowed the resulting TypeError from calling renderFn(null, ...), so
+      // this early return is an equivalent no-render outcome, not a behavior change.
+      if (!ctx) return;
       const state = buildArenaState(replay.frames, currentTickRef.current, replay.config);
       try { renderFn(ctx, state, 'player-1'); } catch { /* ignore render errors */ }
     });
@@ -185,7 +208,7 @@ export default function Replay() {
         const next = prev + 1;
         if (next >= totalTicks) {
           setPlaying(false);
-          clearInterval(intervalRef.current);
+          clearInterval(intervalRef.current ?? undefined);
           intervalRef.current = null;
           return totalTicks;
         }
@@ -193,7 +216,7 @@ export default function Replay() {
       });
     }, msPerTick);
 
-    return () => { clearInterval(intervalRef.current); intervalRef.current = null; };
+    return () => { clearInterval(intervalRef.current ?? undefined); intervalRef.current = null; };
   }, [playing, speed, replay]);
 
   // Re-render on tick change
@@ -203,13 +226,15 @@ export default function Replay() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Always non-null in practice: canvas is rendered inside .replay-viewport-wrap.
+    const parent = canvas.parentElement!;
     const obs = new ResizeObserver(() => {
-      const rect = canvas.parentElement.getBoundingClientRect();
+      const rect = parent.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
       scheduleRender();
     });
-    obs.observe(canvas.parentElement);
+    obs.observe(parent);
     return () => obs.disconnect();
   }, [scheduleRender]);
 
@@ -228,7 +253,7 @@ export default function Replay() {
     setPlaying((p) => !p);
   }
 
-  function handleSeek(tick) {
+  function handleSeek(tick: number) {
     const totalTicks = replay ? replay.frames.length - 1 : 0;
     const clamped = Math.max(0, Math.min(totalTicks, tick));
     setCurrentTick(clamped);
