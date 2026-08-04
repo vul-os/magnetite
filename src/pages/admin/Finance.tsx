@@ -21,7 +21,44 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 /** Protocol fee charged by this node, in basis points. Default: none. */
 const PROTOCOL_FEE_BPS = 0;
 
-function authFetch(endpoint, options = {}) {
+interface Receipt {
+  id: string;
+  kind: string;
+  buyer: string;
+  payee: string | null;
+  game: string;
+  total: number;
+  protocolFee: number;
+  rail: string | null;
+  date: string;
+  voided: boolean;
+}
+
+interface RawReceipt {
+  id: string;
+  kind?: string;
+  tx_type?: string;
+  type?: string;
+  username?: string;
+  buyer?: string;
+  user?: string;
+  payee?: string;
+  counterparty?: string;
+  developer_pubkey?: string;
+  game_title?: string;
+  game?: string;
+  total?: number | string;
+  amount?: number | string;
+  protocol_fee?: number | string;
+  rail_pubkey?: string;
+  rail?: string;
+  created_at?: string;
+  date?: string;
+  voided?: boolean;
+  status?: string;
+}
+
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -36,7 +73,7 @@ function authFetch(endpoint, options = {}) {
 const RAIL_PUBKEY = '3ac9017e5fb2d846902ce15b7a4d3f80c6e1927b5d0af348e2c76b91045fd8a2';
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_RECEIPTS: Receipt[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 'rcpt_01HQ8ZK3NP', kind: 'item_purchase', buyer: 'CryptoGamer42', payee: '5c8de401f9b7236a0d14e8c93b750af26e1d3809c47ba62e91d70b385ac64f13', game: 'Cosmic Raiders',  total:  2.50, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-16 14:32', voided: false },
       { id: 'rcpt_01HQ7WX8TM', kind: 'hosting_fee',   buyer: 'NeonRacer99',   payee: '7e30b8a1cd94c25e06f381ba47d9e2c0518736fa9db4e18c02735d6ab91af4e2', game: 'Neon Drift',      total:  1.50, protocolFee: 0, rail: RAIL_PUBKEY, date: '2026-07-16 14:28', voided: false },
@@ -45,15 +82,15 @@ const MOCK_RECEIPTS = import.meta.env.VITE_USE_MOCKS === 'true'
     ]
   : null;
 
-function normaliseReceipt(r) {
+function normaliseReceipt(r: RawReceipt): Receipt {
   return {
     id:          r.id,
     kind:        r.kind ?? r.tx_type ?? r.type ?? 'unknown',
     buyer:       r.username ?? r.buyer ?? r.user ?? 'Unknown',
     payee:       r.payee ?? r.counterparty ?? r.developer_pubkey ?? null,
     game:        r.game_title ?? r.game ?? '—',
-    total:       Math.abs(parseFloat(r.total ?? r.amount ?? 0)),
-    protocolFee: Math.abs(parseFloat(r.protocol_fee ?? 0)),
+    total:       Math.abs(parseFloat(String(r.total ?? r.amount ?? 0))),
+    protocolFee: Math.abs(parseFloat(String(r.protocol_fee ?? 0))),
     rail:        r.rail_pubkey ?? r.rail ?? null,
     date:        r.created_at ? r.created_at.replace('T', ' ').slice(0, 16) : (r.date ?? ''),
     voided:      Boolean(r.voided ?? (r.status === 'refunded')),
@@ -61,7 +98,7 @@ function normaliseReceipt(r) {
 }
 
 /** Human label for a receipt `kind`. */
-function kindLabel(kind) {
+function kindLabel(kind: string) {
   if (kind === 'item_purchase') return 'Item';
   if (kind === 'hosting_fee')   return 'Hosting';
   if (kind === 'tier')          return 'Tier';
@@ -69,15 +106,15 @@ function kindLabel(kind) {
 }
 
 export default function Finance() {
-  const [receipts, setReceipts]           = useState(MOCK_RECEIPTS ?? []);
+  const [receipts, setReceipts]           = useState<Receipt[]>(MOCK_RECEIPTS ?? []);
   const [loadingReceipts, setLoading]     = useState(!MOCK_RECEIPTS);
-  const [error, setError]                 = useState(null);
+  const [error, setError]                 = useState<string | null>(null);
   const [kindFilter, setKindFilter]       = useState('all');
   const [currentPage, setCurrentPage]     = useState(1);
-  const [voidingReceipt, setVoidingReceipt] = useState(null);   // receipt being voided
+  const [voidingReceipt, setVoidingReceipt] = useState<Receipt | null>(null);   // receipt being voided
   const [voidReason, setVoidReason]         = useState('');
-  const [voidError, setVoidError]           = useState(null);
-  const [voidSuccess, setVoidSuccess]       = useState(null);
+  const [voidError, setVoidError]           = useState<string | null>(null);
+  const [voidSuccess, setVoidSuccess]       = useState<string | null>(null);
   const perPage = 10;
 
   const fetchData = useCallback(async () => {
@@ -89,12 +126,12 @@ export default function Finance() {
     try {
       const res = await authFetch('/api/admin/transactions?limit=100');
       if (res.ok) {
-        const d = await res.json();
-        const raw = d.data ?? d ?? [];
+        const d = await res.json() as { data?: RawReceipt[] } | RawReceipt[];
+        const raw = (!Array.isArray(d) ? d.data : d) ?? [];
         setReceipts(Array.isArray(raw) ? raw.map(normaliseReceipt) : []);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load receipts');
+      setError((err instanceof Error && err.message) || 'Failed to load receipts');
     } finally {
       setLoading(false);
     }
@@ -135,7 +172,7 @@ export default function Finance() {
         prev.map(r => r.id === voidingReceipt.id ? { ...r, voided: true } : r)
       );
     } catch (err) {
-      setVoidError(err.message || 'Void failed');
+      setVoidError((err instanceof Error && err.message) || 'Void failed');
     }
   };
 
