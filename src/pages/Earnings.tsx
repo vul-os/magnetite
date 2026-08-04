@@ -1,11 +1,33 @@
 import { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/Layout';
 import AnalyticsChart from '../components/charts/AnalyticsChart';
+import type { AnalyticsChartDatum } from '../components/charts/AnalyticsChart';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 import './Earnings.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+interface EarningsShape {
+  data?: EarningsShape;
+  receipts?: Receipt[];
+  items?: Receipt[];
+  revenue_series?: AnalyticsChartDatum[];
+  protocol_fee_bps?: number;
+  wallet_pubkey?: string;
+}
+
+interface Receipt {
+  id: string;
+  buyer_pubkey?: string;
+  game_title?: string;
+  item_name?: string;
+  total: number;
+  protocol_fee: number;
+  rail_pubkey?: string;
+  settled_at?: string;
+  voided: boolean;
+}
 
 /**
  * Developer revenue is **receipt-backed** (§3.6 PaymentRail). A purchase moves USDC
@@ -34,23 +56,23 @@ const MOCK_REVENUE_SERIES = [
   { date: '2026-05-18', value: 37.55 },
 ];
 
-const shortKey = (pk) => {
+const shortKey = (pk?: string | null) => {
   if (!pk) return '—';
   const raw = String(pk).replace(/^[a-z0-9]+:/i, '');
   return raw.length <= 12 ? raw : `${raw.slice(0, 6)}…${raw.slice(-4)}`;
 };
 
-const usdc = (amount) =>
+const usdc = (amount?: number | null) =>
   `${Number(amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`;
 
 export default function Earnings() {
   const { t } = useTranslation();
-  const [receipts, setReceipts]   = useState(USE_MOCKS ? MOCK_RECEIPTS : []);
-  const [series, setSeries]       = useState(USE_MOCKS ? MOCK_REVENUE_SERIES : []);
+  const [receipts, setReceipts]   = useState<Receipt[]>(USE_MOCKS ? MOCK_RECEIPTS : []);
+  const [series, setSeries]       = useState<AnalyticsChartDatum[]>(USE_MOCKS ? MOCK_REVENUE_SERIES : []);
   const [feeBps, setFeeBps]       = useState(0);
-  const [walletPubkey, setWalletPubkey] = useState(USE_MOCKS ? 'ed25519:4a7f21c9e08b3d65' : null);
+  const [walletPubkey, setWalletPubkey] = useState<string | null>(USE_MOCKS ? 'ed25519:4a7f21c9e08b3d65' : null);
   const [loading, setLoading]     = useState(!USE_MOCKS);
-  const [loadError, setLoadError] = useState(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (USE_MOCKS) return;
@@ -61,20 +83,20 @@ export default function Earnings() {
       setLoading(true);
       setLoadError(null);
       try {
-        const res = await api.developer.earnings();
+        const res = await api.developer.earnings() as EarningsShape | Receipt[] | null;
         if (cancelled) return;
 
-        const d = res?.data ?? res ?? {};
-        const list = Array.isArray(d.receipts) ? d.receipts
-          : Array.isArray(d.items) ? d.items
+        const d: EarningsShape | Receipt[] = (res && !Array.isArray(res) ? (res.data ?? res) : res) ?? {};
+        const list: Receipt[] = !Array.isArray(d) && Array.isArray(d.receipts) ? d.receipts
+          : !Array.isArray(d) && Array.isArray(d.items) ? d.items
           : Array.isArray(d) ? d : [];
         setReceipts(list);
 
-        if (Array.isArray(d.revenue_series)) setSeries(d.revenue_series);
-        if (d.protocol_fee_bps != null) setFeeBps(Number(d.protocol_fee_bps));
-        if (d.wallet_pubkey) setWalletPubkey(d.wallet_pubkey);
+        if (!Array.isArray(d) && Array.isArray(d.revenue_series)) setSeries(d.revenue_series);
+        if (!Array.isArray(d) && d.protocol_fee_bps != null) setFeeBps(Number(d.protocol_fee_bps));
+        if (!Array.isArray(d) && d.wallet_pubkey) setWalletPubkey(d.wallet_pubkey);
       } catch (err) {
-        if (!cancelled) setLoadError(err.message || 'Failed to load revenue');
+        if (!cancelled) setLoadError((err instanceof Error && err.message) || 'Failed to load revenue');
       } finally {
         if (!cancelled) setLoading(false);
       }
