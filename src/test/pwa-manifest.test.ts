@@ -17,14 +17,43 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
+// ── Manifest shape (only the fields this suite inspects) ─────────────────────
+
+interface ManifestIcon {
+  src: string;
+  sizes: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+interface ManifestShortcut {
+  name: string;
+  url: string;
+  [key: string]: unknown;
+}
+
+interface PwaManifest {
+  name: string;
+  short_name: string;
+  start_url: string;
+  display: string;
+  icons: ManifestIcon[];
+  theme_color?: string;
+  background_color?: string;
+  scope?: string;
+  shortcuts?: ManifestShortcut[];
+  prefer_related_applications?: boolean;
+  [key: string]: unknown;
+}
+
 // ── Load the manifest once ────────────────────────────────────────────────────
 
-let manifest;
+let manifest: PwaManifest;
 
 beforeAll(() => {
   const manifestPath = resolve(process.cwd(), 'public/manifest.json');
   const raw = readFileSync(manifestPath, 'utf-8');
-  manifest = JSON.parse(raw);
+  manifest = JSON.parse(raw) as PwaManifest;
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
