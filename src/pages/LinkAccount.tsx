@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { getOAuthUrl, api } from '../api/client';
 
+interface LinkedAccount {
+  id: string | number;
+  provider: string;
+  email?: string;
+}
+
 const OAuthProviders = [
   { id: 'google',  name: 'Google',  abbr: 'G',  cls: 'google' },
   { id: 'discord', name: 'Discord', abbr: 'Di', cls: 'discord' },
@@ -12,26 +18,26 @@ const OAuthProviders = [
 
 const USER_KEY = 'magnetite_user';
 
-function navigateToProvider(provider) {
+function navigateToProvider(provider: string) {
   const destination = encodeURIComponent('/settings/connected-accounts');
   window.location.assign(getOAuthUrl(provider) + `?action=link&destination=${destination}`);
 }
 
 export default function LinkAccount() {
   const navigate = useNavigate();
-  const [linkedAccounts, setLinkedAccounts] = useState([]);
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
   const [loading, setLoading]               = useState(true);
-  const [linking, setLinking]               = useState(null);
-  const [unlinking, setUnlinking]           = useState(null);
-  const [showConfirm, setShowConfirm]       = useState(null);
+  const [linking, setLinking]               = useState<string | null>(null);
+  const [unlinking, setUnlinking]           = useState<LinkedAccount['id'] | null>(null);
+  const [showConfirm, setShowConfirm]       = useState<string | null>(null);
   const [error, setError]                   = useState('');
 
   const loadLinkedAccounts = useCallback(async () => {
     try {
       const accounts = await api.auth.linkedAccounts();
-      setLinkedAccounts(accounts);
+      setLinkedAccounts(accounts as LinkedAccount[]);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -48,25 +54,25 @@ export default function LinkAccount() {
     loadLinkedAccounts();
   }, [navigate, loadLinkedAccounts]);
 
-  const handleLinkAccount = (provider) => {
+  const handleLinkAccount = (provider: string) => {
     setLinking(provider);
     navigateToProvider(provider);
   };
 
-  const handleUnlinkAccount = async (providerId, accountId) => {
+  const handleUnlinkAccount = async (providerId: string, accountId: LinkedAccount['id']) => {
     setUnlinking(accountId);
     try {
       await api.auth.unlinkAccount(accountId);
       setLinkedAccounts(linkedAccounts.filter(a => a.id !== accountId));
       setShowConfirm(null);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setUnlinking(null);
     }
   };
 
-  const isLinked = (providerId) => linkedAccounts.some(a => a.provider === providerId);
+  const isLinked = (providerId: string) => linkedAccounts.some(a => a.provider === providerId);
 
   return (
     <Layout>
@@ -94,6 +100,9 @@ export default function LinkAccount() {
           <div className="connected-accounts-grid reveal reveal-2">
             {OAuthProviders.map((provider) => {
               const linked = isLinked(provider.id);
+              // linkedAccount is only read below inside `linked ? ... : ...` branches,
+              // where isLinked(provider.id) === true guarantees find() succeeded —
+              // hence the non-null assertions on its uses.
               const linkedAccount = linkedAccounts.find(a => a.provider === provider.id);
 
               return (
@@ -114,17 +123,17 @@ export default function LinkAccount() {
                           <span className="provider-confirm-label">Disconnect?</span>
                           <button
                             className="provider-disconnect-btn"
-                            onClick={() => handleUnlinkAccount(provider.id, linkedAccount.id)}
-                            disabled={unlinking === linkedAccount.id}
+                            onClick={() => handleUnlinkAccount(provider.id, linkedAccount!.id)}
+                            disabled={unlinking === linkedAccount!.id}
                           >
-                            {unlinking === linkedAccount.id
+                            {unlinking === linkedAccount!.id
                               ? <span className="spinner spinner-sm" aria-hidden="true" />
                               : 'Yes'}
                           </button>
                           <button
                             className="settings-action-btn"
                             onClick={() => setShowConfirm(null)}
-                            disabled={unlinking === linkedAccount.id}
+                            disabled={unlinking === linkedAccount!.id}
                             style={{ padding: '0.4rem 0.75rem' }}
                           >
                             No
