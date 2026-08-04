@@ -1,7 +1,19 @@
 import { CloseIcon } from '../assets/icons';
 import './ActiveFilters.css';
 
-export default function ActiveFilters({ filters = [], onRemove, onClearAll }) {
+export interface ActiveFilter {
+  type: string;
+  value: string;
+  label?: string;
+}
+
+interface ActiveFiltersProps {
+  filters?: ActiveFilter[];
+  onRemove?: (filter: ActiveFilter) => void;
+  onClearAll?: () => void;
+}
+
+export default function ActiveFilters({ filters = [], onRemove, onClearAll }: ActiveFiltersProps) {
   if (filters.length === 0) return null;
 
   return (

@@ -1,12 +1,20 @@
 import './LoadingSpinner.css';
 
+interface LoadingSpinnerProps {
+  size?: string;
+  color?: string;
+  centered?: boolean;
+  inline?: boolean;
+  className?: string;
+}
+
 export default function LoadingSpinner({
   size = 'md',
   color = 'primary',
   centered = false,
   inline = false,
   className = ''
-}) {
+}: LoadingSpinnerProps) {
   const classes = [
     'loading-spinner',
     `size-${size}`,

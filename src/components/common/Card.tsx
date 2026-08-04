@@ -1,18 +1,32 @@
+import type { MouseEventHandler, ReactNode } from 'react';
 import './Card.css';
 
-const variantClasses = {
+export type CardVariant = 'default' | 'elevated' | 'interactive' | 'glass';
+export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
+
+const variantClasses: Record<CardVariant, string> = {
   default: 'card-default',
   elevated: 'card-elevated',
   interactive: 'card-interactive',
   glass: 'card-glass',
 };
 
-const paddingClasses = {
+const paddingClasses: Record<CardPadding, string> = {
   none: 'padding-none',
   sm: 'padding-sm',
   md: 'padding-md',
   lg: 'padding-lg',
 };
+
+export interface CardProps {
+  children?: ReactNode;
+  variant?: CardVariant;
+  padding?: CardPadding;
+  onClick?: MouseEventHandler<HTMLButtonElement | HTMLDivElement>;
+  hoverable?: boolean;
+  className?: string;
+  [key: string]: unknown;
+}
 
 export default function Card({
   children,
@@ -22,7 +36,7 @@ export default function Card({
   hoverable = false,
   className = '',
   ...props
-}) {
+}: CardProps) {
   const isInteractive = hoverable || onClick;
 
   const classes = [
@@ -47,7 +61,12 @@ export default function Card({
   );
 }
 
-export function CardHeader({ children, className = '' }) {
+export interface CardSectionProps {
+  children?: ReactNode;
+  className?: string;
+}
+
+export function CardHeader({ children, className = '' }: CardSectionProps) {
   return (
     <div className={`card-header ${className}`}>
       {children}
@@ -55,7 +74,7 @@ export function CardHeader({ children, className = '' }) {
   );
 }
 
-export function CardBody({ children, className = '' }) {
+export function CardBody({ children, className = '' }: CardSectionProps) {
   return (
     <div className={`card-body ${className}`}>
       {children}
@@ -63,7 +82,7 @@ export function CardBody({ children, className = '' }) {
   );
 }
 
-export function CardFooter({ children, className = '' }) {
+export function CardFooter({ children, className = '' }: CardSectionProps) {
   return (
     <div className={`card-footer ${className}`}>
       {children}

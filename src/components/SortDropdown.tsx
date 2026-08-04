@@ -10,12 +10,18 @@ const sortOptions = [
   { value: 'rating', label: 'Highest Rated' },
 ];
 
-export default function SortDropdown({ value, onChange, onClose }) {
-  const ref = useRef(null);
+export interface SortDropdownProps {
+  value?: string;
+  onChange: (value: string) => void;
+  onClose?: () => void;
+}
+
+export default function SortDropdown({ value, onChange, onClose }: SortDropdownProps) {
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (ref.current && !ref.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         onClose?.();
       }
     }

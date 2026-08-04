@@ -1,6 +1,14 @@
+import type { ReactNode } from 'react';
 import './EmptyState.css';
 
-export default function EmptyState({ icon, title, description, action }) {
+interface EmptyStateProps {
+  icon?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+}
+
+export default function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="empty-state">
       {icon && <div className="empty-icon">{icon}</div>}

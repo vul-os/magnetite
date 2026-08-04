@@ -1,25 +1,38 @@
+import type { CSSProperties } from 'react';
 import './Skeleton.css';
+
+export interface SkeletonProps {
+  variant?: string;
+  width?: number | string;
+  height?: number | string;
+  className?: string;
+}
 
 export default function Skeleton({
   variant = 'text',
   width,
   height,
   className = ''
-}) {
+}: SkeletonProps) {
   const classes = [
     'skeleton',
     `variant-${variant}`,
     className
   ].filter(Boolean).join(' ');
 
-  const style = {};
+  const style: CSSProperties = {};
   if (width) style.width = width;
   if (height) style.height = height;
 
   return <div className={classes} style={style} />;
 }
 
-export function SkeletonText({ lines = 3, className = '' }) {
+export interface SkeletonTextProps {
+  lines?: number;
+  className?: string;
+}
+
+export function SkeletonText({ lines = 3, className = '' }: SkeletonTextProps) {
   return (
     <div className={`skeleton-text ${className}`}>
       {Array.from({ length: lines }).map((_, i) => (
@@ -33,7 +46,11 @@ export function SkeletonText({ lines = 3, className = '' }) {
   );
 }
 
-export function SkeletonCard({ className = '' }) {
+export interface SkeletonCardProps {
+  className?: string;
+}
+
+export function SkeletonCard({ className = '' }: SkeletonCardProps) {
   return (
     <div className={`skeleton-card ${className}`}>
       <div className="skeleton-card-image" />
@@ -49,7 +66,12 @@ export function SkeletonCard({ className = '' }) {
   );
 }
 
-export function SkeletonAvatar({ size = 'md', className = '' }) {
+export interface SkeletonAvatarProps {
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+export function SkeletonAvatar({ size = 'md', className = '' }: SkeletonAvatarProps) {
   const sizeMap = { sm: 32, md: 48, lg: 64 };
   const dimension = sizeMap[size] || sizeMap.md;
   return (
@@ -62,7 +84,12 @@ export function SkeletonAvatar({ size = 'md', className = '' }) {
   );
 }
 
-export function SkeletonTableRow({ columns = 4, className = '' }) {
+export interface SkeletonTableRowProps {
+  columns?: number;
+  className?: string;
+}
+
+export function SkeletonTableRow({ columns = 4, className = '' }: SkeletonTableRowProps) {
   return (
     <div className={`skeleton-table-row ${className}`}>
       {Array.from({ length: columns }).map((_, i) => (

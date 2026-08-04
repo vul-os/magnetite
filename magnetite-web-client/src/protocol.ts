@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/protocol.js
+ * magnetite-web-client/src/protocol.ts
  *
  * Wire-format helpers that exactly mirror magnetite-sdk::protocol.
  *
@@ -23,12 +23,13 @@
  *               middle_button, scroll }
  */
 
+import type { KeyState, MouseState, Input, ServerMessage } from './types';
+
 // ---------------------------------------------------------------------------
 // Default constructors
 // ---------------------------------------------------------------------------
 
-/** @returns {import('./types.js').KeyState} */
-export function defaultKeyState() {
+export function defaultKeyState(): KeyState {
   return {
     forward: false,
     backward: false,
@@ -43,8 +44,7 @@ export function defaultKeyState() {
   };
 }
 
-/** @returns {import('./types.js').MouseState} */
-export function defaultMouseState() {
+export function defaultMouseState(): MouseState {
   return {
     x: 0,
     y: 0,
@@ -57,8 +57,7 @@ export function defaultMouseState() {
   };
 }
 
-/** @returns {import('./types.js').Input} */
-export function defaultInput() {
+export function defaultInput(): Input {
   return {
     keys: defaultKeyState(),
     mouse: defaultMouseState(),
@@ -72,12 +71,11 @@ export function defaultInput() {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {number} seq  - client-local sequence number (u32)
- * @param {number} tick - authoritative tick this input targets (u64)
- * @param {import('./types.js').Input} input
- * @returns {string} JSON string ready to send over WebSocket
+ * @param seq  - client-local sequence number (u32)
+ * @param tick - authoritative tick this input targets (u64)
+ * @returns JSON string ready to send over WebSocket
  */
-export function encodeInputFrame(seq, tick, input) {
+export function encodeInputFrame(seq: number, tick: number, input: Input): string {
   return JSON.stringify({
     type: 'input_frame',
     seq,
@@ -94,11 +92,8 @@ export function encodeInputFrame(seq, tick, input) {
  * Parse a raw WebSocket text message into a typed ServerNet variant.
  *
  * Returns null (and logs a warning) if the message cannot be parsed.
- *
- * @param {string} raw
- * @returns {{ type: string, [key: string]: unknown } | null}
  */
-export function parseServerMessage(raw) {
+export function parseServerMessage(raw: string): ServerMessage | null {
   try {
     const msg = JSON.parse(raw);
     if (typeof msg !== 'object' || msg === null || typeof msg.type !== 'string') {
@@ -122,10 +117,9 @@ export function parseServerMessage(raw) {
  *
  * Decodes that base64 string back to a JS object.
  *
- * @param {string | number[]} bytesField  - base64 string or array of bytes
- * @returns {unknown | null}
+ * @param bytesField  - base64 string or array of bytes
  */
-export function decodeBytes(bytesField) {
+export function decodeBytes(bytesField: string | number[] | null | undefined): unknown | null {
   if (!bytesField) return null;
   try {
     if (Array.isArray(bytesField)) {

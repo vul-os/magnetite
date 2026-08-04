@@ -1,8 +1,41 @@
+import type { KeyboardEvent, ReactNode } from 'react';
 import Pagination from '../Pagination';
 import EmptyState from '../empty/EmptyState';
 import './Table.css';
 
-export default function Table({
+export interface TableColumn<T> {
+  key: string;
+  label: ReactNode;
+  sortable?: boolean;
+  width?: string | number;
+  render?: (value: unknown, row: T) => ReactNode;
+}
+
+export interface TablePagination {
+  total?: number;
+  perPage?: number;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
+}
+
+interface TableProps<T extends Record<string, unknown>> {
+  columns: TableColumn<T>[];
+  data: T[];
+  onSort?: (key: string) => void;
+  sortKey?: string;
+  sortOrder?: 'asc' | 'desc';
+  selectable?: boolean;
+  selectedRows?: number[];
+  onRowSelect?: (rows: number[]) => void;
+  emptyIcon?: ReactNode;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  pagination?: TablePagination;
+  caption?: string;
+  className?: string;
+}
+
+export default function Table<T extends Record<string, unknown>>({
   columns,
   data,
   onSort,
@@ -17,14 +50,14 @@ export default function Table({
   pagination,
   caption,
   className = '',
-}) {
-  const handleHeaderClick = (column) => {
+}: TableProps<T>) {
+  const handleHeaderClick = (column: TableColumn<T>) => {
     if (column.sortable && onSort) {
       onSort(column.key);
     }
   };
 
-  const handleHeaderKeyDown = (e, column) => {
+  const handleHeaderKeyDown = (e: KeyboardEvent<HTMLTableCellElement>, column: TableColumn<T>) => {
     if (column.sortable && onSort && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       onSort(column.key);
@@ -39,7 +72,7 @@ export default function Table({
     }
   };
 
-  const handleRowSelect = (index) => {
+  const handleRowSelect = (index: number) => {
     const newSelected = selectedRows.includes(index)
       ? selectedRows.filter(i => i !== index)
       : [...selectedRows, index];
@@ -49,13 +82,13 @@ export default function Table({
   const isAllSelected = data.length > 0 && selectedRows.length === data.length;
   const isSomeSelected = selectedRows.length > 0 && selectedRows.length < data.length;
 
-  const getAriaSortValue = (column) => {
+  const getAriaSortValue = (column: TableColumn<T>) => {
     if (!column.sortable) return undefined;
     if (sortKey !== column.key) return 'none';
     return sortOrder === 'asc' ? 'ascending' : 'descending';
   };
 
-  const renderSortIcon = (column) => {
+  const renderSortIcon = (column: TableColumn<T>) => {
     if (!column.sortable) return null;
     if (sortKey !== column.key) {
       return <span className="sort-icon sort-icon-neutral" aria-hidden="true">↕</span>;
@@ -144,7 +177,7 @@ export default function Table({
                     )}
                     {columns.map((column) => (
                       <td key={column.key} className="table-cell">
-                        {column.render ? column.render(row[column.key], row) : row[column.key]}
+                        {column.render ? column.render(row[column.key], row) : (row[column.key] as ReactNode)}
                       </td>
                     ))}
                   </tr>
@@ -168,15 +201,20 @@ export default function Table({
   );
 }
 
-export function TableHead({ children, className = '' }) {
+export function TableHead({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return <thead className={`table-head ${className}`}>{children}</thead>;
 }
 
-export function TableBody({ children, className = '' }) {
+export function TableBody({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return <tbody className={`table-body ${className}`}>{children}</tbody>;
 }
 
-export function TableRow({ children, className = '', selected = false, onClick }) {
+export function TableRow({ children, className = '', selected = false, onClick }: {
+  children?: ReactNode;
+  className?: string;
+  selected?: boolean;
+  onClick?: () => void;
+}) {
   const classes = [
     'table-row',
     selected ? 'selected' : '',
@@ -190,7 +228,13 @@ export function TableRow({ children, className = '', selected = false, onClick }
   );
 }
 
-export function TableHeader({ children, className = '', sortable = false, sorted = false, onClick }) {
+export function TableHeader({ children, className = '', sortable = false, sorted = false, onClick }: {
+  children?: ReactNode;
+  className?: string;
+  sortable?: boolean;
+  sorted?: boolean;
+  onClick?: () => void;
+}) {
   const classes = [
     'table-header',
     sortable ? 'sortable' : '',
@@ -204,6 +248,6 @@ export function TableHeader({ children, className = '', sortable = false, sorted
   );
 }
 
-export function TableCell({ children, className = '' }) {
+export function TableCell({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return <td className={`table-cell ${className}`}>{children}</td>;
 }

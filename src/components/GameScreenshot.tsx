@@ -1,10 +1,17 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import './GameScreenshot.css';
 
-export default memo(function GameScreenshot({ src, alt, onClick, index }) {
+interface GameScreenshotProps {
+  src: string;
+  alt: string;
+  onClick: (index: number) => void;
+  index: number;
+}
+
+export default memo(function GameScreenshot({ src, alt, onClick, index }: GameScreenshotProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(false);
-  const imgRef                  = useRef(null);
+  const imgRef                  = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(

@@ -1,10 +1,40 @@
 import './ChannelList.css';
+import type { ChannelKind } from '../../types/comms';
 
 /**
  * ChannelList — second column showing text + voice channel groups for the active server.
  * Renders two sections: TEXT CHANNELS and VOICE CHANNELS.
  * onSelect(channel) is called when a channel is clicked.
  */
+
+export interface ChannelListParticipant {
+  id: string;
+  username?: string;
+  muted?: boolean;
+}
+
+export interface ChannelListChannel {
+  id: string;
+  name: string;
+  /** API uses `kind`, mock data uses `type` — this component normalises to `type`. */
+  type?: ChannelKind;
+  kind?: ChannelKind;
+  unread?: number;
+  private?: boolean;
+  participants?: ChannelListParticipant[];
+}
+
+export interface ChannelListServer {
+  name?: string;
+}
+
+export interface ChannelListProps {
+  server?: ChannelListServer | null;
+  channels: ChannelListChannel[];
+  activeChannelId?: string | null;
+  onSelect: (channel: ChannelListChannel) => void;
+  loading?: boolean;
+}
 
 function HashIcon() {
   return (
@@ -33,7 +63,7 @@ function LockIcon() {
   );
 }
 
-export default function ChannelList({ server, channels, activeChannelId, onSelect, loading = false }) {
+export default function ChannelList({ server, channels, activeChannelId, onSelect, loading = false }: ChannelListProps) {
   // Normalise: API uses `kind`, mock uses `type`
   const normalised = channels.map(c => ({ ...c, type: c.type ?? c.kind ?? 'text' }));
   const textChannels  = normalised.filter(c => c.type === 'text');

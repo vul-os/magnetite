@@ -1,5 +1,18 @@
-import { useMemo } from 'react';
+import { useMemo, type ChangeEvent } from 'react';
 import Button from './common/Button';
+
+export interface PaginationProps {
+  total?: number;
+  perPage?: number;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
+  showFirstLast?: boolean;
+  showPerPageSelector?: boolean;
+  perPageOptions?: number[];
+  onPerPageChange?: (perPage: number) => void;
+  compact?: boolean;
+  className?: string;
+}
 
 export default function Pagination({
   total = 0,
@@ -12,7 +25,7 @@ export default function Pagination({
   onPerPageChange,
   compact = false,
   className = '',
-}) {
+}: PaginationProps) {
   const totalPages = useMemo(() => {
     if (total <= 0 || perPage <= 0) return 0;
     return Math.ceil(total / perPage);
@@ -27,12 +40,12 @@ export default function Pagination({
     return Math.min(currentPage * perPage, total);
   }, [currentPage, perPage, total]);
 
-  const pageNumbers = useMemo(() => {
+  const pageNumbers = useMemo((): (number | string)[] => {
     if (compact || totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
 
-    const pages = [];
+    const pages: (number | string)[] = [];
     const showLeftEllipsis = currentPage > 3;
     const showRightEllipsis = currentPage < totalPages - 2;
 
@@ -62,12 +75,12 @@ export default function Pagination({
     return pages;
   }, [currentPage, totalPages, compact]);
 
-  const handlePageClick = (page) => {
+  const handlePageClick = (page: number) => {
     if (page < 1 || page > totalPages || page === currentPage) return;
     onPageChange?.(page);
   };
 
-  const handlePerPageChange = (e) => {
+  const handlePerPageChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newPerPage = parseInt(e.target.value, 10);
     onPerPageChange?.(newPerPage);
   };
@@ -117,7 +130,7 @@ export default function Pagination({
               <button
                 key={page}
                 className={`page-number ${currentPage === page ? 'active' : ''}`}
-                onClick={() => handlePageClick(page)}
+                onClick={() => handlePageClick(page as number)}
               >
                 {page}
               </button>

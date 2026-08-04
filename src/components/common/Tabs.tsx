@@ -1,5 +1,29 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, type ReactNode, type KeyboardEvent } from 'react';
 import './Tabs.css';
+
+export interface TabItem {
+  id: string;
+  label: ReactNode;
+  icon?: ReactNode;
+  badge?: ReactNode;
+}
+
+interface IndicatorStyle {
+  left?: number;
+  width?: number;
+  top?: number;
+  height?: number;
+}
+
+interface TabsProps {
+  tabs?: TabItem[];
+  activeTab: string;
+  onChange: (id: string) => void;
+  variant?: string;
+  orientation?: 'horizontal' | 'vertical';
+  children?: ReactNode[];
+  className?: string;
+}
 
 export default function Tabs({
   tabs = [],
@@ -9,14 +33,14 @@ export default function Tabs({
   orientation = 'horizontal',
   children,
   className = '',
-}) {
-  const tabsListRef = useRef(null);
-  const [indicatorStyle, setIndicatorStyle] = useState({});
+}: TabsProps) {
+  const tabsListRef = useRef<HTMLDivElement>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState<IndicatorStyle>({});
   const [_focusedIndex, setFocusedIndex] = useState(-1);
 
   const updateIndicator = useCallback(() => {
     if (!tabsListRef.current) return;
-    const activeButton = tabsListRef.current.querySelector(`[data-tab-id="${activeTab}"]`);
+    const activeButton = tabsListRef.current.querySelector<HTMLElement>(`[data-tab-id="${activeTab}"]`);
     if (!activeButton) return;
 
     if (orientation === 'horizontal') {
@@ -36,7 +60,7 @@ export default function Tabs({
     updateIndicator();
   }, [updateIndicator]);
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const currentIndex = tabs.findIndex((t) => t.id === activeTab);
     let newIndex;
 
@@ -60,7 +84,7 @@ export default function Tabs({
     setFocusedIndex(newIndex);
   };
 
-  const handleFocus = (index) => {
+  const handleFocus = (index: number) => {
     setFocusedIndex(index);
   };
 

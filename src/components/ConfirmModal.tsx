@@ -1,14 +1,17 @@
+import type { ReactNode } from 'react';
 import Modal from './Modal';
 import Button from './common/Button';
 import './Modal.css';
 
-const variantClasses = {
+export type ConfirmModalVariant = 'danger' | 'warning' | 'info';
+
+const variantClasses: Record<ConfirmModalVariant, string> = {
   danger: 'confirm-danger',
   warning: 'confirm-warning',
   info: 'confirm-info',
 };
 
-const icons = {
+const icons: Record<ConfirmModalVariant, ReactNode> = {
   danger: (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
@@ -29,6 +32,18 @@ const icons = {
   ),
 };
 
+interface ConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title?: string;
+  message?: ReactNode;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: ConfirmModalVariant;
+  loading?: boolean;
+}
+
 export default function ConfirmModal({
   isOpen,
   onClose,
@@ -39,7 +54,7 @@ export default function ConfirmModal({
   cancelText = 'Cancel',
   variant = 'info',
   loading = false,
-}) {
+}: ConfirmModalProps) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
       <div className={`confirm-body ${variantClasses[variant]}`}>

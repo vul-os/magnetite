@@ -1,8 +1,10 @@
 import { useEffect, useCallback } from 'react';
-import { useVoiceClient } from '../../hooks/useVoiceClient';
+import { useVoiceClient, type PermissionState } from '../../hooks/useVoiceClient';
+import type { PeerState } from '../../hooks/useCommsSocket';
 import PresenceDot from './PresenceDot';
 import './PresenceDot.css';
 import './VoicePanel.css';
+import type { VoiceParticipant, PresenceStatus } from '../../types/comms';
 
 /**
  * VoicePanel — live voice channel panel (Wave 7).
@@ -21,9 +23,29 @@ import './VoicePanel.css';
  *  - Reduced-motion safe (CSS guards the ring animations)
  */
 
+export interface VoicePanelChannel {
+  id: string;
+  name: string;
+  community_id?: string;
+}
+
+export interface VoicePanelProps {
+  channel: VoicePanelChannel | null;
+  communityId?: string | null;
+  onLeave?: () => void;
+}
+
+/** VoiceParticipant plus the display fields this panel actually renders. */
+export interface VoicePanelParticipant extends VoiceParticipant {
+  username?: string;
+  muted?: boolean;
+  speaking?: boolean;
+  status?: PresenceStatus;
+}
+
 // ── SVG icons ──────────────────────────────────────────────────────────────
 
-function MicIcon({ muted }) {
+function MicIcon({ muted }: { muted?: boolean }) {
   if (muted) {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -47,7 +69,7 @@ function MicIcon({ muted }) {
   );
 }
 
-function HeadsetIcon({ deafened }) {
+function HeadsetIcon({ deafened }: { deafened?: boolean }) {
   if (deafened) {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -99,7 +121,7 @@ function AlertIcon() {
 
 // ── Connection state helpers ───────────────────────────────────────────────
 
-function peerStateLabel(state) {
+function peerStateLabel(state: PeerState): string {
   switch (state) {
     case 'connecting': return 'Connecting…';
     case 'connected':  return 'Voice Connected';
@@ -109,7 +131,7 @@ function peerStateLabel(state) {
   }
 }
 
-function peerStateClass(state) {
+function peerStateClass(state: PeerState): string {
   switch (state) {
     case 'connected':  return 'voice-panel--connected';
     case 'connecting': return 'voice-panel--connecting';
@@ -120,7 +142,12 @@ function peerStateClass(state) {
 
 // ── Participant row ────────────────────────────────────────────────────────
 
-function ParticipantRow({ participant, isLocalSpeaking }) {
+interface ParticipantRowProps {
+  participant: VoicePanelParticipant;
+  isLocalSpeaking: boolean;
+}
+
+function ParticipantRow({ participant, isLocalSpeaking }: ParticipantRowProps) {
   const isSpeaking = participant.id === '__local__' ? isLocalSpeaking : !!participant.speaking;
 
   return (
@@ -164,7 +191,7 @@ function ParticipantRow({ participant, isLocalSpeaking }) {
 
 // ── Permission denied banner ───────────────────────────────────────────────
 
-function PermissionBanner({ state }) {
+function PermissionBanner({ state }: { state: PermissionState }) {
   if (state === 'idle' || state === 'granted') return null;
 
   const msg = state === 'denied'
@@ -181,7 +208,7 @@ function PermissionBanner({ state }) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export default function VoicePanel({ channel, communityId, onLeave }) {
+export default function VoicePanel({ channel, communityId, onLeave }: VoicePanelProps) {
   const {
     currentRoom,
     participants,

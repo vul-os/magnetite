@@ -1,29 +1,54 @@
-import { useState, useRef, useEffect, useId, useCallback } from 'react';
+import { useState, useRef, useEffect, useId, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
-const positionClasses = {
+type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
+
+const positionClasses: Record<TooltipPosition, string> = {
   top: 'tooltip-top',
   bottom: 'tooltip-bottom',
   left: 'tooltip-left',
   right: 'tooltip-right',
 };
 
+interface TooltipProps {
+  content: ReactNode;
+  position?: TooltipPosition;
+  children: ReactNode;
+  delay?: number;
+}
+
+interface TooltipCoords {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+interface PositionRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  bottom: number;
+  right: number;
+}
+
 export default function Tooltip({
   content,
   position: initialPosition = 'top',
   children,
   delay = 200,
-}) {
+}: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
-  const [position, setPosition] = useState(initialPosition);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
-  const triggerRef = useRef(null);
-  const tooltipRef = useRef(null);
-  const timeoutRef = useRef(null);
+  const [position, setPosition] = useState<TooltipPosition>(initialPosition);
+  const [coords, setCoords] = useState<TooltipCoords>({ top: 0, left: 0, width: 0, height: 0 });
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tooltipId = useId();
 
-  const calculatePosition = useCallback((rect, tooltipRect) => {
+  const calculatePosition = useCallback((rect: PositionRect, tooltipRect: { width: number; height: number }) => {
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
     const margin = 8;

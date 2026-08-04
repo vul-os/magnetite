@@ -1,4 +1,10 @@
-const variantClasses = {
+import type { ReactNode } from 'react';
+
+export type BadgeVariant = 'solid' | 'outline' | 'subtle';
+export type BadgeColor = 'amber' | 'green' | 'red' | 'blue' | 'gray';
+export type BadgeSize = 'sm' | 'md' | 'lg';
+
+const variantClasses: Record<BadgeVariant, Record<BadgeColor, string>> = {
   solid: {
     amber: 'badge-solid-amber',
     green: 'badge-solid-green',
@@ -22,11 +28,20 @@ const variantClasses = {
   },
 };
 
-const sizeClasses = {
+const sizeClasses: Record<BadgeSize, string> = {
   sm: 'badge-sm',
   md: 'badge-md',
   lg: 'badge-lg',
 };
+
+export interface BadgeProps {
+  children?: ReactNode;
+  variant?: BadgeVariant;
+  color?: BadgeColor;
+  size?: BadgeSize;
+  dot?: boolean;
+  className?: string;
+}
 
 export default function Badge({
   children,
@@ -35,7 +50,7 @@ export default function Badge({
   size = 'md',
   dot = false,
   className = '',
-}) {
+}: BadgeProps) {
   const colorVariants = variantClasses[variant] || variantClasses.solid;
   const colorClass = colorVariants[color] || colorVariants.amber;
   const sizeClass = sizeClasses[size] || sizeClasses.md;

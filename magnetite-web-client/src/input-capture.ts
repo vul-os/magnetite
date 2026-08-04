@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/input-capture.js
+ * magnetite-web-client/src/input-capture.ts
  *
  * Captures keyboard and mouse events and maintains a current InputFrame
  * that can be polled each tick and sent to the server.
@@ -7,18 +7,32 @@
  * Mirrors the KeyState + MouseState snapshot model in magnetite-sdk::input.
  */
 
-import { defaultKeyState, defaultMouseState } from './protocol.js';
+import { defaultKeyState, defaultMouseState } from './protocol';
+import type { KeyState, MouseState, Input } from './types';
 
 // ---------------------------------------------------------------------------
 // InputCapture
 // ---------------------------------------------------------------------------
 
 export class InputCapture {
+  private _target: EventTarget | null;
+  private _keys: KeyState;
+  private _mouse: MouseState;
+  private _attached: boolean;
+
+  private _onKeyDown: (e: KeyboardEvent) => void;
+  private _onKeyUp: (e: KeyboardEvent) => void;
+  private _onMouseMove: (e: MouseEvent) => void;
+  private _onMouseDown: (e: MouseEvent) => void;
+  private _onMouseUp: (e: MouseEvent) => void;
+  private _onWheel: (e: WheelEvent) => void;
+  private _onContextMenu: (e: Event) => void;
+
   /**
-   * @param {EventTarget} [target=window] - DOM element to attach listeners to.
+   * @param target - DOM element to attach listeners to (defaults to `window`).
    *   For a canvas game, pass the canvas element.
    */
-  constructor(target) {
+  constructor(target?: EventTarget | null) {
     this._target = target || (typeof window !== 'undefined' ? window : null);
     this._keys = defaultKeyState();
     this._mouse = defaultMouseState();
@@ -31,7 +45,7 @@ export class InputCapture {
     this._onMouseDown = this._handleMouseDown.bind(this);
     this._onMouseUp = this._handleMouseUp.bind(this);
     this._onWheel = this._handleWheel.bind(this);
-    this._onContextMenu = (e) => e.preventDefault();
+    this._onContextMenu = (e: Event) => e.preventDefault();
   }
 
   // --------------------------------------------------------------------------
@@ -39,27 +53,27 @@ export class InputCapture {
   // --------------------------------------------------------------------------
 
   /** Attach event listeners. Call once after mount. */
-  attach() {
+  attach(): void {
     if (this._attached || !this._target) return;
-    this._target.addEventListener('keydown', this._onKeyDown);
-    this._target.addEventListener('keyup', this._onKeyUp);
-    this._target.addEventListener('mousemove', this._onMouseMove);
-    this._target.addEventListener('mousedown', this._onMouseDown);
-    this._target.addEventListener('mouseup', this._onMouseUp);
-    this._target.addEventListener('wheel', this._onWheel, { passive: true });
+    this._target.addEventListener('keydown', this._onKeyDown as EventListener);
+    this._target.addEventListener('keyup', this._onKeyUp as EventListener);
+    this._target.addEventListener('mousemove', this._onMouseMove as EventListener);
+    this._target.addEventListener('mousedown', this._onMouseDown as EventListener);
+    this._target.addEventListener('mouseup', this._onMouseUp as EventListener);
+    this._target.addEventListener('wheel', this._onWheel as EventListener, { passive: true });
     this._target.addEventListener('contextmenu', this._onContextMenu);
     this._attached = true;
   }
 
   /** Remove event listeners. Call on cleanup / unmount. */
-  detach() {
+  detach(): void {
     if (!this._attached || !this._target) return;
-    this._target.removeEventListener('keydown', this._onKeyDown);
-    this._target.removeEventListener('keyup', this._onKeyUp);
-    this._target.removeEventListener('mousemove', this._onMouseMove);
-    this._target.removeEventListener('mousedown', this._onMouseDown);
-    this._target.removeEventListener('mouseup', this._onMouseUp);
-    this._target.removeEventListener('wheel', this._onWheel);
+    this._target.removeEventListener('keydown', this._onKeyDown as EventListener);
+    this._target.removeEventListener('keyup', this._onKeyUp as EventListener);
+    this._target.removeEventListener('mousemove', this._onMouseMove as EventListener);
+    this._target.removeEventListener('mousedown', this._onMouseDown as EventListener);
+    this._target.removeEventListener('mouseup', this._onMouseUp as EventListener);
+    this._target.removeEventListener('wheel', this._onWheel as EventListener);
     this._target.removeEventListener('contextmenu', this._onContextMenu);
     this._attached = false;
   }
@@ -71,13 +85,9 @@ export class InputCapture {
   /**
    * Return a snapshot of the current input state and RESET delta values
    * (mouse delta and scroll) so they accumulate only within one tick.
-   *
-   * @param {number} seq
-   * @param {number} timestampMs
-   * @returns {import('./types.js').Input}
    */
-  snapshot(seq, timestampMs) {
-    const input = {
+  snapshot(seq: number, timestampMs: number): Input {
+    const input: Input = {
       keys: { ...this._keys },
       mouse: { ...this._mouse },
       sequence: seq,
@@ -96,7 +106,7 @@ export class InputCapture {
   // Event handlers
   // --------------------------------------------------------------------------
 
-  _handleKeyDown(e) {
+  private _handleKeyDown(e: KeyboardEvent): void {
     const k = _keyToField(e.code);
     if (k && k in this._keys) {
       this._keys[k] = true;
@@ -104,33 +114,33 @@ export class InputCapture {
     }
   }
 
-  _handleKeyUp(e) {
+  private _handleKeyUp(e: KeyboardEvent): void {
     const k = _keyToField(e.code);
     if (k && k in this._keys) {
       this._keys[k] = false;
     }
   }
 
-  _handleMouseMove(e) {
+  private _handleMouseMove(e: MouseEvent): void {
     this._mouse.x = e.clientX;
     this._mouse.y = e.clientY;
     this._mouse.delta_x += e.movementX || 0;
     this._mouse.delta_y += e.movementY || 0;
   }
 
-  _handleMouseDown(e) {
+  private _handleMouseDown(e: MouseEvent): void {
     if (e.button === 0) this._mouse.left_button = true;
     if (e.button === 1) this._mouse.middle_button = true;
     if (e.button === 2) this._mouse.right_button = true;
   }
 
-  _handleMouseUp(e) {
+  private _handleMouseUp(e: MouseEvent): void {
     if (e.button === 0) this._mouse.left_button = false;
     if (e.button === 1) this._mouse.middle_button = false;
     if (e.button === 2) this._mouse.right_button = false;
   }
 
-  _handleWheel(e) {
+  private _handleWheel(e: WheelEvent): void {
     this._mouse.scroll += e.deltaY;
   }
 }
@@ -154,10 +164,10 @@ export class InputCapture {
  *   Interact = KeyR / KeyE
  *   Sprint   = ShiftLeft / ShiftRight
  *
- * @param {string} code - KeyboardEvent.code
- * @returns {string | null} KeyState field name or null
+ * @param code - KeyboardEvent.code
+ * @returns KeyState field name or null
  */
-function _keyToField(code) {
+function _keyToField(code: string): keyof KeyState | null {
   switch (code) {
     case 'KeyW':
     case 'ArrowUp':

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import './MessageList.css';
 
 /**
@@ -6,12 +6,36 @@ import './MessageList.css';
  * Scrolls to bottom on new messages.
  */
 
-function formatTime(isoString) {
+export interface MessageListReaction {
+  emoji: string;
+  count: number;
+  userReacted?: boolean;
+  label?: string;
+}
+
+export interface MessageListMessage {
+  id: string;
+  authorId?: string;
+  author?: string;
+  avatarUrl?: string;
+  role?: string;
+  content: string;
+  createdAt: string;
+  reactions?: MessageListReaction[];
+}
+
+export interface MessageListProps {
+  messages: MessageListMessage[];
+  currentUserId?: string;
+  loading?: boolean;
+}
+
+function formatTime(isoString: string): string {
   const d = new Date(isoString);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(isoString) {
+function formatDate(isoString: string): string {
   const d = new Date(isoString);
   const today = new Date();
   const yesterday = new Date(today);
@@ -22,14 +46,14 @@ function formatDate(isoString) {
   return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-function isSameGroup(a, b) {
+function isSameGroup(a: MessageListMessage | undefined, b: MessageListMessage | undefined): boolean {
   if (!a || !b) return false;
   if (a.authorId !== b.authorId) return false;
-  const diff = new Date(b.createdAt) - new Date(a.createdAt);
+  const diff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   return diff < 5 * 60 * 1000; // 5-minute window
 }
 
-function needsDivider(a, b) {
+function needsDivider(a: MessageListMessage | undefined, b: MessageListMessage | undefined): boolean {
   if (!a || !b) return false;
   return new Date(a.createdAt).toDateString() !== new Date(b.createdAt).toDateString();
 }
@@ -55,8 +79,8 @@ function MessageSkeleton() {
   );
 }
 
-export default function MessageList({ messages, currentUserId, loading = false }) {
-  const bottomRef = useRef(null);
+export default function MessageList({ messages, currentUserId, loading = false }: MessageListProps) {
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -82,7 +106,7 @@ export default function MessageList({ messages, currentUserId, loading = false }
     );
   }
 
-  const items = [];
+  const items: ReactNode[] = [];
   messages.forEach((msg, i) => {
     const prev = messages[i - 1];
 

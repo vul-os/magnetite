@@ -19,7 +19,7 @@
  * App.jsx (out of scope for this wave per ownership rules).
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 import './NotificationPreferences.css';
@@ -79,9 +79,16 @@ const DEFAULT_PREFS = {
   marketing_push: false,
 };
 
+type Prefs = typeof DEFAULT_PREFS;
+type PrefKey = keyof Prefs;
+
+type PrefsAction =
+  | { type: 'LOAD'; payload: Partial<Prefs> }
+  | { type: 'TOGGLE'; key: PrefKey };
+
 // ── Reducer ───────────────────────────────────────────────────────────────
 
-function prefsReducer(state, action) {
+function prefsReducer(state: Prefs, action: PrefsAction): Prefs {
   switch (action.type) {
     case 'LOAD':
       return { ...state, ...action.payload };
@@ -94,7 +101,15 @@ function prefsReducer(state, action) {
 
 // ── ToggleSwitch sub-component ─────────────────────────────────────────────
 
-function ToggleSwitch({ id, label, checked, onChange, disabled }) {
+interface ToggleSwitchProps {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}
+
+function ToggleSwitch({ id, label, checked, onChange, disabled }: ToggleSwitchProps) {
   return (
     <div className="np-toggle-cell">
       <button
@@ -115,7 +130,23 @@ function ToggleSwitch({ id, label, checked, onChange, disabled }) {
 
 // ── CategoryCard sub-component ─────────────────────────────────────────────
 
-function CategoryCard({ icon, title, description, channels, prefs, onToggle, disabled, t }) {
+interface ChannelRow {
+  label: string;
+  keys: PrefKey[];
+}
+
+interface CategoryCardProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  channels: ChannelRow[];
+  prefs: Prefs;
+  onToggle: (key: PrefKey) => void;
+  disabled?: boolean;
+  t: (key: string) => string;
+}
+
+function CategoryCard({ icon, title, description, channels, prefs, onToggle, disabled, t }: CategoryCardProps) {
   const channelLabels = [
     t('notifPrefs.channelEmail'),
     t('notifPrefs.channelInApp'),
@@ -179,8 +210,8 @@ export default function NotificationPreferences() {
   const [prefs, dispatch] = useReducer(prefsReducer, DEFAULT_PREFS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [alertState, setAlertState] = useState(null); // 'success' | 'error' | null
-  const alertTimerRef = useRef(null);
+  const [alertState, setAlertState] = useState<'success' | 'error' | null>(null);
+  const alertTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Fetch preferences on mount.
   useEffect(() => {
@@ -189,7 +220,7 @@ export default function NotificationPreferences() {
       .getPreferences()
       .then((data) => {
         if (!cancelled) {
-          dispatch({ type: 'LOAD', payload: data });
+          dispatch({ type: 'LOAD', payload: data as Partial<Prefs> });
           setLoading(false);
         }
       })
@@ -203,17 +234,17 @@ export default function NotificationPreferences() {
     };
   }, []);
 
-  const handleToggle = useCallback((key) => {
+  const handleToggle = useCallback((key: PrefKey) => {
     dispatch({ type: 'TOGGLE', key });
   }, []);
 
-  const showAlert = useCallback((type) => {
+  const showAlert = useCallback((type: 'success' | 'error') => {
     setAlertState(type);
     clearTimeout(alertTimerRef.current);
     alertTimerRef.current = setTimeout(() => setAlertState(null), 3500);
   }, []);
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (saving) return;
     setSaving(true);

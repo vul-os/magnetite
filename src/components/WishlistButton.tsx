@@ -1,16 +1,22 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import Spinner from './common/Spinner';
 
-export default function WishlistButton({ gameId, initialIsWishlisted = false, onToggle }) {
+export interface WishlistButtonProps {
+  gameId: string | number;
+  initialIsWishlisted?: boolean;
+  onToggle?: (gameId: string | number, wishlisted: boolean) => Promise<unknown> | void;
+}
+
+export default function WishlistButton({ gameId, initialIsWishlisted = false, onToggle }: WishlistButtonProps) {
   const [isWishlisted, setIsWishlisted] = useState(initialIsWishlisted);
   const [loading, setLoading] = useState(false);
 
-  const handleClick = async (e) => {
+  const handleClick = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     setLoading(true);
-    
+
     try {
       if (onToggle) {
         await onToggle(gameId, !isWishlisted);

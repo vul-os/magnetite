@@ -1,4 +1,16 @@
+import type { ChangeEvent, InputHTMLAttributes } from 'react';
 import './Checkbox.css';
+
+export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
+  checked?: boolean;
+  onChange?: (event: ChangeEvent<HTMLInputElement>) => void;
+  label?: string;
+  disabled?: boolean;
+  error?: string;
+  name?: string;
+  value?: string | number;
+  className?: string;
+}
 
 export default function Checkbox({
   checked = false,
@@ -10,7 +22,7 @@ export default function Checkbox({
   value,
   className = '',
   ...props
-}) {
+}: CheckboxProps) {
   const checkboxId = label?.toLowerCase().replace(/\s+/g, '-');
 
   const wrapperClasses = [
@@ -20,7 +32,7 @@ export default function Checkbox({
     className,
   ].filter(Boolean).join(' ');
 
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (onChange) {
       onChange(e);
     }

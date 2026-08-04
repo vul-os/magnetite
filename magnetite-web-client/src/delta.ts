@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/delta.js
+ * magnetite-web-client/src/delta.ts
  *
  * Apply an ArenaDelta onto an ArenaView/ArenaSnapshot state.
  *
@@ -21,6 +21,8 @@
  * on a normalised form that matches both.
  */
 
+import type { ArenaSnapshot, ArenaDelta, ArenaView } from './types';
+
 // ---------------------------------------------------------------------------
 // Apply a delta onto an ArenaSnapshot
 // ---------------------------------------------------------------------------
@@ -29,12 +31,13 @@
  * Apply a decoded ArenaDelta to an ArenaSnapshot.
  * Returns a new snapshot (does not mutate the input).
  *
- * @param {import('./types.js').ArenaSnapshot} snapshot
- * @param {import('./types.js').ArenaDelta}    delta
- * @param {number}                             tick  - new authoritative tick
- * @returns {import('./types.js').ArenaSnapshot}
+ * @param tick  - new authoritative tick
  */
-export function applyDeltaToSnapshot(snapshot, delta, tick) {
+export function applyDeltaToSnapshot(
+  snapshot: ArenaSnapshot | null | undefined,
+  delta: ArenaDelta,
+  tick: number,
+): ArenaSnapshot | null | undefined {
   if (!snapshot) return snapshot;
 
   // Build a mutable players map (keyed by player id string)
@@ -80,11 +83,12 @@ export function applyDeltaToSnapshot(snapshot, delta, tick) {
  * to render the game after a Snapshot message arrives (the Delta path sends
  * the view directly).
  *
- * @param {import('./types.js').ArenaSnapshot} snapshot
- * @param {string | number | null} playerId  - local player's id
- * @returns {import('./types.js').ArenaView}
+ * @param playerId  - local player's id
  */
-export function snapshotToView(snapshot, playerId) {
+export function snapshotToView(
+  snapshot: ArenaSnapshot | null | undefined,
+  playerId: string | number | null | undefined,
+): ArenaView {
   if (!snapshot) {
     return { self_state: null, other_players: [], projectiles: [], tick: 0 };
   }

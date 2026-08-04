@@ -1,12 +1,19 @@
 import Button from './common/Button';
 import './ReadyButton.css';
 
+export interface ReadyButtonProps {
+  isReady: boolean;
+  isHost?: boolean;
+  onToggleReady: (nextReady: boolean) => void;
+  disabled?: boolean;
+}
+
 export default function ReadyButton({
   isReady,
   isHost = false,
   onToggleReady,
   disabled = false,
-}) {
+}: ReadyButtonProps) {
   if (isHost) {
     return (
       <div className="ready-button-wrapper">

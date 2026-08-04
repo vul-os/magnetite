@@ -1,11 +1,17 @@
 import LoadingSpinner from './LoadingSpinner';
 import './PageLoader.css';
 
+export interface PageLoaderProps {
+  progress?: number;
+  message?: string;
+  className?: string;
+}
+
 export default function PageLoader({
   progress,
   message = 'Loading...',
   className = ''
-}) {
+}: PageLoaderProps) {
   return (
     <div className={`page-loader ${className}`}>
       <div className="page-loader-content">

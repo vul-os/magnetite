@@ -1,23 +1,38 @@
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import './Button.css';
 
-const variantClasses = {
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+const variantClasses: Record<ButtonVariant, string> = {
   primary: 'variantPrimary',
   secondary: 'variantSecondary',
   ghost: 'variantGhost',
   danger: 'variantDanger',
 };
 
-const sizeClasses = {
+const sizeClasses: Record<ButtonSize, string> = {
   sm: 'sizeSm',
   md: 'sizeMd',
   lg: 'sizeLg',
 };
 
-const spinnerSizeClasses = {
+const spinnerSizeClasses: Record<ButtonSize, string> = {
   sm: 'spinnerSm',
   md: 'spinnerMd',
   lg: 'spinnerLg',
 };
+
+export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
+  children?: ReactNode;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  isLoading?: boolean;
+  isDisabled?: boolean;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+  type?: 'button' | 'submit' | 'reset';
+}
 
 export default function Button({
   children,
@@ -32,7 +47,7 @@ export default function Button({
   className = '',
   'aria-label': ariaLabel,
   ...props
-}) {
+}: ButtonProps) {
   const classes = [
     'button',
     variantClasses[variant],

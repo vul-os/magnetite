@@ -1,12 +1,26 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import './ServerRail.css';
+
+export interface ServerRailServer {
+  id: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  unread?: number;
+}
+
+export interface ServerRailProps {
+  servers: ServerRailServer[];
+  activeId?: string | null;
+  onSelect: (id: string) => void;
+}
 
 /**
  * ServerRail — left column of circular server icons with magnetic hover +
  * active pill indicator. Pure visual shell; selection callback hoisted up.
  */
-export default function ServerRail({ servers, activeId, onSelect }) {
-  const [hovered, setHovered] = useState(null);
+export default function ServerRail({ servers, activeId, onSelect }: ServerRailProps) {
+  const [hovered, setHovered] = useState<string | null>(null);
 
   return (
     <nav
@@ -41,7 +55,7 @@ export default function ServerRail({ servers, activeId, onSelect }) {
 
             <button
               className={`server-icon${isActive ? ' server-icon--active' : ''}`}
-              style={server.color ? { '--server-color': server.color } : undefined}
+              style={server.color ? ({ '--server-color': server.color } as CSSProperties) : undefined}
               onClick={() => onSelect(server.id)}
               onMouseEnter={() => setHovered(server.id)}
               onMouseLeave={() => setHovered(null)}

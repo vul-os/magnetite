@@ -1,6 +1,9 @@
-import { memo } from 'react';
+import { memo, type HTMLAttributes } from 'react';
 
-const sizeMap = {
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+export type AvatarStatus = 'online' | 'idle' | 'dnd' | 'offline' | string;
+
+const sizeMap: Record<AvatarSize, number> = {
   xs: 24,
   sm: 32,
   md: 40,
@@ -8,11 +11,21 @@ const sizeMap = {
   xl: 80,
 };
 
-function getInitials(name) {
+function getInitials(name?: string | null): string {
   if (!name) return '?';
   const parts = name.trim().split(' ');
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+export interface AvatarProps extends HTMLAttributes<HTMLDivElement> {
+  src?: string;
+  alt?: string;
+  name?: string;
+  size?: AvatarSize;
+  showOnline?: boolean;
+  status?: AvatarStatus;
+  className?: string;
 }
 
 export default memo(function Avatar({
@@ -24,7 +37,7 @@ export default memo(function Avatar({
   status,
   className = '',
   ...props
-}) {
+}: AvatarProps) {
   const dimension = sizeMap[size];
   const initials = getInitials(name || alt);
 

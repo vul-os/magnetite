@@ -1,36 +1,51 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react';
 import Button from './common/Button';
 import './LobbyChat.css';
+
+export interface LobbyChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: string | number;
+}
+
+interface LobbyChatProps {
+  messages?: LobbyChatMessage[];
+  currentUserId?: string;
+  onSendMessage: (content: string) => void;
+  disabled?: boolean;
+}
 
 export default function LobbyChat({
   messages = [],
   currentUserId,
   onSendMessage,
   disabled = false,
-}) {
+}: LobbyChatProps) {
   const [input, setInput]     = useState('');
-  const messagesEndRef        = useRef(null);
-  const inputRef              = useRef(null);
+  const messagesEndRef        = useRef<HTMLDivElement>(null);
+  const inputRef              = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement> | KeyboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (!input.trim() || disabled) return;
     onSendMessage(input.trim());
     setInput('');
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
     }
   };
 
-  const formatTime = (ts) =>
+  const formatTime = (ts: string | number) =>
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (

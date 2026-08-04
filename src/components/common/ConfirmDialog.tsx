@@ -1,15 +1,18 @@
+import type { ReactNode } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import { useTranslation } from '../../i18n/useTranslation';
 import './ConfirmDialog.css';
 
-const variantClasses = {
+export type ConfirmDialogVariant = 'danger' | 'warning' | 'info';
+
+const variantClasses: Record<ConfirmDialogVariant, string> = {
   danger: 'confirm-dialog-danger',
   warning: 'confirm-dialog-warning',
   info: 'confirm-dialog-info',
 };
 
-const icons = {
+const icons: Record<ConfirmDialogVariant, ReactNode> = {
   danger: (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
@@ -30,6 +33,18 @@ const icons = {
   ),
 };
 
+export interface ConfirmDialogProps {
+  isOpen: boolean;
+  onClose?: () => void;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  title?: string;
+  message?: ReactNode;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: ConfirmDialogVariant;
+}
+
 export default function ConfirmDialog({
   isOpen,
   onClose,
@@ -40,12 +55,14 @@ export default function ConfirmDialog({
   confirmText,
   cancelText,
   variant = 'info',
-}) {
+}: ConfirmDialogProps) {
   const { t } = useTranslation();
   const resolvedConfirmText = confirmText ?? t('common.confirm');
   const resolvedCancelText = cancelText ?? t('common.cancel');
 
   return (
+    // @ts-expect-error onClose is optional here (ConfirmDialogContext never passes it, a pre-existing
+    // gap — see report) but Modal's onClose is required since it calls it unconditionally on Escape/backdrop.
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" closeOnBackdrop={false}>
       <div className={`confirm-dialog-body ${variantClasses[variant]}`}>
         <div className="confirm-dialog-icon" aria-hidden="true">{icons[variant]}</div>

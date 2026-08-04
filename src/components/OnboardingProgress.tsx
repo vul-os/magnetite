@@ -1,6 +1,11 @@
 import './OnboardingProgress.css';
 
-export default function OnboardingProgress({ currentStep, totalSteps }) {
+export interface OnboardingProgressProps {
+  currentStep: number;
+  totalSteps: number;
+}
+
+export default function OnboardingProgress({ currentStep, totalSteps }: OnboardingProgressProps) {
   return (
     <div className="onboarding-progress">
       <div className="progress-dots">

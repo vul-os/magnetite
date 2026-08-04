@@ -1,8 +1,16 @@
+import type { PresenceStatus } from '../../types/comms';
+
+export interface PresenceDotProps {
+  status?: PresenceStatus;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
 /**
  * PresenceDot — small status indicator dot.
  * status: 'online' | 'idle' | 'dnd' | 'offline'
  */
-export default function PresenceDot({ status = 'offline', size = 'sm', className = '' }) {
+export default function PresenceDot({ status = 'offline', size = 'sm', className = '' }: PresenceDotProps) {
   const label =
     status === 'online'  ? 'Online' :
     status === 'idle'    ? 'Idle' :

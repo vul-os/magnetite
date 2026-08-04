@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import './ChatWidget.css';
 
-export default function ChatWidget({ isAdminOnline = false }) {
+interface ChatWidgetProps {
+  isAdminOnline?: boolean;
+}
+
+export default function ChatWidget({ isAdminOnline = false }: ChatWidgetProps) {
   const [message, setMessage] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!message.trim()) return;
     console.log('Chat message sent:', message);

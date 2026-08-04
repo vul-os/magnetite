@@ -1,6 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ChangeEvent } from 'react';
 import { CloseIcon } from '../assets/icons';
 import './PriceRangeSlider.css';
+
+export interface PriceRange {
+  min: number;
+  max: number;
+}
+
+export interface PriceRangeSliderProps {
+  min?: number;
+  max?: number;
+  value?: PriceRange;
+  onChange?: (value: PriceRange) => void;
+  onClose?: () => void;
+}
 
 export default function PriceRangeSlider({
   min = 0,
@@ -8,14 +21,14 @@ export default function PriceRangeSlider({
   value = { min: 0, max: 100 },
   onChange,
   onClose,
-}) {
-  const [localValue, setLocalValue] = useState(() => value);
-  const ref = useRef(null);
-  const initialValue = useRef(value);
+}: PriceRangeSliderProps) {
+  const [localValue, setLocalValue] = useState<PriceRange>(() => value);
+  const ref = useRef<HTMLDivElement>(null);
+  const initialValue = useRef<PriceRange>(value);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (ref.current && !ref.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         onChange?.(localValue);
         onClose?.();
       }
@@ -31,24 +44,24 @@ export default function PriceRangeSlider({
     }
   }, [value]);
 
-  const handleMinChange = (e) => {
+  const handleMinChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newMin = Math.min(Number(e.target.value), localValue.max - 1);
     setLocalValue((prev) => ({ ...prev, min: newMin }));
   };
 
-  const handleMaxChange = (e) => {
+  const handleMaxChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newMax = Math.max(Number(e.target.value), localValue.min + 1);
     setLocalValue((prev) => ({ ...prev, max: newMax }));
   };
 
-  const handleMinInputChange = (e) => {
+  const handleMinInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const val = Number(e.target.value);
     if (!isNaN(val) && val >= min && val < localValue.max) {
       setLocalValue((prev) => ({ ...prev, min: val }));
     }
   };
 
-  const handleMaxInputChange = (e) => {
+  const handleMaxInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const val = Number(e.target.value);
     if (!isNaN(val) && val <= max && val > localValue.min) {
       setLocalValue((prev) => ({ ...prev, max: val }));

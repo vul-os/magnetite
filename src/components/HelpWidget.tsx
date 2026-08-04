@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import './HelpWidget.css';
 
-const faqs = [
+interface Faq {
+  question: string;
+  answer: string;
+}
+
+const faqs: Faq[] = [
   {
     question: 'How do I get started?',
     answer: 'Create an account, complete your profile, and browse the Magnetite marketplace to discover Rust games compiled to WebAssembly — playable right in your browser.',
@@ -26,14 +31,14 @@ const faqs = [
 
 export default function HelpWidget() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedFaq, setExpandedFaq] = useState(null);
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const filteredFaqs = faqs.filter(faq =>
     faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
     faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const toggleFaq = (index) => {
+  const toggleFaq = (index: number) => {
     setExpandedFaq(prev => (prev === index ? null : index));
   };
 

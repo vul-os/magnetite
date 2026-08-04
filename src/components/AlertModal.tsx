@@ -1,15 +1,18 @@
+import type { ReactNode } from 'react';
 import Modal from './Modal';
 import Button from './common/Button';
 import './Modal.css';
 
-const typeClasses = {
+export type AlertModalType = 'success' | 'error' | 'warning' | 'info';
+
+const typeClasses: Record<AlertModalType, string> = {
   success: 'alert-success',
   error: 'alert-error',
   warning: 'alert-warning',
   info: 'alert-info',
 };
 
-const icons = {
+const icons: Record<AlertModalType, ReactNode> = {
   success: (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
@@ -36,6 +39,15 @@ const icons = {
   ),
 };
 
+interface AlertModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  type?: AlertModalType;
+  title?: string;
+  message?: ReactNode;
+  okText?: string;
+}
+
 export default function AlertModal({
   isOpen,
   onClose,
@@ -43,7 +55,7 @@ export default function AlertModal({
   title,
   message,
   okText = 'OK',
-}) {
+}: AlertModalProps) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
       <div className={`alert-body ${typeClasses[type]}`}>

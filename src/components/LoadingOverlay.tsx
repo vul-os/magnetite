@@ -2,12 +2,19 @@ import { useEffect, useState } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 import './LoadingOverlay.css';
 
+interface LoadingOverlayProps {
+  visible?: boolean;
+  message?: string;
+  fullScreen?: boolean;
+  className?: string;
+}
+
 export default function LoadingOverlay({
   visible = true,
   message = '',
   fullScreen = true,
   className = ''
-}) {
+}: LoadingOverlayProps) {
   const [shouldRender, setShouldRender] = useState(visible);
 
   // Mount immediately when shown, but defer unmount by 300ms so the exit

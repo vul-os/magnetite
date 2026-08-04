@@ -2,7 +2,16 @@ import { Link } from 'react-router-dom';
 import { HomeIcon, ChevronRightIcon } from '../assets/icons';
 import './Breadcrumb.css';
 
-export default function Breadcrumb({ items }) {
+interface BreadcrumbItem {
+  path?: string;
+  label: string;
+}
+
+interface BreadcrumbProps {
+  items?: BreadcrumbItem[];
+}
+
+export default function Breadcrumb({ items }: BreadcrumbProps) {
   if (!items || items.length === 0) return null;
 
   return (
@@ -22,7 +31,9 @@ export default function Breadcrumb({ items }) {
               {isLast ? (
                 <span className="breadcrumb-current">{item.label}</span>
               ) : (
-                <Link to={item.path} className="breadcrumb-link">
+                // Non-last items are expected to carry a path; `path` stays
+                // optional on the type since the last item never needs one.
+                <Link to={item.path as string} className="breadcrumb-link">
                   {item.label}
                 </Link>
               )}

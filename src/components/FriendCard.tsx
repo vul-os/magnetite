@@ -1,8 +1,23 @@
 import { memo } from 'react';
 import { initialsAvatar } from '../utils/initialsAvatar';
 
+export interface Friend {
+  username: string;
+  status?: string;
+  activity?: string | null;
+  avatar?: string | null;
+  [key: string]: unknown;
+}
+
+interface FriendCardProps {
+  friend: Friend;
+  onInvite?: (friend: Friend) => void;
+  onBlock?: (friend: Friend) => void;
+  showActions?: boolean;
+}
+
 /** Map a presence status string to CSS modifier + human label. */
-function resolveStatus(status) {
+function resolveStatus(status?: string) {
   switch (status) {
     case 'online':  return { cls: 'status-online',   label: 'Online' };
     case 'idle':    return { cls: 'status-idle',     label: 'Idle' };
@@ -12,7 +27,7 @@ function resolveStatus(status) {
   }
 }
 
-export default memo(function FriendCard({ friend, onInvite, onBlock, showActions = true }) {
+export default memo(function FriendCard({ friend, onInvite, onBlock, showActions = true }: FriendCardProps) {
   const { cls: statusClass, label: statusLabel } = resolveStatus(friend.status);
   const activityText = friend.activity ?? statusLabel;
 

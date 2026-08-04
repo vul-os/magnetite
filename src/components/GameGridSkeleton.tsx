@@ -1,10 +1,15 @@
 import Skeleton from './Skeleton';
 import './GameGridSkeleton.css';
 
+interface GameGridSkeletonProps {
+  count?: number;
+  className?: string;
+}
+
 export default function GameGridSkeleton({
   count = 8,
   className = ''
-}) {
+}: GameGridSkeletonProps) {
   return (
     <div className={`game-grid-skeleton ${className}`}>
       {Array.from({ length: count }).map((_, i) => (

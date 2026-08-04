@@ -1,13 +1,34 @@
 import PresenceDot from './PresenceDot';
 import './PresenceDot.css';
 import './MemberList.css';
+import type { PresenceStatus, PresenceMap } from '../../types/comms';
+
+export interface MemberListMember {
+  id: string;
+  username?: string;
+  avatarUrl?: string;
+  status?: PresenceStatus;
+  game?: string | null;
+}
+
+export interface MemberListProps {
+  members: MemberListMember[];
+  currentUserId?: string;
+  presenceMap?: PresenceMap;
+}
+
+interface MemberGroupProps {
+  label: string;
+  members: MemberListMember[];
+  currentUserId?: string;
+}
 
 /**
  * MemberList — right sidebar showing server members grouped by role.
  * Each member shows avatar + presence dot.
  */
 
-function MemberGroup({ label, members, currentUserId }) {
+function MemberGroup({ label, members, currentUserId }: MemberGroupProps) {
   if (!members || members.length === 0) return null;
 
   return (
@@ -61,7 +82,7 @@ function MemberGroup({ label, members, currentUserId }) {
   );
 }
 
-export default function MemberList({ members, currentUserId, presenceMap }) {
+export default function MemberList({ members, currentUserId, presenceMap }: MemberListProps) {
   // Enrich status from live presenceMap when available
   const enriched = members.map(m => {
     if (presenceMap && presenceMap[m.id]) {

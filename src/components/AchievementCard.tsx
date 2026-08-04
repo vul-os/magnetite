@@ -1,4 +1,18 @@
-export default function AchievementCard({ achievement }) {
+interface Achievement {
+  name: string;
+  description?: string;
+  icon?: string;
+  progress: number;
+  maxProgress: number;
+  unlockedAt?: string | null;
+  [key: string]: unknown;
+}
+
+interface AchievementCardProps {
+  achievement: Achievement;
+}
+
+export default function AchievementCard({ achievement }: AchievementCardProps) {
   const isUnlocked = achievement.unlockedAt !== null;
   const progressPercent = Math.min((achievement.progress / achievement.maxProgress) * 100, 100);
 

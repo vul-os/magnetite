@@ -1,22 +1,34 @@
 import { memo } from 'react';
 import { initialsAvatar } from '../utils/initialsAvatar';
+import type { LeaderboardEntry } from '../types/domain';
 
-const TOP3_BADGES = { 1: '🥇', 2: '🥈', 3: '🥉' };
+export interface LeaderboardRowEntry extends LeaderboardEntry {
+  avatar?: string | null;
+  change?: number;
+}
 
-function getChangeIcon(change) {
-  if (change > 0) return '↑';
-  if (change < 0) return '↓';
+interface LeaderboardRowProps {
+  entry: LeaderboardRowEntry;
+  isCurrentUser?: boolean;
+  highlightTop3?: boolean;
+}
+
+const TOP3_BADGES: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+function getChangeIcon(change?: number) {
+  if (change !== undefined && change > 0) return '↑';
+  if (change !== undefined && change < 0) return '↓';
   return '–';
 }
 
-function getRankClass(rank) {
+function getRankClass(rank: number) {
   if (rank === 1) return 'rank-gold';
   if (rank === 2) return 'rank-silver';
   if (rank === 3) return 'rank-bronze';
   return '';
 }
 
-export default memo(function LeaderboardRow({ entry, isCurrentUser = false, highlightTop3 = false }) {
+export default memo(function LeaderboardRow({ entry, isCurrentUser = false, highlightTop3 = false }: LeaderboardRowProps) {
   const isTop3 = highlightTop3 && entry.rank <= 3;
 
   return (

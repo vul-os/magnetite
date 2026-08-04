@@ -1,7 +1,18 @@
+import type { ComponentType } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon, HomeIcon } from '../../assets/icons';
 
-export default function Breadcrumb({ items = [], separator: Separator = ChevronRightIcon }) {
+export interface BreadcrumbItem {
+  label: string;
+  href?: string;
+}
+
+export interface BreadcrumbProps {
+  items?: BreadcrumbItem[];
+  separator?: ComponentType<{ className?: string }>;
+}
+
+export default function Breadcrumb({ items = [], separator: Separator = ChevronRightIcon }: BreadcrumbProps) {
   if (!items || items.length === 0) return null;
 
   return (

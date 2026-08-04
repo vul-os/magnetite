@@ -11,7 +11,19 @@
  *   onSpeedChange fn(spd)  — change playback speed
  */
 
+import type { ChangeEvent } from 'react';
+
 const SPEEDS = [0.25, 0.5, 1, 2, 4];
+
+export interface ReplayScrubberProps {
+  currentTick?: number;
+  totalTicks?: number;
+  playing?: boolean;
+  speed?: number;
+  onPlay?: () => void;
+  onSeek?: (tick: number) => void;
+  onSpeedChange?: (speed: number) => void;
+}
 
 export default function ReplayScrubber({
   currentTick = 0,
@@ -21,11 +33,11 @@ export default function ReplayScrubber({
   onPlay,
   onSeek,
   onSpeedChange,
-}) {
+}: ReplayScrubberProps) {
   const pct = totalTicks > 0 ? Math.min(100, (currentTick / totalTicks) * 100) : 0;
 
-  function handleRangeChange(e) {
-    const tick = Math.round((e.target.value / 100) * totalTicks);
+  function handleRangeChange(e: ChangeEvent<HTMLInputElement>) {
+    const tick = Math.round((Number(e.target.value) / 100) * totalTicks);
     onSeek?.(tick);
   }
 

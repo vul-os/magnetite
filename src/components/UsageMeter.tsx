@@ -3,12 +3,19 @@ import './UsageMeter.css';
 const WARNING_THRESHOLD = 0.25;
 const CRITICAL_THRESHOLD = 0.1;
 
-export default function UsageMeter({ 
-  used, 
-  limit, 
+export interface UsageMeterProps {
+  used: number;
+  limit: number;
+  unit?: string;
+  showWarning?: boolean;
+}
+
+export default function UsageMeter({
+  used,
+  limit,
   unit = 'hours',
-  showWarning = true 
-}) {
+  showWarning = true
+}: UsageMeterProps) {
   const remaining = Math.max(0, limit - used);
   const percentage = Math.min((used / limit) * 100, 100);
   const remainingPercentage = 100 - percentage;
@@ -32,7 +39,7 @@ export default function UsageMeter({
 
       <div className="usage-progress">
         <div className="usage-bar">
-          <div 
+          <div
             className="usage-fill"
             style={{ width: `${percentage}%` }}
           />

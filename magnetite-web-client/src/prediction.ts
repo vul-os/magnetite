@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/prediction.js
+ * magnetite-web-client/src/prediction.ts
  *
  * Client-side prediction + reconciliation.
  *
@@ -14,61 +14,58 @@
  * stays game-agnostic.
  */
 
+import type { ArenaView, Input } from './types';
+
 // ---------------------------------------------------------------------------
 // PredictionBuffer
 // ---------------------------------------------------------------------------
 
-/**
- * @typedef {Object} PendingFrame
- * @property {number} seq   - client-local sequence number
- * @property {number} tick  - authoritative tick targeted
- * @property {import('./types.js').Input} input
- */
+interface PendingFrame {
+  /** client-local sequence number */
+  seq: number;
+  /** authoritative tick targeted */
+  tick: number;
+  input: Input;
+}
 
 /**
- * @callback ApplyInputFn
- * @param {unknown} state   - current predicted state (mutable copy)
- * @param {import('./types.js').Input} input
- * @param {number} tick
- * @returns {unknown}       - new predicted state (may be same reference or new)
+ * Pure function: (state, input, tick) → newState.
+ * Must not mutate the original state — return a new object.
  */
+export type ApplyInputFn<S> = (state: S, input: Input, tick: number) => S;
 
-export class PredictionBuffer {
+export class PredictionBuffer<S = unknown> {
+  private _applyInput: ApplyInputFn<S>;
+  /** sorted by seq ascending */
+  private _pending: PendingFrame[];
+  /** Maximum number of unacked frames to retain */
+  private _maxBufferSize: number;
   /**
-   * @param {ApplyInputFn} applyInput
+   * Last authoritative snapshot received from the server.
+   * Reset to this on reconciliation.
+   */
+  private _authoritativeState: S | null;
+  /** The tick of the last authoritative snapshot applied. */
+  private _authoritativeTick: number;
+  /**
+   * Current predicted state (ahead of server, includes locally applied
+   * frames not yet acked).
+   */
+  private _predictedState: S | null;
+
+  /**
+   * @param applyInput
    *   Pure function: (state, input, tick) → newState.
    *   Must not mutate the original state — return a new object.
-   * @param {number} [maxBufferSize=128]
+   * @param maxBufferSize
    *   Hard cap on buffered unacked frames (oldest are dropped when exceeded).
    */
-  constructor(applyInput, maxBufferSize = 128) {
-    /** @type {ApplyInputFn} */
+  constructor(applyInput: ApplyInputFn<S>, maxBufferSize = 128) {
     this._applyInput = applyInput;
-
-    /** @type {PendingFrame[]} sorted by seq ascending */
     this._pending = [];
-
-    /** Maximum number of unacked frames to retain */
     this._maxBufferSize = maxBufferSize;
-
-    /**
-     * Last authoritative snapshot received from the server.
-     * Reset to this on reconciliation.
-     * @type {unknown}
-     */
     this._authoritativeState = null;
-
-    /**
-     * The tick of the last authoritative snapshot applied.
-     * @type {number}
-     */
     this._authoritativeTick = 0;
-
-    /**
-     * Current predicted state (ahead of server, includes locally applied
-     * frames not yet acked).
-     * @type {unknown}
-     */
     this._predictedState = null;
   }
 
@@ -81,10 +78,10 @@ export class PredictionBuffer {
    *
    * Called on ServerNet::Snapshot or after a Welcome.
    *
-   * @param {unknown} state   - parsed ArenaSnapshot (or game-specific snapshot)
-   * @param {number} tick     - the tick this snapshot corresponds to
+   * @param state   - parsed ArenaSnapshot (or game-specific snapshot)
+   * @param tick     - the tick this snapshot corresponds to
    */
-  applySnapshot(state, tick) {
+  applySnapshot(state: S, tick: number): void {
     this._authoritativeState = state;
     this._authoritativeTick = tick;
 
@@ -100,10 +97,10 @@ export class PredictionBuffer {
    *
    * Called on ServerNet::Ack.
    *
-   * @param {number} seq  - sequence number acknowledged by the server
-   * @param {number} tick - authoritative tick produced by that input
+   * @param seq  - sequence number acknowledged by the server
+   * @param tick - authoritative tick produced by that input
    */
-  ack(seq, tick) {
+  ack(seq: number, tick: number): void {
     // Discard frames with seq ≤ acknowledged seq
     this._pending = this._pending.filter(f => f.seq > seq);
 
@@ -122,9 +119,9 @@ export class PredictionBuffer {
    *
    * Called on ServerNet::Reject.
    *
-   * @param {number} seq - rejected sequence number
+   * @param seq - rejected sequence number
    */
-  reject(seq) {
+  reject(seq: number): void {
     // Remove the rejected frame
     this._pending = this._pending.filter(f => f.seq !== seq);
 
@@ -139,12 +136,9 @@ export class PredictionBuffer {
    *
    * Called each time the client sends an InputFrame to the server.
    *
-   * @param {number} seq
-   * @param {number} tick
-   * @param {import('./types.js').Input} input
-   * @returns {unknown} the new predicted state after applying this input
+   * @returns the new predicted state after applying this input
    */
-  predict(seq, tick, input) {
+  predict(seq: number, tick: number, input: Input): S {
     // Drop oldest if buffer is full
     if (this._pending.length >= this._maxBufferSize) {
       this._pending.shift();
@@ -153,29 +147,23 @@ export class PredictionBuffer {
     this._pending.push({ seq, tick, input });
     this._pending.sort((a, b) => a.seq - b.seq);
 
-    const base = this._predictedState ?? this._authoritativeState;
+    const base = (this._predictedState ?? this._authoritativeState) as S;
     this._predictedState = this._applyInput(base, input, tick);
     return this._predictedState;
   }
 
-  /**
-   * @returns {unknown} the current predicted state
-   */
-  get state() {
+  /** the current predicted state */
+  get state(): S | null {
     return this._predictedState;
   }
 
-  /**
-   * @returns {unknown} the last confirmed authoritative state
-   */
-  get authoritativeState() {
+  /** the last confirmed authoritative state */
+  get authoritativeState(): S | null {
     return this._authoritativeState;
   }
 
-  /**
-   * @returns {number} number of unacked frames in the buffer
-   */
-  get pendingCount() {
+  /** number of unacked frames in the buffer */
+  get pendingCount(): number {
     return this._pending.length;
   }
 
@@ -185,11 +173,8 @@ export class PredictionBuffer {
 
   /**
    * Replay all pending (unacked) frames on top of `base`.
-   *
-   * @param {unknown} base
-   * @returns {unknown}
    */
-  _replayPending(base) {
+  private _replayPending(base: S): S {
     let state = base;
     for (const frame of this._pending) {
       state = this._applyInput(state, frame.input, frame.tick);
@@ -220,13 +205,8 @@ const ARENA_HALF_H = 100.0;
  * Apply one input frame to an ArenaView state, predicting local player movement.
  *
  * Returns a new state object (shallow clone with mutated self_state).
- *
- * @param {import('./types.js').ArenaView | null} state
- * @param {import('./types.js').Input} input
- * @param {number} tick
- * @returns {import('./types.js').ArenaView | null}
  */
-export function arenaApplyInput(state, input, tick) {
+export function arenaApplyInput(state: ArenaView | null, input: Input, tick: number): ArenaView | null {
   if (!state || !state.self_state) return state;
 
   const self = { ...state.self_state };

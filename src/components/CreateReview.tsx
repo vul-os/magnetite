@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import Button from './common/Button';
 
 const MAX_CHARACTERS = 1000;
 
-const StarRatingInput = ({ value, onChange }) => {
+interface StarRatingInputProps {
+  value: number;
+  onChange: (rating: number) => void;
+}
+
+const StarRatingInput = ({ value, onChange }: StarRatingInputProps) => {
   const [hoverRating, setHoverRating] = useState(0);
 
-  const handleClick = (rating) => {
+  const handleClick = (rating: number) => {
     onChange(rating);
   };
 
-  const handleMouseEnter = (rating) => {
+  const handleMouseEnter = (rating: number) => {
     setHoverRating(rating);
   };
 
@@ -41,18 +46,29 @@ const StarRatingInput = ({ value, onChange }) => {
   );
 };
 
+export interface ReviewSubmission {
+  rating: number;
+  comment: string;
+}
+
+interface CreateReviewProps {
+  onSubmit?: (review: ReviewSubmission) => void;
+  onCancel?: () => void;
+  isSubmitting?: boolean;
+}
+
 export default function CreateReview({
   onSubmit,
   onCancel,
   isSubmitting = false
-}) {
+}: CreateReviewProps) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
 
   const characterCount = comment.length;
   const isValid = rating > 0 && comment.trim().length >= 10;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isValid) return;
 
@@ -65,7 +81,7 @@ export default function CreateReview({
     setComment('');
   };
 
-  const handleCommentChange = (e) => {
+  const handleCommentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
     if (text.length <= MAX_CHARACTERS) {
       setComment(text);

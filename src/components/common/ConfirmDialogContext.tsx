@@ -1,12 +1,33 @@
-import { createContext, useState, useCallback } from 'react';
-import ConfirmDialog from './ConfirmDialog';
+import { createContext, useState, useCallback, type ReactNode } from 'react';
+import ConfirmDialog, { type ConfirmDialogVariant } from './ConfirmDialog';
+
+export interface ConfirmOptions {
+  title?: string;
+  message?: ReactNode;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: ConfirmDialogVariant;
+}
+
+interface DialogState {
+  isOpen: boolean;
+  title?: string;
+  message: ReactNode;
+  confirmText: string;
+  cancelText: string;
+  variant: ConfirmDialogVariant;
+}
+
+export interface ConfirmDialogContextValue {
+  confirm: (options: ConfirmOptions) => Promise<boolean>;
+}
 
 // Context object is colocated with its Provider component by design.
 // eslint-disable-next-line react-refresh/only-export-components
-export const ConfirmDialogContext = createContext();
+export const ConfirmDialogContext = createContext<ConfirmDialogContextValue | undefined>(undefined);
 
-export function ConfirmDialogProvider({ children }) {
-  const [dialogState, setDialogState] = useState({
+export function ConfirmDialogProvider({ children }: { children?: ReactNode }) {
+  const [dialogState, setDialogState] = useState<DialogState>({
     isOpen: false,
     title: '',
     message: '',
@@ -15,7 +36,7 @@ export function ConfirmDialogProvider({ children }) {
     variant: 'info',
   });
 
-  const [resolveRef, setResolveRef] = useState(null);
+  const [resolveRef, setResolveRef] = useState<((value: boolean) => void) | null>(null);
 
   const confirm = useCallback(({
     title,
@@ -23,7 +44,7 @@ export function ConfirmDialogProvider({ children }) {
     confirmText = 'Confirm',
     cancelText = 'Cancel',
     variant = 'info',
-  }) => {
+  }: ConfirmOptions): Promise<boolean> => {
     return new Promise((resolve) => {
       setDialogState({
         isOpen: true,

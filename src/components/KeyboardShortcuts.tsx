@@ -1,8 +1,20 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import Modal from './common/Modal';
 import './KeyboardShortcuts.css';
 
-const shortcutCategories = {
+interface Shortcut {
+  key: string;
+  description: string;
+  category?: string;
+  allowInInput?: boolean;
+}
+
+interface ShortcutCategory {
+  label: string;
+  icon: ReactNode;
+}
+
+const shortcutCategories: Record<string, ShortcutCategory> = {
   navigation: {
     label: 'Navigation',
     icon: (
@@ -22,7 +34,7 @@ const shortcutCategories = {
   },
 };
 
-const defaultShortcuts = [
+const defaultShortcuts: Shortcut[] = [
   { key: '?', description: 'Show shortcuts', category: 'actions', allowInInput: true },
   { key: 'k', description: 'Open search', category: 'actions', allowInInput: true },
   { key: 'g h', description: 'Go to home', category: 'navigation' },
@@ -32,9 +44,15 @@ const defaultShortcuts = [
   { key: 'Esc', description: 'Close modal', category: 'actions', allowInInput: true },
 ];
 
-export default function KeyboardShortcuts({ isOpen, onClose, shortcuts = defaultShortcuts }) {
+interface KeyboardShortcutsProps {
+  isOpen: boolean;
+  onClose: () => void;
+  shortcuts?: Shortcut[];
+}
+
+export default function KeyboardShortcuts({ isOpen, onClose, shortcuts = defaultShortcuts }: KeyboardShortcutsProps) {
   const groupedShortcuts = useMemo(() => {
-    const groups = {};
+    const groups: Record<string, Shortcut[]> = {};
     shortcuts.forEach(shortcut => {
       const category = shortcut.category || 'actions';
       if (!groups[category]) {

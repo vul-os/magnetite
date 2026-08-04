@@ -1,15 +1,27 @@
-import { useEffect, useRef, useState, useId } from 'react';
+import { useEffect, useRef, useState, useId, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../../i18n/useTranslation';
 import './Modal.css';
 
-const sizeClasses = {
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'fullscreen';
+
+const sizeClasses: Record<ModalSize, string> = {
   sm: 'modal-sm',
   md: 'modal-md',
   lg: 'modal-lg',
   xl: 'modal-xl',
   fullscreen: 'modal-fullscreen',
 };
+
+export interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: ReactNode;
+  children?: ReactNode;
+  size?: ModalSize;
+  showClose?: boolean;
+  closeOnBackdrop?: boolean;
+}
 
 export default function Modal({
   isOpen,
@@ -19,14 +31,14 @@ export default function Modal({
   size = 'md',
   showClose = true,
   closeOnBackdrop = true,
-}) {
+}: ModalProps) {
   const { t } = useTranslation();
   const uid = useId();
   const titleId = `${uid}-title`;
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const modalRef = useRef(null);
-  const previousActiveElement = useRef(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<Element | null>(null);
 
   // Drive enter/exit animation state: mount on open, then defer unmount until
   // the close transition finishes. This is intentional synchronization with the
@@ -56,7 +68,7 @@ export default function Modal({
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
@@ -73,10 +85,10 @@ export default function Modal({
     const focusableElements = modal.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
+    const firstElement = focusableElements[0] as HTMLElement | undefined;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement | undefined;
 
-    const handleTabKey = (e) => {
+    const handleTabKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
 
       if (e.shiftKey) {
@@ -98,7 +110,7 @@ export default function Modal({
     return () => modal.removeEventListener('keydown', handleTabKey);
   }, [isOpen]);
 
-  const handleBackdropClick = (e) => {
+  const handleBackdropClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (closeOnBackdrop && e.target === e.currentTarget) {
       onClose();
     }

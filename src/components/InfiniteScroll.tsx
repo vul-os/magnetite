@@ -1,7 +1,17 @@
-import { forwardRef } from 'react';
+import { forwardRef, type ReactNode, type UIEvent } from 'react';
 import Spinner from './common/Spinner';
 
-const InfiniteScroll = forwardRef(function InfiniteScroll({
+interface InfiniteScrollProps {
+  children?: ReactNode;
+  hasMore?: boolean;
+  isLoading?: boolean;
+  onLoadMore?: () => void;
+  loadingComponent?: ReactNode;
+  threshold?: number;
+  className?: string;
+}
+
+const InfiniteScroll = forwardRef<HTMLDivElement, InfiniteScrollProps>(function InfiniteScroll({
   children,
   hasMore = true,
   isLoading = false,
@@ -10,8 +20,8 @@ const InfiniteScroll = forwardRef(function InfiniteScroll({
   threshold = 100,
   className = '',
 }, ref) {
-  const handleScroll = (e) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.target;
+  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target as HTMLDivElement;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
     if (distanceFromBottom < threshold && hasMore && !isLoading && onLoadMore) {

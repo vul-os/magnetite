@@ -1,5 +1,17 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import './MessageComposer.css';
+
+export interface MessageComposerChannel {
+  name?: string;
+}
+
+export interface MessageComposerProps {
+  channel?: MessageComposerChannel | null;
+  onSend?: (text: string) => void;
+  disabled?: boolean;
+  onTypingStart?: () => void;
+  onTypingStop?: () => void;
+}
 
 /**
  * MessageComposer — text input with emoji, attachment, and send controls.
@@ -12,13 +24,13 @@ export default function MessageComposer({
   disabled = false,
   onTypingStart,
   onTypingStop,
-}) {
+}: MessageComposerProps) {
   const [value, setValue] = useState('');
   const [typing, setTyping]   = useState(false);
-  const textareaRef = useRef(null);
-  const typingTimer = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const handleChange = useCallback((e) => {
+  const handleChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value);
 
     if (!typing) {
@@ -32,7 +44,7 @@ export default function MessageComposer({
     }, 2000);
   }, [typing, onTypingStart, onTypingStop]);
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback((e?: FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     const text = value.trim();
     if (!text || disabled) return;
@@ -44,7 +56,7 @@ export default function MessageComposer({
     textareaRef.current?.focus();
   }, [value, disabled, onSend, onTypingStop]);
 
-  const handleKeyDown = useCallback((e) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
