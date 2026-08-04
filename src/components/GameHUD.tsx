@@ -1,22 +1,64 @@
 import { useState, useRef, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import './GameHUD.css';
+
+export interface HUDPlayer {
+  id: string | number;
+  username: string;
+  score: number;
+}
+
+interface MapPosition {
+  x?: number;
+  y?: number;
+}
+
+interface MinimapPlayer {
+  id: string | number;
+  username?: string;
+  position?: MapPosition;
+}
+
+interface MinimapObjective {
+  id: string | number;
+  name?: string;
+  position?: MapPosition;
+}
+
+export interface MinimapData {
+  players?: MinimapPlayer[];
+  objectives?: MinimapObjective[];
+}
+
+export interface ChatMessage {
+  id: string | number;
+  player: string;
+  message: string;
+}
+
+export interface GameHUDProps {
+  players: HUDPlayer[];
+  minimapData: MinimapData;
+  chatMessages: ChatMessage[];
+  onSendChat: (message: string) => void;
+}
 
 export default function GameHUD({
   players,
   minimapData,
   chatMessages,
   onSendChat,
-}) {
+}: GameHUDProps) {
   const [showChat, setShowChat]             = useState(false);
   const [chatInput, setChatInput]           = useState('');
   const [showPlayerList, setShowPlayerList] = useState(true);
-  const chatEndRef                          = useRef(null);
+  const chatEndRef                          = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const handleSendChat = (e) => {
+  const handleSendChat = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     onSendChat(chatInput);
