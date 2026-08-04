@@ -1,17 +1,17 @@
 const isServer = typeof window === 'undefined';
 
 export const storage = {
-  get(key, defaultValue = null) {
+  get<T = unknown>(key: string, defaultValue: T | null = null): T | null {
     if (isServer) return defaultValue;
     try {
       const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
+      return item ? (JSON.parse(item) as T) : defaultValue;
     } catch {
       return defaultValue;
     }
   },
 
-  set(key, value) {
+  set(key: string, value: unknown): void {
     if (isServer) return;
     try {
       localStorage.setItem(key, JSON.stringify(value));
@@ -20,29 +20,29 @@ export const storage = {
     }
   },
 
-  remove(key) {
+  remove(key: string): void {
     if (isServer) return;
     localStorage.removeItem(key);
   },
 
-  clear() {
+  clear(): void {
     if (isServer) return;
     localStorage.clear();
   },
 };
 
 export const sessionStorage = {
-  get(key, defaultValue = null) {
+  get<T = unknown>(key: string, defaultValue: T | null = null): T | null {
     if (isServer) return defaultValue;
     try {
       const item = window.sessionStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
+      return item ? (JSON.parse(item) as T) : defaultValue;
     } catch {
       return defaultValue;
     }
   },
 
-  set(key, value) {
+  set(key: string, value: unknown): void {
     if (isServer) return;
     try {
       window.sessionStorage.setItem(key, JSON.stringify(value));
@@ -51,7 +51,7 @@ export const sessionStorage = {
     }
   },
 
-  remove(key) {
+  remove(key: string): void {
     if (isServer) return;
     window.sessionStorage.removeItem(key);
   },

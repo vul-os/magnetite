@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { themes } from './themeConstants';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { themes, type ThemeName } from './themeConstants';
 
 /*
  * Theme provider.
@@ -13,20 +13,26 @@ import { themes } from './themeConstants';
  * styles beat stylesheet rules and would override the token layer.
  */
 
-const ThemeContext = createContext();
+export interface ThemeContextValue {
+  theme: ThemeName;
+  setTheme: (theme: ThemeName) => void;
+  themes: string[];
+}
+
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'theme';
 
 /** Resolve a stored preference to the theme that should actually be applied. */
-function resolve(pref) {
+function resolve(pref: ThemeName): ThemeName {
   if (pref !== 'system') return pref;
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<ThemeName>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY) || 'dark';
+      return (localStorage.getItem(STORAGE_KEY) as ThemeName) || 'dark';
     } catch {
       // Private mode / storage disabled — fall back to the default.
       return 'dark';

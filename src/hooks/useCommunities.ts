@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
+import type { Community, CommunityMember, ActionResult } from '../types/comms';
 
 // ── Mock fallback data — only used when VITE_USE_MOCKS=true ───────────────
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-const MOCK_COMMUNITIES = USE_MOCKS
+const MOCK_COMMUNITIES: Community[] | null = USE_MOCKS
   ? [
       { id: '1', name: 'Magnetite Hub',  description: 'The official Magnetite gaming community.', icon_url: null, member_count: 1024, online_count: 87, owner_id: '1' },
       { id: '2', name: 'Rust Gamedev',   description: 'Building games in Rust — share your progress.', icon_url: null, member_count: 412, online_count: 23, owner_id: '2' },
     ]
   : null;
 
-const MOCK_MEMBERS = USE_MOCKS
+const MOCK_MEMBERS: CommunityMember[] | null = USE_MOCKS
   ? [
       { id: '1', username: 'dev_one',     display_name: 'Dev One',    status: 'online', roles: ['admin']  },
       { id: '2', username: 'player_two',  display_name: 'Player Two', status: 'idle',   roles: ['member'] },
@@ -19,11 +20,15 @@ const MOCK_MEMBERS = USE_MOCKS
     ]
   : null;
 
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
 // ── Hook ───────────────────────────────────────────────────────────────────
 export function useCommunities() {
-  const [communities, setCommunities] = useState([]);
+  const [communities, setCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchCommunities = useCallback(async () => {
     let cancelled = false;
@@ -38,12 +43,12 @@ export function useCommunities() {
 
       const data = await api.communities.list();
       if (!cancelled) {
-        const list = Array.isArray(data) ? data : (data?.communities ?? null);
-        setCommunities(list ?? []);
+        const list = Array.isArray(data) ? data : ((data as { communities?: Community[] } | null)?.communities ?? null);
+        setCommunities((list as Community[]) ?? []);
       }
     } catch (err) {
       if (!cancelled) {
-        setError(err.message ?? 'Failed to load communities');
+        setError(errMessage(err, 'Failed to load communities'));
         setCommunities([]);
       }
     } finally {
@@ -59,15 +64,15 @@ export function useCommunities() {
     fetchCommunities();
   }, [fetchCommunities]);
 
-  const createCommunity = useCallback(async (data) => {
+  const createCommunity = useCallback(async (data: { name: string; description?: string; icon_url?: string | null }): Promise<ActionResult> => {
     try {
-      const created = await api.communities.create(data);
+      const created = await api.communities.create(data) as Community;
       setCommunities((prev) => [created, ...prev]);
       return { success: true, community: created };
     } catch (err) {
       if (USE_MOCKS) {
         // In mock mode, optimistic local add is acceptable
-        const mock = {
+        const mock: Community = {
           id: String(Date.now()),
           name: data.name,
           description: data.description ?? '',
@@ -77,14 +82,14 @@ export function useCommunities() {
           owner_id: 'me',
         };
         setCommunities((prev) => [mock, ...prev]);
-        return { success: true, community: mock, _mock: true, _error: err.message };
+        return { success: true, community: mock, _mock: true, _error: errMessage(err, 'unknown error') };
       }
       // Real mode: surface the error
-      return { success: false, error: err.message };
+      return { success: false, error: errMessage(err, 'unknown error') };
     }
   }, []);
 
-  const joinCommunity = useCallback(async (id) => {
+  const joinCommunity = useCallback(async (id: string): Promise<ActionResult> => {
     try {
       await api.communities.join(id);
       setCommunities((prev) =>
@@ -94,17 +99,17 @@ export function useCommunities() {
       );
       return { success: true };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: errMessage(err, 'unknown error') };
     }
   }, []);
 
-  const leaveCommunity = useCallback(async (id) => {
+  const leaveCommunity = useCallback(async (id: string): Promise<ActionResult> => {
     try {
       await api.communities.leave(id);
       setCommunities((prev) => prev.filter((c) => c.id !== id));
       return { success: true };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: errMessage(err, 'unknown error') };
     }
   }, []);
 
@@ -120,10 +125,10 @@ export function useCommunities() {
 }
 
 // ── Per-community members hook ─────────────────────────────────────────────
-export function useCommunityMembers(communityId) {
-  const [members, setMembers] = useState([]);
+export function useCommunityMembers(communityId: string | null) {
+  const [members, setMembers] = useState<CommunityMember[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!communityId) return;
@@ -139,14 +144,14 @@ export function useCommunityMembers(communityId) {
           return;
         }
 
-        const data = await api.communities.members(communityId);
+        const data = await api.communities.members(communityId as string);
         if (!cancelled) {
-          const list = Array.isArray(data) ? data : (data?.members ?? null);
-          setMembers(list ?? []);
+          const list = Array.isArray(data) ? data : ((data as { members?: CommunityMember[] } | null)?.members ?? null);
+          setMembers((list as CommunityMember[]) ?? []);
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message ?? 'Failed to load members');
+          setError(errMessage(err, 'Failed to load members'));
           setMembers([]);
         }
       } finally {

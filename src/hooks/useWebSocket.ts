@@ -1,26 +1,51 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { WsFrame } from '../types/comms';
+
+export interface UseWebSocketOptions {
+  autoReconnect?: boolean;
+  heartbeatInterval?: number;
+  reconnectDelay?: number;
+}
+
+/**
+ * The minimal WebSocket-shaped surface this hook relies on. A real
+ * `WebSocket` satisfies this; so does the duck-typed dev-mode mock socket
+ * below (see `createMockSocket`).
+ */
+export interface WsLike {
+  readonly url: string;
+  readonly readyState: number;
+  send(data: string): void;
+  close(): void;
+  onopen: (() => void) | null;
+  onclose: (() => void) | null;
+  onmessage: ((event: { data: string }) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  addEventListener(event: string, callback: (...args: unknown[]) => void): void;
+  removeEventListener(event: string, callback: (...args: unknown[]) => void): void;
+}
 
 // Derive the WebSocket base URL from the API base env var.
 // VITE_API_URL may be http(s)://... — convert to ws(s)://.
-function getWsBase() {
+function getWsBase(): string {
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8080';
   return apiBase.replace(/^http/, 'ws');
 }
 
-export function useWebSocket(url, options = {}) {
+export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   const { autoReconnect = true, heartbeatInterval = 30000, reconnectDelay = 3000 } = options;
 
-  const [socket, setSocket] = useState(null);
+  const [socket, setSocket] = useState<WsLike | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState(null);
+  const [lastMessage, setLastMessage] = useState<WsFrame | string | null>(null);
 
-  const messageQueueRef = useRef([]);
-  const reconnectTimeoutRef = useRef(null);
-  const heartbeatTimeoutRef = useRef(null);
+  const messageQueueRef = useRef<(string | WsFrame)[]>([]);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatTimeoutRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Stable ref so onclose can call the latest `connect` without creating a circular dep
-  const connectRef = useRef(null);
+  const connectRef = useRef<(() => WsLike | null) | null>(null);
 
-  const sendMessage = useCallback((data) => {
+  const sendMessage = useCallback((data: string | WsFrame) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(typeof data === 'string' ? data : JSON.stringify(data));
     } else {
@@ -28,16 +53,16 @@ export function useWebSocket(url, options = {}) {
     }
   }, [socket]);
 
-  const flushQueue = useCallback((ws) => {
+  const flushQueue = useCallback((ws: WsLike | null) => {
     while (messageQueueRef.current.length > 0) {
       const msg = messageQueueRef.current.shift();
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws && ws.readyState === WebSocket.OPEN && msg !== undefined) {
         ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
       }
     }
   }, []);
 
-  const startHeartbeat = useCallback((ws) => {
+  const startHeartbeat = useCallback((ws: WsLike | null) => {
     if (heartbeatTimeoutRef.current) {
       clearInterval(heartbeatTimeoutRef.current);
     }
@@ -48,9 +73,9 @@ export function useWebSocket(url, options = {}) {
     }, heartbeatInterval);
   }, [heartbeatInterval]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback((): WsLike | null => {
     // Resolve full WS URL
-    let wsUrl;
+    let wsUrl: string;
     if (url.startsWith('ws://') || url.startsWith('wss://')) {
       wsUrl = url;
     } else {
@@ -72,12 +97,13 @@ export function useWebSocket(url, options = {}) {
     // Use a real browser WebSocket by default.
     // Only substitute the mock implementation when VITE_USE_MOCK_WS === 'true'
     // (local dev without a backend).
-    let ws;
+    let ws: WsLike;
     if (import.meta.env.VITE_USE_MOCK_WS === 'true') {
       ws = createMockSocket(wsUrl);
     } else {
       try {
-        ws = new WebSocket(wsUrl);
+        // A real WebSocket structurally satisfies WsLike.
+        ws = new WebSocket(wsUrl) as unknown as WsLike;
       } catch (err) {
         // Log the token-free URL only — never log the full wsUrl which contains the JWT.
         console.error('[useWebSocket] Failed to construct WebSocket:', wsUrlSafe, err);
@@ -153,25 +179,27 @@ export function useWebSocket(url, options = {}) {
 // ---------------------------------------------------------------------------
 // Mock socket — only used when VITE_USE_MOCK_WS === 'true'
 // ---------------------------------------------------------------------------
-function createMockSocket(url) {
-  let readyState = 0;
-  const listeners = {};
+type MockListener = (...args: unknown[]) => void;
 
-  const mockSocket = {
+function createMockSocket(url: string): WsLike {
+  let readyState = 0;
+  const listeners: Record<string, MockListener[]> = {};
+
+  const mockSocket: WsLike = {
     url,
     get readyState() { return readyState; },
 
-    send: (data) => {
+    send: (data: string) => {
       setTimeout(() => {
         const messageListeners = listeners['message'];
         if (messageListeners && messageListeners.length > 0) {
-          let parsed;
+          let parsed: unknown;
           try {
             parsed = JSON.parse(data);
           } catch {
             parsed = data;
           }
-          if (parsed && parsed.type === 'ping') {
+          if (parsed && typeof parsed === 'object' && (parsed as WsFrame).type === 'ping') {
             setTimeout(() => {
               const pl = listeners['message'];
               if (pl) {
@@ -193,17 +221,17 @@ function createMockSocket(url) {
       }
     },
 
-    set onopen(fn)    { listeners['open'] = [fn]; },
-    set onclose(fn)   { listeners['close'] = [fn]; },
-    set onmessage(fn) { listeners['message'] = [fn]; },
-    set onerror(fn)   { listeners['error'] = [fn]; },
+    set onopen(fn: (() => void) | null) { listeners['open'] = fn ? [fn as MockListener] : []; },
+    set onclose(fn: (() => void) | null) { listeners['close'] = fn ? [fn as MockListener] : []; },
+    set onmessage(fn: ((event: { data: string }) => void) | null) { listeners['message'] = fn ? [fn as MockListener] : []; },
+    set onerror(fn: ((event: unknown) => void) | null) { listeners['error'] = fn ? [fn as MockListener] : []; },
 
-    addEventListener: (event, callback) => {
+    addEventListener: (event: string, callback: MockListener) => {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(callback);
     },
 
-    removeEventListener: (event, callback) => {
+    removeEventListener: (event: string, callback: MockListener) => {
       if (listeners[event]) {
         listeners[event] = listeners[event].filter((l) => l !== callback);
       }

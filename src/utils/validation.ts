@@ -16,13 +16,13 @@ export const schemas = {
   },
 };
 
-export function validateEmail(email) {
+export function validateEmail(email: string | null | undefined): string | null {
   if (!email) return 'Email is required';
   if (!schemas.email.test(email)) return 'Invalid email address';
   return null;
 }
 
-export function validatePassword(password) {
+export function validatePassword(password: string | null | undefined): string | null {
   if (!password) return 'Password is required';
   if (password.length < schemas.password.minLength)
     return `Password must be at least ${schemas.password.minLength} characters`;
@@ -37,7 +37,7 @@ export function validatePassword(password) {
   return null;
 }
 
-export function validateUsername(username) {
+export function validateUsername(username: string | null | undefined): string | null {
   if (!username) return 'Username is required';
   if (username.length < schemas.username.minLength)
     return `Username must be at least ${schemas.username.minLength} characters`;

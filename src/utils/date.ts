@@ -1,6 +1,8 @@
-export function formatDate(date, options = {}) {
+export type DateInput = string | number | Date;
+
+export function formatDate(date: DateInput, options: Intl.DateTimeFormatOptions = {}): string {
   const d = new Date(date);
-  const defaultOptions = {
+  const defaultOptions: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -9,7 +11,7 @@ export function formatDate(date, options = {}) {
   return d.toLocaleDateString('en-US', defaultOptions);
 }
 
-export function formatDateTime(date) {
+export function formatDateTime(date: DateInput): string {
   return formatDate(date, {
     year: 'numeric',
     month: 'short',
@@ -19,10 +21,10 @@ export function formatDateTime(date) {
   });
 }
 
-export function timeAgo(date) {
-  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+export function timeAgo(date: DateInput): string {
+  const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
 
-  const intervals = {
+  const intervals: Record<string, number> = {
     year: 31536000,
     month: 2592000,
     week: 604800,
@@ -40,16 +42,16 @@ export function timeAgo(date) {
   return 'Just now';
 }
 
-export function formatRelativeTime(date) {
+export function formatRelativeTime(date: DateInput): string {
   return timeAgo(date);
 }
 
-export function isToday(date) {
+export function isToday(date: DateInput): boolean {
   const d = new Date(date);
   const today = new Date();
   return d.toDateString() === today.toDateString();
 }
 
-export function formatShortDate(date) {
+export function formatShortDate(date: DateInput): string {
   return formatDate(date, { month: 'short', day: 'numeric' });
 }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
+import type { ChatMessage, ActionResult } from '../types/comms';
 
 // ── Mock fallback — only used when VITE_USE_MOCKS=true ────────────────────────
-function makeMockMessages(channelId) {
+function makeMockMessages(channelId: string): ChatMessage[] {
   const now = Date.now();
   return [
     {
@@ -31,13 +32,28 @@ function makeMockMessages(channelId) {
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
+export interface UseMessagesOptions {
+  isDM?: boolean;
+  dmUserId?: string | null;
+}
+
+interface FetchMessagesParams {
+  limit?: number;
+  before?: string;
+  [key: string]: unknown;
+}
+
 // ── Hook ───────────────────────────────────────────────────────────────────
-export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
-  const [messages, setMessages] = useState([]);
+export function useMessages(channelId: string | null, { isDM = false, dmUserId = null }: UseMessagesOptions = {}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const oldestIdRef = useRef(null);
+  const oldestIdRef = useRef<string | null>(null);
 
   // Reset when channel/DM target changes
   useEffect(() => {
@@ -49,13 +65,13 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
     setHasMore(true);
   }, [channelId, isDM, dmUserId]);
 
-  const fetchMessages = useCallback(async (params = {}) => {
+  const fetchMessages = useCallback(async (params: FetchMessagesParams = {}) => {
     let cancelled = false;
     try {
       setLoading(true);
       setError(null);
 
-      let data;
+      let data: unknown;
       if (isDM && dmUserId) {
         data = await api.messages.listDMs(dmUserId, params);
       } else if (channelId) {
@@ -65,7 +81,8 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
       }
 
       // Normalize response: array or { messages: [] }
-      const fetched = Array.isArray(data) ? data : (Array.isArray(data?.messages) ? data.messages : []);
+      const messagesField = (data as { messages?: unknown } | null)?.messages;
+      const fetched: ChatMessage[] = Array.isArray(data) ? data : (Array.isArray(messagesField) ? messagesField : []);
 
       if (!cancelled) {
         if (params.before) {
@@ -80,7 +97,7 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
       }
     } catch (err) {
       if (!cancelled) {
-        setError(err.message ?? 'Failed to load messages');
+        setError(errMessage(err, 'Failed to load messages'));
         // In mock mode, show placeholder messages so the UI is not broken
         if (USE_MOCKS) {
           const mocks = makeMockMessages(channelId ?? dmUserId ?? 'dm');
@@ -113,16 +130,16 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
   }, [hasMore, loading, fetchMessages]);
 
   /** Append a locally-sent message optimistically. */
-  const appendMessage = useCallback((message) => {
+  const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message]);
   }, []);
 
   /** Post a new message; appends optimistically before the server round-trip. */
-  const postMessage = useCallback(async (content) => {
+  const postMessage = useCallback(async (content: string): Promise<ActionResult> => {
     const tempId = `temp-${Date.now()}`;
-    const tempMsg = {
+    const tempMsg: ChatMessage = {
       id: tempId,
-      channel_id: channelId,
+      channel_id: channelId ?? undefined,
       author: { id: 'me', username: 'you', display_name: 'You' },
       content,
       created_at: new Date().toISOString(),
@@ -131,11 +148,11 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
     appendMessage(tempMsg);
 
     try {
-      let confirmed;
+      let confirmed: ChatMessage;
       if (isDM && dmUserId) {
-        confirmed = await api.messages.sendDM(dmUserId, { content });
+        confirmed = await api.messages.sendDM(dmUserId, { content }) as ChatMessage;
       } else {
-        confirmed = await api.messages.post(channelId, { content });
+        confirmed = await api.messages.post(channelId as string, { content }) as ChatMessage;
       }
       // Replace temp message with confirmed
       setMessages((prev) =>
@@ -147,7 +164,7 @@ export function useMessages(channelId, { isDM = false, dmUserId = null } = {}) {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m))
       );
-      return { success: false, error: err.message };
+      return { success: false, error: errMessage(err, 'unknown error') };
     }
   }, [channelId, isDM, dmUserId, appendMessage]);
 

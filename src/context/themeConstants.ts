@@ -12,10 +12,13 @@
  */
 
 /** The themes a user can select. `system` follows the OS preference. */
-export const THEME_NAMES = ['dark', 'light', 'system'];
+export type ThemeName = 'dark' | 'light' | 'system';
+
+/** The themes a user can select. `system` follows the OS preference. */
+export const THEME_NAMES: ThemeName[] = ['dark', 'light', 'system'];
 
 /** Backwards-compatible shape: callers use `Object.keys(themes)` for the list. */
-export const themes = {
+export const themes: Record<ThemeName, Record<string, never>> = {
   dark: {},
   light: {},
   system: {},

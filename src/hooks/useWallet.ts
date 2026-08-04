@@ -18,6 +18,18 @@ import { api } from '../api/client';
  * `wallet_transactions` tables were deleted.
  */
 
+export interface Receipt {
+  id: string;
+  kind: string;
+  subject: string;
+  total: number;
+  protocol_fee: number;
+  counterparty: string;
+  rail_pubkey: string;
+  voided: boolean;
+  created_at: string;
+}
+
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // Mock data — only used when VITE_USE_MOCKS === 'true'. Deterministic so the
@@ -25,7 +37,7 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 const MOCK_ADDRESS =
   '9f2c41a7be03d85610fa27cc4e91b8d3705ea6c2149fbb8e37d0c5a94162e7b0';
 
-const MOCK_RECEIPTS = [
+const MOCK_RECEIPTS: Receipt[] = [
   {
     id: 'rcpt_01HQ8ZK3NP',
     kind: 'item_purchase',
@@ -73,20 +85,26 @@ const MOCK_RECEIPTS = [
 ];
 
 /** Coerce whatever envelope the backend used into a plain array. */
-function asList(payload) {
-  const body = payload?.data ?? payload;
+function asList(payload: unknown): Receipt[] {
+  const body = (payload as { data?: unknown } | null)?.data ?? payload;
   if (Array.isArray(body)) return body;
-  if (Array.isArray(body?.receipts)) return body.receipts;
-  if (Array.isArray(body?.items)) return body.items;
+  const receipts = (body as { receipts?: unknown } | null)?.receipts;
+  if (Array.isArray(receipts)) return receipts;
+  const items = (body as { items?: unknown } | null)?.items;
+  if (Array.isArray(items)) return items;
   return [];
 }
 
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
 export function useWallet() {
-  const [address, setAddress] = useState(USE_MOCKS ? MOCK_ADDRESS : null);
-  const [rail, setRail] = useState(USE_MOCKS ? 'mock' : null);
-  const [receipts, setReceipts] = useState(USE_MOCKS ? MOCK_RECEIPTS : []);
+  const [address, setAddress] = useState<string | null>(USE_MOCKS ? MOCK_ADDRESS : null);
+  const [rail, setRail] = useState<string | null>(USE_MOCKS ? 'mock' : null);
+  const [receipts, setReceipts] = useState<Receipt[]>(USE_MOCKS ? MOCK_RECEIPTS : []);
   const [loading, setLoading] = useState(!USE_MOCKS);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (USE_MOCKS) return;
@@ -105,7 +123,8 @@ export function useWallet() {
         if (cancelled) return;
 
         if (walletResult.status === 'fulfilled') {
-          const payload = walletResult.value?.data ?? walletResult.value;
+          const payload = (walletResult.value as { data?: { wallet_address?: string; rail?: string } } | null)?.data
+            ?? (walletResult.value as { wallet_address?: string; rail?: string } | null);
           setAddress(payload?.wallet_address ?? null);
           setRail(payload?.rail ?? null);
         } else {
@@ -117,7 +136,7 @@ export function useWallet() {
           setReceipts(asList(receiptResult.value));
         }
       } catch (err) {
-        if (!cancelled) setError(err.message || 'Failed to load wallet');
+        if (!cancelled) setError(errMessage(err, 'Failed to load wallet'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -133,7 +152,7 @@ export function useWallet() {
    * Link (or replace) the wallet this account is paid to / charged from.
    * Errors propagate so the caller can surface them.
    */
-  const link = useCallback(async (walletAddress) => {
+  const link = useCallback(async (walletAddress: string): Promise<string> => {
     const clean = String(walletAddress || '').trim().replace(/^0x/, '');
     if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
       throw new Error('Wallet address must be a 32-byte hex Ed25519 public key');
@@ -145,7 +164,8 @@ export function useWallet() {
     }
 
     const result = await api.wallet.link(clean);
-    const payload = result?.data ?? result;
+    const payload = (result as { data?: { wallet_address?: string; rail?: string } } | null)?.data
+      ?? (result as { wallet_address?: string; rail?: string } | null);
     const next = payload?.wallet_address ?? clean.toLowerCase();
     setAddress(next);
     if (payload?.rail) setRail(payload.rail);

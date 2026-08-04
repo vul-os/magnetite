@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWebSocket } from './useWebSocket';
+import type { WsFrame } from '../types/comms';
 
 /**
  * useCommsSocket — the realtime backbone for Wave 6 comms.
@@ -38,12 +39,30 @@ const WS_COMMS_PATH = '/ws/comms';
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
+export type PeerState = 'idle' | RTCPeerConnectionState;
+
+export interface UseCommsSocketOptions {
+  channelId?: string | null;
+  communityId?: string | null;
+  onMessage?: (msg: WsFrame) => void;
+  onPresence?: (msg: WsFrame) => void;
+  onVoiceState?: (msg: WsFrame) => void;
+  onDM?: (msg: WsFrame) => void;
+}
+
+export interface InitPeerOptions {
+  onTrack?: (stream: MediaStream) => void;
+  onStateChange?: (state: PeerState) => void;
+  audio?: boolean;
+  video?: boolean;
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────
 function noop() {}
 
 // Build the voice WS URL including the mandatory ?room= param.
 // useWebSocket will add ?token=<jwt> on top.
-function buildVoiceUrl(roomToken) {
+function buildVoiceUrl(roomToken: string): string {
   return `/ws/voice?room=${encodeURIComponent(roomToken)}`;
 }
 
@@ -55,7 +74,7 @@ export function useCommsSocket({
   onPresence = noop,
   onVoiceState = noop,
   onDM = noop,
-} = {}) {
+}: UseCommsSocketOptions = {}) {
   // ── Chat/presence WS ─────────────────────────────────────────────────────
   const { isConnected, lastMessage, sendMessage } = useWebSocket(WS_COMMS_PATH, {
     autoReconnect: true,
@@ -65,7 +84,7 @@ export function useCommsSocket({
 
   // ── Voice signaling WS — lazy: only open when we have a room token ────────
   // voiceWsUrl is null until initPeer is called; null disables the WS.
-  const [voiceWsUrl, setVoiceWsUrl] = useState(null);
+  const [voiceWsUrl, setVoiceWsUrl] = useState<string | null>(null);
 
   const {
     isConnected: voiceConnected,
@@ -78,21 +97,21 @@ export function useCommsSocket({
   });
 
   // ── Typing state ─────────────────────────────────────────────────────────
-  const [typingUsers, setTypingUsers] = useState({});
-  const typingTimersRef = useRef({});
+  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+  const typingTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // ── WebRTC peer state ─────────────────────────────────────────────────────
-  const [peerState, setPeerState] = useState('idle'); // idle | connecting | connected | failed | closed
-  const pcRef = useRef(null);
-  const localStreamRef = useRef(null);
+  const [peerState, setPeerState] = useState<PeerState>('idle');
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   // ── Track remote peers so we can target offer/answer/ICE correctly ────────
   // Populated from room_state and participant_joined server frames.
-  const remotePeersRef = useRef([]); // Array<string> of user_id strings
+  const remotePeersRef = useRef<string[]>([]); // Array<string> of user_id strings
 
   // ── Inbound: chat/presence WS messages ───────────────────────────────────
   useEffect(() => {
-    if (!lastMessage) return;
+    if (!lastMessage || typeof lastMessage === 'string') return;
     const msg = lastMessage;
 
     switch (msg.type) {
@@ -115,11 +134,11 @@ export function useCommsSocket({
 
       // Backend ServerFrame serialises TypingNotify as 'typing_notify'
       case 'typing_notify': {
-        const uid = msg.user_id;
+        const uid = String(msg.user_id);
         if (typingTimersRef.current[uid]) clearTimeout(typingTimersRef.current[uid]);
         // Driven by an inbound WebSocket frame (external system).
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTypingUsers((prev) => ({ ...prev, [uid]: msg.username ?? uid }));
+        setTypingUsers((prev) => ({ ...prev, [uid]: String(msg.username ?? uid) }));
         typingTimersRef.current[uid] = setTimeout(() => {
           setTypingUsers((prev) => {
             const next = { ...prev };
@@ -132,9 +151,9 @@ export function useCommsSocket({
 
       // Keep handling typing_start from other transports for compat
       case 'typing_start': {
-        const uid = msg.user_id;
+        const uid = String(msg.user_id);
         if (typingTimersRef.current[uid]) clearTimeout(typingTimersRef.current[uid]);
-        setTypingUsers((prev) => ({ ...prev, [uid]: msg.username ?? uid }));
+        setTypingUsers((prev) => ({ ...prev, [uid]: String(msg.username ?? uid) }));
         typingTimersRef.current[uid] = setTimeout(() => {
           setTypingUsers((prev) => {
             const next = { ...prev };
@@ -146,7 +165,7 @@ export function useCommsSocket({
       }
 
       case 'typing_stop': {
-        const uid = msg.user_id;
+        const uid = String(msg.user_id);
         if (typingTimersRef.current[uid]) clearTimeout(typingTimersRef.current[uid]);
         setTypingUsers((prev) => {
           const next = { ...prev };
@@ -163,14 +182,14 @@ export function useCommsSocket({
 
   // ── Inbound: voice signaling WS messages ─────────────────────────────────
   useEffect(() => {
-    if (!voiceLastMessage) return;
+    if (!voiceLastMessage || typeof voiceLastMessage === 'string') return;
     if (voiceWsUrl === null) return; // voice WS not yet active
     const msg = voiceLastMessage;
 
     // Track remote peers from room_state snapshot (sent by backend on join)
     if (msg.type === 'room_state' && Array.isArray(msg.participants)) {
-      remotePeersRef.current = msg.participants.map((p) =>
-        typeof p === 'object' ? String(p.user_id) : String(p)
+      remotePeersRef.current = (msg.participants as unknown[]).map((p) =>
+        typeof p === 'object' && p !== null ? String((p as { user_id: unknown }).user_id) : String(p)
       );
     }
 
@@ -196,7 +215,7 @@ export function useCommsSocket({
         // Backend ServerVoiceFrame serialises Offer as 'offer', Answer as 'answer',
         // IceCandidate as 'ice_candidate' — all with from_user_id rather than room_id.
         if (msg.type === 'offer') {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp as string }));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           // Reply to the specific peer that sent the offer
@@ -204,12 +223,12 @@ export function useCommsSocket({
             sendVoiceSignal({ type: 'answer', to_user_id: msg.from_user_id, sdp: answer.sdp });
           }
         } else if (msg.type === 'answer') {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }));
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp as string }));
         } else if (msg.type === 'ice_candidate') {
           const candidate = new RTCIceCandidate({
-            candidate: msg.candidate,
-            sdpMid: msg.sdp_mid ?? null,
-            sdpMLineIndex: msg.sdp_mline_index ?? null,
+            candidate: msg.candidate as string,
+            sdpMid: (msg.sdp_mid as string | null) ?? null,
+            sdpMLineIndex: (msg.sdp_mline_index as number | null) ?? null,
           });
           await pc.addIceCandidate(candidate);
         }
@@ -238,7 +257,7 @@ export function useCommsSocket({
 
   // ── Outbound helpers ──────────────────────────────────────────────────────
   const sendChatMessage = useCallback(
-    (content, targetChannelId) => {
+    (content: string, targetChannelId?: string) => {
       // Backend ClientFrame::SendMessage serialises as 'send_message'
       sendMessage({
         type: 'send_message',
@@ -250,7 +269,7 @@ export function useCommsSocket({
   );
 
   const sendDMMessage = useCallback(
-    (content, recipientId) => {
+    (content: string, recipientId: string) => {
       sendMessage({ type: 'dm_message', recipient_id: recipientId, content });
     },
     [sendMessage]
@@ -272,16 +291,16 @@ export function useCommsSocket({
   /**
    * Initialise a WebRTC peer connection for a voice room.
    *
-   * @param {string} roomId      - voice room id (UUID)
-   * @param {string} roomToken   - join token from api.voice.joinToken() — used as ?room= in WS URL
-   * @param {object} opts
+   * @param roomId      - voice room id (UUID)
+   * @param roomToken   - join token from api.voice.joinToken() — used as ?room= in WS URL
+   * @param opts
    *   onTrack(stream)        - called when a remote track is received
    *   onStateChange(state)   - called when connection state changes
    *   audio {boolean}        - request mic (default true)
    *   video {boolean}        - request camera (default false)
    */
   const initPeer = useCallback(
-    async (roomId, roomToken, { onTrack = noop, onStateChange = noop, audio = true, video = false } = {}) => {
+    async (roomId: string, roomToken: string, { onTrack = noop, onStateChange = noop, audio = true, video = false }: InitPeerOptions = {}) => {
       // Destroy any existing peer first
       if (pcRef.current) {
         pcRef.current.close();
@@ -298,7 +317,7 @@ export function useCommsSocket({
       // useWebSocket will append ?token=<jwt> automatically.
       setVoiceWsUrl(buildVoiceUrl(roomToken));
 
-      let localStream = null;
+      let localStream: MediaStream | null = null;
       try {
         if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
           localStream = await navigator.mediaDevices.getUserMedia({ audio, video });
@@ -313,7 +332,7 @@ export function useCommsSocket({
 
       // Add local tracks
       if (localStream) {
-        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream as MediaStream));
       }
 
       // Remote track received

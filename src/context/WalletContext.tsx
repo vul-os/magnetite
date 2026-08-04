@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useWallet as useWalletData } from '../hooks/useWallet';
 
 /**
@@ -11,9 +11,9 @@ import { useWallet as useWalletData } from '../hooks/useWallet';
  * without each firing its own request.
  */
 
-const WalletContext = createContext(null);
+const WalletContext = createContext<ReturnType<typeof useWalletData> | null>(null);
 
-export function WalletProvider({ children }) {
+export function WalletProvider({ children }: { children: ReactNode }) {
   const { address, custodial, rail, receipts, link, loading, error } = useWalletData();
 
   const value = useMemo(

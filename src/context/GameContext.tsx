@@ -1,8 +1,25 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
-const GameContext = createContext();
+export interface MockGame {
+  id: number;
+  name: string;
+  description: string;
+  minBet: number;
+  maxBet: number;
+  category: string;
+}
 
-const MOCK_GAMES = [
+export interface GameContextValue {
+  games: MockGame[];
+  currentGame: MockGame | null;
+  loading: boolean;
+  fetchGames: () => Promise<void>;
+  fetchGame: (id: string | number) => Promise<MockGame | null>;
+}
+
+const GameContext = createContext<GameContextValue | undefined>(undefined);
+
+const MOCK_GAMES: MockGame[] = [
   { id: 1, name: 'Lucky Slots', description: 'Spin to win big prizes', minBet: 1, maxBet: 100, category: 'slots' },
   { id: 2, name: 'Blackjack Pro', description: 'Beat the dealer', minBet: 5, maxBet: 500, category: 'cards' },
   { id: 3, name: 'Roulette Spin', description: 'Predict the winning number', minBet: 1, maxBet: 200, category: 'roulette' },
@@ -11,9 +28,9 @@ const MOCK_GAMES = [
   { id: 6, name: 'Baccarat Classic', description: 'Elegant card game', minBet: 10, maxBet: 500, category: 'cards' },
 ];
 
-export function GameProvider({ children }) {
-  const [games, setGames] = useState([]);
-  const [currentGame, setCurrentGame] = useState(null);
+export function GameProvider({ children }: { children: ReactNode }) {
+  const [games, setGames] = useState<MockGame[]>([]);
+  const [currentGame, setCurrentGame] = useState<MockGame | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchGames = async () => {
@@ -23,10 +40,10 @@ export function GameProvider({ children }) {
     setLoading(false);
   };
 
-  const fetchGame = async (id) => {
+  const fetchGame = async (id: string | number) => {
     setLoading(true);
     await new Promise(r => setTimeout(r, 200));
-    const game = MOCK_GAMES.find(g => g.id === parseInt(id));
+    const game = MOCK_GAMES.find(g => g.id === parseInt(String(id)));
     setCurrentGame(game || null);
     setLoading(false);
     return game || null;

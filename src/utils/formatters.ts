@@ -1,4 +1,4 @@
-export function formatCurrency(amount, currency = 'USD') {
+export function formatCurrency(amount: unknown, currency = 'USD'): string {
   if (typeof amount !== 'number') return '';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -6,7 +6,7 @@ export function formatCurrency(amount, currency = 'USD') {
   }).format(amount);
 }
 
-export function formatDate(date) {
+export function formatDate(date: string | number | Date | null | undefined): string {
   if (!date) return '';
   const d = new Date(date);
   if (isNaN(d.getTime())) return '';
@@ -17,7 +17,7 @@ export function formatDate(date) {
   }).format(d);
 }
 
-export function formatRelativeTime(timestamp) {
+export function formatRelativeTime(timestamp: string | number | Date | null | undefined): string {
   if (!timestamp) return '';
   const now = Date.now();
   const date = new Date(timestamp).getTime();
@@ -40,12 +40,12 @@ export function formatRelativeTime(timestamp) {
   return `${years}y ago`;
 }
 
-export function formatNumber(num) {
+export function formatNumber(num: unknown): string {
   if (typeof num !== 'number') return '';
   return new Intl.NumberFormat('en-US').format(num);
 }
 
-export function truncate(str, length = 50) {
+export function truncate(str: unknown, length = 50): string {
   if (typeof str !== 'string') return '';
   if (str.length <= length) return str;
   return str.slice(0, length) + '...';

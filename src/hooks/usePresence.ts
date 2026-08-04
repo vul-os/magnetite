@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { PresenceEntry, PresenceMap, PresenceStatus, CommunityMember } from '../types/comms';
 
 /**
  * Manages user presence state for a set of user IDs.
@@ -14,7 +15,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  */
 
 // ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
-const MOCK_PRESENCE = {
+const MOCK_PRESENCE: PresenceMap = {
   '1': { status: 'online', activity: 'Playing Rust Racer', updated_at: Date.now() },
   '2': { status: 'idle', activity: null, updated_at: Date.now() - 600_000 },
   '3': { status: 'online', activity: 'Streaming', updated_at: Date.now() - 30_000 },
@@ -23,12 +24,12 @@ const MOCK_PRESENCE = {
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // Stable status ordering for sorting member lists
-const STATUS_ORDER = { online: 0, dnd: 1, idle: 2, offline: 3 };
+const STATUS_ORDER: Record<PresenceStatus, number> = { online: 0, dnd: 1, idle: 2, offline: 3 };
 
-export function usePresence(userIds = []) {
+export function usePresence(userIds: string[] = []) {
   // presenceMap: { [userId]: { status, activity, updated_at } }
-  const [presenceMap, setPresenceMap] = useState(USE_MOCKS ? MOCK_PRESENCE : {});
-  const idSetRef = useRef(new Set());
+  const [presenceMap, setPresenceMap] = useState<PresenceMap>(USE_MOCKS ? MOCK_PRESENCE : {});
+  const idSetRef = useRef(new Set<string>());
 
   // Keep idSet in sync
   useEffect(() => {
@@ -39,7 +40,7 @@ export function usePresence(userIds = []) {
   // No API polling here — the WS push model is the authoritative source.
 
   /** Called by useCommsSocket when a presence_update WS message arrives. */
-  const setPresence = useCallback((userId, presenceData) => {
+  const setPresence = useCallback((userId: string, presenceData: Partial<PresenceEntry> & { status: PresenceStatus }) => {
     setPresenceMap((prev) => ({
       ...prev,
       [userId]: { ...presenceData, updated_at: Date.now() },
@@ -47,19 +48,19 @@ export function usePresence(userIds = []) {
   }, []);
 
   /** Batch update from a presence snapshot (e.g. on channel join). */
-  const bulkSetPresence = useCallback((snapshot) => {
+  const bulkSetPresence = useCallback((snapshot: PresenceMap) => {
     setPresenceMap((prev) => ({ ...prev, ...snapshot }));
   }, []);
 
   /** Get the presence entry for a single user. */
   const getPresence = useCallback(
-    (userId) => presenceMap[userId] ?? { status: 'offline', activity: null },
+    (userId: string): PresenceEntry => presenceMap[userId] ?? { status: 'offline', activity: null },
     [presenceMap]
   );
 
   /** Sort a member list by presence status then name. */
   const sortByPresence = useCallback(
-    (members) =>
+    <M extends CommunityMember>(members: M[]): M[] =>
       [...members].sort((a, b) => {
         const sa = STATUS_ORDER[presenceMap[a.id]?.status ?? 'offline'] ?? 3;
         const sb = STATUS_ORDER[presenceMap[b.id]?.status ?? 'offline'] ?? 3;

@@ -17,10 +17,10 @@
 
 const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)')
 
-let observer = null
+let observer: IntersectionObserver | null = null
 let armed = false
 
-function reveal(el) {
+function reveal(el: Element) {
   // rootMargin pulls the trigger slightly before the element is on screen so
   // it is already settling in as it scrolls up; unobserve so it never replays.
   el.classList.add('is-visible')
@@ -39,12 +39,12 @@ function armScrollReveal() {
     { rootMargin: '0px 0px -8% 0px', threshold: 0.08 },
   )
 
-  const scan = (root) => {
+  const scan = (root: Document | Element) => {
     const nodes = root.querySelectorAll ? root.querySelectorAll('.sr:not(.is-visible)') : []
     nodes.forEach((n) => {
       // Anything already in frame at mount (above the fold) reveals immediately
       // on the next frame rather than waiting for a scroll that may never come.
-      observer.observe(n)
+      observer?.observe(n)
     })
   }
   scan(document)
@@ -54,8 +54,9 @@ function armScrollReveal() {
     for (const m of mutations) {
       m.addedNodes.forEach((node) => {
         if (node.nodeType !== 1) return
-        if (node.matches && node.matches('.sr:not(.is-visible)')) observer.observe(node)
-        scan(node)
+        const el = node as Element
+        if (el.matches && el.matches('.sr:not(.is-visible)')) observer?.observe(el)
+        scan(el)
       })
     }
   })
@@ -72,9 +73,9 @@ function disarmScrollReveal() {
 
 /* ── Cursor spotlight + hero parallax (delegated, rAF-throttled) ─────────── */
 let pointerRAF = 0
-let lastEvent = null
+let lastEvent: PointerEvent | null = null
 
-function onPointerMove(e) {
+function onPointerMove(e: PointerEvent) {
   lastEvent = e
   if (pointerRAF) return
   pointerRAF = requestAnimationFrame(() => {
@@ -83,7 +84,8 @@ function onPointerMove(e) {
     if (!ev) return
 
     // Spotlight: paint the local coordinates onto the nearest .spot surface.
-    const spot = ev.target.closest && ev.target.closest('.spot')
+    const target = ev.target as Element
+    const spot = target.closest && target.closest<HTMLElement>('.spot')
     if (spot) {
       const r = spot.getBoundingClientRect()
       spot.style.setProperty('--spot-x', `${((ev.clientX - r.left) / r.width) * 100}%`)
@@ -91,7 +93,7 @@ function onPointerMove(e) {
     }
 
     // Parallax: nudge every [data-aura] field toward the pointer, gently.
-    const auras = document.querySelectorAll('[data-aura]')
+    const auras = document.querySelectorAll<HTMLElement>('[data-aura]')
     if (auras.length) {
       const cx = window.innerWidth / 2
       const cy = window.innerHeight / 2

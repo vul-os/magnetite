@@ -18,10 +18,10 @@
  * Escape a string so it is safe to inject into an HTML context via innerHTML.
  * Prefer JSX text nodes — this is a last resort for imperative DOM writes.
  *
- * @param {string} str - Raw user-supplied string.
- * @returns {string} HTML-escaped string.
+ * @param str - Raw user-supplied string.
+ * @returns HTML-escaped string.
  */
-export function escapeHtml(str) {
+export function escapeHtml(str: string | null | undefined): string {
   if (str == null) return '';
   return String(str)
     .replace(/&/g, '&amp;')
@@ -37,11 +37,11 @@ export function escapeHtml(str) {
  * Trims whitespace and collapses internal runs of whitespace/newlines.
  * The result is safe to use as `{sanitizeText(value)}` in JSX.
  *
- * @param {string} str - Raw user-supplied string.
- * @param {number} [maxLength] - Optional maximum character length (truncates with ellipsis).
- * @returns {string} Normalised string.
+ * @param str - Raw user-supplied string.
+ * @param maxLength - Optional maximum character length (truncates with ellipsis).
+ * @returns Normalised string.
  */
-export function sanitizeText(str, maxLength) {
+export function sanitizeText(str: string | null | undefined, maxLength?: number): string {
   if (str == null) return '';
   let out = String(str).trim();
   if (maxLength != null && out.length > maxLength) {
@@ -54,11 +54,11 @@ export function sanitizeText(str, maxLength) {
  * Validate that a redirect destination is a safe same-origin relative path.
  * Rejects absolute URLs and protocol-relative URLs (//evil.com).
  *
- * @param {string|null|undefined} destination - The destination string from a query param or form field.
- * @param {string} [fallback='/'] - Returned when destination is unsafe.
- * @returns {string} A safe relative path.
+ * @param destination - The destination string from a query param or form field.
+ * @param fallback - Returned when destination is unsafe.
+ * @returns A safe relative path.
  */
-export function sanitizeRedirect(destination, fallback = '/') {
+export function sanitizeRedirect(destination: string | null | undefined, fallback = '/'): string {
   if (!destination) return fallback;
   const d = String(destination);
   // Must start with exactly one '/' and not be a protocol-relative URL ('//...').

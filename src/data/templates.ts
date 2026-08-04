@@ -13,8 +13,32 @@
  * (ascending complexity / lines-of-code).
  */
 
-/** @type {Template[]} */
-export const templates = [
+export interface Template {
+  /** Stable identifier used by the CLI and the Studio. */
+  id: string;
+  /** Display name shown in the gallery. */
+  name: string;
+  /** Complexity tier: "minimal" | "action" | "advanced". */
+  tier: string;
+  /** One-to-two sentence description for gallery cards. */
+  blurb: string;
+  /** Filterable tags. */
+  tags: string[];
+  /** Default max_players for MatchConfig.auto(). */
+  maxPlayers: number;
+  /** Default tick rate in Hz. */
+  tickHz: number;
+  /** Absolute path to a preview image under /public/. */
+  previewImage: string;
+  /** Exact `magnetite new` command to scaffold this template. */
+  cliCommand: string;
+  /** In-app link to the relevant developer guide. */
+  docsUrl: string;
+  /** Whether to show on the homepage template gallery. */
+  featured: boolean;
+}
+
+export const templates: Template[] = [
   {
     id: "minimal",
     name: "Minimal",
@@ -86,44 +110,21 @@ export const templates = [
 
 /**
  * Return a single template by id, or undefined if not found.
- *
- * @param {string} id
- * @returns {Template | undefined}
  */
-export function getTemplate(id) {
+export function getTemplate(id: string): Template | undefined {
   return templates.find((t) => t.id === id);
 }
 
 /**
  * Return templates that are flagged as featured (shown on the homepage gallery).
- *
- * @returns {Template[]}
  */
-export function getFeaturedTemplates() {
+export function getFeaturedTemplates(): Template[] {
   return templates.filter((t) => t.featured);
 }
 
 /**
  * Return templates filtered by tag.
- *
- * @param {string} tag
- * @returns {Template[]}
  */
-export function getTemplatesByTag(tag) {
+export function getTemplatesByTag(tag: string): Template[] {
   return templates.filter((t) => t.tags.includes(tag));
 }
-
-/**
- * @typedef {Object} Template
- * @property {string}   id           - Stable identifier used by the CLI and the Studio.
- * @property {string}   name         - Display name shown in the gallery.
- * @property {string}   tier         - Complexity tier: "minimal" | "action" | "advanced".
- * @property {string}   blurb        - One-to-two sentence description for gallery cards.
- * @property {string[]} tags         - Filterable tags.
- * @property {number}   maxPlayers   - Default max_players for MatchConfig.auto().
- * @property {number}   tickHz       - Default tick rate in Hz.
- * @property {string}   previewImage - Absolute path to a preview image under /public/.
- * @property {string}   cliCommand   - Exact `magnetite new` command to scaffold this template.
- * @property {string}   docsUrl      - In-app link to the relevant developer guide.
- * @property {boolean}  featured     - Whether to show on the homepage template gallery.
- */

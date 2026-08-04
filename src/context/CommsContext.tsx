@@ -1,10 +1,93 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useCommunities } from '../hooks/useCommunities';
 import { useChannels } from '../hooks/useChannels';
 import { useMessages } from '../hooks/useMessages';
 import { usePresence } from '../hooks/usePresence';
 import { useVoice } from '../hooks/useVoice';
-import { useCommsSocket } from '../hooks/useCommsSocket';
+import { useCommsSocket, type PeerState, type InitPeerOptions } from '../hooks/useCommsSocket';
+import type {
+  WsFrame,
+  Community,
+  Channel,
+  ChatMessage,
+  PresenceMap,
+  PresenceEntry,
+  CommunityMember,
+  VoiceRoom,
+  VoiceParticipant,
+  ActionResult,
+} from '../types/comms';
+
+export interface CommsContextValue {
+  // Selection
+  activeCommunityId: string | null;
+  activeChannelId: string | null;
+  activeDMUserId: string | null;
+  activeCommunity: Community | null;
+  activeChannel: Channel | null;
+  selectCommunity: (id: string) => void;
+  selectChannel: (id: string) => void;
+  selectDM: (userId: string) => void;
+
+  // Communities
+  communities: Community[];
+  communitiesLoading: boolean;
+  // The underlying hook's async body sometimes returns a (never-consumed)
+  // cleanup closure and sometimes returns nothing — see useCommunities.ts.
+  fetchCommunities: () => Promise<(() => void) | undefined>;
+  createCommunity: (data: { name: string; description?: string; icon_url?: string | null }) => Promise<ActionResult>;
+  joinCommunity: (id: string) => Promise<ActionResult>;
+  leaveCommunity: (id: string) => Promise<ActionResult>;
+
+  // Channels
+  channels: Channel[];
+  textChannels: Channel[];
+  voiceChannels: Channel[];
+  channelsLoading: boolean;
+  createChannel: (data: { name: string; kind?: Channel['kind'] }) => Promise<ActionResult>;
+
+  // Messages
+  messages: ChatMessage[];
+  messagesLoading: boolean;
+  hasMore: boolean;
+  loadMore: () => void;
+  postMessage: (content: string) => Promise<ActionResult>;
+  appendMessage: (message: ChatMessage) => void;
+
+  // Presence
+  presenceMap: PresenceMap;
+  getPresence: (userId: string) => PresenceEntry;
+  bulkSetPresence: (snapshot: PresenceMap) => void;
+  sortByPresence: <M extends CommunityMember>(members: M[]) => M[];
+  onlineCount: number;
+
+  // Voice
+  voiceRooms: VoiceRoom[];
+  currentRoom: VoiceRoom | null;
+  joinToken: string | null;
+  muted: boolean;
+  deafened: boolean;
+  voiceParticipants: VoiceParticipant[];
+  fetchVoiceRooms: () => Promise<(() => void) | undefined>;
+  joinVoiceRoom: (roomId: string, peerOpts?: InitPeerOptions) => Promise<ActionResult>;
+  leaveVoiceRoom: () => void;
+  toggleMute: () => void;
+  toggleDeafen: () => void;
+
+  // Realtime socket
+  isConnected: boolean;
+  voiceConnected: boolean;
+  sendChatMessage: (content: string, targetChannelId?: string) => void;
+  sendDMMessage: (content: string, recipientId: string) => void;
+  sendTypingStart: () => void;
+  sendTypingStop: () => void;
+  typingUsers: Record<string, string>;
+
+  // WebRTC
+  peerState: PeerState;
+  initPeer: (roomId: string, roomToken: string, opts?: InitPeerOptions) => Promise<{ localStream: MediaStream | null }>;
+  destroyPeer: () => void;
+}
 
 /**
  * CommsContext — the single source of truth for Wave 6 comms state.
@@ -24,13 +107,13 @@ import { useCommsSocket } from '../hooks/useCommsSocket';
  *   const comms = useComms();
  */
 
-const CommsContext = createContext(null);
+const CommsContext = createContext<CommsContextValue | null>(null);
 
-export function CommsProvider({ children }) {
+export function CommsProvider({ children }: { children: ReactNode }) {
   // ── Selection state ───────────────────────────────────────────────────────
-  const [activeCommunityId, setActiveCommunityId] = useState(null);
-  const [activeChannelId, setActiveChannelId] = useState(null);
-  const [activeDMUserId, setActiveDMUserId] = useState(null);
+  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const [activeDMUserId, setActiveDMUserId] = useState<string | null>(null);
 
   // ── Communities ───────────────────────────────────────────────────────────
   const {
@@ -89,36 +172,36 @@ export function CommsProvider({ children }) {
 
   // ── Realtime socket ───────────────────────────────────────────────────────
   const handleMessage = useCallback(
-    (msg) => {
+    (msg: WsFrame) => {
       // Real-time chat message → append if it's for the active channel
       if (msg.channel_id === activeChannelId) {
-        appendMessage({ ...msg, pending: false });
+        appendMessage({ ...msg, id: String(msg.id), content: String(msg.content ?? ''), pending: false });
       }
     },
     [activeChannelId, appendMessage]
   );
 
   const handlePresence = useCallback(
-    (msg) => {
-      setPresence(msg.user_id, { status: msg.status, activity: msg.activity ?? null });
+    (msg: WsFrame) => {
+      setPresence(String(msg.user_id), { status: msg.status as PresenceEntry['status'], activity: (msg.activity as string | null) ?? null });
     },
     [setPresence]
   );
 
   const handleVoiceState = useCallback(
-    (msg) => {
-      if (msg.action === 'join') addParticipant(msg.participant);
-      else if (msg.action === 'leave') removeParticipant(msg.user_id);
-      else if (msg.action === 'update') updateParticipant(msg.user_id, msg.updates);
+    (msg: WsFrame) => {
+      if (msg.action === 'join') addParticipant(msg.participant as VoiceParticipant);
+      else if (msg.action === 'leave') removeParticipant(String(msg.user_id));
+      else if (msg.action === 'update') updateParticipant(String(msg.user_id), msg.updates as Partial<VoiceParticipant>);
     },
     [addParticipant, removeParticipant, updateParticipant]
   );
 
   const handleDM = useCallback(
-    (msg) => {
+    (msg: WsFrame) => {
       // If this DM is from the active DM user, append it
       if (activeDMUserId && msg.sender_id === activeDMUserId) {
-        appendMessage({ ...msg, pending: false });
+        appendMessage({ ...msg, id: String(msg.id), content: String(msg.content ?? ''), pending: false });
       }
     },
     [activeDMUserId, appendMessage]
@@ -157,7 +240,7 @@ export function CommsProvider({ children }) {
 
   // ── Navigation helpers ────────────────────────────────────────────────────
   const selectCommunity = useCallback(
-    (id) => {
+    (id: string) => {
       setActiveCommunityId(id);
       setActiveChannelId(null);
       setActiveDMUserId(null);
@@ -165,13 +248,13 @@ export function CommsProvider({ children }) {
     []
   );
 
-  const selectChannel = useCallback((id) => {
+  const selectChannel = useCallback((id: string) => {
     setActiveChannelId(id);
     setActiveDMUserId(null);
     setMessages([]);
   }, [setMessages]);
 
-  const selectDM = useCallback((userId) => {
+  const selectDM = useCallback((userId: string) => {
     setActiveDMUserId(userId);
     setActiveChannelId(null);
     setMessages([]);
@@ -179,10 +262,10 @@ export function CommsProvider({ children }) {
 
   // ── Join voice room + init WebRTC ─────────────────────────────────────────
   const joinVoiceRoom = useCallback(
-    async (roomId, peerOpts = {}) => {
+    async (roomId: string, peerOpts: InitPeerOptions = {}) => {
       const result = await joinRoom(roomId);
       if (result.success && result.token) {
-        await initPeer(roomId, result.token, peerOpts);
+        await initPeer(roomId, result.token as string, peerOpts);
       }
       return result;
     },
@@ -195,7 +278,7 @@ export function CommsProvider({ children }) {
   }, [leaveRoom, destroyPeer]);
 
   // ── Context value ─────────────────────────────────────────────────────────
-  const value = useMemo(
+  const value = useMemo<CommsContextValue>(
     () => ({
       // Selection
       activeCommunityId,

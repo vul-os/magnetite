@@ -14,18 +14,18 @@
 const PLACEHOLDER_BG = '#31343c'; // neutral slate — legible in both themes
 const PLACEHOLDER_FG = '#9aa1ad'; // muted ink
 
-function firstInitial(name) {
+function firstInitial(name: string | null | undefined): string {
   const trimmed = String(name ?? '').trim();
   if (!trimmed) return '?';
   return trimmed.charAt(0).toUpperCase();
 }
 
 /**
- * @param {string} name   entity name/username used for the initial
- * @param {number} size   pixel dimension of the square SVG (default 96)
- * @returns {string}      a `data:image/svg+xml,...` URI (no network request)
+ * @param name   entity name/username used for the initial
+ * @param size   pixel dimension of the square SVG (default 96)
+ * @returns      a `data:image/svg+xml,...` URI (no network request)
  */
-export function initialsAvatar(name, size = 96) {
+export function initialsAvatar(name: string | null | undefined, size = 96): string {
   const initial = firstInitial(name)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

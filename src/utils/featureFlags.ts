@@ -5,10 +5,12 @@ const flags = {
   MOBILE_APP: false,
 };
 
-export function isEnabled(flag) {
+export type FeatureFlag = keyof typeof flags;
+
+export function isEnabled(flag: FeatureFlag): boolean {
   return flags[flag] === true;
 }
 
-export function getAllFlags() {
+export function getAllFlags(): typeof flags {
   return { ...flags };
 }

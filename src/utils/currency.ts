@@ -20,7 +20,7 @@ const SMALLEST_UNITS_PER_TOKEN = 10 ** RAIL_DECIMALS;
  * Format a decimal token amount (e.g. `4.99`) with its ticker.
  * Use `formatReceiptAmount` when you have raw smallest-unit integers.
  */
-export function formatCurrency(amount, currency = 'USDC') {
+export function formatCurrency(amount: number | string | null | undefined, currency = 'USDC'): string {
   const formatted = new Intl.NumberFormat('en-US', {
     style: 'decimal',
     minimumFractionDigits: RAIL_DECIMALS,
@@ -31,7 +31,7 @@ export function formatCurrency(amount, currency = 'USDC') {
 }
 
 /** Format a decimal token amount as USDC — the default rail currency. */
-export function formatUSDC(amount) {
+export function formatUSDC(amount: number | string | null | undefined): string {
   return formatCurrency(amount, 'USDC');
 }
 
@@ -39,18 +39,18 @@ export function formatUSDC(amount) {
  * Format a raw receipt integer (smallest unit) as a human token amount.
  * `formatReceiptAmount(499)` → `"4.99 USDC"`.
  */
-export function formatReceiptAmount(smallestUnits, currency = 'USDC') {
+export function formatReceiptAmount(smallestUnits: number | string | null | undefined, currency = 'USDC'): string {
   const tokens = (Number(smallestUnits) || 0) / SMALLEST_UNITS_PER_TOKEN;
   return formatCurrency(tokens, currency);
 }
 
 /** Convert a decimal token amount to the integer a checkout call expects. */
-export function toSmallestUnits(amount) {
+export function toSmallestUnits(amount: number | string | null | undefined): number {
   return Math.round((Number(amount) || 0) * SMALLEST_UNITS_PER_TOKEN);
 }
 
 /** Render a protocol fee in basis points. `0` → `"0 bps (no protocol fee)"`. */
-export function formatProtocolFee(bps) {
+export function formatProtocolFee(bps: number | string | null | undefined): string {
   const n = Number(bps) || 0;
   return n === 0 ? '0 bps (no protocol fee)' : `${n} bps`;
 }
@@ -59,19 +59,19 @@ export function formatProtocolFee(bps) {
  * Abbreviate a hex Ed25519 key for display. Raw keys are the substrate; any
  * human name is a display layer on top (seam §3.2 `Naming`).
  */
-export function shortKey(hexKey, lead = 6, tail = 4) {
+export function shortKey(hexKey: string | null | undefined, lead = 6, tail = 4): string {
   if (!hexKey) return '—';
   const clean = String(hexKey).replace(/^0x/, '');
   if (clean.length <= lead + tail + 1) return clean;
   return `${clean.slice(0, lead)}…${clean.slice(-tail)}`;
 }
 
-export function parseCurrency(value) {
+export function parseCurrency(value: string | number | null | undefined): number {
   const cleaned = String(value).replace(/[^0-9.-]/g, '');
   return parseFloat(cleaned) || 0;
 }
 
-export function formatCompactNumber(num) {
+export function formatCompactNumber(num: number): string {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + 'M';
   }

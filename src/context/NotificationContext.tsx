@@ -1,7 +1,32 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { api } from '../api/client';
 
-const NotificationContext = createContext();
+export interface AppNotification {
+  id: string;
+  type?: string;
+  notification_type?: string;
+  title?: string;
+  message?: string;
+  body?: string | null;
+  read: boolean;
+  createdAt: string;
+  created_at?: string;
+  link?: string;
+  icon?: string;
+  data?: unknown;
+  [key: string]: unknown;
+}
+
+export interface NotificationContextValue {
+  notifications: AppNotification[];
+  unreadCount: number;
+  markAsRead: (id: string) => void;
+  markAllAsRead: () => void;
+  addNotification: (notification: Partial<AppNotification>) => void;
+  initialized: boolean;
+}
+
+const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -11,15 +36,15 @@ function getWsBase() {
   return apiBase.replace(/^http/, 'ws');
 }
 
-export function NotificationProvider({ children }) {
-  const [notifications, setNotifications] = useState([]);
+export function NotificationProvider({ children }: { children: ReactNode }) {
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [initialized, setInitialized] = useState(false);
-  const wsRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
-  const addNotification = useCallback((notification) => {
-    const newNotification = {
+  const addNotification = useCallback((notification: Partial<AppNotification>) => {
+    const newNotification: AppNotification = {
       id: Date.now().toString(),
       read: false,
       createdAt: new Date().toISOString(),
@@ -41,8 +66,10 @@ export function NotificationProvider({ children }) {
         }
         const data = await api.notifications.list();
         if (!cancelled) {
-          const list = Array.isArray(data) ? data : (data?.notifications ?? null);
-          if (list) setNotifications(list);
+          const list = Array.isArray(data)
+            ? data
+            : ((data as { notifications?: AppNotification[] } | null)?.notifications ?? null);
+          if (list) setNotifications(list as AppNotification[]);
         }
       } catch {
         /* API unavailable — empty list is the honest state; no fabricated data shown */
@@ -118,7 +145,7 @@ export function NotificationProvider({ children }) {
 
     return () => {
       mountedRef.current = false;
-      clearTimeout(reconnectTimerRef.current);
+      clearTimeout(reconnectTimerRef.current ?? undefined);
       if (wsRef.current) {
         wsRef.current.onclose = null; // Prevent reconnect on intentional close
         wsRef.current.close();
@@ -129,7 +156,7 @@ export function NotificationProvider({ children }) {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAsRead = useCallback((id) => {
+  const markAsRead = useCallback((id: string) => {
     api.notifications.markAsRead(id).catch(() => { /* optimistic */ });
     setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, read: true } : n)

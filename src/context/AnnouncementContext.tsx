@@ -1,10 +1,18 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 
-const AnnouncementContext = createContext();
+export interface AnnouncementContextValue {
+  announcement: string | null;
+  isVisible: boolean;
+  isDismissed: boolean;
+  dismiss: () => void;
+  show: () => void;
+}
+
+const AnnouncementContext = createContext<AnnouncementContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'magnetite_announcement_dismissed';
 
-export function AnnouncementProvider({ children, announcement = null }) {
+export function AnnouncementProvider({ children, announcement = null }: { children: ReactNode; announcement?: string | null }) {
   const [isVisible, setIsVisible] = useState(false);
   const [isDismissed, setIsDismissed] = useState(() => {
     try {
