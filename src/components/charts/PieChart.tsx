@@ -2,7 +2,16 @@ import { PieChart as RechartsPieChart, Pie, Cell, Tooltip, Legend, ResponsiveCon
 
 const COLORS = ['#f5a524', '#7b61ff', '#3ddc84', '#5b9dff', '#a78bfa', '#f472b6'];
 
-export default function PieChart({ data, nameKey, valueKey, title }) {
+export type ChartDatum = Record<string, string | number>;
+
+export interface PieChartProps {
+  data: ChartDatum[];
+  nameKey: string;
+  valueKey: string;
+  title?: string;
+}
+
+export default function PieChart({ data, nameKey, valueKey, title }: PieChartProps) {
   return (
     <div className="chart-container">
       {title && <h4 className="chart-title">{title}</h4>}
@@ -16,7 +25,7 @@ export default function PieChart({ data, nameKey, valueKey, title }) {
             outerRadius={100}
             dataKey={valueKey}
             nameKey={nameKey}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
