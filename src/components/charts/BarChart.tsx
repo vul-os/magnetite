@@ -8,7 +8,15 @@ const colors = {
   background: '#111319',   /* --color-bg-card */
 };
 
-export default function BarChart({ data, xKey, yKey, title, horizontal = false }) {
+export interface BarChartProps {
+  data: Array<Record<string, string | number>>;
+  xKey: string;
+  yKey: string;
+  title?: string;
+  horizontal?: boolean;
+}
+
+export default function BarChart({ data, xKey, yKey, title, horizontal = false }: BarChartProps) {
   return (
     <div className="chart-container">
       {title && <h4 className="chart-title">{title}</h4>}
