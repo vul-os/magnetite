@@ -4,19 +4,19 @@ import { faqData, contactInfo } from '../data/faqData';
 
 export default function FAQ() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedCategories, setExpandedCategories] = useState(
-    faqData.reduce((acc, cat) => ({ ...acc, [cat.category]: true }), {})
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(
+    faqData.reduce((acc, cat) => ({ ...acc, [cat.category]: true }), {} as Record<string, boolean>)
   );
-  const [expandedQuestions, setExpandedQuestions] = useState({});
+  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
 
-  const toggleCategory = (category) => {
+  const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({
       ...prev,
       [category]: !prev[category]
     }));
   };
 
-  const toggleQuestion = (category, index) => {
+  const toggleQuestion = (category: string, index: number) => {
     const key = `${category}-${index}`;
     setExpandedQuestions(prev => ({
       ...prev,
