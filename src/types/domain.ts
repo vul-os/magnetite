@@ -49,3 +49,19 @@ export interface SearchResults {
   games: SearchResultItem[];
   users: SearchResultItem[];
 }
+
+export interface ReviewUser {
+  username?: string;
+  avatar?: string;
+  [key: string]: unknown;
+}
+
+export interface Review {
+  id?: string | number;
+  user?: ReviewUser;
+  rating: number;
+  content?: string;
+  date?: string;
+  helpful?: number;
+  [key: string]: unknown;
+}

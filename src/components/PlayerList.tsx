@@ -1,12 +1,26 @@
 import { memo } from 'react';
 import Button from './common/Button';
 
+interface Player {
+  id: string;
+  username?: string;
+  avatar?: string;
+  ready?: boolean;
+}
+
+interface PlayerListProps {
+  players: Player[];
+  hostId?: string;
+  currentUserId?: string;
+  onKickPlayer?: (playerId: string) => void;
+}
+
 export default memo(function PlayerList({
   players,
   hostId,
   currentUserId,
   onKickPlayer,
-}) {
+}: PlayerListProps) {
   if (!players || players.length === 0) {
     return (
       <div className="player-list-empty">

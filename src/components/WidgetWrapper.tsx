@@ -1,11 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import './WidgetWrapper.css';
 
-export default function WidgetWrapper({ children, icon, label }) {
+interface WidgetWrapperProps {
+  children?: ReactNode;
+  icon?: ReactNode;
+  label?: string;
+}
+
+export default function WidgetWrapper({ children, icon, label }: WidgetWrapperProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const widgetRef = useRef(null);
+  const widgetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -25,8 +31,8 @@ export default function WidgetWrapper({ children, icon, label }) {
   }, [isOpen]);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (widgetRef.current && !widgetRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (widgetRef.current && !widgetRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };

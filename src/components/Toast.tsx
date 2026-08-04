@@ -1,7 +1,25 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import type { ToastType } from '../context/ToastContext';
 import './Toast.css';
 
-const icons = {
+/* Broader than context/ToastContext's `Toast` (id/message/type only) — this
+   component also supports an optional title and a custom auto-dismiss
+   duration, matching how it was already used before the migration. */
+export interface ToastItem {
+  id: number;
+  type: ToastType;
+  message: string;
+  title?: string;
+  duration?: number;
+}
+
+interface ToastProps {
+  toast: ToastItem;
+  onRemove: (id: number) => void;
+  position?: string;
+}
+
+const icons: Record<ToastType, ReactNode> = {
   success: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
       <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2"/>
@@ -28,7 +46,7 @@ const icons = {
   ),
 };
 
-function Toast({ toast, onRemove, position = 'top-right' }) {
+function Toast({ toast, onRemove, position = 'top-right' }: ToastProps) {
   const [isExiting, setIsExiting] = useState(false);
   const [isEntering, setIsEntering] = useState(true);
   const [progress, setProgress] = useState(100);
@@ -88,7 +106,13 @@ function Toast({ toast, onRemove, position = 'top-right' }) {
   );
 }
 
-export function ToastContainer({ toasts, removeToast, position = 'top-right' }) {
+interface ToastContainerProps {
+  toasts: ToastItem[];
+  removeToast: (id: number) => void;
+  position?: string;
+}
+
+export function ToastContainer({ toasts, removeToast, position = 'top-right' }: ToastContainerProps) {
   return (
     <div
       className={`toast-container toast-container-${position}`}

@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ChangeEvent, type Key } from 'react';
 import ReviewCard from './ReviewCard';
 import Pagination from './Pagination';
 import Button from './common/Button';
+import type { Review } from '../types/domain';
 import './ReviewList.css';
 
 const SORT_OPTIONS = [
@@ -13,6 +14,20 @@ const SORT_OPTIONS = [
 
 const REVIEWS_PER_PAGE = 5;
 
+/* review.id is the normal identity, but existing call sites fall back to the
+   (object-typed) review.user when id is absent — an odd but pre-existing
+   shape, so this is `unknown` rather than a narrower type. */
+type ReviewId = unknown;
+
+interface ReviewListProps {
+  reviews?: Review[];
+  onHelpful?: (reviewId: ReviewId) => void;
+  onReport?: (reviewId: ReviewId) => void;
+  showCreateReview?: boolean;
+  onCreateReview?: () => void;
+  walletConnected?: boolean;
+}
+
 export default function ReviewList({
   reviews = [],
   onHelpful,
@@ -20,15 +35,15 @@ export default function ReviewList({
   showCreateReview = false,
   onCreateReview,
   walletConnected = false,
-}) {
+}: ReviewListProps) {
   const [sortBy, setSortBy]             = useState('recent');
   const [currentPage, setCurrentPage]   = useState(1);
-  const [votedReviews, setVotedReviews] = useState(new Set());
+  const [votedReviews, setVotedReviews] = useState<Set<ReviewId>>(new Set());
 
   const sortedReviews = useMemo(() => {
     const sorted = [...reviews];
     switch (sortBy) {
-      case 'recent':      return sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+      case 'recent':      return sorted.sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
       case 'helpful':     return sorted.sort((a, b) => (b.helpful || 0) - (a.helpful || 0));
       case 'high_rating': return sorted.sort((a, b) => b.rating - a.rating);
       case 'low_rating':  return sorted.sort((a, b) => a.rating - b.rating);
@@ -42,18 +57,18 @@ export default function ReviewList({
     currentPage * REVIEWS_PER_PAGE
   );
 
-  const handleSortChange = (e) => {
+  const handleSortChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setSortBy(e.target.value);
     setCurrentPage(1);
   };
 
-  const handleHelpful = (reviewId) => {
+  const handleHelpful = (reviewId: ReviewId) => {
     if (votedReviews.has(reviewId)) return;
     setVotedReviews(prev => new Set([...prev, reviewId]));
     onHelpful?.(reviewId);
   };
 
-  const handlePageChange = (page) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -109,7 +124,7 @@ export default function ReviewList({
       <div className="reviews-container">
         {paginatedReviews.map(review => (
           <ReviewCard
-            key={review.id ?? review.user}
+            key={(review.id ?? review.user) as Key}
             review={review}
             onHelpful={handleHelpful}
             onReport={onReport}

@@ -2,14 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 import Button from './common/Button';
 import './StartGameButton.css';
 
+interface StartGameButtonProps {
+  allPlayersReady: boolean;
+  playerCount: number;
+  minPlayers?: number;
+  onStartGame?: () => void;
+  disabled?: boolean;
+}
+
 export default function StartGameButton({
   allPlayersReady,
   playerCount,
   minPlayers = 1,
   onStartGame,
   disabled = false,
-}) {
-  const [countdown, setCountdown]   = useState(null);
+}: StartGameButtonProps) {
+  const [countdown, setCountdown]   = useState<number | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
   // Stable ref so the effect doesn't re-register when onStartGame identity changes
