@@ -1,10 +1,32 @@
 import { useState, useEffect, useMemo } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import Layout from '../components/Layout';
 import Skeleton from '../components/skeletons/Skeleton';
 import EmptyState from '../components/empty/EmptyState';
 import { Unavailable } from '../components/state/Unavailable';
 import { useMarketplace } from '../hooks/useMarketplace';
+import type { MarketplaceItem } from '../hooks/useMarketplace';
 import './DevMarketplace.css';
+
+interface StoreForm {
+  name: string;
+  game_id: string;
+  description: string;
+  [key: string]: unknown;
+}
+
+interface ItemForm {
+  name: string;
+  description: string;
+  price_points: string;
+  price_usdc: string;
+  item_type: string;
+}
+
+interface FlashMsg {
+  text: string;
+  type: 'success' | 'error';
+}
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -40,12 +62,12 @@ function PencilIcon() {
 
 const ITEM_TYPES = ['cosmetic', 'boost', 'bundle', 'currency', 'other'];
 
-const EMPTY_STORE_FORM = { name: '', game_id: '', description: '' };
-const EMPTY_ITEM_FORM  = {
+const EMPTY_STORE_FORM: StoreForm = { name: '', game_id: '', description: '' };
+const EMPTY_ITEM_FORM: ItemForm  = {
   name: '', description: '', price_points: '', price_usdc: '', item_type: 'cosmetic',
 };
 
-function formatCurrency(n) {
+function formatCurrency(n: number) {
   return `$${Number(n).toFixed(2)}`;
 }
 
@@ -57,7 +79,7 @@ export default function DevMarketplace() {
     loadItems, createStore, addItem, updateItem,
   } = useMarketplace();
 
-  const [selectedStoreId, setSelectedStoreId] = useState(null);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
 
   // Derive activeStore from stores list (no setState in effect needed)
   const activeStore = useMemo(
@@ -68,12 +90,12 @@ export default function DevMarketplace() {
   // Modals
   const [showCreateStore, setShowCreateStore] = useState(false);
   const [showAddItem,     setShowAddItem]     = useState(false);
-  const [editingItem,     setEditingItem]     = useState(null); // item obj
+  const [editingItem,     setEditingItem]     = useState<MarketplaceItem | null>(null); // item obj
 
-  const [storeForm, setStoreForm] = useState(EMPTY_STORE_FORM);
-  const [itemForm,  setItemForm]  = useState(EMPTY_ITEM_FORM);
+  const [storeForm, setStoreForm] = useState<StoreForm>(EMPTY_STORE_FORM);
+  const [itemForm,  setItemForm]  = useState<ItemForm>(EMPTY_ITEM_FORM);
   const [saving,    setSaving]    = useState(false);
-  const [msg,       setMsg]       = useState(null);
+  const [msg,       setMsg]       = useState<FlashMsg | null>(null);
 
   // Load items for the active store whenever it changes
   useEffect(() => {
@@ -82,12 +104,12 @@ export default function DevMarketplace() {
     }
   }, [activeStore, loadItems]);
 
-  function flash(text, type = 'success') {
+  function flash(text: string, type: FlashMsg['type'] = 'success') {
     setMsg({ text, type });
     setTimeout(() => setMsg(null), 3500);
   }
 
-  async function handleCreateStore(e) {
+  async function handleCreateStore(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     try {
@@ -97,13 +119,13 @@ export default function DevMarketplace() {
       setStoreForm(EMPTY_STORE_FORM);
       flash('Store created!');
     } catch (err) {
-      flash(err.message || 'Failed to create store.', 'error');
+      flash((err instanceof Error && err.message) || 'Failed to create store.', 'error');
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleAddItem(e) {
+  async function handleAddItem(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!activeStore) return;
     setSaving(true);
@@ -117,13 +139,13 @@ export default function DevMarketplace() {
       setItemForm(EMPTY_ITEM_FORM);
       flash('Item added!');
     } catch (err) {
-      flash(err.message || 'Failed to add item.', 'error');
+      flash((err instanceof Error && err.message) || 'Failed to add item.', 'error');
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleSaveItem(e) {
+  async function handleSaveItem(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!activeStore || !editingItem) return;
     setSaving(true);
@@ -137,7 +159,7 @@ export default function DevMarketplace() {
       setItemForm(EMPTY_ITEM_FORM);
       flash('Item updated!');
     } catch (err) {
-      flash(err.message || 'Failed to update item.', 'error');
+      flash((err instanceof Error && err.message) || 'Failed to update item.', 'error');
     } finally {
       setSaving(false);
     }
@@ -146,18 +168,18 @@ export default function DevMarketplace() {
   // Removing an item is not implemented on this backend (no delete route), so
   // no delete control is rendered — see the notice above the item table.
 
-  function openEditItem(item) {
+  function openEditItem(item: MarketplaceItem) {
     setEditingItem(item);
     setItemForm({
       name:         item.name,
-      description:  item.description,
+      description:  item.description ?? '',
       price_points: String(item.price_points),
       price_usdc:   String(item.price_usdc),
-      item_type:    item.item_type,
+      item_type:    item.item_type ?? 'cosmetic',
     });
   }
 
-  function selectStore(store) {
+  function selectStore(store: { id: string }) {
     setSelectedStoreId(store.id);
   }
 
@@ -339,10 +361,10 @@ export default function DevMarketplace() {
                           <span className="item-type-badge">{item.item_type}</span>
                         </div>
                         <div role="cell" className="devmp-cell-mono">
-                          {item.price_points.toLocaleString()} pts
+                          {item.price_points!.toLocaleString()} pts
                         </div>
                         <div role="cell" className="devmp-cell-mono">
-                          {formatCurrency(item.price_usdc)}
+                          {formatCurrency(item.price_usdc!)}
                         </div>
                         <div role="cell" className="devmp-cell-mono">
                           {(item.sales ?? 0).toLocaleString()}
@@ -464,9 +486,15 @@ export default function DevMarketplace() {
 
 // ── Shared item form fields ───────────────────────────────────────────────────
 
-function ItemFormFields({ form, onChange }) {
-  function set(field) {
-    return e => onChange(f => ({ ...f, [field]: e.target.value }));
+interface ItemFormFieldsProps {
+  form: ItemForm;
+  onChange: (updater: (prev: ItemForm) => ItemForm) => void;
+}
+
+function ItemFormFields({ form, onChange }: ItemFormFieldsProps) {
+  function set(field: keyof ItemForm) {
+    return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      onChange(f => ({ ...f, [field]: e.target.value }));
   }
 
   return (
