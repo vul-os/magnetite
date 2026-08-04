@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCommunities, useCommunityMembers } from './useCommunities';
+import type { ActionResult } from '../types/comms';
 
 vi.mock('../api/client', () => ({
   api: {
@@ -16,6 +17,11 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
+const mockList = vi.mocked(api.communities.list);
+const mockCreate = vi.mocked(api.communities.create);
+const mockJoin = vi.mocked(api.communities.join);
+const mockLeave = vi.mocked(api.communities.leave);
+
 const FAKE_COMMUNITIES = [
   { id: '1', name: 'Magnetite Hub',  description: 'The official hub.', icon_url: null, member_count: 1024, online_count: 87, owner_id: '1' },
   { id: '2', name: 'Rust Gamedev',   description: 'Rust game development.', icon_url: null, member_count: 412,  online_count: 23, owner_id: '2' },
@@ -30,10 +36,10 @@ describe('useCommunities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: API returns communities so tests have data to work with.
-    api.communities.list.mockResolvedValue({ communities: FAKE_COMMUNITIES });
-    api.communities.create.mockRejectedValue(new Error('no backend'));
-    api.communities.join.mockRejectedValue(new Error('no backend'));
-    api.communities.leave.mockRejectedValue(new Error('no backend'));
+    mockList.mockResolvedValue({ communities: FAKE_COMMUNITIES });
+    mockCreate.mockRejectedValue(new Error('no backend'));
+    mockJoin.mockRejectedValue(new Error('no backend'));
+    mockLeave.mockRejectedValue(new Error('no backend'));
   });
 
   afterEach(() => {
@@ -52,7 +58,7 @@ describe('useCommunities', () => {
   });
 
   it('sets error and empty list on API failure', async () => {
-    api.communities.list.mockRejectedValue(new Error('no backend'));
+    mockList.mockRejectedValue(new Error('no backend'));
 
     const { result } = renderHook(() => useCommunities());
 
@@ -66,7 +72,7 @@ describe('useCommunities', () => {
     const fakeCommunities = [
       { id: 'api-1', name: 'API Community', member_count: 10, online_count: 2 },
     ];
-    api.communities.list.mockResolvedValue({ communities: fakeCommunities });
+    mockList.mockResolvedValue({ communities: fakeCommunities });
 
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -78,7 +84,7 @@ describe('useCommunities', () => {
     const fakeCommunities = [
       { id: 'arr-1', name: 'Array Community', member_count: 5, online_count: 1 },
     ];
-    api.communities.list.mockResolvedValue(fakeCommunities);
+    mockList.mockResolvedValue(fakeCommunities);
 
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -94,7 +100,7 @@ describe('useCommunities', () => {
 
     // Resolve a fresh list on the second call
     const freshList = [{ id: 'new-1', name: 'Fresh Community', member_count: 1, online_count: 0 }];
-    api.communities.list.mockResolvedValueOnce(freshList);
+    mockList.mockResolvedValueOnce(freshList);
 
     await act(async () => {
       await result.current.fetchCommunities();
@@ -105,38 +111,38 @@ describe('useCommunities', () => {
 
   it('createCommunity: adds community to state on API success', async () => {
     const created = { id: 'c-new', name: 'Brand New', description: '', icon_url: null, member_count: 1, online_count: 1 };
-    api.communities.create.mockResolvedValue(created);
+    mockCreate.mockResolvedValue(created);
 
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
     const before = result.current.communities.length;
-    let res;
+    let res: ActionResult | undefined;
     await act(async () => {
       res = await result.current.createCommunity({ name: 'Brand New' });
     });
 
-    expect(res.success).toBe(true);
+    expect(res?.success).toBe(true);
     expect(result.current.communities.length).toBe(before + 1);
     expect(result.current.communities[0].id).toBe('c-new');
   });
 
   it('createCommunity: returns success:false on API failure (real mode)', async () => {
-    // api.communities.create already mocked to reject
+    // mockCreate already mocked to reject
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    let res;
+    let res: ActionResult | undefined;
     await act(async () => {
       res = await result.current.createCommunity({ name: 'Offline Community' });
     });
 
-    expect(res.success).toBe(false);
-    expect(res.error).toBeDefined();
+    expect(res?.success).toBe(false);
+    expect(res?.error).toBeDefined();
   });
 
   it('joinCommunity: increments member_count on success', async () => {
-    api.communities.join.mockResolvedValue({ ok: true });
+    mockJoin.mockResolvedValue({ ok: true });
 
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -149,25 +155,25 @@ describe('useCommunities', () => {
     });
 
     const after = result.current.communities.find((c) => c.id === targetId);
-    expect(after.member_count).toBe(before + 1);
+    expect(after?.member_count).toBe((before ?? 0) + 1);
   });
 
   it('joinCommunity: returns success:false on API failure', async () => {
-    // api.communities.join mocked to reject
+    // mockJoin mocked to reject
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    let res;
+    let res: ActionResult | undefined;
     await act(async () => {
       res = await result.current.joinCommunity('some-id');
     });
 
-    expect(res.success).toBe(false);
-    expect(res.error).toBeDefined();
+    expect(res?.success).toBe(false);
+    expect(res?.error).toBeDefined();
   });
 
   it('leaveCommunity: removes community from state on success', async () => {
-    api.communities.leave.mockResolvedValue({ ok: true });
+    mockLeave.mockResolvedValue({ ok: true });
 
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -187,12 +193,12 @@ describe('useCommunities', () => {
     const { result } = renderHook(() => useCommunities());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    let res;
+    let res: ActionResult | undefined;
     await act(async () => {
       res = await result.current.leaveCommunity('unknown-id');
     });
 
-    expect(res.success).toBe(false);
+    expect(res?.success).toBe(false);
   });
 
   it('communities have the expected shape', async () => {
@@ -232,7 +238,7 @@ describe('useCommunityMembers', () => {
   });
 
   it('sets error and empty members on API failure', async () => {
-    api.communities.members.mockRejectedValue(new Error('no backend'));
+    vi.mocked(api.communities.members).mockRejectedValue(new Error('no backend'));
 
     const { result } = renderHook(() => useCommunityMembers('comm-1'));
 
@@ -246,7 +252,7 @@ describe('useCommunityMembers', () => {
     const fakeMembers = [
       { id: 'm1', username: 'user_a', display_name: 'User A', status: 'online', roles: ['member'] },
     ];
-    api.communities.members.mockResolvedValue({ members: fakeMembers });
+    vi.mocked(api.communities.members).mockResolvedValue({ members: fakeMembers });
 
     const { result } = renderHook(() => useCommunityMembers('comm-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -255,7 +261,7 @@ describe('useCommunityMembers', () => {
   });
 
   it('handles communityId change by re-fetching', async () => {
-    api.communities.members.mockResolvedValue({ members: [{ id: 'm1', username: 'a', status: 'online', roles: [] }] });
+    vi.mocked(api.communities.members).mockResolvedValue({ members: [{ id: 'm1', username: 'a', status: 'online', roles: [] }] });
 
     const { result, rerender } = renderHook(
       ({ id }) => useCommunityMembers(id),
@@ -263,13 +269,13 @@ describe('useCommunityMembers', () => {
     );
 
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
-    const firstCallCount = api.communities.members.mock.calls.length;
+    const firstCallCount = vi.mocked(api.communities.members).mock.calls.length;
 
     // Switch to a different community
-    api.communities.members.mockResolvedValue({ members: [{ id: 'm2', username: 'b', status: 'idle', roles: [] }] });
+    vi.mocked(api.communities.members).mockResolvedValue({ members: [{ id: 'm2', username: 'b', status: 'idle', roles: [] }] });
     rerender({ id: 'comm-2' });
 
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
-    expect(api.communities.members.mock.calls.length).toBeGreaterThan(firstCallCount);
+    expect(vi.mocked(api.communities.members).mock.calls.length).toBeGreaterThan(firstCallCount);
   });
 });
