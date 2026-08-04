@@ -1,11 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+interface SessionItem {
+  id: string;
+  device: string;
+  location: string;
+  lastActive: string;
+  current: boolean;
+}
+
+interface RawSession {
+  id?: string;
+  session_id?: string;
+  user_agent?: string;
+  device?: string;
+  ip_address?: string;
+  location?: string;
+  last_active?: string;
+  updated_at?: string;
+  current?: boolean;
+}
+
+interface ApiKeyItem {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsed: string;
+}
+
+interface RawApiKey {
+  id: string;
+  name?: string;
+  prefix?: string;
+  key_prefix?: string;
+  key?: string;
+  created_at?: string;
+  last_used_at?: string;
+}
+
+interface CreatedKey {
+  id: string;
+  name: string;
+  key: string;
+}
+
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -18,7 +63,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock fallbacks — only used when VITE_USE_MOCKS=true */
-const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_SESSIONS: SessionItem[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 'sess_001', device: 'Chrome on Mac OS',   location: 'San Francisco, CA', lastActive: 'Now',        current: true  },
       { id: 'sess_002', device: 'Safari on iPhone',   location: 'San Francisco, CA', lastActive: '2 hours ago', current: false },
@@ -26,19 +71,19 @@ const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS === 'true'
     ]
   : null;
 
-function normaliseSession(s) {
+function normaliseSession(s: RawSession): SessionItem {
   return {
-    id:         s.id ?? s.session_id,
+    id:         s.id ?? s.session_id ?? '',
     device:     s.user_agent ?? s.device ?? 'Unknown device',
     location:   s.ip_address ?? s.location ?? 'Unknown',
     lastActive: s.last_active ?? s.updated_at
-      ? new Date(s.last_active ?? s.updated_at).toLocaleString()
+      ? new Date((s.last_active ?? s.updated_at)!).toLocaleString()
       : 'Unknown',
     current:    s.current ?? false,
   };
 }
 
-function normaliseApiKey(k) {
+function normaliseApiKey(k: RawApiKey): ApiKeyItem {
   return {
     id:          k.id,
     name:        k.name ?? 'Unnamed key',
@@ -67,19 +112,19 @@ export default function Security() {
   const [showDisableForm, setShowDisableForm] = useState(false);
 
   // ── Sessions ──────────────────────────────────────────────────────────────────
-  const [sessions, setSessions]             = useState(MOCK_SESSIONS ?? []);
+  const [sessions, setSessions]             = useState<SessionItem[]>(MOCK_SESSIONS ?? []);
   const [sessionsLoading, setSessionsLoading] = useState(!MOCK_SESSIONS);
-  const [sessionError, setSessionError]     = useState(null);
+  const [sessionError, setSessionError]     = useState<string | null>(null);
 
   // ── API Keys ──────────────────────────────────────────────────────────────────
-  const [apiKeys, setApiKeys]               = useState([]);
+  const [apiKeys, setApiKeys]               = useState<ApiKeyItem[]>([]);
   const [apiKeysLoading, setApiKeysLoading] = useState(false);
-  const [apiKeysError, setApiKeysError]     = useState(null);
+  const [apiKeysError, setApiKeysError]     = useState<string | null>(null);
   const [newKeyName, setNewKeyName]         = useState('');
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
-  const [createdKey, setCreatedKey]         = useState(null); // one-time display
+  const [createdKey, setCreatedKey]         = useState<CreatedKey | null>(null); // one-time display
   const [creatingKey, setCreatingKey]       = useState(false);
-  const [revokingId, setRevokingId]         = useState(null);
+  const [revokingId, setRevokingId]         = useState<string | null>(null);
 
   /* Load real sessions from backend */
   useEffect(() => {
@@ -89,8 +134,8 @@ export default function Security() {
       try {
         const res = await authFetch('/api/auth/sessions');
         if (res.ok) {
-          const data = await res.json();
-          const raw = data.sessions ?? data ?? [];
+          const data = await res.json() as { sessions?: RawSession[] } | RawSession[];
+          const raw = (!Array.isArray(data) ? data.sessions : data) ?? [];
           setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
         }
       } catch {
@@ -108,12 +153,13 @@ export default function Security() {
     setApiKeysLoading(true);
     setApiKeysError(null);
     try {
-      const data = await api.auth.apiKeys();
-      const raw = data?.keys ?? data ?? [];
+      const data = await api.auth.apiKeys() as { keys?: RawApiKey[] } | RawApiKey[] | null;
+      const raw = (data && !Array.isArray(data) ? data.keys : data) ?? [];
       setApiKeys(Array.isArray(raw) ? raw.map(normaliseApiKey) : []);
     } catch (err) {
-      if (!err.message?.includes('404') && !err.message?.includes('not found')) {
-        setApiKeysError(err.message || 'Failed to load API keys');
+      const message = err instanceof Error ? err.message : undefined;
+      if (!message?.includes('404') && !message?.includes('not found')) {
+        setApiKeysError(message || 'Failed to load API keys');
       }
       // 404 = endpoint not yet deployed; silently show empty
     } finally {
@@ -125,7 +171,7 @@ export default function Security() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadApiKeys(); }, [loadApiKeys]);
 
-  const handlePasswordChange = async (e) => {
+  const handlePasswordChange = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPasswordError('');
     setPasswordSuccess(false);
@@ -150,7 +196,7 @@ export default function Security() {
       setPasswords({ current: '', new: '', confirm: '' });
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
-      setPasswordError(err.message || t('account.failedToUpdatePassword'));
+      setPasswordError((err instanceof Error && err.message) || t('account.failedToUpdatePassword'));
     } finally {
       setChangingPw(false);
     }
@@ -162,22 +208,28 @@ export default function Security() {
     setTwoFaError('');
     setTwoFaLoading(true);
     try {
-      const data = await api.auth.setup2fa();
+      const data = await api.auth.setup2fa() as {
+        otpauth_uri?: string;
+        uri?: string;
+        qr_data_url?: string;
+        qr_url?: string;
+      };
       setOtpauthUri(data.otpauth_uri ?? data.uri ?? '');
       setQrDataUrl(data.qr_data_url ?? data.qr_url ?? '');
       setShowSetup2FA(true);
     } catch (err) {
-      if (err.message?.includes('404') || err.message?.includes('not found') || err.message?.includes('not yet')) {
+      const message = err instanceof Error ? err.message : undefined;
+      if (message?.includes('404') || message?.includes('not found') || message?.includes('not yet')) {
         setTwoFaError('2FA setup endpoint not yet deployed on this server. The backend route will be added soon.');
       } else {
-        setTwoFaError(err.message || '2FA setup failed');
+        setTwoFaError(message || '2FA setup failed');
       }
     } finally {
       setTwoFaLoading(false);
     }
   };
 
-  const handleVerify2FA = async (e) => {
+  const handleVerify2FA = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setTwoFaLoading(true);
     setTwoFaError('');
@@ -189,13 +241,13 @@ export default function Security() {
       setOtpauthUri('');
       setQrDataUrl('');
     } catch (err) {
-      setTwoFaError(err.message || 'Verification failed — check the code and try again');
+      setTwoFaError((err instanceof Error && err.message) || 'Verification failed — check the code and try again');
     } finally {
       setTwoFaLoading(false);
     }
   };
 
-  const handleDisable2FA = async (e) => {
+  const handleDisable2FA = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setTwoFaLoading(true);
     setTwoFaError('');
@@ -205,7 +257,7 @@ export default function Security() {
       setShowDisableForm(false);
       setDisableCode('');
     } catch (err) {
-      setTwoFaError(err.message || 'Could not disable 2FA — check your code and try again');
+      setTwoFaError((err instanceof Error && err.message) || 'Could not disable 2FA — check your code and try again');
     } finally {
       setTwoFaLoading(false);
     }
@@ -218,28 +270,28 @@ export default function Security() {
       if (res.ok) {
         setSessions(prev => prev.filter(s => s.current));
       } else {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { message?: string };
         throw new Error(err.message || 'Failed to sign out all sessions');
       }
     } catch (err) {
-      setSessionError(err.message);
+      setSessionError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const handleRevokeSession = async (sessionId) => {
+  const handleRevokeSession = async (sessionId: string) => {
     setSessionError(null);
     setSessions(prev => prev.filter(s => s.id !== sessionId));
   };
 
   // ── API Key handlers ──────────────────────────────────────────────────────────
 
-  const handleCreateApiKey = async (e) => {
+  const handleCreateApiKey = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!newKeyName.trim()) return;
     setCreatingKey(true);
     setApiKeysError(null);
     try {
-      const data = await api.auth.createApiKey(newKeyName.trim());
+      const data = await api.auth.createApiKey(newKeyName.trim()) as { id: string; name?: string; key: string };
       // Store the one-time plaintext key for display before clearing
       setCreatedKey({ id: data.id, name: data.name ?? newKeyName, key: data.key });
       setShowNewKeyForm(false);
@@ -247,19 +299,19 @@ export default function Security() {
       // Reload the key list (will not show plaintext key again)
       await loadApiKeys();
     } catch (err) {
-      setApiKeysError(err.message || 'Failed to create API key');
+      setApiKeysError((err instanceof Error && err.message) || 'Failed to create API key');
     } finally {
       setCreatingKey(false);
     }
   };
 
-  const handleRevokeApiKey = async (id) => {
+  const handleRevokeApiKey = async (id: string) => {
     setRevokingId(id);
     try {
       await api.auth.revokeApiKey(id);
       setApiKeys(prev => prev.filter(k => k.id !== id));
     } catch (err) {
-      setApiKeysError(err.message || 'Failed to revoke API key');
+      setApiKeysError((err instanceof Error && err.message) || 'Failed to revoke API key');
     } finally {
       setRevokingId(null);
     }
