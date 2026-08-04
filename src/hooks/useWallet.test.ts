@@ -22,6 +22,10 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
+const mockWalletGet = vi.mocked(api.wallet.get);
+const mockWalletLink = vi.mocked(api.wallet.link);
+const mockWalletReceipts = vi.mocked(api.wallet.receipts);
+
 const ADDRESS =
   '9f2c41a7be03d85610fa27cc4e91b8d3705ea6c2149fbb8e37d0c5a94162e7b0';
 const OTHER_ADDRESS =
@@ -52,9 +56,9 @@ describe('useWallet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: API fails → hook enters error state (not silent mock success).
-    api.wallet.get.mockRejectedValue(new Error('No backend'));
-    api.wallet.receipts.mockRejectedValue(new Error('No backend'));
-    api.wallet.link.mockRejectedValue(new Error('No backend'));
+    mockWalletGet.mockRejectedValue(new Error('No backend'));
+    mockWalletReceipts.mockRejectedValue(new Error('No backend'));
+    mockWalletLink.mockRejectedValue(new Error('No backend'));
   });
 
   afterEach(() => {
@@ -78,10 +82,10 @@ describe('useWallet', () => {
   });
 
   it('populates address and rail from the API response', async () => {
-    api.wallet.get.mockResolvedValue({
+    mockWalletGet.mockResolvedValue({
       data: { user_id: 'u1', wallet_address: ADDRESS, custodial: false, rail: 'mock' },
     });
-    api.wallet.receipts.mockResolvedValue({ receipts: [] });
+    mockWalletReceipts.mockResolvedValue({ receipts: [] });
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -92,8 +96,8 @@ describe('useWallet', () => {
   });
 
   it('populates address from a flat API response (no data wrapper)', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: ADDRESS, rail: 'usdc-base' });
-    api.wallet.receipts.mockResolvedValue([]);
+    mockWalletGet.mockResolvedValue({ wallet_address: ADDRESS, rail: 'usdc-base' });
+    mockWalletReceipts.mockResolvedValue([]);
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -103,8 +107,8 @@ describe('useWallet', () => {
   });
 
   it('leaves address null when the account has no wallet linked yet', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: null, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue([]);
+    mockWalletGet.mockResolvedValue({ wallet_address: null, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue([]);
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -116,8 +120,8 @@ describe('useWallet', () => {
   // ── Receipts (replaces the custodial transaction ledger) ─────────────────
 
   it('populates receipts from the API response', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue({ receipts: RECEIPTS });
+    mockWalletGet.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue({ receipts: RECEIPTS });
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -126,8 +130,8 @@ describe('useWallet', () => {
   });
 
   it('accepts a bare array of receipts', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue(RECEIPTS);
+    mockWalletGet.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue(RECEIPTS);
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -137,8 +141,8 @@ describe('useWallet', () => {
   });
 
   it('treats a failed receipt fetch as non-fatal — the address still renders', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
-    api.wallet.receipts.mockRejectedValue(new Error('receipts down'));
+    mockWalletGet.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
+    mockWalletReceipts.mockRejectedValue(new Error('receipts down'));
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -151,51 +155,51 @@ describe('useWallet', () => {
   // ── link() ────────────────────────────────────────────────────────────────
 
   it('link: rejects a malformed key without calling the API', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: null, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue([]);
+    mockWalletGet.mockResolvedValue({ wallet_address: null, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue([]);
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    let caughtError;
+    let caughtError: Error | undefined;
     await act(async () => {
       try {
         await result.current.link('not-a-key');
       } catch (e) {
-        caughtError = e;
+        caughtError = e as Error;
       }
     });
 
     expect(caughtError).toBeDefined();
-    expect(caughtError.message).toMatch(/hex Ed25519/i);
-    expect(api.wallet.link).not.toHaveBeenCalled();
+    expect(caughtError!.message).toMatch(/hex Ed25519/i);
+    expect(mockWalletLink).not.toHaveBeenCalled();
     expect(result.current.address).toBeNull();
   });
 
   it('link: rejects a hex string of the wrong length', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: null, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue([]);
+    mockWalletGet.mockResolvedValue({ wallet_address: null, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue([]);
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    let caughtError;
+    let caughtError: Error | undefined;
     await act(async () => {
       try {
         await result.current.link('abcdef');
       } catch (e) {
-        caughtError = e;
+        caughtError = e as Error;
       }
     });
 
     expect(caughtError).toBeDefined();
-    expect(api.wallet.link).not.toHaveBeenCalled();
+    expect(mockWalletLink).not.toHaveBeenCalled();
   });
 
   it('link: calls the API with the bare hex key and updates the address', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: null, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue([]);
-    api.wallet.link.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
+    mockWalletGet.mockResolvedValue({ wallet_address: null, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue([]);
+    mockWalletLink.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -204,14 +208,14 @@ describe('useWallet', () => {
       await result.current.link(ADDRESS);
     });
 
-    expect(api.wallet.link).toHaveBeenCalledWith(ADDRESS);
+    expect(mockWalletLink).toHaveBeenCalledWith(ADDRESS);
     expect(result.current.address).toBe(ADDRESS);
   });
 
   it('link: strips a 0x prefix before calling the API', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: null, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue([]);
-    api.wallet.link.mockResolvedValue({ wallet_address: OTHER_ADDRESS });
+    mockWalletGet.mockResolvedValue({ wallet_address: null, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue([]);
+    mockWalletLink.mockResolvedValue({ wallet_address: OTHER_ADDRESS });
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -220,36 +224,36 @@ describe('useWallet', () => {
       await result.current.link(`0x${OTHER_ADDRESS}`);
     });
 
-    expect(api.wallet.link).toHaveBeenCalledWith(OTHER_ADDRESS);
+    expect(mockWalletLink).toHaveBeenCalledWith(OTHER_ADDRESS);
     expect(result.current.address).toBe(OTHER_ADDRESS);
   });
 
   it('link: propagates an API failure', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: null, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue([]);
-    api.wallet.link.mockRejectedValue(new Error('link rejected'));
+    mockWalletGet.mockResolvedValue({ wallet_address: null, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue([]);
+    mockWalletLink.mockRejectedValue(new Error('link rejected'));
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    let caughtError;
+    let caughtError: Error | undefined;
     await act(async () => {
       try {
         await result.current.link(ADDRESS);
       } catch (e) {
-        caughtError = e;
+        caughtError = e as Error;
       }
     });
 
     expect(caughtError).toBeDefined();
-    expect(caughtError.message).toBe('link rejected');
+    expect(caughtError!.message).toBe('link rejected');
   });
 
   // ── Return shape ──────────────────────────────────────────────────────────
 
   it('is non-custodial and exposes no balance/deposit/withdraw surface', async () => {
-    api.wallet.get.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
-    api.wallet.receipts.mockResolvedValue(RECEIPTS);
+    mockWalletGet.mockResolvedValue({ wallet_address: ADDRESS, rail: 'mock' });
+    mockWalletReceipts.mockResolvedValue(RECEIPTS);
 
     const { result } = renderHook(() => useWallet());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -258,9 +262,11 @@ describe('useWallet', () => {
     expect(typeof result.current.link).toBe('function');
     expect(Array.isArray(result.current.receipts)).toBe(true);
     // The custodial surface is gone — these routes no longer exist server-side.
-    expect(result.current.balance).toBeUndefined();
-    expect(result.current.deposit).toBeUndefined();
-    expect(result.current.withdraw).toBeUndefined();
-    expect(result.current.transactions).toBeUndefined();
+    // Cast through `unknown` to probe for absent properties without an `any`.
+    const wideResult = result.current as unknown as Record<string, unknown>;
+    expect(wideResult.balance).toBeUndefined();
+    expect(wideResult.deposit).toBeUndefined();
+    expect(wideResult.withdraw).toBeUndefined();
+    expect(wideResult.transactions).toBeUndefined();
   });
 });
