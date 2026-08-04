@@ -13,7 +13,7 @@ const NAV_ITEMS = [
 export default function AdminSidebar() {
   const location = useLocation();
 
-  const isActive = (item) => {
+  const isActive = (item: (typeof NAV_ITEMS)[number]) => {
     if (item.id === 'dashboard') {
       return location.pathname === '/admin' || location.pathname === '/admin/';
     }
