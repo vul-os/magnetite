@@ -1,7 +1,12 @@
+import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
-export function AdminRoute({ children }) {
+export interface AdminRouteProps {
+  children: ReactNode;
+}
+
+export function AdminRoute({ children }: AdminRouteProps) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
