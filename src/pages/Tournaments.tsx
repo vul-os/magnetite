@@ -10,15 +10,59 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 import './Tournaments.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+interface Tournament {
+  id: string;
+  name: string;
+  game_id: string;
+  status: string;
+  max_players: number;
+  entry_fee?: string | number | null;
+  prize_pool: string | number;
+  start_time: string;
+  created_at: string;
+}
+
+interface TournamentParticipant {
+  id: string;
+  tournament_id?: string;
+  user_id: string;
+  registered_at?: string;
+  status: string;
+  seed?: number;
+  username?: string;
+}
+
+interface TournamentMatch {
+  id: string;
+  tournament_id?: string;
+  round: number;
+  match_number?: number;
+  player1_id: string | null;
+  player2_id: string | null;
+  winner_id: string | null;
+  player1_score: number | null;
+  player2_score: number | null;
+  status: string;
+  scheduled_at?: string | null;
+  completed_at?: string | null;
+}
+
+interface TournamentDetail {
+  tournament: Tournament;
+  participants: TournamentParticipant[];
+  matches: TournamentMatch[];
+}
+
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
-const MOCK_TOURNAMENTS = [
+const MOCK_TOURNAMENTS: Tournament[] = [
   {
     id: 'tour-1',
     name: 'Arena Open #12',
@@ -54,11 +98,11 @@ const MOCK_TOURNAMENTS = [
   },
 ];
 
-function _makePlayer(n) {
+function _makePlayer(n: number) {
   return { id: `p${n}`, username: `Player${n}`, seed: n };
 }
 
-const MOCK_DETAIL = {
+const MOCK_DETAIL: TournamentDetail = {
   tournament: MOCK_TOURNAMENTS[1],
   participants: Array.from({ length: 4 }, (_, i) => ({
     id: `part-${i}`,
@@ -80,7 +124,7 @@ const MOCK_DETAIL = {
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
-const STATUS_META = {
+const STATUS_META: Record<string, { label: string; cls: string }> = {
   Draft:        { label: 'Draft',        cls: 'ts--draft' },
   Registration: { label: 'Open',         cls: 'ts--registration' },
   InProgress:   { label: 'Live',         cls: 'ts--inprogress' },
@@ -88,24 +132,29 @@ const STATUS_META = {
   Cancelled:    { label: 'Cancelled',    cls: 'ts--cancelled' },
 };
 
-function StatusBadge({ status }) {
+function StatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status] ?? { label: status, cls: '' };
   return <span className={`tournament-status ${meta.cls}`}>{meta.label}</span>;
 }
 
-function formatPrize(val) {
+function formatPrize(val: string | number | null | undefined) {
   if (!val) return '$0';
-  return `$${parseFloat(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return `$${parseFloat(String(val)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-function formatFee(val) {
+function formatFee(val: string | number | null | undefined) {
   if (!val) return 'Free';
-  return `$${parseFloat(val).toFixed(2)}`;
+  return `$${parseFloat(String(val)).toFixed(2)}`;
 }
 
 // ── Bracket ───────────────────────────────────────────────────────────────────
 
-function BracketView({ matches, participants }) {
+interface BracketViewProps {
+  matches?: TournamentMatch[];
+  participants?: TournamentParticipant[];
+}
+
+function BracketView({ matches, participants }: BracketViewProps) {
   if (!matches || matches.length === 0) {
     return (
       <div className="bracket-empty">
@@ -115,7 +164,7 @@ function BracketView({ matches, participants }) {
   }
 
   // Group by round
-  const rounds = {};
+  const rounds: Record<number, TournamentMatch[]> = {};
   for (const m of matches) {
     if (!rounds[m.round]) rounds[m.round] = [];
     rounds[m.round].push(m);
@@ -123,12 +172,12 @@ function BracketView({ matches, participants }) {
   const sortedRounds = Object.keys(rounds).map(Number).sort((a, b) => a - b);
 
   // Participant lookup by user_id
-  const participantMap = {};
+  const participantMap: Record<string, string> = {};
   for (const p of (participants || [])) {
     participantMap[p.user_id] = p.username || p.user_id?.slice(0, 8) || '—';
   }
 
-  function playerName(pid) {
+  function playerName(pid: string | null | undefined) {
     if (!pid) return 'TBD';
     return participantMap[pid] || pid.slice(0, 8);
   }
@@ -185,7 +234,12 @@ function BracketView({ matches, participants }) {
 
 // ── Create modal ──────────────────────────────────────────────────────────────
 
-function CreateModal({ onClose, onCreate }) {
+interface CreateModalProps {
+  onClose: () => void;
+  onCreate: (tournament: Tournament) => void;
+}
+
+function CreateModal({ onClose, onCreate }: CreateModalProps) {
   const [form, setForm] = useState({
     name: '',
     game_id: '',
@@ -195,13 +249,13 @@ function CreateModal({ onClose, onCreate }) {
     start_time: '',
   });
   const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  function handleChange(e) {
+  function handleChange(e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!form.name.trim()) { setErr('Name is required.'); return; }
     if (!form.game_id.trim()) { setErr('Game ID is required.'); return; }
@@ -217,13 +271,16 @@ function CreateModal({ onClose, onCreate }) {
         start_time: new Date(form.start_time).toISOString(),
         ...(form.entry_fee ? { entry_fee: parseFloat(form.entry_fee) } : {}),
       };
-      const result = USE_MOCKS
+      const result: Tournament = USE_MOCKS
         ? { ...payload, id: `tour-${Date.now()}`, status: 'Draft', created_at: new Date().toISOString() }
-        : await api.tournaments.create(payload);
-      onCreate(result?.data ?? result);
+        : await api.tournaments.create(payload).then((r) => {
+            const typed = r as { data?: Tournament } | null;
+            return (typed?.data ?? typed) as Tournament;
+          });
+      onCreate(result);
       onClose();
     } catch (ex) {
-      setErr(ex.message || 'Failed to create tournament.');
+      setErr((ex instanceof Error && ex.message) || 'Failed to create tournament.');
     } finally {
       setSubmitting(false);
     }
@@ -285,17 +342,17 @@ function CreateModal({ onClose, onCreate }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function Tournaments() {
-  const [tournaments, setTournaments] = useState([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selected, setSelected] = useState(null);        // tournament detail
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<TournamentDetail | null>(null);        // tournament detail
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [joining, setJoining] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [actionError, setActionError] = useState(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Load tournament list
   const loadList = useCallback(() => {
@@ -303,13 +360,13 @@ export default function Tournaments() {
     setError(null);
     const params = statusFilter ? { status: statusFilter } : {};
 
-    const fetch = USE_MOCKS
+    const fetch: Promise<{ data: Tournament[] } | Tournament[]> = USE_MOCKS
       ? Promise.resolve({ data: MOCK_TOURNAMENTS.filter((t) => !statusFilter || t.status === statusFilter) })
-      : api.tournaments.list(params);
+      : (api.tournaments.list(params) as Promise<{ data: Tournament[] } | Tournament[]>);
 
     fetch
-      .then((res) => setTournaments(res?.data ?? res))
-      .catch((err) => setError(err.message || 'Failed to load tournaments'))
+      .then((res) => setTournaments(Array.isArray(res) ? res : res?.data))
+      .catch((err) => setError((err instanceof Error && err.message) || 'Failed to load tournaments'))
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
@@ -318,29 +375,29 @@ export default function Tournaments() {
   useEffect(() => { loadList(); }, [loadList]);
 
   // Load tournament detail
-  function openDetail(id) {
+  function openDetail(id: string) {
     setDetailLoading(true);
     setDetailError(null);
     setSelected(null);
     setActionError(null);
 
-    const fetch = USE_MOCKS && id === 'tour-2'
+    const fetch: Promise<{ data: TournamentDetail } | TournamentDetail> = USE_MOCKS && id === 'tour-2'
       ? Promise.resolve({ data: MOCK_DETAIL })
       : USE_MOCKS
         ? Promise.resolve({ data: { tournament: MOCK_TOURNAMENTS.find((t) => t.id === id) || MOCK_TOURNAMENTS[0], participants: [], matches: [] } })
-        : api.tournaments.get(id);
+        : (api.tournaments.get(id) as Promise<{ data: TournamentDetail } | TournamentDetail>);
 
     fetch
-      .then((res) => setSelected(res?.data ?? res))
-      .catch((err) => setDetailError(err.message || 'Failed to load tournament'))
+      .then((res) => setSelected('tournament' in res ? res : res.data))
+      .catch((err) => setDetailError((err instanceof Error && err.message) || 'Failed to load tournament'))
       .finally(() => setDetailLoading(false));
   }
 
-  function handleCreated(t) {
+  function handleCreated(t: Tournament) {
     setTournaments((prev) => [t, ...prev]);
   }
 
-  async function handleJoin(tournamentId) {
+  async function handleJoin(tournamentId: string) {
     setJoining(true);
     setActionError(null);
     try {
@@ -348,13 +405,13 @@ export default function Tournaments() {
       // Refresh detail
       openDetail(tournamentId);
     } catch (ex) {
-      setActionError(ex.message || 'Failed to join tournament');
+      setActionError((ex instanceof Error && ex.message) || 'Failed to join tournament');
     } finally {
       setJoining(false);
     }
   }
 
-  async function handleStart(tournamentId) {
+  async function handleStart(tournamentId: string) {
     setStarting(true);
     setActionError(null);
     try {
@@ -364,7 +421,7 @@ export default function Tournaments() {
       openDetail(tournamentId);
       loadList();
     } catch (ex) {
-      setActionError(ex.message || 'Failed to start tournament');
+      setActionError((ex instanceof Error && ex.message) || 'Failed to start tournament');
     } finally {
       setStarting(false);
     }
