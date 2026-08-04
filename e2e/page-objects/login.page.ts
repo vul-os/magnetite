@@ -1,4 +1,5 @@
-import { BasePage } from './base.page.js';
+import type { Locator, Page } from '@playwright/test';
+import { BasePage } from './base.page';
 
 /**
  * LoginPage — Industrial Magnetite split-panel auth UI.
@@ -13,7 +14,14 @@ import { BasePage } from './base.page.js';
  * Error container:    <div class="auth-alert" role="alert">
  */
 export class LoginPage extends BasePage {
-  constructor(page) {
+  readonly emailInput: string;
+  readonly passwordInput: string;
+  readonly submitButton: string;
+  readonly oauthButtons: string;
+  readonly errorMessage: string;
+  readonly formHeading: string;
+
+  constructor(page: Page) {
     super(page);
     // Form-panel selectors (Industrial Magnetite auth redesign)
     this.emailInput = 'input[type="email"], input[name="email"], input[placeholder*="mail" i]';
@@ -27,17 +35,17 @@ export class LoginPage extends BasePage {
     this.formHeading = '.auth-title';
   }
 
-  async login(email, password) {
+  async login(email: string, password: string): Promise<void> {
     await this.fill(this.emailInput, email);
     await this.fill(this.passwordInput, password);
     await this.click(this.submitButton);
   }
 
-  async getFormHeading() {
+  async getFormHeading(): Promise<string | null> {
     return this.getText(this.formHeading);
   }
 
-  async getOAuthButtons() {
+  async getOAuthButtons(): Promise<Locator[]> {
     // .all() takes a synchronous snapshot and does not auto-wait, so wait for
     // the async-rendered OAuth section to appear before counting — otherwise
     // this races the SPA's first client render and returns an empty array.
@@ -45,16 +53,16 @@ export class LoginPage extends BasePage {
     return this.page.locator(this.oauthButtons).all();
   }
 
-  async isOAuthButtonVisible(provider) {
+  async isOAuthButtonVisible(provider: string): Promise<boolean> {
     // Buttons use aria-label="Continue with <Provider>"
     return this.isVisible(`button.oauth-btn[aria-label*="${provider}"]`);
   }
 
-  async submitEmpty() {
+  async submitEmpty(): Promise<void> {
     await this.click(this.submitButton);
   }
 
-  async isErrorVisible() {
+  async isErrorVisible(): Promise<boolean> {
     return this.isVisible(this.errorMessage);
   }
 }
