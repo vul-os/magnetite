@@ -38,7 +38,7 @@ export default function Modal({
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  const previousActiveElement = useRef<Element | null>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
   // Drive enter/exit animation state: mount on open, then defer unmount until
   // the close transition finishes. This is intentional synchronization with the

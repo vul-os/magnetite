@@ -1,11 +1,34 @@
 import { useState } from 'react';
+import type { InputHTMLAttributes, ReactNode } from 'react';
 import './Input.css';
 
-const variantClasses = {
+type InputVariant = 'default' | 'error' | 'success';
+type InputSize = 'sm' | 'md' | 'lg';
+
+const variantClasses: Record<InputVariant, string> = {
   default: 'input-default',
   error: 'input-error',
   success: 'input-success',
 };
+
+export interface InputProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size' | 'id' | 'placeholder' | 'type' | 'className'> {
+  label?: string;
+  placeholder?: string;
+  error?: string;
+  helperText?: string;
+  type?: string;
+  id?: string;
+  className?: string;
+  isDisabled?: boolean;
+  isRequired?: boolean;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+  leftText?: ReactNode;
+  rightText?: ReactNode;
+  floatingLabel?: boolean;
+  size?: InputSize;
+}
 
 export default function Input({
   label,
@@ -24,7 +47,7 @@ export default function Input({
   floatingLabel = false,
   size = 'md',
   ...props
-}) {
+}: InputProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
