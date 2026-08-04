@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { ControllerSettingsPage } from './page-objects/controller-settings.page.js';
+import { ControllerSettingsPage } from './page-objects/controller-settings.page';
 
 test.describe('Controller Settings', () => {
-  let csPage;
+  let csPage: ControllerSettingsPage;
 
   test.beforeEach(async ({ page }) => {
     csPage = new ControllerSettingsPage(page);
