@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/client.test.js
+ * magnetite-web-client/src/client.test.ts
  *
  * Unit tests for the reconcile / delta-apply logic.
  * Does NOT require a live server — all tests run in Node/vitest with jsdom.
@@ -25,12 +25,22 @@ import {
   defaultKeyState,
   defaultMouseState,
 } from './protocol.js';
+import type {
+  ArenaDelta,
+  ArenaSnapshot,
+  ArenaView,
+  Input,
+  KeyState,
+  MouseState,
+  Projectile,
+  ShooterPlayer,
+} from './types';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makePlayer(id, x = 0, y = 0, hp = 100, alive = true) {
+function makePlayer(id: string, x = 0, y = 0, hp = 100, alive = true): ShooterPlayer {
   return {
     id,
     x,
@@ -43,11 +53,16 @@ function makePlayer(id, x = 0, y = 0, hp = 100, alive = true) {
   };
 }
 
-function makeSnapshot(players = [], projectiles = [], tick = 0) {
+function makeSnapshot(players: ShooterPlayer[] = [], projectiles: Projectile[] = [], tick = 0): ArenaSnapshot {
   return { players, projectiles, tick };
 }
 
-function makeView(selfState, others = [], projectiles = [], tick = 0) {
+function makeView(
+  selfState: ShooterPlayer | null,
+  others: ShooterPlayer[] = [],
+  projectiles: Projectile[] = [],
+  tick = 0,
+): ArenaView {
   return {
     self_state: selfState,
     other_players: others,
@@ -56,7 +71,7 @@ function makeView(selfState, others = [], projectiles = [], tick = 0) {
   };
 }
 
-function makeInput(keys = {}, mouse = {}) {
+function makeInput(keys: Partial<KeyState> = {}, mouse: Partial<MouseState> = {}): Input {
   return {
     keys: { ...defaultKeyState(), ...keys },
     mouse: { ...defaultMouseState(), ...mouse },
@@ -98,7 +113,7 @@ describe('PredictionBuffer', () => {
 
     expect(buf.pendingCount).toBe(1);
     // Moving right (KeyD) should increase x
-    expect(predicted.self_state.x).toBeGreaterThan(0);
+    expect(predicted!.self_state!.x).toBeGreaterThan(0);
   });
 
   it('ack: discards acknowledged frames', () => {
@@ -177,9 +192,9 @@ describe('arenaApplyInput', () => {
   });
 
   it('returns unchanged state when self_state is missing', () => {
-    const view = { self_state: null, other_players: [], projectiles: [], tick: 0 };
+    const view: ArenaView = { self_state: null, other_players: [], projectiles: [], tick: 0 };
     const result = arenaApplyInput(view, makeInput(), 1);
-    expect(result.self_state).toBeNull();
+    expect(result!.self_state).toBeNull();
   });
 
   it('moves right on right key (KeyD)', () => {
@@ -187,8 +202,8 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({ right: true });
     const result = arenaApplyInput(view, input, 1);
-    expect(result.self_state.x).toBeCloseTo(4.0, 5); // MAX_SPEED = 4
-    expect(result.self_state.y).toBe(0);
+    expect(result!.self_state!.x).toBeCloseTo(4.0, 5); // MAX_SPEED = 4
+    expect(result!.self_state!.y).toBe(0);
   });
 
   it('moves left on left key', () => {
@@ -196,7 +211,7 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({ left: true });
     const result = arenaApplyInput(view, input, 1);
-    expect(result.self_state.x).toBeCloseTo(-4.0, 5);
+    expect(result!.self_state!.x).toBeCloseTo(-4.0, 5);
   });
 
   it('moves forward on W key (increases y)', () => {
@@ -204,7 +219,7 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({ forward: true });
     const result = arenaApplyInput(view, input, 1);
-    expect(result.self_state.y).toBeCloseTo(4.0, 5);
+    expect(result!.self_state!.y).toBeCloseTo(4.0, 5);
   });
 
   it('diagonal movement is normalised to MAX_SPEED', () => {
@@ -212,8 +227,8 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({ right: true, forward: true });
     const result = arenaApplyInput(view, input, 1);
-    const dx = result.self_state.x;
-    const dy = result.self_state.y;
+    const dx = result!.self_state!.x;
+    const dy = result!.self_state!.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     expect(dist).toBeCloseTo(4.0, 4); // normalised to MAX_SPEED
   });
@@ -223,7 +238,7 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({ right: true });
     const result = arenaApplyInput(view, input, 1);
-    expect(result.self_state.x).toBeLessThanOrEqual(100);
+    expect(result!.self_state!.x).toBeLessThanOrEqual(100);
   });
 
   it('updates angle from mouse delta', () => {
@@ -231,7 +246,7 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({}, { delta_x: 1.0, delta_y: 0.0 });
     const result = arenaApplyInput(view, input, 1);
-    expect(result.self_state.angle).toBeCloseTo(0, 5); // atan2(0, 1) = 0
+    expect(result!.self_state!.angle).toBeCloseTo(0, 5); // atan2(0, 1) = 0
   });
 
   it('does not move dead players', () => {
@@ -239,7 +254,7 @@ describe('arenaApplyInput', () => {
     const view = makeView(p);
     const input = makeInput({ right: true });
     const result = arenaApplyInput(view, input, 1);
-    expect(result.self_state.x).toBe(0);
+    expect(result!.self_state!.x).toBe(0);
   });
 
   it('advances tick on the returned view', () => {
@@ -247,7 +262,7 @@ describe('arenaApplyInput', () => {
     const view = makeView(p, [], [], 5);
     const input = makeInput();
     const result = arenaApplyInput(view, input, 7);
-    expect(result.tick).toBe(7);
+    expect(result!.tick).toBe(7);
   });
 });
 
@@ -258,62 +273,73 @@ describe('arenaApplyInput', () => {
 describe('applyDeltaToSnapshot', () => {
   it('returns unchanged state for empty delta', () => {
     const snap = makeSnapshot([makePlayer('1', 10, 20)], [], 5);
-    const delta = { changed_players: [], removed_projectile_ids: [], new_projectiles: [] };
+    const delta: ArenaDelta = { changed_players: [], removed_projectile_ids: [], new_projectiles: [] };
     const result = applyDeltaToSnapshot(snap, delta, 6);
-    expect(result.players).toHaveLength(1);
-    expect(result.players[0].x).toBe(10);
-    expect(result.tick).toBe(6);
+    expect(result!.players).toHaveLength(1);
+    expect(result!.players[0].x).toBe(10);
+    expect(result!.tick).toBe(6);
   });
 
   it('updates a changed player', () => {
     const snap = makeSnapshot([makePlayer('1', 0, 0, 100)], [], 1);
-    const delta = {
+    const delta: ArenaDelta = {
       changed_players: [makePlayer('1', 50, 30, 75)],
       removed_projectile_ids: [],
       new_projectiles: [],
     };
     const result = applyDeltaToSnapshot(snap, delta, 2);
-    expect(result.players[0].x).toBe(50);
-    expect(result.players[0].hp).toBe(75);
+    expect(result!.players[0].x).toBe(50);
+    expect(result!.players[0].hp).toBe(75);
   });
 
   it('adds a new player from delta (upsert)', () => {
     const snap = makeSnapshot([makePlayer('1', 0, 0)], [], 1);
-    const delta = {
+    const delta: ArenaDelta = {
       changed_players: [makePlayer('2', 10, 10)],
       removed_projectile_ids: [],
       new_projectiles: [],
     };
     const result = applyDeltaToSnapshot(snap, delta, 2);
-    expect(result.players).toHaveLength(2);
+    expect(result!.players).toHaveLength(2);
   });
 
   it('adds new projectiles', () => {
     const snap = makeSnapshot([], [], 1);
-    const proj = { id: 42n, owner: '1', x: 5, y: 5, vx: 1, vy: 0, ticks_left: 40 };
-    const delta = {
+    // id carries a bigint (u64 ids above 2^53 stay exact) even though
+    // Projectile.id's declared type is string | number — the cast documents
+    // the mismatch rather than widening the shared type.
+    const proj = {
+      id: 42n,
+      owner: '1',
+      x: 5,
+      y: 5,
+      vx: 1,
+      vy: 0,
+      ticks_left: 40,
+    } as unknown as Projectile;
+    const delta: ArenaDelta = {
       changed_players: [],
       removed_projectile_ids: [],
       new_projectiles: [proj],
     };
     const result = applyDeltaToSnapshot(snap, delta, 2);
-    expect(result.projectiles).toHaveLength(1);
+    expect(result!.projectiles).toHaveLength(1);
   });
 
   it('removes expired projectiles', () => {
-    const proj = { id: 99, owner: '1', x: 0, y: 0, vx: 1, vy: 0, ticks_left: 1 };
+    const proj: Projectile = { id: 99, owner: '1', x: 0, y: 0, vx: 1, vy: 0, ticks_left: 1 };
     const snap = makeSnapshot([], [proj], 1);
-    const delta = {
+    const delta: ArenaDelta = {
       changed_players: [],
       removed_projectile_ids: [99],
       new_projectiles: [],
     };
     const result = applyDeltaToSnapshot(snap, delta, 2);
-    expect(result.projectiles).toHaveLength(0);
+    expect(result!.projectiles).toHaveLength(0);
   });
 
   it('handles null snapshot gracefully', () => {
-    const delta = { changed_players: [], removed_projectile_ids: [], new_projectiles: [] };
+    const delta: ArenaDelta = { changed_players: [], removed_projectile_ids: [], new_projectiles: [] };
     const result = applyDeltaToSnapshot(null, delta, 1);
     expect(result).toBeNull();
   });
@@ -331,7 +357,7 @@ describe('snapshotToView', () => {
 
     const view = snapshotToView(snap, '1');
     expect(view.self_state).not.toBeNull();
-    expect(String(view.self_state.id)).toBe('1');
+    expect(String(view.self_state!.id)).toBe('1');
     expect(view.other_players).toHaveLength(1);
     expect(String(view.other_players[0].id)).toBe('2');
     expect(view.tick).toBe(3);
@@ -396,22 +422,22 @@ describe('parseServerMessage', () => {
     const raw = JSON.stringify({ type: 'welcome', player_id: '1', config: {} });
     const msg = parseServerMessage(raw);
     expect(msg).not.toBeNull();
-    expect(msg.type).toBe('welcome');
-    expect(msg.player_id).toBe('1');
+    expect(msg!.type).toBe('welcome');
+    expect(msg!.player_id).toBe('1');
   });
 
   it('parses an ack message', () => {
     const raw = JSON.stringify({ type: 'ack', seq: 7, tick: 100 });
     const msg = parseServerMessage(raw);
-    expect(msg.type).toBe('ack');
-    expect(msg.seq).toBe(7);
+    expect(msg!.type).toBe('ack');
+    expect(msg!.seq).toBe(7);
   });
 
   it('parses a reject message', () => {
     const raw = JSON.stringify({ type: 'reject', seq: 3, reason: 'RateLimited' });
     const msg = parseServerMessage(raw);
-    expect(msg.type).toBe('reject');
-    expect(msg.reason).toBe('RateLimited');
+    expect(msg!.type).toBe('reject');
+    expect(msg!.reason).toBe('RateLimited');
   });
 
   it('returns null for invalid JSON', () => {
@@ -435,10 +461,10 @@ describe('decodeBytes', () => {
     const json = JSON.stringify(obj);
     // Encode to base64 (browser-style)
     const b64 = btoa(json);
-    const decoded = decodeBytes(b64);
+    const decoded = decodeBytes(b64) as ArenaSnapshot | null;
     expect(decoded).not.toBeNull();
-    expect(decoded.tick).toBe(3);
-    expect(decoded.players).toHaveLength(1);
+    expect(decoded!.tick).toBe(3);
+    expect(decoded!.players).toHaveLength(1);
   });
 
   it('returns null for empty/null input', () => {
@@ -451,8 +477,8 @@ describe('decodeBytes', () => {
     const obj = { tick: 7 };
     const json = JSON.stringify(obj);
     const bytes = Array.from(new TextEncoder().encode(json));
-    const decoded = decodeBytes(bytes);
+    const decoded = decodeBytes(bytes) as { tick: number } | null;
     expect(decoded).not.toBeNull();
-    expect(decoded.tick).toBe(7);
+    expect(decoded!.tick).toBe(7);
   });
 });
