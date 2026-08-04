@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { MarketplacePage } from './page-objects/marketplace.page.js';
+import { MarketplacePage } from './page-objects/marketplace.page';
 
 // The catalogue comes from GET /api/v1/games (useGames → api.games.list). The
 // app calls it cross-origin (VITE_API_URL, default http://localhost:8080), so a
@@ -17,7 +17,7 @@ const GAMES = [
 ];
 
 test.describe('Marketplace', () => {
-  let marketplacePage;
+  let marketplacePage: MarketplacePage;
 
   test.beforeEach(async ({ page }) => {
     marketplacePage = new MarketplacePage(page);
