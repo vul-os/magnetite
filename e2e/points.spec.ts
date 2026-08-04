@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { PointsPage } from './page-objects/points.page.js';
+import { test, expect, type Page } from '@playwright/test';
+import { PointsPage } from './page-objects/points.page';
 
 // usePoints loads balance/history/rewards/leaderboard from /api/v1/points/*
 // (cross-origin at VITE_API_URL, so fulfilled responses need CORS headers).
@@ -26,14 +26,14 @@ const LEADERBOARD = [
   { rank: 3, username: 'CarolFast', avatar: null, points: 9800 },
 ];
 
-async function stubPoints(page) {
+async function stubPoints(page: Page) {
   await page.route('**/api/v1/points/**', async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: CORS });
       return;
     }
     const path = new URL(route.request().url()).pathname;
-    const json = (status, obj) =>
+    const json = (status: number, obj: unknown) =>
       route.fulfill({ status, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
     if (path.endsWith('/balance')) return json(200, BALANCE);
     if (path.endsWith('/history')) return json(200, { history: HISTORY });
@@ -44,7 +44,7 @@ async function stubPoints(page) {
 }
 
 test.describe('Points Dashboard', () => {
-  let pointsPage;
+  let pointsPage: PointsPage;
 
   test.beforeEach(async ({ page }) => {
     pointsPage = new PointsPage(page);
