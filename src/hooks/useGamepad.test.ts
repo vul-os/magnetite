@@ -4,20 +4,20 @@ import { useGamepad } from './useGamepad';
 
 // jsdom does not implement requestAnimationFrame natively in all test environments.
 // Provide a stable fake that runs the callback once synchronously.
-const rafCallbacks = [];
+const rafCallbacks: Array<{ id: number; cb: FrameRequestCallback }> = [];
 let rafIdCounter = 0;
 
 beforeEach(() => {
   rafCallbacks.length = 0;
   rafIdCounter = 0;
 
-  vi.stubGlobal('requestAnimationFrame', (cb) => {
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     const id = ++rafIdCounter;
     rafCallbacks.push({ id, cb });
     return id;
   });
 
-  vi.stubGlobal('cancelAnimationFrame', (id) => {
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
     const idx = rafCallbacks.findIndex((r) => r.id === id);
     if (idx !== -1) rafCallbacks.splice(idx, 1);
   });
@@ -97,20 +97,20 @@ describe('useGamepad', () => {
     const { bindings } = result.current;
 
     expect(bindings).toHaveProperty('fire');
-    expect(bindings['fire'].type).toBe('button');
-    expect(bindings['fire'].index).toBe(7); // R2
+    expect(bindings['fire']?.type).toBe('button');
+    expect(bindings['fire']?.index).toBe(7); // R2
 
     expect(bindings).toHaveProperty('jump');
-    expect(bindings['jump'].type).toBe('button');
-    expect(bindings['jump'].index).toBe(0); // Cross/A
+    expect(bindings['jump']?.type).toBe('button');
+    expect(bindings['jump']?.index).toBe(0); // Cross/A
   });
 
   it('default bindings include axis-based actions', () => {
     const { result } = renderHook(() => useGamepad());
     const { bindings } = result.current;
 
-    expect(bindings['move_forward'].type).toBe('axis');
-    expect(bindings['aim_horizontal'].type).toBe('axis');
+    expect(bindings['move_forward']?.type).toBe('axis');
+    expect(bindings['aim_horizontal']?.type).toBe('axis');
   });
 
   it('clearBinding removes a binding', () => {
@@ -153,7 +153,7 @@ describe('useGamepad', () => {
 
     const stored = localStorage.getItem('magnetite_gamepad_bindings');
     expect(stored).not.toBeNull();
-    const parsed = JSON.parse(stored);
+    const parsed = JSON.parse(stored ?? '');
     expect(parsed).toHaveProperty('fire');
   });
 
@@ -166,7 +166,7 @@ describe('useGamepad', () => {
 
     const stored = localStorage.getItem('magnetite_gamepad_bindings');
     expect(stored).not.toBeNull();
-    const parsed = JSON.parse(stored);
+    const parsed = JSON.parse(stored ?? '');
     expect(parsed['reload']).toBeUndefined();
   });
 
@@ -178,8 +178,8 @@ describe('useGamepad', () => {
     localStorage.setItem('magnetite_gamepad_bindings', JSON.stringify(customBindings));
 
     const { result } = renderHook(() => useGamepad());
-    expect(result.current.bindings['fire'].index).toBe(5);
-    expect(result.current.bindings['jump'].index).toBe(1);
+    expect(result.current.bindings['fire']?.index).toBe(5);
+    expect(result.current.bindings['jump']?.index).toBe(1);
   });
 
   it('handles corrupt localStorage gracefully (uses defaults)', () => {
