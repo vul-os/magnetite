@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/connection.js
+ * magnetite-web-client/src/connection.ts
  *
  * WebSocket connection manager for the Magnetite authoritative server.
  *
@@ -13,49 +13,101 @@
  */
 
 import { parseServerMessage } from './protocol.js';
-import { redirectUrl, verifyRedirect, followRedirect } from './follow.js';
+import { redirectUrl, verifyRedirect, followRedirect, type FollowRoute } from './follow.js';
+import type { ServerMessage } from './types';
 
 const DEFAULT_RECONNECT_INITIAL_MS = 500;
 const DEFAULT_RECONNECT_MAX_MS = 16000;
 const DEFAULT_RECONNECT_FACTOR = 2;
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ConnectionManagerOptions {
+  /** WebSocket URL (ws:// or wss://) */
+  url: string;
+  /** Optional auth token (appended as ?token=) */
+  token?: string;
+  reconnectInitialMs?: number;
+  reconnectMaxMs?: number;
+  /** default true */
+  autoReconnect?: boolean;
+}
+
+/** What `onFollowed` receives once a session-follow completes. */
+export type FollowedInfo = FollowRoute & { nodeKey: string };
+
+export interface EnableSessionFollowOptions {
+  /** hex node key of the current server */
+  nodeKey: string;
+  /** our current player id */
+  getPlayerId: () => number;
+  onFollowed?: (info: FollowedInfo) => void;
+  /** called when a redirect is refused */
+  onRefused?: (err: Error) => void;
+  /** injectable for tests */
+  openSocket?: (url: string) => WebSocket;
+}
+
+interface FollowState {
+  nodeKey: string;
+  getPlayerId: () => number;
+  onFollowed: ((info: FollowedInfo) => void) | null;
+  onRefused: ((err: Error) => void) | null;
+  openSocket: ((url: string) => WebSocket) | null;
+}
+
+function errMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// ---------------------------------------------------------------------------
 // ConnectionManager
 // ---------------------------------------------------------------------------
 
 export class ConnectionManager {
-  /**
-   * @param {object} opts
-   * @param {string}  opts.url   - WebSocket URL (ws:// or wss://)
-   * @param {string}  [opts.token] - Optional auth token (appended as ?token=)
-   * @param {number}  [opts.reconnectInitialMs]
-   * @param {number}  [opts.reconnectMaxMs]
-   * @param {boolean} [opts.autoReconnect=true]
-   */
-  constructor(opts) {
+  private _baseUrl: string;
+  private _token: string | null;
+  private _autoReconnect: boolean;
+  private _reconnectInitialMs: number;
+  private _reconnectMaxMs: number;
+
+  private _ws: WebSocket | null;
+  private _reconnectDelay: number;
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null;
+  private _closed: boolean;
+
+  // Message handler registry: type → fn(msg)
+  private _handlers: Map<string, (msg: ServerMessage) => void>;
+
+  private _onOpen: (() => void) | null;
+  private _onClose: ((event?: CloseEvent) => void) | null;
+  private _onError: ((event: Event) => void) | null;
+
+  // Session follow (see follow.js). Off unless `enableSessionFollow` is
+  // called: without a pinned node key there is nothing to verify a redirect
+  // against, and an unverifiable redirect must never be followed.
+  private _follow: FollowState | null;
+
+  constructor(opts: ConnectionManagerOptions) {
     this._baseUrl = opts.url;
     this._token = opts.token || null;
     this._autoReconnect = opts.autoReconnect !== false;
     this._reconnectInitialMs = opts.reconnectInitialMs || DEFAULT_RECONNECT_INITIAL_MS;
     this._reconnectMaxMs = opts.reconnectMaxMs || DEFAULT_RECONNECT_MAX_MS;
 
-    /** @type {WebSocket | null} */
     this._ws = null;
     this._reconnectDelay = this._reconnectInitialMs;
     this._reconnectTimer = null;
     this._closed = false;
 
-    // Message handler registry: type → fn(msg)
-    /** @type {Map<string, (msg: object) => void>} */
     this._handlers = new Map();
 
     this._onOpen = null;
     this._onClose = null;
     this._onError = null;
 
-    // Session follow (see follow.js). Off unless `enableSessionFollow` is
-    // called: without a pinned node key there is nothing to verify a redirect
-    // against, and an unverifiable redirect must never be followed.
     this._follow = null;
   }
 
@@ -66,15 +118,8 @@ export class ConnectionManager {
    * connected to, learned out of band (a signed discovery ad, or the
    * `target_key` this connection was itself followed to). The redirect's issuer
    * signature is checked against it; an address alone is never an identity.
-   *
-   * @param {object} opts
-   * @param {string} opts.nodeKey - hex node key of the current server
-   * @param {() => number} opts.getPlayerId - our current player id
-   * @param {(info: {nodeKey: string, addr: string, shard: number, epoch: number}) => void} [opts.onFollowed]
-   * @param {(err: Error) => void} [opts.onRefused] - called when a redirect is refused
-   * @param {(url: string) => WebSocket} [opts.openSocket] - injectable for tests
    */
-  enableSessionFollow(opts) {
+  enableSessionFollow(opts: EnableSessionFollowOptions): this {
     this._follow = {
       nodeKey: opts.nodeKey,
       getPlayerId: opts.getPlayerId,
@@ -92,10 +137,9 @@ export class ConnectionManager {
    * Every failure path leaves this connection exactly as it was and reports via
    * `onRefused` — a refused redirect is not a reason to go anywhere.
    *
-   * @param {object} msg - the redirect frame
-   * @returns {Promise<boolean>} whether the follow succeeded
+   * @returns whether the follow succeeded
    */
-  async _handleRedirect(msg) {
+  private async _handleRedirect(msg: ServerMessage): Promise<boolean> {
     const f = this._follow;
     if (!f) {
       // No pinned key ⇒ nothing could verify this. Ignore it rather than
@@ -104,7 +148,7 @@ export class ConnectionManager {
       return false;
     }
     try {
-      const route = await verifyRedirect(msg.redirect, {
+      const route = await verifyRedirect(msg.redirect as object, {
         issuerKey: f.nodeKey,
         playerId: f.getPlayerId(),
       });
@@ -112,7 +156,7 @@ export class ConnectionManager {
       const socket = await followRedirect({
         url,
         targetKey: route.targetKey,
-        redirect: msg.redirect,
+        redirect: msg.redirect as object,
         ...(f.openSocket ? { openSocket: f.openSocket } : {}),
       });
       // Adopt the proven connection. The node key we now trust is the one we
@@ -131,8 +175,8 @@ export class ConnectionManager {
       if (f.onFollowed) f.onFollowed({ nodeKey: route.targetKey, ...route });
       return true;
     } catch (e) {
-      console.warn('[magnetite] refusing session redirect:', e.message);
-      if (f.onRefused) f.onRefused(e);
+      console.warn('[magnetite] refusing session redirect:', errMessage(e));
+      if (f.onRefused) f.onRefused(e instanceof Error ? e : new Error(errMessage(e)));
       return false;
     }
   }
@@ -145,7 +189,7 @@ export class ConnectionManager {
    * Open the WebSocket connection.
    * Safe to call multiple times — no-ops if already connected.
    */
-  connect() {
+  connect(): void {
     if (this._ws && this._ws.readyState < WebSocket.CLOSING) return;
     this._closed = false;
     this._openSocket();
@@ -154,7 +198,7 @@ export class ConnectionManager {
   /**
    * Close the connection permanently (no reconnect).
    */
-  disconnect() {
+  disconnect(): void {
     this._closed = true;
     this._cancelReconnect();
     if (this._ws) {
@@ -165,9 +209,9 @@ export class ConnectionManager {
   }
 
   /**
-   * @returns {boolean} true if the socket is open and ready
+   * @returns true if the socket is open and ready
    */
-  get isConnected() {
+  get isConnected(): boolean {
     return this._ws !== null && this._ws.readyState === WebSocket.OPEN;
   }
 
@@ -178,12 +222,10 @@ export class ConnectionManager {
   /**
    * Send a JSON string to the server.
    * No-ops if not connected.
-   *
-   * @param {string} message
    */
-  send(message) {
+  send(message: string): void {
     if (this.isConnected) {
-      this._ws.send(message);
+      this._ws!.send(message);
     }
   }
 
@@ -194,43 +236,40 @@ export class ConnectionManager {
   /**
    * Register a handler for a ServerNet message type.
    *
-   * @param {string} type  - snake_case type tag (e.g. 'welcome', 'ack')
-   * @param {(msg: object) => void} handler
+   * @param type - snake_case type tag (e.g. 'welcome', 'ack')
    */
-  on(type, handler) {
+  on(type: string, handler: (msg: ServerMessage) => void): this {
     this._handlers.set(type, handler);
     return this;
   }
 
   /** Called when the socket opens (before Welcome) */
-  set onOpen(fn) { this._onOpen = fn; }
+  set onOpen(fn: (() => void) | null) { this._onOpen = fn; }
   /** Called when the socket closes (after all retries or explicit disconnect) */
-  set onClose(fn) { this._onClose = fn; }
+  set onClose(fn: ((event?: CloseEvent) => void) | null) { this._onClose = fn; }
   /** Called on a socket error event */
-  set onError(fn) { this._onError = fn; }
+  set onError(fn: ((event: Event) => void) | null) { this._onError = fn; }
 
   // --------------------------------------------------------------------------
   // Internal
   // --------------------------------------------------------------------------
 
-  _buildUrl() {
+  private _buildUrl(): string {
     const url = this._token
       ? `${this._baseUrl}${this._baseUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(this._token)}`
       : this._baseUrl;
     return url;
   }
 
-  _openSocket() {
+  private _openSocket(): void {
     this._adopt(new WebSocket(this._buildUrl()));
   }
 
   /**
    * Attach this manager's handlers to a socket — either one we just opened, or
    * one handed back by a completed session follow.
-   *
-   * @param {WebSocket} ws
    */
-  _adopt(ws) {
+  private _adopt(ws: WebSocket): void {
     this._ws = ws;
 
     ws.addEventListener('open', () => {
@@ -238,13 +277,13 @@ export class ConnectionManager {
       if (this._onOpen) this._onOpen();
     });
 
-    ws.addEventListener('message', (event) => {
+    ws.addEventListener('message', (event: MessageEvent<string>) => {
       const msg = parseServerMessage(event.data);
       if (!msg) return;
       if (msg.type === 'redirect') {
         // Handled here rather than by a user handler: following a redirect is a
         // security decision, not application logic.
-        this._handleRedirect(msg);
+        void this._handleRedirect(msg);
         return;
       }
       const handler = this._handlers.get(msg.type);
@@ -257,7 +296,7 @@ export class ConnectionManager {
       }
     });
 
-    ws.addEventListener('close', (event) => {
+    ws.addEventListener('close', (event: CloseEvent) => {
       this._ws = null;
       if (!this._closed && this._autoReconnect) {
         this._scheduleReconnect();
@@ -266,7 +305,7 @@ export class ConnectionManager {
       }
     });
 
-    ws.addEventListener('error', (event) => {
+    ws.addEventListener('error', (event: Event) => {
       if (this._onError) this._onError(event);
     });
 
@@ -278,7 +317,7 @@ export class ConnectionManager {
     }
   }
 
-  _scheduleReconnect() {
+  private _scheduleReconnect(): void {
     const delay = this._reconnectDelay;
     this._reconnectDelay = Math.min(
       this._reconnectDelay * DEFAULT_RECONNECT_FACTOR,
@@ -289,7 +328,7 @@ export class ConnectionManager {
     }, delay);
   }
 
-  _cancelReconnect() {
+  private _cancelReconnect(): void {
     if (this._reconnectTimer !== null) {
       clearTimeout(this._reconnectTimer);
       this._reconnectTimer = null;
