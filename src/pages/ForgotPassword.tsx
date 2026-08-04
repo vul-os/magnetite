@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
@@ -12,7 +13,7 @@ export default function ForgotPassword() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -20,7 +21,7 @@ export default function ForgotPassword() {
       await api.auth.forgotPassword(email);
       setSuccess(true);
     } catch (err) {
-      setError(err.message || t('auth.failedToSendResetLink'));
+      setError((err instanceof Error && err.message) || t('auth.failedToSendResetLink'));
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,7 @@ export default function ForgotPassword() {
         <div className="auth-hero-glow-amber" aria-hidden="true" />
         <div className="auth-hero-grain" aria-hidden="true" />
         <div className="auth-hero-content">
-          <Link to="/" className="auth-hero-logo" tabIndex="-1">
+          <Link to="/" className="auth-hero-logo" tabIndex={-1}>
             <img src={magnetiteLogo} className="auth-hero-logo-mark" aria-hidden="true" alt="" />
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
