@@ -1,4 +1,5 @@
-import { BasePage } from './base.page.js';
+import type { Page } from '@playwright/test';
+import { BasePage } from './base.page';
 
 /**
  * StreamsPage — Streams browse + Go-Live UI.
@@ -12,7 +13,14 @@ import { BasePage } from './base.page.js';
  * Key selectors aligned to real component classes.
  */
 export class StreamsPage extends BasePage {
-  constructor(page) {
+  readonly pageHeading: string;
+  readonly goLiveButton: string;
+  readonly streamCards: string;
+  readonly streamPlayer: string;
+  readonly goLivePanel: string;
+  readonly viewerCount: string;
+
+  constructor(page: Page) {
     super(page);
     this.pageHeading = 'h1, h2, [class*="streams-title"]';
     this.goLiveButton = 'button:has-text("Go Live"), .go-live-btn, [aria-label*="Go Live" i]';
@@ -22,23 +30,23 @@ export class StreamsPage extends BasePage {
     this.viewerCount = '[class*="viewer"], .viewer-count, :has-text("viewer")';
   }
 
-  async getStreamCardCount() {
+  async getStreamCardCount(): Promise<number> {
     return this.page.locator(this.streamCards).count();
   }
 
-  async clickGoLive() {
+  async clickGoLive(): Promise<void> {
     await this.page.locator(this.goLiveButton).first().click();
   }
 
-  async isGoLivePanelVisible() {
+  async isGoLivePanelVisible(): Promise<boolean> {
     return this.page.locator(this.goLivePanel).isVisible();
   }
 
-  async clickFirstStream() {
+  async clickFirstStream(): Promise<void> {
     await this.page.locator(this.streamCards).first().click();
   }
 
-  async isPlayerVisible() {
+  async isPlayerVisible(): Promise<boolean> {
     return this.page.locator(this.streamPlayer).isVisible();
   }
 }
