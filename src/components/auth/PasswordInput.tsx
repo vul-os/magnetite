@@ -1,18 +1,27 @@
 import { useState } from 'react';
+import type { InputHTMLAttributes } from 'react';
 
 const requirements = [
-  { id: 'length', label: '8+ characters', test: (v) => v.length >= 8 },
-  { id: 'upper', label: 'Uppercase letter', test: (v) => /[A-Z]/.test(v) },
-  { id: 'number', label: 'Number', test: (v) => /\d/.test(v) },
-  { id: 'symbol', label: 'Symbol', test: (v) => /[!@#$%^&*(),.?":{}|<>]/.test(v) },
+  { id: 'length', label: '8+ characters', test: (v: string) => v.length >= 8 },
+  { id: 'upper', label: 'Uppercase letter', test: (v: string) => /[A-Z]/.test(v) },
+  { id: 'number', label: 'Number', test: (v: string) => /\d/.test(v) },
+  { id: 'symbol', label: 'Symbol', test: (v: string) => /[!@#$%^&*(),.?":{}|<>]/.test(v) },
 ];
 
-function getStrength(password) {
+function getStrength(password: string) {
   const passed = requirements.filter((r) => r.test(password)).length;
   if (passed === 0) return { level: 0, label: '', color: '' };
   if (passed <= 1) return { level: 1, label: 'Weak', color: 'var(--color-error)' };
   if (passed <= 3) return { level: 2, label: 'Medium', color: 'var(--color-warning)' };
   return { level: 3, label: 'Strong', color: 'var(--color-success)' };
+}
+
+export interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
+  value: string;
+  onChange: (value: string) => void;
+  showStrength?: boolean;
+  showRequirements?: boolean;
+  error?: string;
 }
 
 export default function PasswordInput({
@@ -22,7 +31,7 @@ export default function PasswordInput({
   showRequirements = false,
   error,
   ...props
-}) {
+}: PasswordInputProps) {
   const [show, setShow] = useState(false);
   const strength = getStrength(value || '');
 
