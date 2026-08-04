@@ -2,7 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 
-const ProviderMeta = {
+interface LinkedAccount {
+  id: string | number;
+  provider: string;
+  email?: string;
+  connectedAt?: string;
+}
+
+const ProviderMeta: Record<string, { name: string; abbr: string; cls: string }> = {
   google:  { name: 'Google',  abbr: 'G',  cls: 'google' },
   discord: { name: 'Discord', abbr: 'Di', cls: 'discord' },
   github:  { name: 'GitHub',  abbr: 'GH', cls: 'github' },
@@ -10,18 +17,18 @@ const ProviderMeta = {
 };
 
 export default function ConnectedAccounts() {
-  const [accounts, setAccounts]       = useState([]);
+  const [accounts, setAccounts]       = useState<LinkedAccount[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [unlinking, setUnlinking]     = useState(null);
-  const [showConfirm, setShowConfirm] = useState(null);
+  const [unlinking, setUnlinking]     = useState<LinkedAccount['id'] | null>(null);
+  const [showConfirm, setShowConfirm] = useState<LinkedAccount['id'] | null>(null);
   const [error, setError]             = useState('');
 
   const loadAccounts = useCallback(async () => {
     try {
       const data = await api.auth.linkedAccounts();
-      setAccounts(data);
+      setAccounts(data as LinkedAccount[]);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -33,14 +40,14 @@ export default function ConnectedAccounts() {
     loadAccounts();
   }, [loadAccounts]);
 
-  const handleDisconnect = async (accountId) => {
+  const handleDisconnect = async (accountId: LinkedAccount['id']) => {
     setUnlinking(accountId);
     try {
       await api.auth.unlinkAccount(accountId);
       setAccounts(accounts.filter(a => a.id !== accountId));
       setShowConfirm(null);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setUnlinking(null);
     }
