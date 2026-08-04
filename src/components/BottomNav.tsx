@@ -96,10 +96,10 @@ export default function BottomNav() {
     ? `/profile/${encodeURIComponent(user.username)}`
     : '/login';
 
-  const hrefFor = (tabPath) => (tabPath === '/profile' ? profileHref : tabPath);
+  const hrefFor = (tabPath: string) => (tabPath === '/profile' ? profileHref : tabPath);
 
   /* Resolve the active tab: exact match first, then prefix match */
-  function isActive(tabPath) {
+  function isActive(tabPath: string) {
     if (location.pathname === tabPath) return true;
     // Special-case: /play/:id and /lobby/:id → highlight Play
     if (tabPath === '/matchmaking' &&
