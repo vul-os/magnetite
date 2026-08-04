@@ -17,14 +17,37 @@ import { useParams, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 import AnalyticsChart from '../components/charts/AnalyticsChart';
+import type { AnalyticsChartDatum } from '../components/charts/AnalyticsChart';
 import { useTranslation } from '../i18n/useTranslation';
 import './GameAnalytics.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+interface AnalyticsSummary {
+  total_revenue: number;
+  active_players: number;
+  total_sessions: number;
+}
+
+interface GameAnalyticsData {
+  game_id: string;
+  game_title: string;
+  summary: AnalyticsSummary;
+  daily_revenue: AnalyticsChartDatum[];
+  daily_playtime: AnalyticsChartDatum[];
+}
+
+interface GameBreakdownRow {
+  id: string | number;
+  title: string;
+  revenue: number;
+  players: number;
+  sessions: number;
+}
+
 /* ── Mock data ─────────────────────────────────────────────────────────────── */
-function buildMockSeries(days, baseRevenue, variance) {
-  const out = [];
+function buildMockSeries(days: number, baseRevenue: number, variance: number): AnalyticsChartDatum[] {
+  const out: AnalyticsChartDatum[] = [];
   const now = new Date('2026-06-01');
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
@@ -37,7 +60,7 @@ function buildMockSeries(days, baseRevenue, variance) {
   return out;
 }
 
-const MOCK_ANALYTICS = {
+const MOCK_ANALYTICS: GameAnalyticsData = {
   game_id: '1',
   game_title: 'Cosmic Raiders',
   summary: {
@@ -49,7 +72,7 @@ const MOCK_ANALYTICS = {
   daily_playtime: buildMockSeries(30, 12400, 3500),
 };
 
-const MOCK_GAMES_BREAKDOWN = [
+const MOCK_GAMES_BREAKDOWN: GameBreakdownRow[] = [
   { id: 1, title: 'Cosmic Raiders',   revenue: 12450.0,  players: 8420, sessions: 54203 },
   { id: 2, title: 'Galaxy Conquest',  revenue: 2970.5,   players: 2941, sessions: 14201 },
   { id: 3, title: 'Dungeon Realms',   revenue: 7840.0,   players: 3240, sessions: 28400 },
@@ -64,17 +87,24 @@ const RANGES = [
   { label: 'All', days: null },
 ];
 
-function sliceSeries(series, days) {
+function sliceSeries(series: AnalyticsChartDatum[] | undefined, days: number | null): AnalyticsChartDatum[] {
   if (!days || !series) return series ?? [];
   return series.slice(-days);
 }
 
-function sum(series) {
+function sum(series: AnalyticsChartDatum[]) {
   return series.reduce((acc, d) => acc + (d.value ?? 0), 0);
 }
 
 /* ── KPI Card ────────────────────────────────────────────────────────────── */
-function KpiCard({ label, value, sub, accent }) {
+interface KpiCardProps {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: boolean;
+}
+
+function KpiCard({ label, value, sub, accent }: KpiCardProps) {
   return (
     <div className={`analytics-kpi-card${accent ? ' accent' : ''}`}>
       <span className="kpi-label">{label}</span>
@@ -85,7 +115,7 @@ function KpiCard({ label, value, sub, accent }) {
 }
 
 /* ── Loading skeleton ────────────────────────────────────────────────────── */
-function Skeleton({ h = 260 }) {
+function Skeleton({ h = 260 }: { h?: number }) {
   return (
     <div
       className="analytics-skeleton"
@@ -100,10 +130,10 @@ export default function GameAnalytics() {
   const { t } = useTranslation();
   const { gameId } = useParams();
 
-  const [analytics, setAnalytics] = useState(USE_MOCKS ? MOCK_ANALYTICS : null);
-  const [gamesBreakdown, setGamesBreakdown] = useState(USE_MOCKS ? MOCK_GAMES_BREAKDOWN : []);
+  const [analytics, setAnalytics] = useState<GameAnalyticsData | null>(USE_MOCKS ? MOCK_ANALYTICS : null);
+  const [gamesBreakdown, setGamesBreakdown] = useState<GameBreakdownRow[]>(USE_MOCKS ? MOCK_GAMES_BREAKDOWN : []);
   const [loading, setLoading] = useState(!USE_MOCKS);
-  const [loadError, setLoadError] = useState(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [range, setRange] = useState(2); // index into RANGES → default 30d
 
   const loadData = useCallback(async () => {
@@ -112,29 +142,31 @@ export default function GameAnalytics() {
     setLoadError(null);
     try {
       const [analyticsRes, gamesRes] = await Promise.allSettled([
-        api.developer.gameAnalytics(gameId),
+        api.developer.gameAnalytics(gameId!),
         api.developer.games(),
       ]);
 
       if (analyticsRes.status === 'fulfilled') {
-        const raw = analyticsRes.value?.data ?? analyticsRes.value;
+        const wrapped = analyticsRes.value as { data?: Record<string, unknown> } & Record<string, unknown>;
+        const raw = (wrapped?.data ?? wrapped ?? {}) as Record<string, unknown>;
+        const summary = (raw.summary ?? {}) as Record<string, unknown>;
         // Normalise daily_revenue → [{ date, value }]
-        const daily_revenue = (raw?.daily_revenue ?? []).map(p => ({
-          date: p.date,
+        const daily_revenue = ((raw.daily_revenue ?? []) as Record<string, unknown>[]).map(p => ({
+          date: p.date as string,
           value: Number(p.revenue ?? p.value ?? 0),
         }));
         // Normalise daily_playtime → [{ date, value }]
-        const daily_playtime = (raw?.daily_playtime ?? []).map(p => ({
-          date: p.date,
+        const daily_playtime = ((raw.daily_playtime ?? []) as Record<string, unknown>[]).map(p => ({
+          date: p.date as string,
           value: Number(p.minutes ?? p.playtime_minutes ?? p.value ?? 0),
         }));
         setAnalytics({
-          game_id: raw?.game_id ?? gameId,
-          game_title: raw?.game_title ?? raw?.title ?? 'Game',
+          game_id: (raw.game_id as string | undefined) ?? gameId ?? '',
+          game_title: (raw.game_title as string | undefined) ?? (raw.title as string | undefined) ?? 'Game',
           summary: {
-            total_revenue:  Number(raw?.summary?.total_revenue  ?? 0),
-            active_players: Number(raw?.summary?.active_players ?? 0),
-            total_sessions: Number(raw?.summary?.total_sessions ?? 0),
+            total_revenue:  Number(summary.total_revenue  ?? 0),
+            active_players: Number(summary.active_players ?? 0),
+            total_sessions: Number(summary.total_sessions ?? 0),
           },
           daily_revenue,
           daily_playtime,
@@ -144,18 +176,22 @@ export default function GameAnalytics() {
       }
 
       if (gamesRes.status === 'fulfilled') {
-        const d = gamesRes.value?.data ?? gamesRes.value;
+        const wrapped = gamesRes.value as { data?: unknown } | unknown[];
+        const d = (!Array.isArray(wrapped) ? wrapped?.data : wrapped) as
+          | Record<string, unknown>[]
+          | { games?: Record<string, unknown>[] }
+          | undefined;
         const list = Array.isArray(d) ? d : (d?.games ?? []);
         setGamesBreakdown(list.map(g => ({
-          id: g.id,
-          title: g.title,
+          id: g.id as string | number,
+          title: g.title as string,
           revenue: Number(g.total_revenue ?? g.earnings ?? 0),
           players: Number(g.total_players ?? g.players ?? 0),
           sessions: Number(g.total_sessions ?? g.sessions ?? 0),
         })));
       }
     } catch (err) {
-      setLoadError(err.message || t('analytics.loadError'));
+      setLoadError((err instanceof Error && err.message) || t('analytics.loadError'));
     } finally {
       setLoading(false);
     }
@@ -174,8 +210,8 @@ export default function GameAnalytics() {
   /* Derived KPIs from visible window (if range is filtered, show window sum) */
   const windowRevenue = revSeries.length ? sum(revSeries) : (analytics?.summary?.total_revenue ?? 0);
   const windowMinutes = playSeries.length ? sum(playSeries) : 0;
-  const fmtUsd = (v) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  const fmtMin = (v) => `${Math.round(v).toLocaleString()} ${t('analytics.min')}`;
+  const fmtUsd = (v: number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const fmtMin = (v: number) => `${Math.round(v).toLocaleString()} ${t('analytics.min')}`;
 
   return (
     <Layout>
