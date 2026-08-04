@@ -27,7 +27,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.js'],
+    setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'magnetite-web-client/src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     // The axe page/component a11y suite (*.a11y.test.jsx) is excluded here and
     // run separately via `npm run test:a11y` (vitest.a11y.config.js), which

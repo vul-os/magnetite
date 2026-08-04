@@ -38,7 +38,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/test/setup.js'],
+    setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.a11y.test.{jsx,tsx}'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**', '**/target/**'],
     // Serialize axe so two runs are never in flight at once.

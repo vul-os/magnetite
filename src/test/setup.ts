@@ -13,16 +13,19 @@ class MockObserver {
   }
 }
 if (typeof globalThis.IntersectionObserver === 'undefined') {
-  globalThis.IntersectionObserver = MockObserver;
+  // MockObserver is intentionally a minimal stub, not a full IntersectionObserver
+  // (it lacks root/rootMargin/thresholds) — cast through `unknown` rather than
+  // pad it with unused dummy properties just to satisfy the DOM lib type.
+  globalThis.IntersectionObserver = MockObserver as unknown as typeof IntersectionObserver;
 }
 if (typeof globalThis.ResizeObserver === 'undefined') {
-  globalThis.ResizeObserver = MockObserver;
+  globalThis.ResizeObserver = MockObserver as unknown as typeof ResizeObserver;
 }
 
 // jsdom doesn't implement matchMedia; provide a no-op MediaQueryList so
 // useMediaQuery (and anything else) can mount. Defaults to "does not match".
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
-  window.matchMedia = (query) => ({
+  window.matchMedia = (query: string): MediaQueryList => ({
     matches: false,
     media: query,
     onchange: null,
