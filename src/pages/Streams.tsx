@@ -1,14 +1,43 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
 import Navbar from '../components/Navbar';
 import StreamCard from '../components/streaming/StreamCard';
 import StreamPlayer from '../components/streaming/StreamPlayer';
 import GoLivePanel from '../components/streaming/GoLivePanel';
+import type { LiveStreamInfo } from '../components/streaming/GoLivePanel';
+import type { MessageListMessage } from '../components/comms/MessageList';
 import { api } from '../api/client';
 import './Streams.css';
 
 // ── Mock stream data — only used when VITE_USE_MOCKS=true ───────────────────
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
+interface StreamItem {
+  id?: string | number;
+  title?: string;
+  game?: string;
+  streamer?: string;
+  viewerCount?: number;
+  thumbnailUrl?: string;
+  liveAt?: string;
+  communityId?: string;
+  hlsUrl?: string;
+  [key: string]: unknown;
+}
+
+// Actual shape produced by makeMockChatMessages/handleChatSend below — richer
+// than MessageListMessage (author is an object here, not a display-name
+// string), so it's passed to StreamPlayer via a documented cast. See handleWatch.
+interface MockChatMessage {
+  id: string;
+  channel_id: string;
+  author: { id: string; username: string; display_name: string };
+  authorId: string;
+  content: string;
+  createdAt: string;
+  created_at: string;
+}
 
 const MOCK_STREAMS = [
   {
@@ -74,7 +103,7 @@ const MOCK_STREAMS = [
 ];
 
 // Mock chat messages for a stream
-function makeMockChatMessages(streamer) {
+function makeMockChatMessages(streamer: string | undefined): MockChatMessage[] {
   const now = Date.now();
   return [
     {
@@ -119,11 +148,11 @@ function makeMockChatMessages(streamer) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Streams() {
-  const [streams, setStreams]           = useState(USE_MOCKS ? MOCK_STREAMS : []);
+  const [streams, setStreams]           = useState<StreamItem[]>(USE_MOCKS ? (MOCK_STREAMS as unknown as StreamItem[]) : []);
   const [loading, setLoading]           = useState(!USE_MOCKS);
-  const [streamsError, setStreamsError] = useState(null);
-  const [watchingStream, setWatching]   = useState(null);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [streamsError, setStreamsError] = useState<string | null>(null);
+  const [watchingStream, setWatching]   = useState<StreamItem | null>(null);
+  const [chatMessages, setChatMessages] = useState<MockChatMessage[]>([]);
   const [showGoLive, setShowGoLive]     = useState(false);
   const [filter, setFilter]             = useState('');
 
@@ -137,16 +166,19 @@ export default function Streams() {
       setLoading(true);
       setStreamsError(null);
       try {
-        const data = await api.streams.list('global');
+        const data = await api.streams.list('global') as
+          | { streams?: StreamItem[] }
+          | StreamItem[]
+          | null;
         if (!cancelled) {
-          const result = Array.isArray(data?.streams)
+          const result = !Array.isArray(data) && Array.isArray(data?.streams)
             ? data.streams
             : (Array.isArray(data) ? data : []);
           setStreams(result);
         }
       } catch (err) {
         if (!cancelled) {
-          setStreamsError(err.message ?? 'Failed to load streams');
+          setStreamsError((err instanceof Error ? err.message : undefined) ?? 'Failed to load streams');
           setStreams([]);
         }
       } finally {
@@ -159,7 +191,7 @@ export default function Streams() {
   }, []);
 
   // ── Watch stream ──────────────────────────────────────────────────────────────
-  const handleWatch = useCallback(async (stream) => {
+  const handleWatch = useCallback(async (stream: StreamItem) => {
     setWatching(stream);
     setShowGoLive(false);
     // Seed chat with mocks only in mock mode; in production the comms WS feeds messages
@@ -170,8 +202,12 @@ export default function Streams() {
     }
 
     // Try to resolve the real HLS/watch URL from the backend.
+    // stream.id is always present for a stream reachable via handleWatch (both
+    // mock and API-sourced streams always carry one); non-null asserted below.
     try {
-      const watchData = await api.streams.watch(stream.id).catch(() => null);
+      const watchData = await api.streams.watch(stream.id!).catch(() => null) as
+        | { hls_url?: string; watch_url?: string }
+        | null;
       if (watchData?.hls_url || watchData?.watch_url) {
         setWatching((prev) => prev
           ? { ...prev, hlsUrl: watchData.hls_url ?? watchData.watch_url }
@@ -179,7 +215,7 @@ export default function Streams() {
         );
       } else if (!stream.hlsUrl) {
         // Derive an HLS URL from the backend convention.
-        const derivedUrl = api.streams.hlsUrl(stream.id);
+        const derivedUrl = api.streams.hlsUrl(stream.id!);
         setWatching((prev) => prev ? { ...prev, hlsUrl: derivedUrl } : prev);
       }
     } catch {
@@ -191,8 +227,8 @@ export default function Streams() {
     setWatching(null);
   }, []);
 
-  const handleChatSend = useCallback((text) => {
-    const msg = {
+  const handleChatSend = useCallback((text: string) => {
+    const msg: MockChatMessage = {
       id: `sc-${Date.now()}`,
       channel_id: 'stream-chat',
       author: { id: 'me', username: 'you', display_name: 'You' },
@@ -205,7 +241,7 @@ export default function Streams() {
   }, []);
 
   // ── Go live ───────────────────────────────────────────────────────────────────
-  const handleLive = useCallback((stream) => {
+  const handleLive = useCallback((stream: LiveStreamInfo) => {
     setShowGoLive(false);
     setStreams((prev) => [
       { ...stream, liveAt: new Date().toISOString(), viewerCount: 0 },
@@ -233,7 +269,13 @@ export default function Streams() {
         <main id="main-content" className="streams-watch-main">
           <StreamPlayer
             stream={watchingStream}
-            messages={chatMessages}
+            // NOTE (pre-existing bug, not fixed here — MessageListMessage.author
+            // is a display-name string, but these mock/local chat messages carry
+            // an {id,username,display_name} object under `author`, so
+            // MessageList's `{msg.author}` render would throw "Objects are not
+            // valid as a React child" if this code path were exercised).
+            // Cast preserves that exact prior shape through the type checker.
+            messages={chatMessages as unknown as MessageListMessage[]}
             onSend={handleChatSend}
             onClose={handleCloseWatch}
           />
