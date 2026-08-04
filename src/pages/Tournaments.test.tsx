@@ -16,6 +16,7 @@
 //   - Filter tabs change visible tournaments
 //   - formatPrize / formatFee display helpers
 
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -27,7 +28,7 @@ vi.mock('./Tournaments.css', () => ({}));
 // ── Mock Layout ───────────────────────────────────────────────────────────────
 
 vi.mock('../components/Layout', () => ({
-  default: ({ children }) => <div data-testid="layout">{children}</div>,
+  default: ({ children }: { children: ReactNode }) => <div data-testid="layout">{children}</div>,
 }));
 
 // ── Mock api client ───────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ function renderTournaments() {
 
 describe('Tournaments — loading state', () => {
   beforeEach(() => {
-    api.tournaments.list.mockReturnValue(new Promise(() => {}));
+    vi.mocked(api.tournaments.list).mockReturnValue(new Promise(() => {}));
   });
 
   afterEach(() => {
@@ -137,7 +138,7 @@ describe('Tournaments — loading state', () => {
 
 describe('Tournaments — error state', () => {
   beforeEach(() => {
-    api.tournaments.list.mockRejectedValue(new Error('Server unreachable'));
+    vi.mocked(api.tournaments.list).mockRejectedValue(new Error('Server unreachable'));
   });
 
   afterEach(() => {
@@ -159,7 +160,7 @@ describe('Tournaments — error state', () => {
 
 describe('Tournaments — empty list', () => {
   beforeEach(() => {
-    api.tournaments.list.mockResolvedValue({ data: [] });
+    vi.mocked(api.tournaments.list).mockResolvedValue({ data: [] });
   });
 
   afterEach(() => {
@@ -180,7 +181,7 @@ describe('Tournaments — empty list', () => {
 
 describe('Tournaments — populated list', () => {
   beforeEach(() => {
-    api.tournaments.list.mockResolvedValue({ data: TOURNAMENTS });
+    vi.mocked(api.tournaments.list).mockResolvedValue({ data: TOURNAMENTS });
   });
 
   afterEach(() => {
@@ -256,8 +257,8 @@ describe('Tournaments — populated list', () => {
 
 describe('Tournaments — bracket view', () => {
   beforeEach(() => {
-    api.tournaments.list.mockResolvedValue({ data: TOURNAMENTS });
-    api.tournaments.get.mockResolvedValue({ data: TOURNAMENT_DETAIL });
+    vi.mocked(api.tournaments.list).mockResolvedValue({ data: TOURNAMENTS });
+    vi.mocked(api.tournaments.get).mockResolvedValue({ data: TOURNAMENT_DETAIL });
   });
 
   afterEach(() => {
@@ -351,8 +352,8 @@ describe('Tournaments — bracket view', () => {
 
 describe('Tournaments — empty bracket state', () => {
   beforeEach(() => {
-    api.tournaments.list.mockResolvedValue({ data: [TOURNAMENTS[0]] });
-    api.tournaments.get.mockResolvedValue({
+    vi.mocked(api.tournaments.list).mockResolvedValue({ data: [TOURNAMENTS[0]] });
+    vi.mocked(api.tournaments.get).mockResolvedValue({
       data: {
         tournament: TOURNAMENTS[0],
         participants: [],
@@ -383,7 +384,7 @@ describe('Tournaments — empty bracket state', () => {
 
 describe('Tournaments — create modal', () => {
   beforeEach(() => {
-    api.tournaments.list.mockResolvedValue({ data: TOURNAMENTS });
+    vi.mocked(api.tournaments.list).mockResolvedValue({ data: TOURNAMENTS });
   });
 
   afterEach(() => {
@@ -421,7 +422,7 @@ describe('Tournaments — create modal', () => {
     // (clicking submit triggers native required-field validation that blocks handleSubmit).
     const form = document.querySelector('form');
     expect(form).not.toBeNull();
-    fireEvent.submit(form);
+    fireEvent.submit(form!);
 
     // The React handler checks name.trim() === '' and sets an error via setErr
     await waitFor(() => {
@@ -449,7 +450,7 @@ describe('Tournaments — create modal', () => {
 
 describe('Tournaments — formatPrize and formatFee display', () => {
   beforeEach(() => {
-    api.tournaments.list.mockResolvedValue({
+    vi.mocked(api.tournaments.list).mockResolvedValue({
       data: [
         { ...TOURNAMENTS[0], prize_pool: '1000.00', entry_fee: '5.00', status: 'Registration' },
         { ...TOURNAMENTS[1], prize_pool: '0', entry_fee: null, status: 'Draft' },
