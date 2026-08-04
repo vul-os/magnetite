@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Input from '../components/common/Input';
@@ -8,15 +9,23 @@ import { useTranslation } from '../i18n/useTranslation';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-const BLANK_PROFILE = { username: '', bio: '', location: '', avatar: '' };
+interface ProfileFormData {
+  username: string;
+  bio: string;
+  location: string;
+  avatar: string;
+  [key: string]: unknown;
+}
+
+const BLANK_PROFILE: ProfileFormData = { username: '', bio: '', location: '', avatar: '' };
 
 export default function EditProfile() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState(BLANK_PROFILE);
-  const [avatarFile, setAvatarFile] = useState(null);
+  const [formData, setFormData] = useState<ProfileFormData>(BLANK_PROFILE);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [isSaving, setIsSaving]     = useState(false);
-  const [loadError, setLoadError]   = useState(null);
+  const [loadError, setLoadError]   = useState<string | null>(null);
 
   useEffect(() => {
     async function loadProfile() {
@@ -34,7 +43,7 @@ export default function EditProfile() {
       }
 
       try {
-        const me = await api.auth.me();
+        const me = await api.auth.me() as Partial<ProfileFormData> | null;
         if (me) {
           setFormData({
             username: me.username || '',
@@ -44,19 +53,19 @@ export default function EditProfile() {
           });
         }
       } catch (err) {
-        setLoadError(err.message || 'Failed to load profile');
+        setLoadError((err instanceof Error && err.message) || 'Failed to load profile');
       }
     }
     loadProfile();
   }, []);
 
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
+  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       setAvatarFile(file);
       const previewUrl = URL.createObjectURL(file);
@@ -64,7 +73,7 @@ export default function EditProfile() {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
     try {
@@ -163,7 +172,10 @@ export default function EditProfile() {
             <Button
               type="submit"
               variant="primary"
-              loading={isSaving}
+              // NOTE (pre-existing bug, not fixed here — Button's real loading
+              // prop is `isLoading`; `loading` isn't part of ButtonProps and is
+              // silently forwarded onto the DOM <button> as an unknown attribute).
+              {...({ loading: isSaving } as Record<string, boolean>)}
             >
               {t('account.saveChanges')}
             </Button>
