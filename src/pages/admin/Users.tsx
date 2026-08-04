@@ -7,7 +7,28 @@ import './admin.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+interface AdminUser {
+  id: string | number;
+  username: string;
+  email: string;
+  verified: boolean;
+  developer: boolean;
+  banned: boolean;
+  createdAt: string;
+  games: number;
+}
+
+interface RawUser {
+  id: string | number;
+  username: string;
+  email: string;
+  banned_at?: string | null;
+  is_developer?: boolean;
+  created_at?: string;
+  games?: number;
+}
+
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -20,7 +41,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_USERS = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_USERS: AdminUser[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 1,  username: 'CryptoGamer42',   email: 'crypto@example.com',    verified: true,  developer: true,  banned: false, createdAt: '2024-01-15', games: 3  },
       { id: 2,  username: 'PixelMaster',     email: 'pixel@example.com',     verified: true,  developer: true,  banned: false, createdAt: '2024-02-20', games: 7  },
@@ -42,7 +63,7 @@ const SORT_OPTIONS = [
   { value: 'username', label: 'Username'    },
 ];
 
-function normaliseUser(u) {
+function normaliseUser(u: RawUser): AdminUser {
   return {
     id:        u.id,
     username:  u.username,
@@ -56,16 +77,16 @@ function normaliseUser(u) {
 }
 
 export default function Users() {
-  const [users, setUsers]             = useState(MOCK_USERS ? MOCK_USERS.map(u => ({ ...u })) : []);
+  const [users, setUsers]             = useState<AdminUser[]>(MOCK_USERS ? MOCK_USERS.map(u => ({ ...u })) : []);
   const [loading, setLoading]         = useState(!MOCK_USERS);
-  const [error, setError]             = useState(null);
+  const [error, setError]             = useState<string | null>(null);
   const [search, setSearch]           = useState('');
   const [filter, setFilter]           = useState('all');
   const [sort, setSort]               = useState('date');
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage]         = useState(10);
-  const [actionLoading, setActionLoading] = useState(null);
-  const [actionError, setActionError]     = useState(null);
+  const [actionLoading, setActionLoading] = useState<AdminUser['id'] | null>(null);
+  const [actionError, setActionError]     = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     if (import.meta.env.VITE_USE_MOCKS === 'true') return;
@@ -74,11 +95,11 @@ export default function Users() {
     try {
       const res = await authFetch('/api/admin/users?limit=200');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const raw = json.data ?? json ?? [];
+      const json = await res.json() as { data?: RawUser[] } | RawUser[];
+      const raw = (!Array.isArray(json) ? json.data : json) ?? [];
       setUsers(Array.isArray(raw) ? raw.map(normaliseUser) : []);
     } catch (err) {
-      setError(err.message || 'Failed to load users');
+      setError((err instanceof Error && err.message) || 'Failed to load users');
     } finally {
       setLoading(false);
     }
@@ -102,7 +123,7 @@ export default function Users() {
     list.sort((a, b) =>
       sort === 'username'
         ? a.username.localeCompare(b.username)
-        : new Date(b.createdAt) - new Date(a.createdAt)
+        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     return list;
   }, [users, search, filter, sort]);
@@ -112,11 +133,11 @@ export default function Users() {
     return filteredUsers.slice(start, start + perPage);
   }, [filteredUsers, currentPage, perPage]);
 
-  const handleAction = async (action, userId) => {
+  const handleAction = async (action: string, userId: AdminUser['id']) => {
     setActionLoading(userId);
     setActionError(null);
     try {
-      let res;
+      let res: Response | undefined;
       if (action === 'ban') {
         res = await authFetch(`/api/admin/users/${userId}/ban`, {
           method: 'PUT',
@@ -134,7 +155,7 @@ export default function Users() {
         });
       }
       if (res && !res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { message?: string };
         throw new Error(err.message || `Action failed (HTTP ${res.status})`);
       }
       /* optimistic update */
@@ -146,7 +167,7 @@ export default function Users() {
         return u;
       }));
     } catch (err) {
-      setActionError(err.message);
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setActionLoading(null);
     }
@@ -278,12 +299,16 @@ export default function Users() {
                       <td>
                         <div className="action-buttons">
                           <Button variant="ghost" size="sm">View</Button>
+                          {/* NOTE (pre-existing bug in all three Buttons below, not
+                              fixed here — Button's real loading prop is `isLoading`;
+                              `loading` isn't part of ButtonProps and is silently
+                              forwarded onto the DOM <button> as an unknown attribute). */}
                           {!user.banned ? (
                             <Button
                               variant="danger"
                               size="sm"
-                              loading={actionLoading === user.id}
                               onClick={() => handleAction('ban', user.id)}
+                              {...({ loading: actionLoading === user.id } as Record<string, boolean>)}
                             >
                               Ban
                             </Button>
@@ -291,8 +316,8 @@ export default function Users() {
                             <Button
                               variant="secondary"
                               size="sm"
-                              loading={actionLoading === user.id}
                               onClick={() => handleAction('unban', user.id)}
+                              {...({ loading: actionLoading === user.id } as Record<string, boolean>)}
                             >
                               Unban
                             </Button>
@@ -301,8 +326,8 @@ export default function Users() {
                             <Button
                               variant="primary"
                               size="sm"
-                              loading={actionLoading === user.id}
                               onClick={() => handleAction('verify', user.id)}
+                              {...({ loading: actionLoading === user.id } as Record<string, boolean>)}
                             >
                               Verify
                             </Button>
