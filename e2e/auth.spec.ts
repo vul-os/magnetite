@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { LoginPage } from './page-objects/login.page.js';
+import { LoginPage } from './page-objects/login.page';
 
 test.describe('Auth', () => {
-  let loginPage;
+  let loginPage: LoginPage;
 
   test.beforeEach(async ({ page }) => {
     loginPage = new LoginPage(page);
