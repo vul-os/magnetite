@@ -1,11 +1,42 @@
 import { useState, useEffect, useRef } from 'react';
+import type { ChangeEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import './Matchmaking.css';
 
+interface MatchmakingGame {
+  id: string;
+  name: string;
+  players?: number;
+}
+
+interface MatchOpponent {
+  username?: string;
+  rating?: number | string;
+  [key: string]: unknown;
+}
+
+interface MatchGame {
+  name?: string;
+  [key: string]: unknown;
+}
+
+interface MatchInfo {
+  opponent?: MatchOpponent;
+  opponent_username?: string;
+  opponent_rating?: number | string;
+  game?: MatchGame;
+  game_name?: string;
+  sessionId?: string;
+  session_id?: string;
+  timeControl?: string;
+  time_control?: string;
+  [key: string]: unknown;
+}
+
 // ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
-const MOCK_GAMES = [
+const MOCK_GAMES: MatchmakingGame[] = [
   { id: 'void-raiders',  name: 'Void Raiders',  players: 24 },
   { id: 'iron-siege',    name: 'Iron Siege',     players: 18 },
   { id: 'rust-runner',   name: 'Rust Runner',    players: 31 },
@@ -18,18 +49,18 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 // Converts http(s):// → ws(s):// so there is never a hardcoded localhost.
 function getWsBase() {
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-  return apiUrl.replace(/^http(s?):\/\//, (_, s) => `ws${s}://`);
+  return apiUrl.replace(/^http(s?):\/\//, (_: string, s: string) => `ws${s}://`);
 }
 
 export default function Matchmaking() {
   const [searchParams]    = useSearchParams();
-  const [games, setGames]               = useState(USE_MOCKS ? MOCK_GAMES : []);
+  const [games, setGames]               = useState<MatchmakingGame[]>(USE_MOCKS ? MOCK_GAMES : []);
   const [gamesLoading, setGamesLoading] = useState(!USE_MOCKS);
-  const [gamesError, setGamesError]     = useState(null);
+  const [gamesError, setGamesError]     = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState(searchParams.get('game') || '');
-  const [status, setStatus]             = useState('idle');
+  const [status, setStatus]             = useState<'idle' | 'searching' | 'found'>('idle');
   const [queueInfo, setQueueInfo]       = useState({ waitTime: 0, playersInQueue: 0 });
-  const [match, setMatch]               = useState(null);
+  const [match, setMatch]               = useState<MatchInfo | null>(null);
 
   // ── Fetch game list ────────────────────────────────────────────────────────
   // Fetch the game list from the API (external system) on mount.
@@ -44,12 +75,14 @@ export default function Matchmaking() {
     api.games.list()
       .then((data) => {
         if (!cancelled) {
-          const list = Array.isArray(data?.games) ? data.games : (Array.isArray(data) ? data : []);
+          const typed = data as MatchmakingGame[] | { games?: MatchmakingGame[] } | null;
+          const nestedGames = typed && !Array.isArray(typed) ? typed.games : undefined;
+          const list = Array.isArray(nestedGames) ? nestedGames : (Array.isArray(typed) ? typed : []);
           setGames(list);
         }
       })
       .catch((err) => {
-        if (!cancelled) setGamesError(err.message ?? 'Failed to load games');
+        if (!cancelled) setGamesError((err instanceof Error ? err.message : undefined) ?? 'Failed to load games');
       })
       .finally(() => {
         if (!cancelled) setGamesLoading(false);
@@ -59,7 +92,7 @@ export default function Matchmaking() {
   }, []);
 
   // ── Matchmaking status polling (while searching) ───────────────────────────
-  const statusIntervalRef = useRef(null);
+  const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── WebSocket for real-time matchmaking events ─────────────────────────────
   // Only activate the WS hook when we have a selected game and are searching.
@@ -87,15 +120,17 @@ export default function Matchmaking() {
 
   // Handle WS messages from the matchmaking server (external system).
   useEffect(() => {
-    if (!wsMessage) return;
+    // wsMessage can be a raw string per useWebSocket's typing; that never
+    // matches the .type checks below (a string has no .type), same as before.
+    if (!wsMessage || typeof wsMessage === 'string') return;
     if (wsMessage.type === 'queue_update') {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setQueueInfo({
-        waitTime: wsMessage.waitTime ?? wsMessage.wait_seconds ?? queueInfo.waitTime,
-        playersInQueue: wsMessage.playersInQueue ?? wsMessage.players_in_queue ?? queueInfo.playersInQueue,
+        waitTime: (wsMessage.waitTime ?? wsMessage.wait_seconds ?? queueInfo.waitTime) as number,
+        playersInQueue: (wsMessage.playersInQueue ?? wsMessage.players_in_queue ?? queueInfo.playersInQueue) as number,
       });
     } else if (wsMessage.type === 'match_found') {
-      setMatch(wsMessage.match);
+      setMatch(wsMessage.match as MatchInfo);
       setStatus('found');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,9 +146,13 @@ export default function Matchmaking() {
 
       // Also poll the REST status endpoint to sync queue count
       try {
-        const data = await api.matchmaking.status();
+        const data = await api.matchmaking.status() as {
+          players_in_queue?: number;
+          status?: string;
+          match?: MatchInfo;
+        } | null;
         if (data?.players_in_queue != null) {
-          setQueueInfo(prev => ({ ...prev, playersInQueue: data.players_in_queue }));
+          setQueueInfo(prev => ({ ...prev, playersInQueue: data.players_in_queue as number }));
         }
         if (data?.status === 'matched' && data?.match) {
           setMatch(data.match);
@@ -124,7 +163,7 @@ export default function Matchmaking() {
       }
     }, 1000);
 
-    return () => clearInterval(statusIntervalRef.current);
+    return () => clearInterval(statusIntervalRef.current ?? undefined);
   }, [status]);
 
   const handleFindMatch = () => {
@@ -137,7 +176,7 @@ export default function Matchmaking() {
   };
 
   const handleCancel = () => {
-    clearInterval(statusIntervalRef.current);
+    clearInterval(statusIntervalRef.current ?? undefined);
     wsSend({ type: 'leave_queue' });
     api.matchmaking.leave().catch(() => {});
     setStatus('idle');
@@ -169,7 +208,7 @@ export default function Matchmaking() {
               <select
                 id="mm-game-select"
                 value={selectedGame}
-                onChange={(e) => setSelectedGame(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedGame(e.target.value)}
                 className="game-select"
                 disabled={gamesLoading}
               >
