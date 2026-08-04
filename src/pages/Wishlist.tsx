@@ -6,6 +6,7 @@ import EmptyState from '../components/empty/EmptyState';
 import { mockGames } from '../data/mockGames';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
+import type { Game } from '../types/domain';
 import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -18,8 +19,8 @@ const WishlistEmptyIcon = (
 
 export default function Wishlist() {
   const { t } = useTranslation();
-  const [wishlistGames, setWishlistGames] = useState(useMocks ? mockGames.slice(0, 3) : []);
-  const [removingId, setRemovingId]       = useState(null);
+  const [wishlistGames, setWishlistGames] = useState<Game[]>(useMocks ? mockGames.slice(0, 3) : []);
+  const [removingId, setRemovingId]       = useState<Game['id'] | null>(null);
   const [loading, setLoading]             = useState(true);
 
   // Load the wishlist from the API (external system); the mock branch resolves
@@ -36,7 +37,11 @@ export default function Wishlist() {
       try {
         const data = await api.wishlist.list();
         if (!cancelled && data) {
-          const list = Array.isArray(data) ? data : (data?.games ?? data?.items ?? null);
+          const list: Game[] | null = Array.isArray(data)
+            ? (data as Game[])
+            : ((data as { games?: Game[]; items?: Game[] }).games
+                ?? (data as { games?: Game[]; items?: Game[] }).items
+                ?? null);
           if (list != null) setWishlistGames(list);
         }
       } catch { /* API unavailable — empty list is the honest state */ } finally {
@@ -48,7 +53,7 @@ export default function Wishlist() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleRemove = async (gameId) => {
+  const handleRemove = async (gameId: Game['id']) => {
     setRemovingId(gameId);
     try {
       await api.wishlist.remove(gameId);
@@ -103,7 +108,13 @@ export default function Wishlist() {
                   variant="danger"
                   size="sm"
                   onClick={() => handleRemove(game.id)}
-                  loading={removingId === game.id}
+                  // NOTE (pre-existing bug, not fixed here — Button's real loading
+                  // prop is `isLoading`; `loading` isn't part of ButtonProps and is
+                  // silently forwarded onto the DOM <button> as an unknown attribute,
+                  // so the remove button never actually shows its spinner state).
+                  // Spread rather than a plain prop to preserve that exact behavior
+                  // through the type checker.
+                  {...({ loading: removingId === game.id } as Record<string, boolean>)}
                   className="remove-button"
                   aria-label={t('wishlist.removeLabel', { title: game.title })}
                 >
