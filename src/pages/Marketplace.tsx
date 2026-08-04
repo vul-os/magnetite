@@ -5,11 +5,20 @@ import OnboardingTour from '../components/OnboardingTour';
 import { useTour } from '../hooks/useTour';
 import { useGames } from '../hooks/useGames';
 import { useTranslation } from '../i18n/useTranslation';
+import type { Game } from '../types/domain';
 import './Marketplace.css';
 
 const TOUR_KEY = 'magnetite_marketplace_tour_done';
 
-const MARKETPLACE_TOUR_STEPS = [
+// Structurally matches OnboardingTour's (unexported) internal OnboardingStep type.
+interface TourStepDef {
+  targetSelector?: string;
+  title?: string;
+  description?: string;
+  position?: 'top' | 'bottom' | 'left' | 'right';
+}
+
+const MARKETPLACE_TOUR_STEPS: TourStepDef[] = [
   {
     targetSelector: '.search-container',
     title: 'Search Games',
@@ -54,7 +63,7 @@ function LoadingSkeleton() {
   );
 }
 
-function EmptyState({ hasFilters, onClearFilters }) {
+function EmptyState({ hasFilters, onClearFilters }: { hasFilters: boolean; onClearFilters: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="empty-state">
@@ -80,7 +89,7 @@ function EmptyState({ hasFilters, onClearFilters }) {
   );
 }
 
-function ErrorState({ message, onRetry }) {
+function ErrorState({ message, onRetry }: { message?: string | null; onRetry?: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="empty-state" role="alert">
@@ -135,31 +144,34 @@ export default function Marketplace() {
     return { games: allGames.length, online: totalOnline, free: freeCount };
   }, [allGames]);
 
+  // title/developer/fee_per_session/rating/players_online are typed optional on
+  // Game, but every real and mock game populates them; non-null assertions
+  // preserve the exact original behavior (including a crash if one were ever
+  // absent) rather than substituting fallbacks that would change results.
   const filteredGames = useMemo(() => {
     let games = allGames.filter(game => {
       const matchesSearch   = game.title.toLowerCase().includes(search.toLowerCase()) ||
-                              game.developer.toLowerCase().includes(search.toLowerCase());
+                              game.developer!.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = category === 'All' || game.category === category;
-      const matchesPrice    = game.fee_per_session >= priceRange[0] && game.fee_per_session <= priceRange[1];
+      const matchesPrice    = game.fee_per_session! >= priceRange[0] && game.fee_per_session! <= priceRange[1];
       return matchesSearch && matchesCategory && matchesPrice;
     });
-
     switch (sortBy) {
       case 'new':
         games = [...games].sort((a, b) => (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0));
         break;
       case 'price-low':
-        games = [...games].sort((a, b) => a.fee_per_session - b.fee_per_session);
+        games = [...games].sort((a, b) => a.fee_per_session! - b.fee_per_session!);
         break;
       case 'price-high':
-        games = [...games].sort((a, b) => b.fee_per_session - a.fee_per_session);
+        games = [...games].sort((a, b) => b.fee_per_session! - a.fee_per_session!);
         break;
       case 'rating':
-        games = [...games].sort((a, b) => b.rating - a.rating);
+        games = [...games].sort((a, b) => b.rating! - a.rating!);
         break;
       case 'popular':
       default:
-        games = [...games].sort((a, b) => b.players_online - a.players_online);
+        games = [...games].sort((a, b) => b.players_online! - a.players_online!);
         break;
     }
     return games;
@@ -172,7 +184,7 @@ export default function Marketplace() {
     setSortBy('popular');
   };
 
-  const removeFilter = (filterType) => {
+  const removeFilter = (filterType: string) => {
     switch (filterType) {
       case 'search':   setSearch(''); break;
       case 'category': setCategory('All'); break;
