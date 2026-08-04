@@ -1,4 +1,14 @@
+import type { ReactNode } from 'react';
 import Spinner from '../common/Spinner';
+
+export interface AuthFormProps {
+  children?: ReactNode;
+  logo?: ReactNode;
+  title?: string;
+  subtitle?: string;
+  loading?: boolean;
+  showTerms?: boolean;
+}
 
 export default function AuthForm({
   children,
@@ -7,7 +17,7 @@ export default function AuthForm({
   subtitle,
   loading = false,
   showTerms = true,
-}) {
+}: AuthFormProps) {
   return (
     <div className="auth-card">
       {loading && (
