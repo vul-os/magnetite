@@ -1,14 +1,36 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
-const AccessibilityContext = createContext();
+export type AnnouncementPriority = 'polite' | 'assertive';
 
-export function AccessibilityProvider({ children }) {
+interface Announcement {
+  id: number;
+  message: string;
+  priority: AnnouncementPriority;
+}
+
+interface AccessibilityContextValue {
+  announce: (message: string, priority?: AnnouncementPriority) => void;
+  trapFocus: (containerRef: RefObject<HTMLElement | null>) => (() => void) | undefined;
+  releaseFocus: () => void;
+  enableFocusTrap: () => void;
+  disableFocusTrap: () => void;
+  focusTrapEnabled: boolean;
+}
+
+const AccessibilityContext = createContext<AccessibilityContextValue | undefined>(undefined);
+
+export interface AccessibilityProviderProps {
+  children?: ReactNode;
+}
+
+export function AccessibilityProvider({ children }: AccessibilityProviderProps) {
   const [focusTrapEnabled, setFocusTrapEnabled] = useState(false);
-  const [announcements, setAnnouncements] = useState([]);
-  const announcerRef = useRef(null);
-  const previousActiveElement = useRef(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const announcerRef = useRef<HTMLDivElement | null>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
-  const announce = useCallback((message, priority = 'polite') => {
+  const announce = useCallback((message: string, priority: AnnouncementPriority = 'polite') => {
     const id = Date.now();
     setAnnouncements(prev => [...prev, { id, message, priority }]);
     setTimeout(() => {
@@ -16,7 +38,7 @@ export function AccessibilityProvider({ children }) {
     }, 1000);
   }, []);
 
-  const trapFocus = useCallback((containerRef) => {
+  const trapFocus = useCallback((containerRef: RefObject<HTMLElement | null>) => {
     if (!containerRef?.current) return;
 
     const focusableSelectors = [
@@ -28,13 +50,13 @@ export function AccessibilityProvider({ children }) {
       '[tabindex]:not([tabindex="-1"])',
     ].join(', ');
 
-    const focusableElements = containerRef.current.querySelectorAll(focusableSelectors);
+    const focusableElements = containerRef.current.querySelectorAll<HTMLElement>(focusableSelectors);
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
 
-    previousActiveElement.current = document.activeElement;
+    previousActiveElement.current = document.activeElement as HTMLElement | null;
 
-    const handleTabKey = (e) => {
+    const handleTabKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
 
       if (e.shiftKey) {
@@ -77,19 +99,20 @@ export function AccessibilityProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!announcerRef.current) return;
+    const announcer = announcerRef.current;
+    if (!announcer) return;
 
     const politeAnnouncements = announcements.filter(a => a.priority === 'polite');
     const assertiveAnnouncements = announcements.filter(a => a.priority === 'assertive');
 
     politeAnnouncements.forEach(a => {
-      announcerRef.current.setAttribute('aria-live', 'polite');
-      announcerRef.current.textContent = a.message;
+      announcer.setAttribute('aria-live', 'polite');
+      announcer.textContent = a.message;
     });
 
     assertiveAnnouncements.forEach(a => {
-      announcerRef.current.setAttribute('aria-live', 'assertive');
-      announcerRef.current.textContent = a.message;
+      announcer.setAttribute('aria-live', 'assertive');
+      announcer.textContent = a.message;
     });
   }, [announcements]);
 
