@@ -15,6 +15,7 @@
  * renders anything a user might copy or verify. On a self-hostable node that is
  * not decoration — it is the fact an operator needs.
  */
+import type { HTMLAttributes, JSX, ReactNode } from 'react';
 import './Unavailable.css';
 
 /* ── Icons ────────────────────────────────────────────────────────────────── */
@@ -52,8 +53,14 @@ function AlertIcon() {
  * correct for where the state sits in the document, so a page-level state is an
  * <h2> under the page <h1> and a panel-level state is an <h3>.
  */
-function StateHeading({ level = 2, className, children }) {
-  const Tag = `h${Math.min(Math.max(level, 1), 6)}`;
+interface StateHeadingProps {
+  level?: number;
+  className?: string;
+  children?: ReactNode;
+}
+
+function StateHeading({ level = 2, className, children }: StateHeadingProps) {
+  const Tag = `h${Math.min(Math.max(level, 1), 6)}` as keyof JSX.IntrinsicElements;
   return <Tag className={className}>{children}</Tag>;
 }
 
@@ -71,6 +78,15 @@ function StateHeading({ level = 2, className, children }) {
  * @param {boolean}  inline     Compact variant, for one unavailable action
  *                              inside an otherwise working page.
  */
+export interface UnavailableProps extends HTMLAttributes<HTMLDivElement> {
+  title?: string;
+  children?: ReactNode;
+  endpoints?: string[];
+  headingLevel?: number;
+  actions?: ReactNode;
+  inline?: boolean;
+}
+
 export function Unavailable({
   title = 'Not built yet',
   children,
@@ -80,7 +96,7 @@ export function Unavailable({
   inline = false,
   className = '',
   ...rest
-}) {
+}: UnavailableProps) {
   const cls = [
     inline ? 'state-inline' : 'state',
     'state-unavailable',
@@ -98,7 +114,7 @@ export function Unavailable({
         {title}
       </StateHeading>
       {children && <div className="state-body">{children}</div>}
-      {endpoints?.length > 0 && (
+      {endpoints && endpoints.length > 0 && (
         <ul className="state-manifest" aria-label="Endpoints not mounted on this node">
           {endpoints.map((route) => (
             <li key={route}>
@@ -119,6 +135,14 @@ export function Unavailable({
  * A request that failed. Distinct from <Unavailable>: the capability exists,
  * this attempt did not land, and retrying is a real option.
  */
+export interface LoadErrorProps extends HTMLAttributes<HTMLDivElement> {
+  title?: string;
+  children?: ReactNode;
+  detail?: string;
+  onRetry?: () => void;
+  headingLevel?: number;
+}
+
 export function LoadError({
   title = 'Could not load',
   children,
@@ -127,7 +151,7 @@ export function LoadError({
   headingLevel = 2,
   className = '',
   ...rest
-}) {
+}: LoadErrorProps) {
   return (
     <div className={['state', 'state-error', className].filter(Boolean).join(' ')} {...rest}>
       <AlertIcon />
