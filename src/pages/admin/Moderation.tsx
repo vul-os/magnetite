@@ -35,7 +35,34 @@ const STATUS_TABS = [
   { id: 'all',      label: 'All' },
 ];
 
-const REASON_META = {
+interface Report {
+  id: string;
+  review_id?: string;
+  review_content?: string;
+  reviewer_username?: string;
+  reviewer_id?: string;
+  game_title?: string;
+  game_id?: string;
+  reason?: string;
+  auto_flag_reason?: string | null;
+  reporter_username?: string;
+  reporter_id?: string;
+  created_at: string;
+  status: string;
+  review_rating?: number;
+}
+
+interface ReportActionMsg {
+  text: string;
+  isError: boolean;
+}
+
+interface ReportState {
+  actioning?: string | null;
+  msg?: ReportActionMsg | null;
+}
+
+const REASON_META: Record<string, { label: string; color: string; bg: string }> = {
   inappropriate:   { label: 'Inappropriate', color: '#ff5468', bg: 'rgba(255,84,104,0.1)' },
   spam:            { label: 'Spam',           color: '#f5a524', bg: 'rgba(245,165,36,0.1)' },
   false_information:{ label: 'False Info',   color: '#5b9dff', bg: 'rgba(91,157,255,0.1)' },
@@ -43,7 +70,7 @@ const REASON_META = {
   other:           { label: 'Other',          color: '#6b6b78', bg: 'rgba(107,107,120,0.1)' },
 };
 
-const STATUS_META = {
+const STATUS_META: Record<string, { label: string; color: string }> = {
   pending:   { label: 'Pending',   color: '#f5a524' },
   dismissed: { label: 'Dismissed', color: '#3ddc84' },
   actioned:  { label: 'Actioned',  color: '#7b61ff' },
@@ -52,7 +79,7 @@ const STATUS_META = {
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
-const MOCK_REPORTS = [
+const MOCK_REPORTS: Report[] = [
   {
     id: 'rpt_001',
     review_id: 'rev_001',
@@ -121,8 +148,8 @@ const MOCK_REPORTS = [
 
 // ── ReasonBadge ───────────────────────────────────────────────────────────────
 
-function ReasonBadge({ reason }) {
-  const meta = REASON_META[reason] ?? REASON_META.other;
+function ReasonBadge({ reason }: { reason?: string }) {
+  const meta = REASON_META[reason ?? ''] ?? REASON_META.other;
   return (
     <span
       className="mod-reason-badge"
@@ -135,7 +162,7 @@ function ReasonBadge({ reason }) {
 
 // ── StatusBadge ───────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }) {
+function StatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status] ?? STATUS_META.pending;
   return (
     <span className="mod-status-badge" style={{ color: meta.color }}>
@@ -146,7 +173,7 @@ function StatusBadge({ status }) {
 
 // ── StarRating ────────────────────────────────────────────────────────────────
 
-function StarRating({ rating }) {
+function StarRating({ rating }: { rating?: number }) {
   if (!rating) return null;
   return (
     <span className="mod-star-rating" aria-label={`${rating} out of 5 stars`}>
@@ -161,7 +188,7 @@ function StarRating({ rating }) {
 
 // ── AutoFlagBanner ────────────────────────────────────────────────────────────
 
-function AutoFlagBanner({ reason }) {
+function AutoFlagBanner({ reason }: { reason?: string | null }) {
   if (!reason) return null;
   return (
     <div className="mod-auto-flag" role="note">
@@ -174,7 +201,14 @@ function AutoFlagBanner({ reason }) {
 
 // ── ReportCard ────────────────────────────────────────────────────────────────
 
-function ReportCard({ report, actioning, actionMsg, onAction }) {
+interface ReportCardProps {
+  report: Report;
+  actioning: string | null;
+  actionMsg: ReportActionMsg | null;
+  onAction: (report: Report, action: string) => void;
+}
+
+function ReportCard({ report, actioning, actionMsg, onAction }: ReportCardProps) {
   const [expanded, setExpanded] = useState(false);
   const isPending = report.status === 'pending';
 
@@ -290,7 +324,7 @@ function ReportCard({ report, actioning, actionMsg, onAction }) {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ statusFilter }) {
+function EmptyState({ statusFilter }: { statusFilter: string }) {
   return (
     <div className="mod-empty">
       <div className="mod-empty-icon" aria-hidden="true">✓</div>
@@ -311,14 +345,14 @@ function EmptyState({ statusFilter }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Moderation() {
-  const [reports, setReports]           = useState([]);
+  const [reports, setReports]           = useState<Report[]>([]);
   const [loading, setLoading]           = useState(true);
-  const [loadError, setLoadError]       = useState(null);
+  const [loadError, setLoadError]       = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('pending');
   const [page, setPage]                 = useState(1);
   const [total, setTotal]               = useState(0);
   // Per-report action state: { [reportId]: { actioning: string|null, msg: {text,isError}|null } }
-  const [reportStates, setReportStates] = useState({});
+  const [reportStates, setReportStates] = useState<Record<string, ReportState>>({});
 
   // ── Fetch reports ─────────────────────────────────────────────────────────
 
@@ -343,12 +377,16 @@ export default function Moderation() {
         offset: (page - 1) * PAGE_SIZE,
         ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
       };
-      const data = await api.admin.reviewReports(params);
+      const data = await api.admin.reviewReports(params) as
+        | Report[]
+        | { reports?: Report[]; items?: Report[]; total?: number }
+        | null;
       const list = Array.isArray(data) ? data : (data?.reports ?? data?.items ?? []);
       setReports(list);
-      setTotal(data?.total ?? list.length);
+      const dataTotal = !Array.isArray(data) ? data?.total : undefined;
+      setTotal(dataTotal ?? list.length);
     } catch (err) {
-      setLoadError(err.message || 'Failed to load moderation reports');
+      setLoadError((err instanceof Error && err.message) || 'Failed to load moderation reports');
     } finally {
       setLoading(false);
     }
@@ -360,14 +398,14 @@ export default function Moderation() {
 
   // ── Handle moderation actions ──────────────────────────────────────────────
 
-  const setReportState = useCallback((reportId, updates) => {
+  const setReportState = useCallback((reportId: string, updates: ReportState) => {
     setReportStates(prev => ({
       ...prev,
       [reportId]: { ...(prev[reportId] ?? {}), ...updates },
     }));
   }, []);
 
-  const handleAction = useCallback(async (report, action) => {
+  const handleAction = useCallback(async (report: Report, action: string) => {
     const { id: reportId } = report;
     setReportState(reportId, { actioning: action, msg: null });
 
@@ -386,7 +424,7 @@ export default function Moderation() {
         r.id === reportId ? { ...r, status: newStatus } : r
       ));
 
-      const successMessages = {
+      const successMessages: Record<string, string> = {
         dismiss:       'Report dismissed — review kept.',
         warn:          'User warned and report dismissed.',
         remove_review: 'Review removed.',
@@ -401,7 +439,7 @@ export default function Moderation() {
     } catch (err) {
       setReportState(reportId, {
         actioning: null,
-        msg: { text: `Error: ${err.message || 'Action failed'}`, isError: true },
+        msg: { text: `Error: ${err instanceof Error ? err.message : 'Action failed'}`, isError: true },
       });
     }
   }, [setReportState]);
