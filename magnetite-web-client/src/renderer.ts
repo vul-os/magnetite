@@ -20,6 +20,8 @@
  * Arena: 200×200 world units (constants from types.rs).
  */
 
+import type { ArenaView, ShooterPlayer } from './types';
+
 const ARENA_WIDTH = 200;
 const ARENA_HEIGHT = 200;
 const PLAYER_RADIUS = 3.0;
@@ -57,7 +59,7 @@ const COLORS = {
  * @param {import('./types.js').ArenaView} state - current (possibly predicted) view
  * @param {string | null} _localPlayerId  - the local player's id string (for colouring)
  */
-export function renderArenaView(ctx, state, _localPlayerId) {
+export function renderArenaView(ctx: CanvasRenderingContext2D, state: ArenaView, _localPlayerId: string | null) {
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
 
@@ -119,7 +121,7 @@ export function renderArenaView(ctx, state, _localPlayerId) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function _drawGrid(ctx) {
+function _drawGrid(ctx: CanvasRenderingContext2D) {
   ctx.strokeStyle = 'rgba(35,35,46,0.5)';
   ctx.lineWidth = 0.25;
   const step = 20;
@@ -143,7 +145,7 @@ function _drawGrid(ctx) {
  * @param {string} color
  * @param {boolean} isSelf
  */
-function _drawPlayer(ctx, player, color, isSelf) {
+function _drawPlayer(ctx: CanvasRenderingContext2D, player: ShooterPlayer, color: string, isSelf: boolean) {
   const alpha = player.alive ? 1.0 : 0.3;
   ctx.globalAlpha = alpha;
 
@@ -200,7 +202,7 @@ function _drawPlayer(ctx, player, color, isSelf) {
  * @param {number} cw
  * @param {number} ch
  */
-function _drawHUD(ctx, state, cw, ch) {
+function _drawHUD(ctx: CanvasRenderingContext2D, state: ArenaView, cw: number, ch: number) {
   const pad = 12;
 
   ctx.font = '12px "JetBrains Mono", "Courier New", monospace';
