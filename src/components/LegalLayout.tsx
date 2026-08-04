@@ -1,14 +1,27 @@
 import { useEffect, useState, useRef } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import Layout from './Layout';
 import './LegalLayout.css';
+
+export interface LegalSectionInfo {
+  id: string;
+  title: string;
+}
+
+export interface LegalLayoutProps {
+  title?: string;
+  lastUpdated?: string;
+  sections: LegalSectionInfo[];
+  children?: ReactNode;
+}
 
 /**
  * LegalLayout — sticky in-page nav with active-section highlighting.
  * Owned by data-page-completeness partition.
  */
-export default function LegalLayout({ title, lastUpdated, sections, children }) {
-  const [activeId, setActiveId] = useState(sections[0]?.id ?? null);
-  const observerRef = useRef(null);
+export default function LegalLayout({ title, lastUpdated, sections, children }: LegalLayoutProps) {
+  const [activeId, setActiveId] = useState<string | null>(sections[0]?.id ?? null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   /* Track which section is currently visible via IntersectionObserver */
   useEffect(() => {
@@ -16,7 +29,7 @@ export default function LegalLayout({ title, lastUpdated, sections, children }) 
 
     const headings = sections
       .map(s => document.getElementById(s.id))
-      .filter(Boolean);
+      .filter((el): el is HTMLElement => el !== null);
 
     if (headings.length === 0) return;
 
@@ -37,14 +50,14 @@ export default function LegalLayout({ title, lastUpdated, sections, children }) 
       }
     );
 
-    headings.forEach(el => observerRef.current.observe(el));
+    headings.forEach(el => observerRef.current?.observe(el));
 
     return () => observerRef.current?.disconnect();
   }, [sections]);
 
   const handlePrint = () => window.print();
 
-  const handleTocClick = (e, id) => {
+  const handleTocClick = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
     const target = document.getElementById(id);
     if (target) {
@@ -110,7 +123,13 @@ export default function LegalLayout({ title, lastUpdated, sections, children }) 
   );
 }
 
-export function LegalSection({ id, title, children }) {
+export interface LegalSectionProps {
+  id: string;
+  title: string;
+  children?: ReactNode;
+}
+
+export function LegalSection({ id, title, children }: LegalSectionProps) {
   return (
     <section id={id} className="legal-section">
       <h2>{title}</h2>
