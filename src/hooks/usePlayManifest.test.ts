@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { usePlayManifest } from './usePlayManifest';
+import { usePlayManifest, type PlayManifest } from './usePlayManifest';
 
 vi.mock('../api/client', () => ({
   api: {
@@ -19,7 +19,9 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
-const FAKE_MANIFEST = {
+const mockPlayManifest = vi.mocked(api.distribution.playManifest);
+
+const FAKE_MANIFEST: PlayManifest = {
   game_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   version: '1.2.3',
   commit_sha: 'abc123',
@@ -33,7 +35,7 @@ const FAKE_MANIFEST = {
 describe('usePlayManifest', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.distribution.playManifest.mockRejectedValue(new Error('No backend'));
+    mockPlayManifest.mockRejectedValue(new Error('No backend'));
   });
 
   afterEach(() => {
@@ -51,7 +53,7 @@ describe('usePlayManifest', () => {
 
   it('does not call the API when gameId is null', () => {
     renderHook(() => usePlayManifest(null));
-    expect(api.distribution.playManifest).not.toHaveBeenCalled();
+    expect(mockPlayManifest).not.toHaveBeenCalled();
   });
 
   // ── Loading state ─────────────────────────────────────────────────────────
@@ -62,16 +64,16 @@ describe('usePlayManifest', () => {
   });
 
   it('calls the API with the correct gameId', async () => {
-    api.distribution.playManifest.mockResolvedValue(FAKE_MANIFEST);
+    mockPlayManifest.mockResolvedValue(FAKE_MANIFEST);
     const { result } = renderHook(() => usePlayManifest('game-42'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
-    expect(api.distribution.playManifest).toHaveBeenCalledWith('game-42');
+    expect(mockPlayManifest).toHaveBeenCalledWith('game-42');
   });
 
   // ── Success — flat response ───────────────────────────────────────────────
 
   it('populates manifest from a flat API response', async () => {
-    api.distribution.playManifest.mockResolvedValue(FAKE_MANIFEST);
+    mockPlayManifest.mockResolvedValue(FAKE_MANIFEST);
 
     const { result } = renderHook(() => usePlayManifest('game-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -81,7 +83,7 @@ describe('usePlayManifest', () => {
   });
 
   it('populates manifest from a wrapped { data: ... } API response', async () => {
-    api.distribution.playManifest.mockResolvedValue({ data: FAKE_MANIFEST });
+    mockPlayManifest.mockResolvedValue({ data: FAKE_MANIFEST });
 
     const { result } = renderHook(() => usePlayManifest('game-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -91,18 +93,18 @@ describe('usePlayManifest', () => {
   });
 
   it('exposes the live server_url from the manifest', async () => {
-    api.distribution.playManifest.mockResolvedValue(FAKE_MANIFEST);
+    mockPlayManifest.mockResolvedValue(FAKE_MANIFEST);
 
     const { result } = renderHook(() => usePlayManifest('game-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.manifest.server_url).toBe('wss://runtime.example.com/ws/game/42');
+    expect(result.current.manifest!.server_url).toBe('wss://runtime.example.com/ws/game/42');
   });
 
   // ── Error state ───────────────────────────────────────────────────────────
 
   it('sets error and null manifest when API rejects', async () => {
-    api.distribution.playManifest.mockRejectedValue(new Error('Not found'));
+    mockPlayManifest.mockRejectedValue(new Error('Not found'));
 
     const { result } = renderHook(() => usePlayManifest('game-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -112,7 +114,7 @@ describe('usePlayManifest', () => {
   });
 
   it('uses a default error message when API rejects without a message', async () => {
-    api.distribution.playManifest.mockRejectedValue({});
+    mockPlayManifest.mockRejectedValue({});
 
     const { result } = renderHook(() => usePlayManifest('game-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -123,7 +125,7 @@ describe('usePlayManifest', () => {
   // ── reload ────────────────────────────────────────────────────────────────
 
   it('exposes a reload function that re-fetches the manifest', async () => {
-    api.distribution.playManifest.mockResolvedValue(FAKE_MANIFEST);
+    mockPlayManifest.mockResolvedValue(FAKE_MANIFEST);
 
     const { result } = renderHook(() => usePlayManifest('game-1'));
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
