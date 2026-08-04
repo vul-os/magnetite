@@ -1,4 +1,5 @@
-import { BasePage } from './base.page.js';
+import type { Locator, Page } from '@playwright/test';
+import { BasePage } from './base.page';
 
 /**
  * PointsPage — Points / score economy dashboard.
@@ -11,7 +12,18 @@ import { BasePage } from './base.page.js';
  * Key selectors aligned to the real component classes.
  */
 export class PointsPage extends BasePage {
-  constructor(page) {
+  readonly pageHeading: string;
+  readonly balanceValue: string;
+  readonly seasonCard: string;
+  readonly tabBar: string;
+  readonly historyTab: string;
+  readonly rewardsTab: string;
+  readonly leaderboardTab: string;
+  readonly rewardCards: string;
+  readonly leaderboardRows: string;
+  readonly historyRows: string;
+
+  constructor(page: Page) {
     super(page);
     this.pageHeading = 'h1, .pts-kicker + h1, [class*="points-title"]';
     this.balanceValue = '.pts-balance-val, [class*="balance-val"], [class*="points-amount"]';
@@ -25,23 +37,23 @@ export class PointsPage extends BasePage {
     this.historyRows = '.hist-row, .history-entry, [class*="history"]';
   }
 
-  async getTabBar() {
+  async getTabBar(): Promise<Locator> {
     return this.page.locator(this.tabBar);
   }
 
-  async clickTab(name) {
+  async clickTab(name: string): Promise<void> {
     await this.page.locator(`button:has-text("${name}")`).first().click();
   }
 
-  async getRewardCount() {
+  async getRewardCount(): Promise<number> {
     return this.page.locator(this.rewardCards).count();
   }
 
-  async getLeaderboardCount() {
+  async getLeaderboardCount(): Promise<number> {
     return this.page.locator(this.leaderboardRows).count();
   }
 
-  async getHistoryCount() {
+  async getHistoryCount(): Promise<number> {
     return this.page.locator(this.historyRows).count();
   }
 }
