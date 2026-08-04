@@ -56,9 +56,9 @@ const STAGES = [
 ];
 
 // Map API status → which STAGES are done/active/pending
-function resolveStageState(status, stageId) {
+function resolveStageState(status: string, stageId: string) {
   const order = ['queued', 'building', 'uploading', 'built'];
-  const failedAt = { queued: 0, building: 1, uploading: 2 };
+  const failedAt: Record<string, number> = { queued: 0, building: 1, uploading: 2 };
 
   if (status === 'failed') {
     const failIdx = failedAt[status] ?? 1; // default to failed at build
@@ -78,7 +78,14 @@ function resolveStageState(status, stageId) {
   return 'pending';
 }
 
-export default function BuildTimeline({ status = 'queued', startedAt, duration, commitSha }) {
+interface BuildTimelineProps {
+  status?: string;
+  startedAt?: string;
+  duration?: string;
+  commitSha?: string;
+}
+
+export default function BuildTimeline({ status = 'queued', startedAt, duration, commitSha }: BuildTimelineProps) {
   const isFailed = status === 'failed';
   const isBuilt  = status === 'built' || status === 'success';
   const isActive = status === 'building' || status === 'queued' || status === 'uploading';
