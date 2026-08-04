@@ -1,4 +1,5 @@
-import { BasePage } from './base.page.js';
+import type { Locator, Page } from '@playwright/test';
+import { BasePage } from './base.page';
 
 /**
  * NavigationPage — Industrial Magnetite Navbar + Footer.
@@ -15,7 +16,13 @@ import { BasePage } from './base.page.js';
  * Mobile: hamburger button with aria-label="Toggle menu" (class .navbar-menu-btn).
  */
 export class NavigationPage extends BasePage {
-  constructor(page) {
+  readonly navbarLinks: string;
+  readonly footerLinks: string;
+  readonly logo: string;
+  readonly mobileMenuButton: string;
+  readonly mobileMenuOpen: string;
+
+  constructor(page: Page) {
     super(page);
     // Primary nav links are inside nav.navbar (desktop) — use this selector so
     // mobile menu links are not double-counted when viewport is large.
@@ -27,7 +34,7 @@ export class NavigationPage extends BasePage {
     this.mobileMenuOpen = '.navbar-mobile-open, .mobile-menu[aria-expanded="true"]';
   }
 
-  async getNavbarLinks() {
+  async getNavbarLinks(): Promise<Locator[]> {
     // .all() is a synchronous snapshot with no auto-wait, so wait for the navbar
     // to render before counting — otherwise this races the SPA's first client
     // render and returns an empty array.
@@ -35,24 +42,24 @@ export class NavigationPage extends BasePage {
     return this.page.locator(this.navbarLinks).all();
   }
 
-  async getFooterLinks() {
+  async getFooterLinks(): Promise<Locator[]> {
     await this.page.locator(this.footerLinks).first().waitFor({ state: 'visible' });
     return this.page.locator(this.footerLinks).all();
   }
 
-  async clickNavbarLink(text) {
+  async clickNavbarLink(text: string): Promise<void> {
     await this.click(`nav.navbar a:has-text("${text}")`);
   }
 
-  async clickFooterLink(text) {
+  async clickFooterLink(text: string): Promise<void> {
     await this.click(`footer.footer a:has-text("${text}")`);
   }
 
-  async isLogoVisible() {
+  async isLogoVisible(): Promise<boolean> {
     return this.isVisible(this.logo);
   }
 
-  async openMobileMenu() {
+  async openMobileMenu(): Promise<void> {
     if (await this.isVisible(this.mobileMenuButton)) {
       await this.click(this.mobileMenuButton);
     }
