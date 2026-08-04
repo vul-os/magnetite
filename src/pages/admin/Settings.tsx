@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { FormEvent } from 'react';
 import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Button from '../../components/common/Button';
@@ -6,7 +7,27 @@ import './admin.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+interface PlatformSettings {
+  platformName: string;
+  maintenanceMode: boolean;
+  registrationEnabled: boolean;
+  emailVerificationRequired: boolean;
+  maxGameSessionFee: number;
+  supportEmail: string;
+  maxGamesPerDeveloper: number;
+}
+
+interface ServerPlatformSettings {
+  platform_name?: string;
+  maintenance_mode?: boolean;
+  registration_enabled?: boolean;
+  email_verification_required?: boolean;
+  max_game_session_fee?: number | string;
+  support_email?: string;
+  max_games_per_developer?: number | string;
+}
+
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -23,7 +44,7 @@ function authFetch(endpoint, options = {}) {
  * NON-CUSTODIAL: there is no platform fee percentage or payout minimum to configure
  * here — the platform takes no cut (PROTOCOL_FEE_BPS defaults to 0) and holds no
  * funds, so those controls were removed along with the rest of the custodial surface. */
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS: PlatformSettings = {
   platformName:              'Magnetite',
   maintenanceMode:           false,
   registrationEnabled:       true,
@@ -33,19 +54,19 @@ const DEFAULT_SETTINGS = {
   maxGamesPerDeveloper:      20,
 };
 
-function serverToLocal(d) {
+function serverToLocal(d: ServerPlatformSettings): PlatformSettings {
   return {
     platformName:              d.platform_name              ?? DEFAULT_SETTINGS.platformName,
     maintenanceMode:           d.maintenance_mode           ?? DEFAULT_SETTINGS.maintenanceMode,
     registrationEnabled:       d.registration_enabled       ?? DEFAULT_SETTINGS.registrationEnabled,
     emailVerificationRequired: d.email_verification_required ?? DEFAULT_SETTINGS.emailVerificationRequired,
-    maxGameSessionFee:         parseFloat(d.max_game_session_fee ?? DEFAULT_SETTINGS.maxGameSessionFee),
+    maxGameSessionFee:         parseFloat(String(d.max_game_session_fee ?? DEFAULT_SETTINGS.maxGameSessionFee)),
     supportEmail:              d.support_email              ?? DEFAULT_SETTINGS.supportEmail,
-    maxGamesPerDeveloper:      parseInt(d.max_games_per_developer ?? DEFAULT_SETTINGS.maxGamesPerDeveloper),
+    maxGamesPerDeveloper:      parseInt(String(d.max_games_per_developer ?? DEFAULT_SETTINGS.maxGamesPerDeveloper)),
   };
 }
 
-function localToServer(s) {
+function localToServer(s: PlatformSettings): ServerPlatformSettings {
   return {
     platform_name:               s.platformName,
     maintenance_mode:            s.maintenanceMode,
@@ -58,10 +79,10 @@ function localToServer(s) {
 }
 
 export default function AdminSettings() {
-  const [settings, setSettings]       = useState(DEFAULT_SETTINGS);
+  const [settings, setSettings]       = useState<PlatformSettings>(DEFAULT_SETTINGS);
   const [saving, setSaving]           = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError]     = useState(null);
+  const [saveError, setSaveError]     = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
   /* Track whether the settings endpoint is mounted; if not, show an info notice */
   const [endpointAvailable, setEndpointAvailable] = useState(true);
@@ -78,7 +99,7 @@ export default function AdminSettings() {
         /* endpoint not mounted yet — use defaults, show notice */
         setEndpointAvailable(false);
       } else if (res.ok) {
-        const d = await res.json();
+        const d = await res.json() as ServerPlatformSettings;
         setSettings(serverToLocal(d));
         setEndpointAvailable(true);
       }
@@ -94,7 +115,7 @@ export default function AdminSettings() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     setSaveError(null);
@@ -108,19 +129,20 @@ export default function AdminSettings() {
         body: JSON.stringify(localToServer(settings)),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { message?: string };
         throw new Error(err.message || `Save failed (HTTP ${res.status})`);
       }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch (err) {
-      setSaveError(err.message);
+      setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
   };
 
-  const update = (key, val) => setSettings(prev => ({ ...prev, [key]: val }));
+  const update = <K extends keyof PlatformSettings>(key: K, val: PlatformSettings[K]) =>
+    setSettings(prev => ({ ...prev, [key]: val }));
 
   return (
     <Layout>
@@ -283,11 +305,14 @@ export default function AdminSettings() {
               </section>
 
               <div className="form-actions">
+                {/* NOTE (pre-existing bug, not fixed here — Button's real loading
+                    prop is `isLoading`; `loading` isn't part of ButtonProps and is
+                    silently forwarded onto the DOM <button> as an unknown attribute). */}
                 <Button
                   type="submit"
                   variant="primary"
-                  loading={saving}
                   disabled={!endpointAvailable}
+                  {...({ loading: saving } as Record<string, boolean>)}
                 >
                   {saving ? 'Saving...' : 'Save Settings'}
                 </Button>
