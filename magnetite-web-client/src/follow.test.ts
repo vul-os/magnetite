@@ -26,7 +26,27 @@ const { redirect, issuer_key: ISSUER, target_key: TARGET, player: PLAYER } = fix
 /** A moment inside the fixture's validity window. */
 const FRESH = fixture.issued_at + 1;
 
-const opts = (over = {}) => ({ issuerKey: ISSUER, playerId: PLAYER, now: FRESH, ...over });
+interface VerifyOpts {
+  issuerKey: string;
+  playerId: number;
+  now?: number;
+}
+
+/** `opts()` doubles as the argument to `verifyAndFollow`, which also accepts
+ * `openSocket` / `timeoutMs` / `currentUrl` overrides — so `over` (and the
+ * return type) allow those through as well. */
+interface ExtraOpts extends Partial<VerifyOpts> {
+  openSocket?: (url: string) => WebSocket;
+  currentUrl?: string;
+  timeoutMs?: number;
+}
+
+const opts = (over: ExtraOpts = {}): VerifyOpts & ExtraOpts => ({
+  issuerKey: ISSUER,
+  playerId: PLAYER,
+  now: FRESH,
+  ...over,
+});
 
 // ---------------------------------------------------------------------------
 // Cross-language signature verification
@@ -124,7 +144,12 @@ describe('verifyRedirect', () => {
   });
 
   it('refuses garbage instead of throwing something unhelpful', async () => {
-    await expect(verifyRedirect(null, opts())).rejects.toMatchObject({ code: 'malformed' });
+    // verifyRedirect's own runtime guard is what is under test here — `null`
+    // is exactly the kind of malformed input its JSDoc type (`object`) doesn't
+    // rule out at the JS call site, so the cast just lets TS see the same call.
+    await expect(verifyRedirect(null as unknown as object, opts())).rejects.toMatchObject({
+      code: 'malformed',
+    });
     await expect(verifyRedirect({ issuer: ISSUER }, opts())).rejects.toBeInstanceOf(RedirectError);
   });
 });
@@ -133,37 +158,64 @@ describe('verifyRedirect', () => {
 // followRedirect — key pinning on the new connection
 // ---------------------------------------------------------------------------
 
+type SocketEventType = 'open' | 'message' | 'close' | 'error';
+
+/** The shape of the (fake) event object delivered to a registered listener. */
+interface FakeEvent {
+  data?: string;
+}
+
+type FakeListener = (event: FakeEvent) => void;
+
 /** Minimal scriptable WebSocket double. */
 class FakeSocket {
-  constructor() {
-    this.sent = [];
-    this.closed = false;
-    this._listeners = { open: [], message: [], close: [], error: [] };
-  }
-  addEventListener(type, fn) {
+  sent: Record<string, unknown>[] = [];
+  closed = false;
+  private _listeners: Record<SocketEventType, FakeListener[]> = {
+    open: [],
+    message: [],
+    close: [],
+    error: [],
+  };
+
+  addEventListener(type: SocketEventType, fn: FakeListener): void {
     this._listeners[type].push(fn);
   }
-  send(data) {
-    this.sent.push(JSON.parse(data));
+  send(data: string): void {
+    this.sent.push(JSON.parse(data) as Record<string, unknown>);
   }
-  close() {
+  close(): void {
     this.closed = true;
   }
-  emit(type, event) {
+  emit(type: SocketEventType, event: FakeEvent = {}): void {
     for (const fn of this._listeners[type]) fn(event);
   }
   /** Deliver a server frame and let its async handler settle. */
-  async deliver(obj) {
+  async deliver(obj: unknown): Promise<void> {
     this.emit('message', { data: JSON.stringify(obj) });
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise<void>((r) => setTimeout(r, 0));
   }
-  get lastSent() {
+  get lastSent(): Record<string, unknown> {
     return this.sent[this.sent.length - 1];
   }
 }
 
+/**
+ * Cast a `FakeSocket` through the exact boundary `followRedirect`'s
+ * `openSocket` needs. FakeSocket implements the WebSocket surface actually
+ * exercised here (addEventListener/send/close) but not the full interface
+ * (readyState, binaryType, …) — like GamePreview.tsx's client boundary, this
+ * is a single documented cast through `unknown`, not a general `any` escape.
+ */
+function asWebSocket(sock: FakeSocket): WebSocket {
+  return sock as unknown as WebSocket;
+}
+
 /** Drive the far side as an honest target node holding `key`. */
-async function honestTarget(sock, { key = TARGET, sig = fixture.hello.sig } = {}) {
+async function honestTarget(
+  sock: FakeSocket,
+  { key = TARGET, sig = fixture.hello.sig }: { key?: string; sig?: string } = {},
+): Promise<Record<string, unknown>> {
   sock.emit('open');
   const hello = sock.lastSent;
   await sock.deliver({ type: 'node_identity', node_key: key, nonce: hello.nonce, sig });
@@ -179,7 +231,7 @@ describe('followRedirect', () => {
       url: 'ws://10.0.0.11:7100',
       targetKey: TARGET,
       redirect,
-      openSocket: () => sock,
+      openSocket: () => asWebSocket(sock),
     });
     promise.catch(() => {}); // attach a handler before driving, so failures are not "unhandled"
     sock.emit('open');
@@ -209,7 +261,7 @@ describe('followRedirect', () => {
       url: 'ws://10.0.0.11:7100',
       targetKey: TARGET,
       redirect,
-      openSocket: () => sock,
+      openSocket: () => asWebSocket(sock),
     });
     promise.catch(() => {});
     await honestTarget(sock); // fixture sig is over a different nonce → invalid
@@ -223,7 +275,7 @@ describe('followRedirect', () => {
       url: 'ws://10.0.0.11:7100',
       targetKey: TARGET,
       redirect,
-      openSocket: () => sock,
+      openSocket: () => asWebSocket(sock),
     });
     promise.catch(() => {}); // attach a handler before driving, so failures are not "unhandled"
     sock.emit('open');
@@ -242,7 +294,7 @@ describe('followRedirect', () => {
       url: 'ws://10.0.0.11:7100',
       targetKey: TARGET,
       redirect,
-      openSocket: () => sock,
+      openSocket: () => asWebSocket(sock),
     });
     promise.catch(() => {}); // attach a handler before driving, so failures are not "unhandled"
     sock.emit('open');
@@ -257,7 +309,7 @@ describe('followRedirect', () => {
       url: 'ws://10.0.0.11:7100',
       targetKey: TARGET,
       redirect,
-      openSocket: () => sock,
+      openSocket: () => asWebSocket(sock),
       timeoutMs: 100,
     });
     promise.catch(() => {}); // attach a handler before driving, so failures are not "unhandled"
@@ -275,11 +327,11 @@ describe('followRedirect', () => {
       url: 'ws://10.0.0.11:7100',
       targetKey: TARGET,
       redirect,
-      openSocket: () => sock,
+      openSocket: () => asWebSocket(sock),
     });
     promise.catch(() => {}); // attach a handler before driving, so failures are not "unhandled"
     sock.emit('open');
-    const nonce = sock.sent[0].nonce;
+    const nonce = sock.sent[0].nonce as string;
     expect(nonce).toMatch(/^[0-9a-f]{32}$/);
 
     const spy = vi.spyOn(globalThis.crypto.subtle, 'verify').mockResolvedValue(true);
@@ -287,7 +339,7 @@ describe('followRedirect', () => {
     expect(sock.lastSent.type).toBe('follow');
     expect(sock.lastSent.redirect).toEqual(redirect);
     await sock.deliver({ type: 'welcome', player_id: PLAYER, config: {} });
-    await expect(promise).resolves.toBe(sock);
+    await expect(promise).resolves.toBe(asWebSocket(sock));
     spy.mockRestore();
   });
 });
@@ -298,7 +350,7 @@ describe('followRedirect', () => {
 
 describe('verifyAndFollow', () => {
   it('never opens a socket for a redirect that fails verification', async () => {
-    const openSocket = vi.fn(() => new FakeSocket());
+    const openSocket = vi.fn(() => asWebSocket(new FakeSocket()));
     await expect(
       verifyAndFollow(redirect, opts({ now: fixture.expires_at + 1, openSocket })),
     ).rejects.toMatchObject({ code: 'expired' });
