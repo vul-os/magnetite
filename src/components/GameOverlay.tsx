@@ -26,10 +26,49 @@ import {
   useRef,
   useCallback,
 } from 'react';
+import type { FormEvent, ChangeEvent, KeyboardEvent } from 'react';
+import type { CommsContextValue } from '../context/CommsContext';
+import type { ChatMessage, VoiceParticipant } from '../types/comms';
 import './GameOverlay.css';
 
+/** VoiceParticipant plus the display fields this overlay actually renders. */
+interface OverlayParticipant extends VoiceParticipant {
+  username?: string;
+  display_name?: string;
+  muted?: boolean;
+  deafened?: boolean;
+  speaking?: boolean;
+}
+
+/**
+ * The subset of useComms()'s return value this overlay uses, with
+ * voiceParticipants narrowed to the fields it actually reads (the real
+ * VoiceParticipant type only guarantees `id`).
+ */
+type GameOverlayComms = Pick<
+  CommsContextValue,
+  | 'selectChannel'
+  | 'messages'
+  | 'typingUsers'
+  | 'isConnected'
+  | 'sendChatMessage'
+  | 'postMessage'
+  | 'sendTypingStart'
+  | 'sendTypingStop'
+  | 'currentRoom'
+  | 'muted'
+  | 'deafened'
+  | 'toggleMute'
+  | 'toggleDeafen'
+  | 'joinVoiceRoom'
+  | 'leaveVoiceRoom'
+  | 'voiceConnected'
+> & {
+  voiceParticipants: OverlayParticipant[];
+};
+
 // ── Mock fallback data ────────────────────────────────────────────────────────
-const MOCK_MESSAGES = [
+const MOCK_MESSAGES: ChatMessage[] = [
   {
     id: 'm1',
     author: { id: 'sys', username: 'System', display_name: 'System' },
@@ -44,16 +83,16 @@ const MOCK_MESSAGES = [
   },
 ];
 
-const MOCK_PARTICIPANTS = [
+const MOCK_PARTICIPANTS: OverlayParticipant[] = [
   { id: 'p1', username: 'player_one',   display_name: 'Player One',   muted: false, deafened: false, speaking: true  },
   { id: 'p2', username: 'player_two',   display_name: 'Player Two',   muted: true,  deafened: false, speaking: false },
   { id: 'p3', username: 'player_three', display_name: 'Player Three', muted: false, deafened: true,  speaking: false },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatTs(isoString) {
+function formatTs(isoString: string | undefined) {
   try {
-    return new Date(isoString).toLocaleTimeString([], {
+    return new Date(isoString ?? '').toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -85,7 +124,7 @@ function IconChat() {
   );
 }
 
-function IconMic({ off }) {
+function IconMic({ off }: { off?: boolean }) {
   if (off) {
     return (
       <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -103,7 +142,7 @@ function IconMic({ off }) {
   );
 }
 
-function IconDeafen({ off }) {
+function IconDeafen({ off }: { off?: boolean }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
       {off ? (
@@ -185,19 +224,24 @@ function MuteBadge() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CHAT TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function ChatTab({ channelId, comms }) {
-  const listRef = useRef(null);
+interface ChatTabProps {
+  channelId: string | null;
+  comms: GameOverlayComms | null;
+}
+
+function ChatTab({ channelId, comms }: ChatTabProps) {
+  const listRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
 
   const isMock = comms == null;
 
-  const messages        = isMock ? MOCK_MESSAGES     : (comms.messages ?? MOCK_MESSAGES);
-  const typingUsers     = isMock ? {}                : (comms.typingUsers ?? {});
-  const isConnected     = isMock ? false             : (comms.isConnected ?? false);
-  const sendChatMsg     = isMock ? null              : comms.sendChatMessage;
-  const postMessage     = isMock ? null              : comms.postMessage;
-  const sendTypingStart = isMock ? null              : comms.sendTypingStart;
-  const sendTypingStop  = isMock ? null              : comms.sendTypingStop;
+  const messages        = isMock ? MOCK_MESSAGES     : (comms!.messages ?? MOCK_MESSAGES);
+  const typingUsers     = isMock ? {}                : (comms!.typingUsers ?? {});
+  const isConnected     = isMock ? false             : (comms!.isConnected ?? false);
+  const sendChatMsg     = isMock ? null              : comms!.sendChatMessage;
+  const postMessage     = isMock ? null              : comms!.postMessage;
+  const sendTypingStart = isMock ? null              : comms!.sendTypingStart;
+  const sendTypingStop  = isMock ? null              : comms!.sendTypingStop;
 
   const typingList = Object.values(typingUsers);
 
@@ -207,8 +251,11 @@ function ChatTab({ channelId, comms }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
+  // Typed structurally (just the one method used) rather than as FormEvent —
+  // it is called both from the <form onSubmit> and from handleInputKeyDown
+  // with a KeyboardEvent, and only .preventDefault() is ever used.
   const handleSubmit = useCallback(
-    (e) => {
+    (e: { preventDefault: () => void }) => {
       e.preventDefault();
       const trimmed = input.trim();
       if (!trimmed) return;
@@ -217,14 +264,14 @@ function ChatTab({ channelId, comms }) {
       if (postMessage) {
         postMessage(trimmed);
       } else if (sendChatMsg) {
-        sendChatMsg(trimmed, channelId);
+        sendChatMsg(trimmed, channelId ?? undefined);
       }
     },
     [input, channelId, postMessage, sendChatMsg, sendTypingStop]
   );
 
   const handleInputChange = useCallback(
-    (e) => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       setInput(e.target.value);
       if (sendTypingStart) sendTypingStart();
     },
@@ -232,7 +279,7 @@ function ChatTab({ channelId, comms }) {
   );
 
   const handleInputKeyDown = useCallback(
-    (e) => {
+    (e: KeyboardEvent<HTMLInputElement>) => {
       // Swallow Tab inside input so it does not toggle the overlay panel
       e.stopPropagation();
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -335,18 +382,23 @@ function ChatTab({ channelId, comms }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // VOICE TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function VoiceTab({ voiceRoomId, comms }) {
+interface VoiceTabProps {
+  voiceRoomId: string | null;
+  comms: GameOverlayComms | null;
+}
+
+function VoiceTab({ voiceRoomId, comms }: VoiceTabProps) {
   const isMock = comms == null;
 
-  const currentRoom    = isMock ? { id: 'mock-room', name: 'General Voice' } : (comms.currentRoom ?? null);
-  const muted          = isMock ? false  : (comms.muted ?? false);
-  const deafened       = isMock ? false  : (comms.deafened ?? false);
-  const participants   = isMock ? MOCK_PARTICIPANTS  : (comms.voiceParticipants ?? []);
-  const toggleMute     = isMock ? null   : comms.toggleMute;
-  const toggleDeafen   = isMock ? null   : comms.toggleDeafen;
-  const joinVoiceRoom  = isMock ? null   : comms.joinVoiceRoom;
-  const leaveVoiceRoom = isMock ? null   : comms.leaveVoiceRoom;
-  const voiceConnected = isMock ? false  : (comms.voiceConnected ?? false);
+  const currentRoom    = isMock ? { id: 'mock-room', name: 'General Voice' } : (comms!.currentRoom ?? null);
+  const muted          = isMock ? false  : (comms!.muted ?? false);
+  const deafened       = isMock ? false  : (comms!.deafened ?? false);
+  const participants   = isMock ? MOCK_PARTICIPANTS  : (comms!.voiceParticipants ?? []);
+  const toggleMute     = isMock ? null   : comms!.toggleMute;
+  const toggleDeafen   = isMock ? null   : comms!.toggleDeafen;
+  const joinVoiceRoom  = isMock ? null   : comms!.joinVoiceRoom;
+  const leaveVoiceRoom = isMock ? null   : comms!.leaveVoiceRoom;
+  const voiceConnected = isMock ? false  : (comms!.voiceConnected ?? false);
   const currentRoomId  = currentRoom?.id ?? null;
 
   // Auto-join the target room when voiceRoomId is provided and we are not in it
@@ -494,15 +546,23 @@ function VoiceTab({ voiceRoomId, comms }) {
  * result as the `comms` prop.  Pages without a provider omit `comms` and the
  * overlay renders in demo mode with mock data — no errors thrown.
  */
+export interface GameOverlayProps {
+  channelId?: string | null;
+  voiceRoomId?: string | null;
+  label?: string;
+  defaultOpen?: boolean;
+  comms?: GameOverlayComms | null;
+}
+
 export default function GameOverlay({
   channelId   = null,
   voiceRoomId = null,
   label       = 'In-Game',
   defaultOpen = false,
   comms       = null,        // pass useComms() result from the parent page
-}) {
+}: GameOverlayProps) {
   const [open, setOpen]         = useState(defaultOpen);
-  const [activeTab, setActiveTab] = useState('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'voice'>('chat');
 
   // Wire up the target channel in the context when channelId prop changes
   useEffect(() => {
@@ -512,7 +572,7 @@ export default function GameOverlay({
 
   // ── Hotkey: Tab or backtick toggles overlay ──────────────────────────────
   useEffect(() => {
-    function handler(e) {
+    function handler(e: globalThis.KeyboardEvent) {
       const tag = document.activeElement?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
       if (e.key === 'Tab' || e.key === '`') {
