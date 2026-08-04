@@ -8,16 +8,57 @@ import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
+// Structurally matches ProfileCard's (unexported) internal ProfileUser type.
+interface ProfileData {
+  id?: string;
+  username?: string;
+  avatar?: string;
+  coverImage?: string;
+  bio?: string;
+  location?: string;
+  joinedAt?: string;
+  isOnline?: boolean;
+  stats: {
+    gamesPlayed?: number;
+    achievements?: number;
+    friends?: number;
+  };
+  [key: string]: unknown;
+}
+
+interface RecentGame {
+  id: string;
+  title: string;
+  thumbnail: string;
+  playedAt: string;
+  score: number;
+  rank: number;
+}
+
+interface ProfileAchievement {
+  id: string;
+  name: string;
+  icon: string;
+  unlockedAt?: string;
+}
+
+interface ProfileFriend {
+  id: string;
+  username: string;
+  avatar: string;
+  status: string;
+}
+
 export default function Profile() {
   const { t } = useTranslation();
   const { username } = useParams();
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
-  const [user, setUser]               = useState(null);
-  const [recentGames, setRecentGames] = useState([]);
-  const [achievements, setAchievements] = useState([]);
-  const [friends, setFriends]         = useState([]);
+  const [error, setError]             = useState<string | null>(null);
+  const [user, setUser]               = useState<ProfileData | null>(null);
+  const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
+  const [achievements, setAchievements] = useState<ProfileAchievement[]>([]);
+  const [friends, setFriends]         = useState<ProfileFriend[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,15 +81,23 @@ export default function Profile() {
       }
 
       try {
-        const target = username || (await api.auth.me().then(me => me?.username).catch(() => null));
+        const target = username || (await api.auth.me()
+          .then(me => (me as { username?: string } | null)?.username)
+          .catch(() => null));
         if (!target) {
           if (!cancelled) { setLoading(false); setError('Not signed in'); }
           return;
         }
 
-        const data = await api.profile.get(target);
+        const data = await api.profile.get(target) as {
+          user?: ProfileData;
+          recent_games?: RecentGame[];
+          achievements?: ProfileAchievement[];
+          friends?: ProfileFriend[];
+          [key: string]: unknown;
+        } | null;
         if (!cancelled && data) {
-          const userData = data.user || data;
+          const userData = data.user || (data as unknown as ProfileData);
           setUser(userData);
           if (data.recent_games) setRecentGames(data.recent_games);
           if (data.achievements) setAchievements(data.achievements.slice(0, 3));
@@ -56,7 +105,7 @@ export default function Profile() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || 'Failed to load profile');
+          setError((err instanceof Error && err.message) || 'Failed to load profile');
           // No mock fallback — show the error state so the failure is visible
         }
       } finally {
@@ -99,7 +148,10 @@ export default function Profile() {
         )}
         <div className="reveal-1">
           <ProfileCard
-            user={user}
+            // Guarded above: (error && !user) already returned; when neither
+            // loading nor that error case holds, user is always populated by
+            // the effect above (mock or real path) before this renders.
+            user={user!}
             isOwnProfile={!username}
             isFollowing={isFollowing}
             onEdit={() => window.location.href = '/edit-profile'}
