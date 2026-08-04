@@ -24,12 +24,34 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
+interface FriendRequest {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  status: string;
+  created_at: string;
+}
+
+interface Friend {
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+}
+
+const mockFriends = vi.mocked(api.social.friends);
+const mockPendingRequests = vi.mocked(api.social.pendingRequests);
+const mockSentRequests = vi.mocked(api.social.sentRequests);
+const mockCancelRequest = vi.mocked(api.social.cancelRequest);
+const mockAcceptRequest = vi.mocked(api.social.acceptRequest);
+const mockAddFriend = vi.mocked(api.social.addFriend);
+const mockBlockUser = vi.mocked(api.social.blockUser);
+
 describe('api.social — friend-request listing (AX2)', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.clearAllMocks());
 
   it('pendingRequests() returns array of incoming requests', async () => {
-    const mockPending = [
+    const mockPending: FriendRequest[] = [
       {
         id: 'req-1',
         from_user_id: 'user-alice',
@@ -38,23 +60,23 @@ describe('api.social — friend-request listing (AX2)', () => {
         created_at: '2026-06-01T00:00:00Z',
       },
     ];
-    api.social.pendingRequests.mockResolvedValue(mockPending);
+    mockPendingRequests.mockResolvedValue(mockPending);
 
-    const result = await api.social.pendingRequests();
+    const result = await api.social.pendingRequests() as FriendRequest[];
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].status).toBe('pending');
     expect(result[0].from_user_id).toBe('user-alice');
   });
 
   it('pendingRequests() returns empty array when no pending requests', async () => {
-    api.social.pendingRequests.mockResolvedValue([]);
+    mockPendingRequests.mockResolvedValue([]);
 
     const result = await api.social.pendingRequests();
     expect(result).toEqual([]);
   });
 
   it('sentRequests() returns array of outgoing pending requests', async () => {
-    const mockSent = [
+    const mockSent: FriendRequest[] = [
       {
         id: 'req-2',
         from_user_id: 'user-me',
@@ -63,42 +85,42 @@ describe('api.social — friend-request listing (AX2)', () => {
         created_at: '2026-06-01T00:00:00Z',
       },
     ];
-    api.social.sentRequests.mockResolvedValue(mockSent);
+    mockSentRequests.mockResolvedValue(mockSent);
 
-    const result = await api.social.sentRequests();
+    const result = await api.social.sentRequests() as FriendRequest[];
     expect(result[0].from_user_id).toBe('user-me');
     expect(result[0].to_user_id).toBe('user-bob');
   });
 
   it('cancelRequest(id) calls DELETE on the correct request id', async () => {
-    api.social.cancelRequest.mockResolvedValue({});
+    mockCancelRequest.mockResolvedValue({});
 
     await api.social.cancelRequest('req-2');
-    expect(api.social.cancelRequest).toHaveBeenCalledWith('req-2');
+    expect(mockCancelRequest).toHaveBeenCalledWith('req-2');
   });
 
   it('cancelRequest propagates error when request not found', async () => {
-    api.social.cancelRequest.mockRejectedValue(new Error('Not found'));
+    mockCancelRequest.mockRejectedValue(new Error('Not found'));
 
     await expect(api.social.cancelRequest('nonexistent')).rejects.toThrow('Not found');
   });
 
   it('acceptRequest(id) resolves successfully', async () => {
-    api.social.acceptRequest.mockResolvedValue({ status: 'accepted' });
+    mockAcceptRequest.mockResolvedValue({ status: 'accepted' });
 
-    const result = await api.social.acceptRequest('req-1');
+    const result = await api.social.acceptRequest('req-1') as { status: string };
     expect(result.status).toBe('accepted');
-    expect(api.social.acceptRequest).toHaveBeenCalledWith('req-1');
+    expect(mockAcceptRequest).toHaveBeenCalledWith('req-1');
   });
 
   it('friends() returns list of confirmed friends', async () => {
-    const mockFriends = [
+    const fakeFriends: Friend[] = [
       { user_id: 'user-alice', username: 'alice', avatar_url: null },
       { user_id: 'user-bob',   username: 'bob',   avatar_url: 'https://example.com/bob.jpg' },
     ];
-    api.social.friends.mockResolvedValue(mockFriends);
+    mockFriends.mockResolvedValue(fakeFriends);
 
-    const result = await api.social.friends();
+    const result = await api.social.friends() as Friend[];
     expect(result.length).toBe(2);
     expect(result.map(f => f.username)).toContain('alice');
     expect(result.map(f => f.username)).toContain('bob');
@@ -106,18 +128,18 @@ describe('api.social — friend-request listing (AX2)', () => {
 
   it('addFriend sends to_user_id in body (not user_id)', async () => {
     // AUDIT finding: client was sending {user_id} but backend expects {to_user_id}.
-    api.social.addFriend.mockResolvedValue({ ok: true });
+    mockAddFriend.mockResolvedValue({ ok: true });
 
     await api.social.addFriend('user-dave');
     // The mock verifies the call was made; the real client must use to_user_id.
-    expect(api.social.addFriend).toHaveBeenCalledWith('user-dave');
+    expect(mockAddFriend).toHaveBeenCalledWith('user-dave');
   });
 
   it('blockUser(id) resolves', async () => {
-    api.social.blockUser.mockResolvedValue({});
+    mockBlockUser.mockResolvedValue({});
 
     await api.social.blockUser('user-eve');
-    expect(api.social.blockUser).toHaveBeenCalledWith('user-eve');
+    expect(mockBlockUser).toHaveBeenCalledWith('user-eve');
   });
 });
 
