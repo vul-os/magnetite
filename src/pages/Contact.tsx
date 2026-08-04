@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { api } from '../api/client';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './Contact.css';
@@ -57,11 +58,11 @@ export default function Contact() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  const handleChange = (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
     setSubmitError('');
@@ -69,7 +70,7 @@ export default function Contact() {
       await api.contact.submit(formData);
       setSubmitted(true);
     } catch (err) {
-      setSubmitError(err.message || 'Failed to send message. Please try again.');
+      setSubmitError(err instanceof Error ? err.message : 'Failed to send message. Please try again.');
     } finally {
       setSubmitting(false);
     }
