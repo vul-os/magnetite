@@ -1,6 +1,16 @@
 import { useMemo } from 'react';
+import type { ChangeEvent } from 'react';
 import { useTranslation } from '../../i18n/useTranslation';
 import './Pagination.css';
+
+export interface PaginationProps {
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
+  itemsPerPage?: number;
+  onItemsPerPageChange?: (itemsPerPage: number) => void;
+  totalItems?: number;
+}
 
 export default function Pagination({
   currentPage = 1,
@@ -9,7 +19,7 @@ export default function Pagination({
   itemsPerPage = 10,
   onItemsPerPageChange,
   totalItems = 0,
-}) {
+}: PaginationProps) {
   const { t } = useTranslation();
 
   const startIndex = useMemo(() => {
@@ -26,7 +36,7 @@ export default function Pagination({
       return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
 
-    const pages = [];
+    const pages: Array<number | '...'> = [];
     const showLeftEllipsis = currentPage > 3;
     const showRightEllipsis = currentPage < totalPages - 2;
 
@@ -56,12 +66,12 @@ export default function Pagination({
     return pages;
   }, [currentPage, totalPages]);
 
-  const handlePageClick = (page) => {
+  const handlePageClick = (page: number) => {
     if (page < 1 || page > totalPages || page === currentPage) return;
     onPageChange?.(page);
   };
 
-  const handlePerPageChange = (e) => {
+  const handlePerPageChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newPerPage = parseInt(e.target.value, 10);
     onItemsPerPageChange?.(newPerPage);
   };

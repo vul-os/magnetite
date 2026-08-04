@@ -1,22 +1,36 @@
 import './Progress.css';
 
-const variantClasses = {
+type ProgressVariant = 'linear' | 'circular';
+type ProgressColor = 'primary' | 'success' | 'warning' | 'danger';
+type ProgressSize = 'sm' | 'md' | 'lg';
+
+const variantClasses: Record<ProgressVariant, string> = {
   linear: 'progress-linear',
   circular: 'progress-circular',
 };
 
-const colorClasses = {
+const colorClasses: Record<ProgressColor, string> = {
   primary: 'progress-primary',
   success: 'progress-success',
   warning: 'progress-warning',
   danger: 'progress-danger',
 };
 
-const sizeClasses = {
+const sizeClasses: Record<ProgressSize, string> = {
   sm: 'progress-sm',
   md: 'progress-md',
   lg: 'progress-lg',
 };
+
+export interface ProgressProps {
+  value?: number;
+  variant?: ProgressVariant;
+  showLabel?: boolean;
+  color?: ProgressColor;
+  size?: ProgressSize;
+  className?: string;
+  label?: string;
+}
 
 export default function Progress({
   value = 0,
@@ -26,7 +40,7 @@ export default function Progress({
   size = 'md',
   className = '',
   label,
-}) {
+}: ProgressProps) {
   const clampedValue = Math.min(100, Math.max(0, value));
 
   const classes = [

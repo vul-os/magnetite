@@ -1,9 +1,23 @@
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import './Switch.css';
 
-const sizeClasses = {
+type SwitchSize = 'sm' | 'md';
+
+const sizeClasses: Record<SwitchSize, string> = {
   sm: 'sizeSm',
   md: 'sizeMd',
 };
+
+export interface SwitchProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'onChange' | 'type' | 'role'> {
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+  disabled?: boolean;
+  size?: SwitchSize;
+  label?: ReactNode;
+  id?: string;
+  className?: string;
+}
 
 /**
  * Switch — accessible toggle button.
@@ -21,7 +35,7 @@ export default function Switch({
   id,
   className = '',
   ...props
-}) {
+}: SwitchProps) {
   const classes = [
     'switch',
     sizeClasses[size],
