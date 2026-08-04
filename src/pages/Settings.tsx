@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import Layout from '../components/Layout';
 import ThemeToggle from '../components/ThemeToggle';
 import NotificationPreferences from '../components/NotificationPreferences';
@@ -7,7 +8,46 @@ import { useTranslation } from '../i18n/useTranslation';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+interface ProfileData {
+  name: string;
+  email: string;
+  avatar: string;
+  bio: string;
+  location: string;
+}
+
+interface AccountData {
+  email: string;
+  twoFactorEnabled: boolean;
+}
+
+interface PrivacyData {
+  profileVisibility: string;
+  showOnLeaderboards: boolean;
+  blockedUsers: string[];
+}
+
+interface SessionItem {
+  id: string;
+  device: string;
+  location: string;
+  lastActive: string;
+  current: boolean;
+}
+
+interface RawSession {
+  id?: string;
+  session_id?: string;
+  user_agent?: string;
+  device?: string;
+  ip_address?: string;
+  location?: string;
+  last_active?: string;
+  updated_at?: string;
+  current?: boolean;
+}
+
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -20,7 +60,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock fallbacks — only when VITE_USE_MOCKS=true */
-const MOCK_USER = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_USER: ProfileData | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? {
       name: 'StarForge Studios',
       email: 'dev@starforge.com',
@@ -30,7 +70,7 @@ const MOCK_USER = import.meta.env.VITE_USE_MOCKS === 'true'
     }
   : null;
 
-const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_SESSIONS: SessionItem[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 'sess_001', device: 'Chrome on Mac OS',    location: 'San Francisco, CA', lastActive: 'Now',       current: true  },
       { id: 'sess_002', device: 'Safari on iPhone',    location: 'San Francisco, CA', lastActive: '2 hours ago', current: false },
@@ -39,7 +79,14 @@ const MOCK_SESSIONS = import.meta.env.VITE_USE_MOCKS === 'true'
   : null;
 
 /* ── Reusable Toggle component ─────────────────────────────────────────────── */
-function ToggleSetting({ label, description, checked, onChange }) {
+interface ToggleSettingProps {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+function ToggleSetting({ label, description, checked, onChange }: ToggleSettingProps) {
   return (
     <div className="settings-toggle-row">
       <div className="settings-toggle-text">
@@ -61,7 +108,7 @@ function ToggleSetting({ label, description, checked, onChange }) {
 }
 
 /* ── SaveButton ─────────────────────────────────────────────────────────────── */
-function SaveButton({ saving, success }) {
+function SaveButton({ saving, success }: { saving: boolean; success: boolean }) {
   const { t } = useTranslation();
   return (
     <button type="submit" className="settings-save-btn" disabled={saving} aria-busy={saving}>
@@ -76,19 +123,19 @@ function SaveButton({ saving, success }) {
 
 /* ── Tab definitions ─────────────────────────────────────────────────────────── */
 const TAB_IDS = ['profile', 'account', 'appearance', 'notifications', 'privacy'];
-const TAB_ICONS = { profile: '◉', account: '⬡', appearance: '◈', notifications: '◎', privacy: '⊕' };
+const TAB_ICONS: Record<string, string> = { profile: '◉', account: '⬡', appearance: '◈', notifications: '◎', privacy: '⊕' };
 
-const DEFAULT_PROFILE = MOCK_USER ?? {
+const DEFAULT_PROFILE: ProfileData = MOCK_USER ?? {
   name: '', email: '', avatar: '', bio: '', location: '',
 };
 
-function normaliseSession(s) {
+function normaliseSession(s: RawSession): SessionItem {
   return {
-    id:         s.id ?? s.session_id,
+    id:         s.id ?? s.session_id ?? '',
     device:     s.user_agent ?? s.device ?? 'Unknown device',
     location:   s.ip_address  ?? s.location ?? 'Unknown',
     lastActive: s.last_active ?? s.updated_at
-      ? new Date(s.last_active ?? s.updated_at).toLocaleString()
+      ? new Date((s.last_active ?? s.updated_at)!).toLocaleString()
       : 'Unknown',
     current:    s.current ?? false,
   };
@@ -98,18 +145,18 @@ export default function Settings() {
   const { t } = useTranslation();
   const TABS = TAB_IDS.map(id => ({ id, label: t(`account.settingsTab_${id}`), icon: TAB_ICONS[id] }));
   const [activeTab, setActiveTab] = useState('profile');
-  const [profile, setProfile]     = useState(DEFAULT_PROFILE);
-  const [account, setAccount]     = useState({ email: DEFAULT_PROFILE.email, twoFactorEnabled: false });
+  const [profile, setProfile]     = useState<ProfileData>(DEFAULT_PROFILE);
+  const [account, setAccount]     = useState<AccountData>({ email: DEFAULT_PROFILE.email, twoFactorEnabled: false });
   // notifications state is managed by <NotificationPreferences /> — no local state needed.
-  const [privacy, setPrivacy] = useState({
+  const [privacy, setPrivacy] = useState<PrivacyData>({
     profileVisibility: 'public',
     showOnLeaderboards: true,
     blockedUsers: [],
   });
   const [saving, setSaving]           = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError]     = useState(null);
-  const [sessions, setSessions]       = useState(MOCK_SESSIONS ?? []);
+  const [saveError, setSaveError]     = useState<string | null>(null);
+  const [sessions, setSessions]       = useState<SessionItem[]>(MOCK_SESSIONS ?? []);
   const [loading, setLoading]         = useState(true);
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
@@ -118,18 +165,18 @@ export default function Settings() {
       setLoading(true);
       try {
         /* Load profile */
-        const userData = await api.auth.me();
+        const userData = await api.auth.me() as { user?: Record<string, unknown> } | null;
         if (userData?.user) {
           const u = userData.user;
           setProfile(prev => ({
             ...prev,
-            name:     u.username ?? u.name ?? prev.name,
-            email:    u.email    ?? prev.email,
-            avatar:   u.avatar   ?? prev.avatar,
-            bio:      u.bio      ?? prev.bio,
-            location: u.location ?? prev.location,
+            name:     (u.username as string | undefined) ?? (u.name as string | undefined) ?? prev.name,
+            email:    (u.email as string | undefined)    ?? prev.email,
+            avatar:   (u.avatar as string | undefined)   ?? prev.avatar,
+            bio:      (u.bio as string | undefined)      ?? prev.bio,
+            location: (u.location as string | undefined) ?? prev.location,
           }));
-          setAccount(prev => ({ ...prev, email: u.email ?? prev.email }));
+          setAccount(prev => ({ ...prev, email: (u.email as string | undefined) ?? prev.email }));
         }
       } catch {
         /* use defaults — not an error worth surfacing */
@@ -147,8 +194,8 @@ export default function Settings() {
       try {
         const res = await authFetch('/api/auth/sessions');
         if (res.ok) {
-          const data = await res.json();
-          const raw = data.sessions ?? data ?? [];
+          const data = await res.json() as { sessions?: RawSession[] } | RawSession[];
+          const raw = (!Array.isArray(data) ? data.sessions : data) ?? [];
           setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
         }
       } catch {
@@ -160,7 +207,7 @@ export default function Settings() {
     loadSessions();
   }, []);
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     setSaveError(null);
@@ -174,21 +221,21 @@ export default function Settings() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch (err) {
-      setSaveError(err.message || 'Failed to save profile');
+      setSaveError((err instanceof Error && err.message) || 'Failed to save profile');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAvatarUpload = (e) => {
+  const handleAvatarUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => setProfile(prev => ({ ...prev, avatar: reader.result }));
+    reader.onloadend = () => setProfile(prev => ({ ...prev, avatar: reader.result as string }));
     reader.readAsDataURL(file);
   };
 
-  const handleRevokeSession = async (sessionId) => {
+  const handleRevokeSession = async (sessionId: string) => {
     if (import.meta.env.VITE_USE_MOCKS === 'true') {
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       return;
