@@ -1,18 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { InGameStore } from './InGameStore';
+import type { MarketplaceItem } from '../../hooks/useMarketplace';
 
 // Mock useMarketplace so we don't need a real API.
 const mockPurchase = vi.fn();
 const mockLoadItems = vi.fn();
 const mockHasEntitlement = vi.fn();
 
-const MOCK_ITEMS = [
-  { id: 'igs1', name: 'Neon Helm Skin',    description: 'Glowing teal helmet.',      price_points: 800,  price_usdc: 0.99, item_type: 'cosmetic', active: true },
-  { id: 'igs2', name: 'XP Accelerator',   description: '2× XP for 24 hours.',       price_points: 500,  price_usdc: 0.49, item_type: 'boost',    active: true },
-  { id: 'igs3', name: 'Starter Bundle',   description: 'Skin + boost combo deal.',   price_points: 1200, price_usdc: 1.49, item_type: 'bundle',   active: true },
-  { id: 'igs4', name: 'Point Pack (500)', description: 'Top-up 500 bonus points.',   price_points: 0,    price_usdc: 0.99, item_type: 'currency', active: true },
-  { id: 'igs5', name: 'Inactive Item',    description: 'Not shown.',                 price_points: 100,  price_usdc: 0.10, item_type: 'cosmetic', active: false },
+const MOCK_ITEMS: MarketplaceItem[] = [
+  { id: 'igs1', store_id: 'test-store', name: 'Neon Helm Skin',    description: 'Glowing teal helmet.',      price_points: 800,  price_usdc: 0.99, item_type: 'cosmetic', active: true },
+  { id: 'igs2', store_id: 'test-store', name: 'XP Accelerator',   description: '2× XP for 24 hours.',       price_points: 500,  price_usdc: 0.49, item_type: 'boost',    active: true },
+  { id: 'igs3', store_id: 'test-store', name: 'Starter Bundle',   description: 'Skin + boost combo deal.',   price_points: 1200, price_usdc: 1.49, item_type: 'bundle',   active: true },
+  { id: 'igs4', store_id: 'test-store', name: 'Point Pack (500)', description: 'Top-up 500 bonus points.',   price_points: 0,    price_usdc: 0.99, item_type: 'currency', active: true },
+  { id: 'igs5', store_id: 'test-store', name: 'Inactive Item',    description: 'Not shown.',                 price_points: 100,  price_usdc: 0.10, item_type: 'cosmetic', active: false },
 ];
 
 vi.mock('../../hooks/useMarketplace', () => ({
@@ -81,7 +82,7 @@ describe('InGameStore', () => {
   it('closes on Escape key press', () => {
     const onClose = vi.fn();
     const { container } = render(<InGameStore storeId="test-store" gameTitle="G" onClose={onClose} pointBalance={0} />);
-    fireEvent.keyDown(container.firstChild, { key: 'Escape' });
+    fireEvent.keyDown(container.firstChild!, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
   });
 
