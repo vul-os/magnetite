@@ -7,7 +7,19 @@ import './admin.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-const MOCK_REPORTS = [
+interface Report {
+  id: string;
+  review_id?: string;
+  review_content?: string;
+  reviewer_username?: string;
+  game_title?: string;
+  reason?: string;
+  reporter_username?: string;
+  created_at: string;
+  status: string;
+}
+
+const MOCK_REPORTS: Report[] = [
   {
     id: 'rpt_001',
     review_id: 'rev_001',
@@ -43,7 +55,7 @@ const MOCK_REPORTS = [
   },
 ];
 
-const REASON_LABELS = {
+const REASON_LABELS: Record<string, string> = {
   inappropriate: 'Inappropriate Content',
   spam: 'Spam / Advertising',
   false_information: 'False Information',
@@ -53,7 +65,15 @@ const REASON_LABELS = {
 
 const STATUS_FILTERS = ['all', 'pending', 'dismissed', 'actioned'];
 
-function ReportRow({ report, onDismiss, onRemove, onBan, actioning }) {
+interface ReportRowProps {
+  report: Report;
+  onDismiss: (id: string) => void;
+  onRemove: (id: string) => void;
+  onBan: (id: string, reviewerUsername?: string) => void;
+  actioning: string | null;
+}
+
+function ReportRow({ report, onDismiss, onRemove, onBan, actioning }: ReportRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -61,7 +81,7 @@ function ReportRow({ report, onDismiss, onRemove, onBan, actioning }) {
       <div className="report-header" onClick={() => setExpanded(v => !v)} style={{ cursor: 'pointer' }}>
         <div className="report-meta">
           <span className="report-reason-badge" data-reason={report.reason}>
-            {REASON_LABELS[report.reason] ?? report.reason}
+            {(report.reason && REASON_LABELS[report.reason]) ?? report.reason}
           </span>
           <span className="report-game">{report.game_title ?? 'Unknown Game'}</span>
           <span className="report-reviewer">
@@ -123,12 +143,12 @@ function ReportRow({ report, onDismiss, onRemove, onBan, actioning }) {
 }
 
 export default function ReviewModeration() {
-  const [reports, setReports]       = useState([]);
+  const [reports, setReports]       = useState<Report[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [loadError, setLoadError]   = useState(null);
+  const [loadError, setLoadError]   = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('pending');
-  const [actioning, setActioning]   = useState(null);
-  const [actionMsg, setActionMsg]   = useState(null);
+  const [actioning, setActioning]   = useState<string | null>(null);
+  const [actionMsg, setActionMsg]   = useState<string | null>(null);
   const [page, setPage]             = useState(1);
   const [total, setTotal]           = useState(0);
   const PAGE_SIZE = 20;
@@ -150,12 +170,13 @@ export default function ReviewModeration() {
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
         ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-      });
+      }) as Report[] | { reports?: Report[]; items?: Report[]; total?: number } | null;
       const list = Array.isArray(data) ? data : (data?.reports ?? data?.items ?? []);
       setReports(list);
-      setTotal(data?.total ?? list.length);
+      const dataTotal = !Array.isArray(data) ? data?.total : undefined;
+      setTotal(dataTotal ?? list.length);
     } catch (err) {
-      setLoadError(err.message || 'Failed to load review reports');
+      setLoadError((err instanceof Error && err.message) || 'Failed to load review reports');
     } finally {
       setLoading(false);
     }
@@ -165,7 +186,7 @@ export default function ReviewModeration() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadReports(); }, [loadReports]);
 
-  const applyAction = useCallback(async (reportId, action) => {
+  const applyAction = useCallback(async (reportId: string, action: string) => {
     setActioning(reportId);
     setActionMsg(null);
     try {
@@ -175,7 +196,7 @@ export default function ReviewModeration() {
       setReports(prev =>
         prev.map(r => r.id === reportId ? { ...r, status: action === 'dismiss' ? 'dismissed' : 'actioned' } : r)
       );
-      const msgs = {
+      const msgs: Record<string, string> = {
         dismiss: 'Report dismissed — review kept.',
         remove_review: 'Review removed.',
         ban_user: 'Review removed and user banned.',
@@ -183,7 +204,7 @@ export default function ReviewModeration() {
       setActionMsg(msgs[action] ?? 'Done.');
       setTimeout(() => setActionMsg(null), 4000);
     } catch (err) {
-      setActionMsg(`Error: ${err.message}`);
+      setActionMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setActioning(null);
     }
