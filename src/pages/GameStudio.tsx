@@ -1,9 +1,29 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
+import type { ComponentType, FormEvent } from 'react';
 import Layout from '../components/Layout';
 import GamePreview from '../components/GamePreview';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 import './GameStudio.css';
+
+interface GameTemplate {
+  id: string;
+  name: string;
+  description: string;
+  tier: string;
+  tags?: string[];
+  player_count?: string;
+  tick_hz?: number;
+  topology?: string;
+}
+
+interface ScaffoldResult {
+  name?: string;
+  game_id?: string;
+  cli_instructions?: string;
+  next_steps?: string[];
+  [key: string]: unknown;
+}
 
 // Lazy-load CodeEditor — Monaco is large; keep it out of the main bundle.
 // The dynamic import means Vite/Rollup will split Monaco into its own chunk.
@@ -140,7 +160,7 @@ function BlankArt() {
   );
 }
 
-const TEMPLATE_ART = {
+const TEMPLATE_ART: Record<string, ComponentType> = {
   'arena-shooter': ArenaShooterArt,
   'platformer':    PlatformerArt,
   'fps-starter':   FPSArt,
@@ -152,7 +172,7 @@ const TEMPLATE_ART = {
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // ── Mock templates — only used when VITE_USE_MOCKS=true ──────────────────────
-const MOCK_TEMPLATES = [
+const MOCK_TEMPLATES: GameTemplate[] = [
   {
     id: 'arena-shooter',
     name: 'Arena Shooter',
@@ -215,13 +235,13 @@ const MOCK_TEMPLATES = [
   },
 ];
 
-const TIER_CONFIG = {
+const TIER_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   free:     { label: 'Free',     color: 'var(--color-success)', bg: 'rgba(61,220,132,0.1)' },
   starter:  { label: 'Starter',  color: 'var(--color-accent)',  bg: 'var(--color-accent-soft)' },
   advanced: { label: 'Advanced', color: 'var(--color-amber)',   bg: 'var(--color-amber-soft)' },
 };
 
-const TOPOLOGY_LABELS = {
+const TOPOLOGY_LABELS: Record<string, string> = {
   SingleRoom: 'Single Room (≤16)',
   Dedicated:  'Dedicated (≤256)',
   Sharded:    'Sharded (AAA)',
@@ -235,10 +255,10 @@ const STEP_RESULT    = 'result';
 export default function GameStudio() {
   const { t } = useTranslation();
   // ── Step 1: template gallery ─────────────────────────────────────────────
-  const [templates, setTemplates]         = useState(USE_MOCKS ? MOCK_TEMPLATES : []);
+  const [templates, setTemplates]         = useState<GameTemplate[]>(USE_MOCKS ? MOCK_TEMPLATES : []);
   const [templatesLoading, setTemplatesLoading] = useState(!USE_MOCKS);
-  const [templatesError, setTemplatesError]     = useState(null);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [templatesError, setTemplatesError]     = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<GameTemplate | null>(null);
 
   // ── Step 2: configure ────────────────────────────────────────────────────
   const [step, setStep]         = useState(STEP_TEMPLATE);
@@ -250,8 +270,8 @@ export default function GameStudio() {
 
   // ── Step 3: result ───────────────────────────────────────────────────────
   const [creating, setCreating]     = useState(false);
-  const [createError, setCreateError] = useState(null);
-  const [result, setResult]         = useState(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [result, setResult]         = useState<ScaffoldResult | null>(null);
 
   // ── Preview ──────────────────────────────────────────────────────────────
   const [showPreview, setShowPreview] = useState(false);
@@ -269,7 +289,8 @@ export default function GameStudio() {
     api.templates.list()
       .then((data) => {
         if (cancelled) return;
-        const list = Array.isArray(data) ? data : (data?.data ?? data?.templates ?? []);
+        const typed = data as GameTemplate[] | { data?: GameTemplate[]; templates?: GameTemplate[] } | null;
+        const list = Array.isArray(typed) ? typed : (typed?.data ?? typed?.templates ?? []);
         setTemplates(list.length > 0 ? list : MOCK_TEMPLATES);
       })
       .catch(() => {
@@ -286,7 +307,7 @@ export default function GameStudio() {
   }, []);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  const handleSelectTemplate = (tpl) => {
+  const handleSelectTemplate = (tpl: GameTemplate) => {
     setSelectedTemplate(tpl);
     setStep(STEP_CONFIGURE);
     setGameName('');
@@ -301,7 +322,7 @@ export default function GameStudio() {
     setCreateError(null);
   };
 
-  const handleCreate = async (e) => {
+  const handleCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!gameName.trim() || !selectedTemplate) return;
     setCreating(true);
@@ -312,12 +333,12 @@ export default function GameStudio() {
         name:        gameName.trim(),
         template_id: selectedTemplate.id,
         description: gameDesc.trim() || undefined,
-      });
+      }) as { data?: ScaffoldResult } & ScaffoldResult;
       const res = body?.data ?? body;
       setResult(res);
       setStep(STEP_RESULT);
     } catch (err) {
-      setCreateError(err?.message ?? 'Failed to create game');
+      setCreateError((err instanceof Error && err.message) || 'Failed to create game');
     } finally {
       setCreating(false);
     }
@@ -432,7 +453,7 @@ export default function GameStudio() {
                         </span>
                         <span className="meta-item">
                           <span className="meta-label">{t('game.templateTopology')}</span>
-                          <span className="meta-value">{TOPOLOGY_LABELS[tpl.topology] ?? tpl.topology ?? '—'}</span>
+                          <span className="meta-value">{TOPOLOGY_LABELS[tpl.topology ?? ''] ?? tpl.topology ?? '—'}</span>
                         </span>
                       </div>
 
@@ -529,7 +550,7 @@ export default function GameStudio() {
                 <div className="summary-grid">
                   <div className="summary-row">
                     <span className="summary-label">{t('game.summaryTopology')}</span>
-                    <span className="summary-value mono">{TOPOLOGY_LABELS[selectedTemplate.topology] ?? selectedTemplate.topology}</span>
+                    <span className="summary-value mono">{TOPOLOGY_LABELS[selectedTemplate.topology ?? ''] ?? selectedTemplate.topology}</span>
                   </div>
                   <div className="summary-row">
                     <span className="summary-label">{t('game.summaryTick')}</span>
