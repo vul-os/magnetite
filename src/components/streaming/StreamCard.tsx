@@ -1,4 +1,21 @@
+import type { KeyboardEvent } from 'react';
 import './StreamCard.css';
+
+export interface StreamCardStream {
+  id?: string | number;
+  title?: string;
+  game?: string;
+  streamer?: string;
+  viewerCount?: number;
+  thumbnailUrl?: string;
+  liveAt?: string;
+  [key: string]: unknown;
+}
+
+export interface StreamCardProps {
+  stream: StreamCardStream;
+  onWatch?: (stream: StreamCardStream) => void;
+}
 
 /**
  * StreamCard — displays a single live stream in the browse grid.
@@ -6,7 +23,7 @@ import './StreamCard.css';
  *   stream  { id, title, game, streamer, viewerCount, thumbnailUrl, liveAt }
  *   onWatch (stream) => void
  */
-export default function StreamCard({ stream, onWatch }) {
+export default function StreamCard({ stream, onWatch }: StreamCardProps) {
   const {
     title = 'Untitled Stream',
     game = 'Unknown Game',
@@ -27,7 +44,7 @@ export default function StreamCard({ stream, onWatch }) {
       role="button"
       tabIndex={0}
       aria-label={`Watch ${streamer} playing ${game}: ${title}. ${formattedViewers} viewers`}
-      onKeyDown={(e) => {
+      onKeyDown={(e: KeyboardEvent<HTMLElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onWatch?.(stream);
