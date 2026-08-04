@@ -259,7 +259,13 @@ export default function NotificationPreferences() {
   };
 
   // Category definitions — i18n keys resolved at render time.
-  const categories = [
+  const categories: {
+    key: string;
+    icon: ReactNode;
+    title: string;
+    description: string;
+    channels: ChannelRow[];
+  }[] = [
     {
       key: 'payouts',
       icon: <IconPayouts />,

@@ -1,10 +1,15 @@
 import { useNotifications } from '../hooks/useNotifications';
 import NotificationItem from './NotificationItem';
+import type { AppNotification } from '../context/NotificationContext';
 
-export default function NotificationDropdown({ onClose }) {
+interface NotificationDropdownProps {
+  onClose: () => void;
+}
+
+export default function NotificationDropdown({ onClose }: NotificationDropdownProps) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
-  const handleNotificationClick = (notification) => {
+  const handleNotificationClick = (notification: AppNotification) => {
     if (!notification.read) {
       markAsRead(notification.id);
     }

@@ -127,11 +127,17 @@ export default function CreateReview({
               Cancel
             </Button>
           )}
+          {/* NOTE: Button doesn't accept a `loading` prop (only `isLoading`); this
+              was already a no-op before the TS migration. Preserved as-is per
+              zero-behavior-change constraint; extracted to a variable so the
+              (pre-existing) mismatched prop doesn't fail strict JSX checking. */}
           <Button
-            type="submit"
-            variant="primary"
-            disabled={!isValid || isSubmitting}
-            loading={isSubmitting}
+            {...{
+              type: 'submit' as const,
+              variant: 'primary' as const,
+              disabled: !isValid || isSubmitting,
+              loading: isSubmitting,
+            }}
           >
             Submit Review
           </Button>

@@ -1,19 +1,26 @@
+import type { ComponentType } from 'react';
 import { TrophyIcon, UsersIcon, WalletIcon, SettingsIcon } from '../assets/icons';
+import type { AppNotification } from '../context/NotificationContext';
 
-const typeIcons = {
+const typeIcons: Record<string, ComponentType<{ width?: number; height?: number }>> = {
   achievement: TrophyIcon,
   invite: UsersIcon,
   payout: WalletIcon,
   system: SettingsIcon,
 };
 
-export default function NotificationItem({ notification, onClick }) {
-  const Icon = typeIcons[notification.type] || SettingsIcon;
+interface NotificationItemProps {
+  notification: AppNotification;
+  onClick: (notification: AppNotification) => void;
+}
 
-  const timeAgo = (dateString) => {
+export default function NotificationItem({ notification, onClick }: NotificationItemProps) {
+  const Icon = typeIcons[notification.type ?? ''] || SettingsIcon;
+
+  const timeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
     if (seconds < 60) return 'just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
