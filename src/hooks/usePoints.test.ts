@@ -18,15 +18,21 @@ vi.mock('../api/client', () => ({
 // Import the mock AFTER vi.mock so we get the mocked version.
 import { api } from '../api/client';
 
+const mockBalance = vi.mocked(api.points.balance);
+const mockHistory = vi.mocked(api.points.history);
+const mockRewards = vi.mocked(api.points.rewards);
+const mockLeaderboard = vi.mocked(api.points.leaderboard);
+const mockRedeem = vi.mocked(api.points.redeem);
+
 describe('usePoints', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: all API calls reject (simulates no backend) → hook uses mock data.
-    api.points.balance.mockRejectedValue(new Error('No backend'));
-    api.points.history.mockRejectedValue(new Error('No backend'));
-    api.points.rewards.mockRejectedValue(new Error('No backend'));
-    api.points.leaderboard.mockRejectedValue(new Error('No backend'));
-    api.points.redeem.mockRejectedValue(new Error('No backend'));
+    mockBalance.mockRejectedValue(new Error('No backend'));
+    mockHistory.mockRejectedValue(new Error('No backend'));
+    mockRewards.mockRejectedValue(new Error('No backend'));
+    mockLeaderboard.mockRejectedValue(new Error('No backend'));
+    mockRedeem.mockRejectedValue(new Error('No backend'));
   });
 
   afterEach(() => {
@@ -60,26 +66,26 @@ describe('usePoints', () => {
       rank: 5,
       season: { name: 'Season X', tier: 'Platinum', progress: 90, points_needed: 500 },
     };
-    api.points.balance.mockResolvedValue(fakeBalance);
-    api.points.history.mockRejectedValue(new Error('no hist'));
-    api.points.rewards.mockRejectedValue(new Error('no rew'));
-    api.points.leaderboard.mockRejectedValue(new Error('no lb'));
+    mockBalance.mockResolvedValue(fakeBalance);
+    mockHistory.mockRejectedValue(new Error('no hist'));
+    mockRewards.mockRejectedValue(new Error('no rew'));
+    mockLeaderboard.mockRejectedValue(new Error('no lb'));
 
     const { result } = renderHook(() => usePoints());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.balance.points).toBe(9_999);
-    expect(result.current.balance.rank).toBe(5);
+    expect(result.current.balance!.points).toBe(9_999);
+    expect(result.current.balance!.rank).toBe(5);
   });
 
   it('uses API history when backend returns a valid list', async () => {
     const fakeHistory = [
       { id: 10, type: 'earn', amount: 100, description: 'Test earn', created_at: '2026-05-01T00:00:00Z' },
     ];
-    api.points.balance.mockRejectedValue(new Error('no balance'));
-    api.points.history.mockResolvedValue({ history: fakeHistory });
-    api.points.rewards.mockRejectedValue(new Error('no rew'));
-    api.points.leaderboard.mockRejectedValue(new Error('no lb'));
+    mockBalance.mockRejectedValue(new Error('no balance'));
+    mockHistory.mockResolvedValue({ history: fakeHistory });
+    mockRewards.mockRejectedValue(new Error('no rew'));
+    mockLeaderboard.mockRejectedValue(new Error('no lb'));
 
     const { result } = renderHook(() => usePoints());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
@@ -100,16 +106,16 @@ describe('usePoints', () => {
     const seededRewards = [
       { id: 'r2', name: 'XP Boost (24h)', description: '2× points for 24 hours.', cost: 500, type: 'boost', available: true },
     ];
-    api.points.balance.mockResolvedValue(seededBalance);
-    api.points.rewards.mockResolvedValue(seededRewards);
-    api.points.history.mockRejectedValue(new Error('No backend'));
-    api.points.leaderboard.mockRejectedValue(new Error('No backend'));
+    mockBalance.mockResolvedValue(seededBalance);
+    mockRewards.mockResolvedValue(seededRewards);
+    mockHistory.mockRejectedValue(new Error('No backend'));
+    mockLeaderboard.mockRejectedValue(new Error('No backend'));
     // api.points.redeem is still rejecting (set in beforeEach)
 
     const { result } = renderHook(() => usePoints());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    const initialPoints = result.current.balance.points;
+    const initialPoints = result.current.balance!.points;
 
     let redeemResult;
     await act(async () => {
@@ -119,7 +125,7 @@ describe('usePoints', () => {
     // redeem returns failure when api rejects (api.points.redeem is mocked to reject)
     expect(redeemResult).toMatchObject({ success: false });
     // Points NOT deducted because the API call failed
-    expect(result.current.balance.points).toBe(initialPoints);
+    expect(result.current.balance!.points).toBe(initialPoints);
   });
 
   it('redeem: deducts points optimistically when API succeeds without returning points', async () => {
@@ -128,16 +134,16 @@ describe('usePoints', () => {
     const seededRewards = [
       { id: 'r2', name: 'XP Boost (24h)', description: '2× points for 24 hours.', cost: 500, type: 'boost', available: true },
     ];
-    api.points.balance.mockResolvedValue(seededBalance);
-    api.points.rewards.mockResolvedValue(seededRewards);
-    api.points.history.mockRejectedValue(new Error('No backend'));
-    api.points.leaderboard.mockRejectedValue(new Error('No backend'));
-    api.points.redeem.mockResolvedValue({ ok: true }); // no `points` field
+    mockBalance.mockResolvedValue(seededBalance);
+    mockRewards.mockResolvedValue(seededRewards);
+    mockHistory.mockRejectedValue(new Error('No backend'));
+    mockLeaderboard.mockRejectedValue(new Error('No backend'));
+    mockRedeem.mockResolvedValue({ ok: true }); // no `points` field
 
     const { result } = renderHook(() => usePoints());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
-    const initialPoints = result.current.balance.points;
+    const initialPoints = result.current.balance!.points;
     const rewardR2Cost = 500;
 
     let redeemResult;
@@ -146,11 +152,11 @@ describe('usePoints', () => {
     });
 
     expect(redeemResult).toMatchObject({ success: true });
-    expect(result.current.balance.points).toBe(Math.max(0, initialPoints - rewardR2Cost));
+    expect(result.current.balance!.points).toBe(Math.max(0, initialPoints - rewardR2Cost));
   });
 
   it('redeem: updates balance from API response when it includes points', async () => {
-    api.points.redeem.mockResolvedValue({ points: 3_000 });
+    mockRedeem.mockResolvedValue({ points: 3_000 });
     const { result } = renderHook(() => usePoints());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -158,11 +164,11 @@ describe('usePoints', () => {
       await result.current.redeem('r1');
     });
 
-    expect(result.current.balance.points).toBe(3_000);
+    expect(result.current.balance!.points).toBe(3_000);
   });
 
   it('redeem: adds a new history entry on success', async () => {
-    api.points.redeem.mockResolvedValue({ ok: true });
+    mockRedeem.mockResolvedValue({ ok: true });
     const { result } = renderHook(() => usePoints());
     await vi.waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -177,9 +183,9 @@ describe('usePoints', () => {
   });
 
   it('redeeming: sets redeeming flag while in-flight', async () => {
-    let resolveRedeem;
-    api.points.redeem.mockReturnValue(
-      new Promise((res) => { resolveRedeem = res; })
+    let resolveRedeem: (value: unknown) => void;
+    mockRedeem.mockReturnValue(
+      new Promise<unknown>((res) => { resolveRedeem = res; })
     );
 
     const { result } = renderHook(() => usePoints());
