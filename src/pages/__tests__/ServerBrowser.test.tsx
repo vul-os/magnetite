@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ServerBrowser from '../ServerBrowser';
 import { api } from '../../api/client';
+import type { SessionAd } from '../../hooks/useDiscovery';
 
 /**
  * Server-browser ↔ tracker contract.
@@ -20,13 +22,13 @@ vi.mock('../../api/client', () => ({
 }));
 
 vi.mock('../../components/Layout', () => ({
-  default: ({ children }) => <div>{children}</div>,
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 const HASH = '7f41c0a8e35d92b6104fa7cd8e2059b3746ac1de92f80b5537ea16c4d0938ab1';
 
 /** A fully-populated row, exactly as the tracker serializes it. */
-function fullRow(overrides = {}) {
+function fullRow(overrides: Partial<SessionAd> = {}): SessionAd {
   return {
     id: '3f2a1b6c-0d4e-4a71-9c83-1e5f7a2b9d04',
     game: HASH,
@@ -70,8 +72,8 @@ function sparseRow() {
   });
 }
 
-function serve(rows) {
-  api.discovery.sessions.mockResolvedValue({
+function serve(rows: SessionAd[]) {
+  vi.mocked(api.discovery.sessions).mockResolvedValue({
     success: true,
     data: { sessions: rows, total: rows.length },
   });
@@ -157,7 +159,7 @@ describe('ServerBrowser ↔ discovery payload', () => {
 
     await screen.findAllByText('Cosmic Raiders');
     const label = screen.getByText('distinct node keys');
-    expect(label.parentElement.textContent).toMatch(/2/);
+    expect(label.parentElement!.textContent).toMatch(/2/);
   });
 
   it('treats plain hex as the canonical form (no b3: prefix expected)', async () => {
@@ -171,7 +173,7 @@ describe('ServerBrowser ↔ discovery payload', () => {
   });
 
   it('survives a tracker being unreachable without blanking the page', async () => {
-    api.discovery.sessions.mockRejectedValue(new Error('No discovery tracker reachable'));
+    vi.mocked(api.discovery.sessions).mockRejectedValue(new Error('No discovery tracker reachable'));
     renderBrowser();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/tracker/i);
