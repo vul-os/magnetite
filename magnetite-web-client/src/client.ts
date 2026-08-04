@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/client.js
+ * magnetite-web-client/src/client.ts
  *
  * Public API entry point for the Magnetite web client.
  *
@@ -28,49 +28,76 @@
  */
 
 import { ConnectionManager } from './connection.js';
-import { PredictionBuffer, arenaApplyInput } from './prediction.js';
-import { InputCapture } from './input-capture.js';
-import { renderArenaView } from './renderer.js';
-import { encodeInputFrame, decodeBytes } from './protocol.js';
-import { applyDeltaToSnapshot, snapshotToView } from './delta.js';
+import { PredictionBuffer, arenaApplyInput, type ApplyInputFn } from './prediction';
+import { InputCapture } from './input-capture';
+import { renderArenaView } from './renderer';
+import { encodeInputFrame, decodeBytes } from './protocol';
+import { applyDeltaToSnapshot, snapshotToView } from './delta';
+import type { ArenaSnapshot, ArenaView, Input, MatchConfig } from './types';
 
 // ---------------------------------------------------------------------------
 // createClient
 // ---------------------------------------------------------------------------
 
-/**
- * @typedef {Object} ClientOptions
- * @property {string}  url                   - WebSocket URL
- * @property {string}  [token]               - Optional auth token
- * @property {HTMLCanvasElement} [canvas]    - Canvas to render into
- * @property {RenderFn} [render]             - Custom render function
- * @property {ApplyInputFn} [applyInput]     - Custom prediction function
- * @property {boolean} [autoReconnect=true]  - Whether to reconnect on drop
- */
+/** Custom render function — draws `state` (always the arena-shooter's
+ * ArenaView shape; see the module doc for why the wire protocol is not
+ * pluggable even though prediction/rendering are) onto `ctx`. */
+export type RenderFn = (
+  ctx: CanvasRenderingContext2D,
+  state: ArenaView,
+  localPlayerId: string | null,
+) => void;
 
-/**
- * @callback RenderFn
- * @param {CanvasRenderingContext2D} ctx
- * @param {unknown} state
- * @param {string | null} localPlayerId
- */
-
-/**
- * @callback ApplyInputFn
- * @param {unknown} state
- * @param {import('./types.js').Input} input
- * @param {number} tick
- * @returns {unknown}
- */
+export interface ClientOptions {
+  /** WebSocket URL */
+  url: string;
+  /** Optional auth token */
+  token?: string;
+  /** Canvas to render into */
+  canvas?: HTMLCanvasElement;
+  /** Custom render function */
+  render?: RenderFn;
+  /** Custom local-prediction function */
+  applyInput?: ApplyInputFn<ArenaView | null>;
+  /** Whether to reconnect on drop (default true) */
+  autoReconnect?: boolean;
+}
 
 /**
  * Create a Magnetite game client.
- *
- * @param {ClientOptions} opts
- * @returns {MagnetiteClient}
  */
-export function createClient(opts) {
+export function createClient(opts: ClientOptions): MagnetiteClient {
   return new MagnetiteClient(opts);
+}
+
+// ---------------------------------------------------------------------------
+// Server message shapes (the raw JSON each ServerNet handler receives)
+// ---------------------------------------------------------------------------
+
+interface WelcomeMessage {
+  player_id: string | number;
+  config?: MatchConfig;
+}
+
+interface SnapshotMessage {
+  tick: number | string;
+  full: string | number[] | null | undefined;
+}
+
+interface DeltaMessage {
+  tick: number | string;
+  since_tick?: number | string;
+  diff: string | number[] | null | undefined;
+}
+
+interface AckMessage {
+  seq: number | string;
+  tick: number | string;
+}
+
+interface RejectMessage {
+  seq: number | string;
+  reason?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,53 +105,53 @@ export function createClient(opts) {
 // ---------------------------------------------------------------------------
 
 class MagnetiteClient {
-  /**
-   * @param {ClientOptions} opts
-   */
-  constructor(opts) {
+  private _opts: ClientOptions;
+  /** The local player's id, assigned by Welcome */
+  private _playerId: string | null;
+  /** MatchConfig from Welcome */
+  private _config: MatchConfig | null;
+  /** Current client-predicted tick */
+  private _tick: number;
+  /** Monotonically increasing sequence number for InputFrames */
+  private _seq: number;
+  private _prediction: PredictionBuffer<ArenaView | null>;
+  private _input: InputCapture | null;
+  private _ctx: CanvasRenderingContext2D | null;
+  private _render: RenderFn;
+  private _stateListeners: Set<(state: ArenaView | null) => void>;
+  /** requestAnimationFrame handle */
+  private _rafHandle: number | null;
+  /** setInterval tick handle */
+  private _tickHandle: ReturnType<typeof setInterval> | null;
+  /** server tick rate in Hz (from Welcome or default 60) */
+  private _tickHz: number;
+  private _conn: ConnectionManager;
+
+  constructor(opts: ClientOptions) {
     this._opts = opts;
-
-    /** @type {string | null} The local player's id, assigned by Welcome */
     this._playerId = null;
-
-    /** @type {object | null} MatchConfig from Welcome */
     this._config = null;
-
-    /** @type {number} Current client-predicted tick */
     this._tick = 0;
-
-    /** @type {number} Monotonically increasing sequence number for InputFrames */
     this._seq = 0;
 
-    /** @type {import('./prediction.js').PredictionBuffer} */
-    this._prediction = new PredictionBuffer(
+    this._prediction = new PredictionBuffer<ArenaView | null>(
       opts.applyInput || arenaApplyInput
     );
 
-    /** @type {import('./input-capture.js').InputCapture | null} */
     this._input = opts.canvas
       ? new InputCapture(opts.canvas)
       : (typeof window !== 'undefined' ? new InputCapture(window) : null);
 
-    /** @type {CanvasRenderingContext2D | null} */
     this._ctx = opts.canvas ? opts.canvas.getContext('2d') : null;
 
-    /** @type {RenderFn} */
     this._render = opts.render || renderArenaView;
 
-    /** @type {Set<(state: unknown) => void>} */
     this._stateListeners = new Set();
 
-    /** @type {number | null} requestAnimationFrame handle */
     this._rafHandle = null;
-
-    /** @type {number | null} setInterval tick handle */
     this._tickHandle = null;
-
-    /** @type {number} server tick rate in Hz (from Welcome or default 60) */
     this._tickHz = 60;
 
-    /** @type {import('./connection.js').ConnectionManager} */
     this._conn = new ConnectionManager({
       url: opts.url,
       token: opts.token,
@@ -140,9 +167,8 @@ class MagnetiteClient {
 
   /**
    * Open the WebSocket connection.
-   * @returns {this}
    */
-  connect() {
+  connect(): this {
     if (this._input) this._input.attach();
     this._conn.connect();
     return this;
@@ -151,7 +177,7 @@ class MagnetiteClient {
   /**
    * Close the connection and stop the tick loop.
    */
-  disconnect() {
+  disconnect(): void {
     this._stopLoop();
     this._conn.disconnect();
     if (this._input) this._input.detach();
@@ -160,10 +186,8 @@ class MagnetiteClient {
   /**
    * Send a pre-built input directly (advanced use).
    * Increments seq and predicts locally.
-   *
-   * @param {import('./types.js').Input} input
    */
-  sendInput(input) {
+  sendInput(input: Input): void {
     const seq = ++this._seq;
     const tick = this._tick;
     const predicted = this._prediction.predict(seq, tick, input);
@@ -175,10 +199,9 @@ class MagnetiteClient {
    * Subscribe to state updates.
    * Callback fires on every local prediction step AND on authoritative updates.
    *
-   * @param {(state: unknown) => void} fn
-   * @returns {() => void} unsubscribe function
+   * @returns unsubscribe function
    */
-  onState(fn) {
+  onState(fn: (state: ArenaView | null) => void): () => void {
     this._stateListeners.add(fn);
     // Immediately call with current state if available
     const current = this._prediction.state;
@@ -186,24 +209,18 @@ class MagnetiteClient {
     return () => this._stateListeners.delete(fn);
   }
 
-  /**
-   * @returns {string | null} the local player id (set after Welcome)
-   */
-  get playerId() {
+  /** the local player id (set after Welcome) */
+  get playerId(): string | null {
     return this._playerId;
   }
 
-  /**
-   * @returns {object | null} the MatchConfig (set after Welcome)
-   */
-  get matchConfig() {
+  /** the MatchConfig (set after Welcome) */
+  get matchConfig(): MatchConfig | null {
     return this._config;
   }
 
-  /**
-   * @returns {unknown} the current predicted state
-   */
-  get state() {
+  /** the current predicted state */
+  get state(): ArenaView | null {
     return this._prediction.state;
   }
 
@@ -211,20 +228,25 @@ class MagnetiteClient {
   // Server message handlers
   // --------------------------------------------------------------------------
 
-  _wireHandlers() {
+  private _wireHandlers(): void {
     this._conn.on('welcome', (msg) => this._handleWelcome(msg));
-    this._conn.on('snapshot', (msg) => this._handleSnapshot(msg));
-    this._conn.on('delta', (msg) => this._handleDelta(msg));
-    this._conn.on('ack', (msg) => this._handleAck(msg));
-    this._conn.on('reject', (msg) => this._handleReject(msg));
+    this._conn.on('snapshot', (msg) => this._handleSnapshot(msg as unknown as SnapshotMessage));
+    this._conn.on('delta', (msg) => this._handleDelta(msg as unknown as DeltaMessage));
+    this._conn.on('ack', (msg) => this._handleAck(msg as unknown as AckMessage));
+    this._conn.on('reject', (msg) => this._handleReject(msg as unknown as RejectMessage));
   }
 
   /**
    * ServerNet::Welcome { player_id, config }
+   *
+   * Takes `unknown` (not `WelcomeMessage`) so this stays the exact shape a
+   * caller replacing it (e.g. GamePreview.tsx, which wraps this to also flip
+   * connection status to "connected") needs to match.
    */
-  _handleWelcome(msg) {
-    this._playerId = String(msg.player_id);
-    this._config = msg.config || null;
+  private _handleWelcome(msg: unknown): void {
+    const m = msg as WelcomeMessage;
+    this._playerId = String(m.player_id);
+    this._config = m.config || null;
     if (this._config && this._config.tick_hz) {
       this._tickHz = Number(this._config.tick_hz);
     }
@@ -238,9 +260,9 @@ class MagnetiteClient {
    * `full` is a Vec<u8> serialised snapshot (JSON of ArenaSnapshot).
    * serde_json serialises Vec<u8> as a base64 string.
    */
-  _handleSnapshot(msg) {
+  private _handleSnapshot(msg: SnapshotMessage): void {
     const tick = Number(msg.tick);
-    const snapshot = decodeBytes(msg.full);
+    const snapshot = decodeBytes(msg.full) as ArenaSnapshot | null;
     if (!snapshot) return;
 
     // advance local tick to server tick
@@ -258,7 +280,7 @@ class MagnetiteClient {
    *
    * `diff` is a Vec<u8> serialised ArenaDelta.
    */
-  _handleDelta(msg) {
+  private _handleDelta(msg: DeltaMessage): void {
     const tick = Number(msg.tick);
     const delta = decodeBytes(msg.diff);
     if (!delta) return;
@@ -272,7 +294,7 @@ class MagnetiteClient {
 
     // Convert view → snapshot for delta application
     const snapForDelta = _viewToSnapshot(authSnap);
-    const newSnap = applyDeltaToSnapshot(snapForDelta, delta, tick);
+    const newSnap = applyDeltaToSnapshot(snapForDelta, delta as Parameters<typeof applyDeltaToSnapshot>[1], tick);
     const newView = snapshotToView(newSnap, this._playerId);
 
     this._prediction.applySnapshot(newView, tick);
@@ -283,14 +305,14 @@ class MagnetiteClient {
   /**
    * ServerNet::Ack { seq, tick }
    */
-  _handleAck(msg) {
+  private _handleAck(msg: AckMessage): void {
     this._prediction.ack(Number(msg.seq), Number(msg.tick));
   }
 
   /**
    * ServerNet::Reject { seq, reason }
    */
-  _handleReject(msg) {
+  private _handleReject(msg: RejectMessage): void {
     console.warn('[magnetite] input rejected:', msg.reason, '(seq', msg.seq, ')');
     this._prediction.reject(Number(msg.seq));
     const state = this._prediction.state;
@@ -301,14 +323,14 @@ class MagnetiteClient {
   // Tick loop
   // --------------------------------------------------------------------------
 
-  _startLoop() {
+  private _startLoop(): void {
     this._stopLoop();
     const intervalMs = Math.round(1000 / this._tickHz);
     this._tickHandle = setInterval(() => this._tick_step(), intervalMs);
     if (this._ctx) this._scheduleRaf();
   }
 
-  _stopLoop() {
+  private _stopLoop(): void {
     if (this._tickHandle !== null) {
       clearInterval(this._tickHandle);
       this._tickHandle = null;
@@ -319,7 +341,7 @@ class MagnetiteClient {
     }
   }
 
-  _tick_step() {
+  private _tick_step(): void {
     if (!this._conn.isConnected) return;
     this._tick++;
 
@@ -331,7 +353,7 @@ class MagnetiteClient {
     this.sendInput(input);
   }
 
-  _scheduleRaf() {
+  private _scheduleRaf(): void {
     this._rafHandle = requestAnimationFrame(() => {
       this._renderFrame();
       this._rafHandle = null;
@@ -339,7 +361,7 @@ class MagnetiteClient {
     });
   }
 
-  _renderFrame() {
+  private _renderFrame(): void {
     if (!this._ctx) return;
     const state = this._prediction.state;
     if (!state) return;
@@ -354,7 +376,7 @@ class MagnetiteClient {
   // Internal helpers
   // --------------------------------------------------------------------------
 
-  _emitState(state) {
+  private _emitState(state: ArenaView | null): void {
     for (const fn of this._stateListeners) {
       try {
         fn(state);
@@ -372,11 +394,8 @@ class MagnetiteClient {
 /**
  * Convert an ArenaView back to a minimal ArenaSnapshot for delta application.
  * (Views contain self_state + other_players; snapshots contain players[])
- *
- * @param {import('./types.js').ArenaView} view
- * @returns {import('./types.js').ArenaSnapshot}
  */
-function _viewToSnapshot(view) {
+function _viewToSnapshot(view: ArenaView | null): ArenaSnapshot {
   if (!view) return { players: [], projectiles: [], tick: 0 };
 
   const players = [];
@@ -392,11 +411,8 @@ function _viewToSnapshot(view) {
 
 /**
  * Return a no-op input for ticks when input capture is unavailable.
- *
- * @param {number} seq
- * @returns {import('./types.js').Input}
  */
-function _emptyInput(seq) {
+function _emptyInput(seq: number): Input {
   return {
     keys: {
       forward: false, backward: false, left: false, right: false,
@@ -417,11 +433,11 @@ function _emptyInput(seq) {
 // Re-export lower-level primitives for advanced usage
 // ---------------------------------------------------------------------------
 
-export { PredictionBuffer, arenaApplyInput } from './prediction.js';
-export { renderArenaView } from './renderer.js';
-export { InputCapture } from './input-capture.js';
+export { PredictionBuffer, arenaApplyInput } from './prediction';
+export { renderArenaView } from './renderer';
+export { InputCapture } from './input-capture';
 export { ConnectionManager } from './connection.js';
-export { applyDeltaToSnapshot, snapshotToView } from './delta.js';
+export { applyDeltaToSnapshot, snapshotToView } from './delta';
 export { encodeInputFrame, parseServerMessage, decodeBytes,
-  defaultInput, defaultKeyState, defaultMouseState } from './protocol.js';
+  defaultInput, defaultKeyState, defaultMouseState } from './protocol';
 export { ReplayPlayer } from './replay-player.js';
