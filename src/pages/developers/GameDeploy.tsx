@@ -4,15 +4,67 @@ import Layout from '../../components/Layout';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
+import type { SelectOptionValue } from '../../components/common/Select';
 import Modal from '../../components/common/Modal';
 import DeploymentStatus from './DeploymentStatus';
+import type { Deployment } from './DeploymentStatus';
 import { Unavailable, LoadError } from '../../components/state/Unavailable';
 import { getOAuthUrl, api } from '../../api/client';
 import './GameDeploy.css';
 
+interface RepoOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+interface RawRepo {
+  id?: string;
+  full_name?: string;
+  name?: string;
+  description?: string;
+}
+
+interface RawDeploy {
+  id: string;
+  game_id?: string;
+  version_id?: string;
+  name?: string;
+  game_title?: string;
+  status?: string;
+  repo?: string;
+  github_repo?: string;
+  branch?: string;
+  build_branch?: string;
+  commit?: string;
+  commit_sha?: string;
+  version?: string;
+  duration?: string;
+  url?: string;
+  artifact_url?: string;
+  started_at?: string;
+  created_at?: string;
+  progress?: number;
+}
+
+interface DeployVersion {
+  id: string;
+  game_id?: string;
+  is_live?: boolean;
+  commit_sha?: string;
+  version?: string;
+  created_at?: string;
+}
+
+interface DeployGame {
+  id: string;
+  title?: string;
+  github_repo?: string;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -25,7 +77,7 @@ function authFetch(endpoint, options = {}) {
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
-const MOCK_REPOS = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_REPOS: RepoOption[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { value: 'cosmic-raiders',  label: 'cosmic-raiders',  description: 'Action space shooter game' },
       { value: 'galaxy-conquest', label: 'galaxy-conquest',  description: '4X strategy game'          },
@@ -33,7 +85,7 @@ const MOCK_REPOS = import.meta.env.VITE_USE_MOCKS === 'true'
     ]
   : null;
 
-const MOCK_DEPLOYMENTS = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_DEPLOYMENTS: Deployment[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       {
         id:         'deploy-1',
@@ -64,20 +116,20 @@ const STATIC_BRANCHES = [
   { value: 'staging', label: 'staging' },
 ];
 
-function normaliseRepo(r) {
+function normaliseRepo(r: RawRepo): RepoOption {
   return {
-    value:       r.id ?? r.full_name ?? r.name,
+    value:       r.id ?? r.full_name ?? r.name ?? '',
     label:       r.name ?? r.full_name ?? String(r.id),
     description: r.description ?? '',
   };
 }
 
-function normaliseDeploy(d) {
+function normaliseDeploy(d: RawDeploy): Deployment {
   const status = d.status ?? 'queued';
   return {
     id:        d.id,
-    game_id:   d.game_id ?? null,
-    version_id: d.version_id ?? d.id ?? null,
+    game_id:   d.game_id ?? undefined,
+    version_id: d.version_id ?? d.id ?? undefined,
     name:      d.name ?? d.game_title ?? 'Deployment',
     status,
     repo:      d.repo ?? d.github_repo ?? '',
@@ -85,7 +137,7 @@ function normaliseDeploy(d) {
     commit:    d.commit ?? d.commit_sha ?? '',
     version:   d.version ?? '',
     duration:  d.duration ?? '—',
-    url:       d.url ?? d.artifact_url ?? null,
+    url:       d.url ?? d.artifact_url ?? undefined,
     startedAt: d.started_at ?? d.created_at ?? new Date().toISOString(),
     progress:  d.progress ?? (
       status === 'built'    ? 100 :
@@ -100,10 +152,10 @@ function normaliseDeploy(d) {
  * — there is no separate build-job record. `is_live` is the only status the
  * backend actually knows, so that is the only status we claim.
  */
-function versionToDeploy(version, game) {
+function versionToDeploy(version: DeployVersion, game: DeployGame | undefined): Deployment {
   return normaliseDeploy({
     id:         version.id,
-    game_id:    version.game_id ?? game?.id ?? null,
+    game_id:    version.game_id ?? game?.id ?? undefined,
     version_id: version.id,
     name:       game?.title ?? 'Game',
     status:     version.is_live ? 'success' : 'built',
@@ -119,17 +171,17 @@ export default function GameDeploy() {
   const [step, setStep]               = useState(1);
   const [githubConnected, setGithubConnected] = useState(false);
   const [connecting, setConnecting]   = useState(false);
-  const [connectError, setConnectError] = useState(null);
-  const [repos, setRepos]             = useState(MOCK_REPOS ?? []);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [repos, setRepos]             = useState<RepoOption[]>(MOCK_REPOS ?? []);
   const [reposLoading, setReposLoading] = useState(false);
   const [selectedRepo, setSelectedRepo]   = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [gameSettings, setGameSettings] = useState({ title: '', description: '', tier: 'free' });
   const [deploying, setDeploying]       = useState(false);
-  const [deployError, setDeployError]   = useState(null);
-  const [deployments, setDeployments]   = useState(MOCK_DEPLOYMENTS ?? []);
+  const [deployError, setDeployError]   = useState<string | null>(null);
+  const [deployments, setDeployments]   = useState<Deployment[]>(MOCK_DEPLOYMENTS ?? []);
   const [deploymentsLoading, setDeploymentsLoading] = useState(!MOCK_DEPLOYMENTS);
-  const [deploymentsError, setDeploymentsError] = useState(null);
+  const [deploymentsError, setDeploymentsError] = useState<string | null>(null);
   const [showWebhookModal, setShowWebhookModal] = useState(false);
 
   /* Check existing GitHub installations on mount */
@@ -138,7 +190,7 @@ export default function GameDeploy() {
       try {
         const res = await authFetch('/api/github/installations');
         if (res.ok) {
-          const data = await res.json();
+          const data = await res.json() as { installations?: unknown[] } | unknown[];
           const list = Array.isArray(data) ? data : (data.installations ?? []);
           if (list.length > 0) {
             setGithubConnected(true);
@@ -171,7 +223,7 @@ export default function GameDeploy() {
     try {
       const res = await authFetch('/api/github/repos');
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { repos?: RawRepo[]; repositories?: RawRepo[] } | RawRepo[];
         const raw = Array.isArray(data) ? data : (data.repos ?? data.repositories ?? []);
         setRepos(raw.map(normaliseRepo));
       }
@@ -203,15 +255,15 @@ export default function GameDeploy() {
     setDeploymentsLoading(true);
     setDeploymentsError(null);
     try {
-      const body  = await api.developer.games();
-      const games = body?.games ?? body?.data ?? body ?? [];
+      const gamesBody = await api.developer.games() as { games?: DeployGame[]; data?: DeployGame[] } | DeployGame[] | null;
+      const games = (!Array.isArray(gamesBody) ? (gamesBody?.games ?? gamesBody?.data) : gamesBody) ?? [];
       const list  = Array.isArray(games) ? games : [];
 
       const perGame = await Promise.all(
         list.map(async (game) => {
           try {
-            const vBody = await api.developer.versions(game.id);
-            const versions = vBody?.data ?? vBody ?? [];
+            const vBody = await api.developer.versions(game.id) as { data?: DeployVersion[] } | DeployVersion[] | null;
+            const versions = (!Array.isArray(vBody) ? vBody?.data : vBody) ?? [];
             return (Array.isArray(versions) ? versions : []).map(v => versionToDeploy(v, game));
           } catch {
             // One game's versions failing must not blank the whole history.
@@ -221,10 +273,10 @@ export default function GameDeploy() {
       );
 
       setDeployments(
-        perGame.flat().sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+        perGame.flat().sort((a, b) => new Date(b.startedAt ?? 0).getTime() - new Date(a.startedAt ?? 0).getTime())
       );
     } catch (err) {
-      setDeploymentsError(err.message || 'Failed to load deployments');
+      setDeploymentsError((err instanceof Error && err.message) || 'Failed to load deployments');
     } finally {
       setDeploymentsLoading(false);
     }
@@ -245,7 +297,7 @@ export default function GameDeploy() {
       const oauthUrl = getOAuthUrl('github');
       window.location.href = oauthUrl;
     } catch (err) {
-      setConnectError(err.message || 'Failed to start GitHub OAuth');
+      setConnectError((err instanceof Error && err.message) || 'Failed to start GitHub OAuth');
       setConnecting(false);
     }
   };
@@ -258,9 +310,10 @@ export default function GameDeploy() {
     setStep(1);
   };
 
-  const handleSelectRepo = (repoValue) => {
-    setSelectedRepo(repoValue);
-    const repo = repos.find(r => r.value === repoValue);
+  const handleSelectRepo = (repoValue: SelectOptionValue | SelectOptionValue[]) => {
+    const value = String(Array.isArray(repoValue) ? repoValue[0] : repoValue);
+    setSelectedRepo(value);
+    const repo = repos.find(r => r.value === value);
     if (repo) {
       setGameSettings(prev => ({ ...prev, title: repo.label }));
     }
@@ -271,9 +324,9 @@ export default function GameDeploy() {
   // no route serves it. Rather than open an empty console that looks like it is
   // still loading, the modal states the absence.
   const [logModalOpen, setLogModalOpen]     = useState(false);
-  const [logModalDeploy, setLogModalDeploy] = useState(null);
+  const [logModalDeploy, setLogModalDeploy] = useState<Deployment | null>(null);
 
-  const handleViewLogs = useCallback((deployment) => {
+  const handleViewLogs = useCallback((deployment: Deployment) => {
     setLogModalDeploy(deployment);
     setLogModalOpen(true);
   }, []);
@@ -294,10 +347,10 @@ export default function GameDeploy() {
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { message?: string };
         throw new Error(err.message || `Failed to register game (HTTP ${res.status})`);
       }
-      const game = await res.json();
+      const game = await res.json() as { id?: string; data?: { id?: string } };
       const gameId = game.id ?? game.data?.id;
 
       /* The game record now exists. Re-read the real version history rather
@@ -306,18 +359,18 @@ export default function GameDeploy() {
        * would be a claim the backend cannot support. */
       if (gameId) await loadDeployments();
     } catch (err) {
-      setDeployError(err.message);
+      setDeployError(err instanceof Error ? err.message : String(err));
     } finally {
       setDeploying(false);
     }
   };
 
-  const [actionError, setActionError] = useState(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   /* Promote — PUT /developer/games/:gameId/versions/:versionId/promote */
-  const handlePromote = useCallback(async (deployment) => {
-    const gameId    = deployment.game_id;
-    const versionId = deployment.version_id;
+  const handlePromote = useCallback(async (deployment: Deployment) => {
+    const gameId    = deployment.game_id as string | undefined;
+    const versionId = deployment.version_id as string | undefined;
     if (!gameId || !versionId) {
       setActionError('Cannot promote: this entry has no game or version id.');
       return;
@@ -327,16 +380,16 @@ export default function GameDeploy() {
       await api.developer.promote(gameId, versionId);
       await loadDeployments();
     } catch (err) {
-      setActionError(`Promote failed: ${err.message}`);
+      setActionError(`Promote failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [loadDeployments]);
 
   /* Rollback — PUT /developer/games/:gameId/versions/:versionId/rollback.
    * The backend rolls back TO a version id, so the version being acted on is
    * the target; there is no free-text version to prompt for. */
-  const handleRollback = useCallback(async (deployment) => {
-    const gameId    = deployment.game_id;
-    const versionId = deployment.version_id;
+  const handleRollback = useCallback(async (deployment?: Deployment | null) => {
+    const gameId    = deployment?.game_id as string | undefined;
+    const versionId = deployment?.version_id as string | undefined;
     if (!gameId || !versionId) {
       setActionError('Cannot roll back: this entry has no game or version id.');
       return;
@@ -346,7 +399,7 @@ export default function GameDeploy() {
       await api.developer.rollback(gameId, versionId);
       await loadDeployments();
     } catch (err) {
-      setActionError(`Rollback failed: ${err.message}`);
+      setActionError(`Rollback failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [loadDeployments]);
 
@@ -504,7 +557,7 @@ export default function GameDeploy() {
                     <Select
                       options={STATIC_BRANCHES}
                       value={selectedBranch}
-                      onChange={setSelectedBranch}
+                      onChange={(value) => setSelectedBranch(String(Array.isArray(value) ? value[0] : value))}
                       placeholder="Select a branch..."
                     />
                   </div>
@@ -583,7 +636,7 @@ export default function GameDeploy() {
                     <Select
                       options={MOCK_TIER_OPTIONS}
                       value={gameSettings.tier}
-                      onChange={(value) => setGameSettings({ ...gameSettings, tier: value })}
+                      onChange={(value) => setGameSettings({ ...gameSettings, tier: String(Array.isArray(value) ? value[0] : value) })}
                     />
                     <span className="form-hint">
                       Subscribers at this tier or higher can access your game
@@ -664,13 +717,17 @@ export default function GameDeploy() {
                 </div>
               ) : (
                 <div className="deployments-list">
+                  {/* null and undefined are equally falsy to DeploymentStatus's
+                      `onPromote && (...)` check, so the ": undefined" below is
+                      behavior-preserving while satisfying the prop's type
+                      (which doesn't include null). */}
                   {deployments.map(deployment => (
                     <DeploymentStatus
                       key={deployment.id}
                       deployment={deployment}
                       onRollback={handleRollback}
                       onViewLogs={() => handleViewLogs(deployment)}
-                      onPromote={deployment.status === 'built' ? () => handlePromote(deployment) : null}
+                      onPromote={deployment.status === 'built' ? () => handlePromote(deployment) : undefined}
                     />
                   ))}
                 </div>

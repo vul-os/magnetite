@@ -6,7 +6,7 @@ import BuildLogs from './BuildLogs';
 import BuildTimeline from './BuildTimeline';
 import './DeploymentStatus.css';
 
-interface Deployment {
+export interface Deployment {
   id?: string | number;
   status?: string;
   name?: string;
