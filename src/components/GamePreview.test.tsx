@@ -23,10 +23,25 @@ import GamePreview from './GamePreview';
 // ---------------------------------------------------------------------------
 
 // We build a fake MagnetiteClient factory so we can push messages in tests.
-let _lastClient = null;
+let _lastClient: FakeMagnetiteClient | null = null;
+
+interface FakeConn {
+  onOpen: (() => void) | null;
+  onClose: (() => void) | null;
+  onError: (() => void) | null;
+  isConnected: boolean;
+  send: ReturnType<typeof vi.fn>;
+}
 
 class FakeMagnetiteClient {
-  constructor(opts) {
+  _opts: Record<string, unknown>;
+  _stateListeners: Set<(state: unknown) => void>;
+  _conn: FakeConn;
+  _prediction: { lag: number };
+  _playerId: string | null;
+  __patchedWelcome?: unknown;
+
+  constructor(opts: Record<string, unknown>) {
     this._opts = opts;
     this._stateListeners = new Set();
     this._conn = {
@@ -51,7 +66,7 @@ class FakeMagnetiteClient {
     if (this._conn.onClose) this._conn.onClose();
   }
 
-  onState(fn) {
+  onState(fn: (state: unknown) => void) {
     this._stateListeners.add(fn);
     return () => this._stateListeners.delete(fn);
   }
@@ -64,12 +79,12 @@ class FakeMagnetiteClient {
     this._handleWelcome({ player_id: playerId, config });
   }
 
-  _handleWelcome(msg) {
+  _handleWelcome(msg: unknown) {
     // GamePreview patches this after construction; we call the patched version.
-    if (this.__patchedWelcome) this.__patchedWelcome(msg);
+    if (this.__patchedWelcome) (this.__patchedWelcome as (msg: unknown) => void)(msg);
   }
 
-  _triggerState(state) {
+  _triggerState(state: unknown) {
     for (const fn of this._stateListeners) {
       fn(state);
     }
@@ -86,7 +101,7 @@ class FakeMagnetiteClient {
 }
 
 vi.mock('../../magnetite-web-client/src/client.js', () => ({
-  createClient: (opts) => new FakeMagnetiteClient(opts),
+  createClient: (opts: Record<string, unknown>) => new FakeMagnetiteClient(opts),
 }));
 
 // GamePreview imports CSS — mock it silently.
@@ -230,11 +245,9 @@ describe('GamePreview — connect flow', () => {
     // Patch the welcome handler (GamePreview replaces it).
     act(() => {
       // GamePreview patches _handleWelcome; trigger it via the patched version.
-      _lastClient.__patchedWelcome = _lastClient._opts?.onWelcome || null;
+      _lastClient!.__patchedWelcome = _lastClient!._opts?.onWelcome || null;
       // Directly call the original patched slot that GamePreview set.
-      if (_lastClient._handleWelcome) {
-        _lastClient._handleWelcome({ player_id: '1', config: { tick_hz: 60 } });
-      }
+      _lastClient!._handleWelcome({ player_id: '1', config: { tick_hz: 60 } });
     });
 
     // After welcome the status should flip to connected.
@@ -250,16 +263,14 @@ describe('GamePreview — connect flow', () => {
 
     // First send a Welcome to move to 'connected' state (player count only shows when connected).
     act(() => {
-      if (_lastClient._handleWelcome) {
-        _lastClient._handleWelcome({ player_id: '1', config: { tick_hz: 60 } });
-      }
+      _lastClient!._handleWelcome({ player_id: '1', config: { tick_hz: 60 } });
     });
 
     await waitFor(() => expect(screen.queryByText(/live/i)).toBeInTheDocument());
 
     act(() => {
       // Trigger a state update with 2 players (self + one other).
-      _lastClient._triggerState({
+      _lastClient!._triggerState({
         self_state: { id: '1', x: 0, y: 0, hp: 100, alive: true, angle: 0, score: 0, last_shot_tick: 0 },
         other_players: [
           { id: '2', x: 10, y: 10, hp: 100, alive: true, angle: 0, score: 0, last_shot_tick: 0 },
@@ -280,9 +291,7 @@ describe('GamePreview — connect flow', () => {
     await waitFor(() => expect(_lastClient).not.toBeNull());
 
     act(() => {
-      if (_lastClient._handleWelcome) {
-        _lastClient._handleWelcome({ player_id: '1', config: { tick_hz: 60 } });
-      }
+      _lastClient!._handleWelcome({ player_id: '1', config: { tick_hz: 60 } });
     });
 
     await waitFor(() =>
@@ -306,7 +315,7 @@ describe('GamePreview — error state', () => {
     await waitFor(() => expect(_lastClient).not.toBeNull());
 
     act(() => {
-      _lastClient._triggerError();
+      _lastClient!._triggerError();
     });
 
     await waitFor(() => {
@@ -320,7 +329,7 @@ describe('GamePreview — error state', () => {
     await waitFor(() => expect(_lastClient).not.toBeNull());
 
     act(() => {
-      _lastClient._triggerError();
+      _lastClient!._triggerError();
     });
 
     await waitFor(() =>
@@ -333,7 +342,7 @@ describe('GamePreview — error state', () => {
     await waitFor(() => expect(_lastClient).not.toBeNull());
 
     act(() => {
-      _lastClient._triggerError();
+      _lastClient!._triggerError();
     });
 
     await waitFor(() =>
@@ -346,7 +355,7 @@ describe('GamePreview — error state', () => {
     await waitFor(() => expect(_lastClient).not.toBeNull());
 
     act(() => {
-      _lastClient._triggerError();
+      _lastClient!._triggerError();
     });
 
     await waitFor(() =>
@@ -377,12 +386,10 @@ describe('GamePreview — disconnected state', () => {
 
     // Simulate a Welcome first, then close.
     act(() => {
-      if (_lastClient._handleWelcome) {
-        _lastClient._handleWelcome({ player_id: '1', config: {} });
-      }
+      _lastClient!._handleWelcome({ player_id: '1', config: {} });
     });
     act(() => {
-      _lastClient._triggerClose();
+      _lastClient!._triggerClose();
     });
 
     // The overlay heading specifically says "Disconnected".
@@ -396,12 +403,10 @@ describe('GamePreview — disconnected state', () => {
     await waitFor(() => expect(_lastClient).not.toBeNull());
 
     act(() => {
-      if (_lastClient._handleWelcome) {
-        _lastClient._handleWelcome({ player_id: '1', config: {} });
-      }
+      _lastClient!._handleWelcome({ player_id: '1', config: {} });
     });
     act(() => {
-      _lastClient._triggerClose();
+      _lastClient!._triggerClose();
     });
 
     await waitFor(() => {
