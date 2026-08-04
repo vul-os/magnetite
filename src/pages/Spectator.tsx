@@ -1,24 +1,54 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { FormEvent } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import GameOverlay from '../components/GameOverlay';
 import { api } from '../api/client';
 import './Spectator.css';
 
+interface SpectatorPlayer {
+  id: number;
+  username: string;
+  score: number;
+  kills: number;
+  deaths: number;
+  position: { x: number; y: number };
+}
+
+interface SpectatorEntry {
+  id: number;
+  username: string;
+  isChatting: boolean;
+}
+
+interface SpectatorChatMessage {
+  id: number;
+  player: string;
+  message: string;
+  timestamp: number;
+}
+
+interface ReplayItem {
+  id: string;
+  recorded_at: string;
+  tick_count?: number;
+  verdict?: string;
+}
+
 // ── Mock replays ──────────────────────────────────────────────────────────────
-const MOCK_REPLAYS = [
+const MOCK_REPLAYS: ReplayItem[] = [
   { id: 'mock-replay-1', recorded_at: new Date(Date.now() - 3600000).toISOString(), tick_count: 300, verdict: 'Clean' },
   { id: 'mock-replay-2', recorded_at: new Date(Date.now() - 86400000).toISOString(), tick_count: 540, verdict: 'Clean' },
 ];
 
 // ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
-const MOCK_SPECTATORS = [
+const MOCK_SPECTATORS: SpectatorEntry[] = [
   { id: 1, username: 'Viewer123',   isChatting: true  },
   { id: 2, username: 'GamerFan',    isChatting: false },
   { id: 3, username: 'Spectator99', isChatting: true  },
 ];
 
-const MOCK_PLAYERS = [
+const MOCK_PLAYERS: SpectatorPlayer[] = [
   { id: 1, username: 'PlayerOne',  score: 1250, kills: 5, deaths: 2, position: { x: 30, y: 45 } },
   { id: 2, username: 'GameMaster', score: 1100, kills: 4, deaths: 3, position: { x: 55, y: 20 } },
   { id: 3, username: 'ProGamer99', score:  980, kills: 3, deaths: 4, position: { x: 70, y: 60 } },
@@ -35,11 +65,11 @@ export default function Spectator() {
     `/ws/spectate/${gameId}`
   );
 
-  const [players, setPlayers]           = useState(USE_MOCKS ? MOCK_PLAYERS : []);
-  const [cameraMode, setCameraMode]     = useState('follow');
-  const [followedPlayer, setFollowedPlayer] = useState(USE_MOCKS ? MOCK_PLAYERS[0] : null);
-  const [spectators, setSpectators]     = useState(USE_MOCKS ? MOCK_SPECTATORS : []);
-  const [chatMessages, setChatMessages] = useState(
+  const [players, setPlayers]           = useState<SpectatorPlayer[]>(USE_MOCKS ? MOCK_PLAYERS : []);
+  const [cameraMode, setCameraMode]     = useState<'follow' | 'free'>('follow');
+  const [followedPlayer, setFollowedPlayer] = useState<SpectatorPlayer | null>(USE_MOCKS ? MOCK_PLAYERS[0] : null);
+  const [spectators, setSpectators]     = useState<SpectatorEntry[]>(USE_MOCKS ? MOCK_SPECTATORS : []);
+  const [chatMessages, setChatMessages] = useState<SpectatorChatMessage[]>(
     USE_MOCKS
       ? [
           { id: 1, player: 'Viewer123', message: 'Great game!',      timestamp: 60000 },
@@ -48,7 +78,7 @@ export default function Spectator() {
       : []
   );
   const [chatInput, setChatInput]       = useState('');
-  const [replays, setReplays]           = useState([]);
+  const [replays, setReplays]           = useState<ReplayItem[]>([]);
   const [replaysLoading, setReplaysLoading] = useState(false);
 
   // camera position derived from followedPlayer — no extra state needed
@@ -65,22 +95,26 @@ export default function Spectator() {
 
   // Handle incoming WS messages
   useEffect(() => {
-    if (!lastMessage) return;
+    // lastMessage can be a raw string per useWebSocket's typing; that never
+    // matches the .type switch below, same as before.
+    if (!lastMessage || typeof lastMessage === 'string') return;
 
     switch (lastMessage.type) {
-      case 'players_update':
+      case 'players_update': {
+        const msg = lastMessage as unknown as { players: SpectatorPlayer[] };
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setPlayers(lastMessage.players);
+        setPlayers(msg.players);
         if (cameraMode === 'follow') {
-          const updated = lastMessage.players.find(p => p.id === followedPlayer?.id);
+          const updated = msg.players.find(p => p.id === followedPlayer?.id);
           if (updated) setFollowedPlayer(updated);
         }
         break;
+      }
       case 'spectator_update':
-        setSpectators(lastMessage.spectators);
+        setSpectators((lastMessage as unknown as { spectators: SpectatorEntry[] }).spectators);
         break;
       case 'chat_message':
-        setChatMessages(prev => [...prev, lastMessage.message]);
+        setChatMessages(prev => [...prev, (lastMessage as unknown as { message: SpectatorChatMessage }).message]);
         break;
       case 'game_ended':
         navigate('/matchmaking');
@@ -99,16 +133,19 @@ export default function Spectator() {
     setReplaysLoading(true);
     // GET /api/v1/replays does not exist; replays are listed per game at
     // GET /api/v1/games/:id/replays, which is what this page actually wants.
-    const fetch = USE_MOCKS
+    const fetch: Promise<unknown> = USE_MOCKS
       ? Promise.resolve(MOCK_REPLAYS)
-      : api.replays.listForGame(gameId, { limit: 5 }).then((r) => r?.data ?? r);
+      : api.replays.listForGame(gameId, { limit: 5 }).then((r) => {
+          const typed = r as { data?: ReplayItem[] } | ReplayItem[] | null;
+          return typed && !Array.isArray(typed) ? typed.data : typed;
+        });
     fetch
-      .then((r) => setReplays(Array.isArray(r) ? r : []))
+      .then((r) => setReplays(Array.isArray(r) ? (r as ReplayItem[]) : []))
       .catch(() => setReplays([]))
       .finally(() => setReplaysLoading(false));
   }, [gameId]);
 
-  const handleSendChat = useCallback((e) => {
+  const handleSendChat = useCallback((e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
@@ -126,8 +163,8 @@ export default function Spectator() {
     navigate('/matchmaking');
   }, [sendMessage, navigate]);
 
-  const handleFollowPlayer = useCallback((playerId) => {
-    const p = players.find(pl => pl.id === parseInt(playerId, 10));
+  const handleFollowPlayer = useCallback((playerId: number | string) => {
+    const p = players.find(pl => pl.id === parseInt(String(playerId), 10));
     if (p) { setFollowedPlayer(p); setCameraMode('follow'); }
   }, [players]);
 
