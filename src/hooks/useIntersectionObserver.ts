@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export function useIntersectionObserver(options = {}) {
+export function useIntersectionObserver(options: IntersectionObserverInit = {}) {
   const [isIntersecting, setIsIntersecting] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<Element | null>(null);
 
   useEffect(() => {
     const element = ref.current;
@@ -22,7 +22,7 @@ export function useIntersectionObserver(options = {}) {
     };
   }, [options]);
 
-  const setRef = useCallback((node) => {
+  const setRef = useCallback((node: Element | null) => {
     ref.current = node;
   }, []);
 

@@ -1,13 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
 
-export function useGameSession(gameId) {
+export interface SessionPlayer {
+  id: string;
+  [key: string]: unknown;
+}
+
+export type SessionStatus = 'connecting' | 'invalid' | 'active' | 'finished' | 'left' | string;
+
+export function useGameSession(gameId: string | number | null | undefined) {
   const { isConnected, lastMessage, sendMessage, reconnect } = useWebSocket(`/ws/game/${gameId}`);
 
-  const [gameState, setGameState] = useState(null);
-  const [players, setPlayers] = useState([]);
-  const [sessionStatus, setSessionStatus] = useState('connecting');
-  const [sessionError, setSessionError] = useState(null);
+  const [gameState, setGameState] = useState<unknown>(null);
+  const [players, setPlayers] = useState<SessionPlayer[]>([]);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('connecting');
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   // Reset session status when the target game changes.
   useEffect(() => {
@@ -39,30 +46,32 @@ export function useGameSession(gameId) {
     // with any older backend build until the rename lands.
     // Incoming WebSocket messages (an external system) drive all of this state.
     /* eslint-disable react-hooks/set-state-in-effect */
-    const t = lastMessage?.type;
+    if (!lastMessage || typeof lastMessage === 'string') return;
+    const msg = lastMessage;
+    const t = msg.type;
     if (t === 'state_update' || t === 'game_state' || t === 'game_state_update') {
-      if (lastMessage.state) setGameState(lastMessage.state);
-      if (Array.isArray(lastMessage.players)) setPlayers(lastMessage.players);
+      if (msg.state) setGameState(msg.state);
+      if (Array.isArray(msg.players)) setPlayers(msg.players as SessionPlayer[]);
     }
     if (t === 'player_join' || t === 'player_joined') {
-      const player = lastMessage.player ?? { id: lastMessage.player_id };
+      const player = (msg.player as SessionPlayer) ?? { id: msg.player_id as string };
       setPlayers((p) => [...p, player]);
     }
     if (t === 'player_leave' || t === 'player_left') {
-      const id = lastMessage.player_id ?? lastMessage.playerId;
+      const id = msg.player_id ?? msg.playerId;
       setPlayers((p) => p.filter((pl) => pl.id !== id));
     }
     if (t === 'game_over') {
       setSessionStatus('finished');
-      setGameState(lastMessage.finalState ?? lastMessage.state ?? null);
+      setGameState(msg.finalState ?? msg.state ?? null);
     }
     if (t === 'error') {
-      setSessionError(lastMessage.message);
+      setSessionError(msg.message as string);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [lastMessage]);
 
-  const makeMove = useCallback((cellIndex) => {
+  const makeMove = useCallback((cellIndex: number) => {
     sendMessage({ type: 'make_move', cellIndex, gameId });
   }, [sendMessage, gameId]);
 

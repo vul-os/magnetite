@@ -1,6 +1,11 @@
 import { useState, useCallback } from 'react';
 
-export function useTour(initialSteps = [], options = {}) {
+export interface UseTourOptions {
+  onComplete?: () => void;
+  onSkip?: () => void;
+}
+
+export function useTour<T = unknown>(initialSteps: T[] = [], options: UseTourOptions = {}) {
   const { onComplete, onSkip } = options;
   const [currentStep, setCurrentStep] = useState(0);
   const [isActive, setIsActive] = useState(false);
@@ -37,7 +42,7 @@ export function useTour(initialSteps = [], options = {}) {
     stop();
   }, [onSkip, stop]);
 
-  const goToStep = useCallback((stepIndex) => {
+  const goToStep = useCallback((stepIndex: number) => {
     if (stepIndex >= 0 && stepIndex < steps.length) {
       setCurrentStep(stepIndex);
     }

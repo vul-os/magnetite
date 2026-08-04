@@ -1,4 +1,6 @@
-export const mockGames = [
+import type { Game } from '../types/domain';
+
+export const mockGames: Game[] = [
   {
     id: '1',
     title: 'Cosmic Drift',

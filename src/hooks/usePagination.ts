@@ -1,6 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
 
-export function usePagination({ total, perPage = 10, currentPage: initialPage = 1 }) {
+export interface UsePaginationOptions {
+  total: number;
+  perPage?: number;
+  currentPage?: number;
+}
+
+export function usePagination({ total, perPage = 10, currentPage: initialPage = 1 }: UsePaginationOptions) {
   const [currentPage, setCurrentPage] = useState(initialPage);
 
   const totalPages = useMemo(() => {
@@ -24,7 +30,7 @@ export function usePagination({ total, perPage = 10, currentPage: initialPage = 
     return currentPage > 1;
   }, [currentPage]);
 
-  const goTo = useCallback((page) => {
+  const goTo = useCallback((page: number) => {
     const pageNum = Math.max(1, Math.min(page, totalPages));
     setCurrentPage(pageNum);
   }, [totalPages]);

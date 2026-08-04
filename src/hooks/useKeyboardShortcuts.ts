@@ -1,10 +1,17 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-export function useKeyboardShortcuts(shortcuts, enabled = true) {
-  const pendingSequence = useRef(null);
-  const sequenceTimeout = useRef(null);
+export interface KeyboardShortcut {
+  key: string;
+  action: () => void;
+  allowInInput?: boolean;
+  [key: string]: unknown;
+}
 
-  const handleKeyDown = useCallback((event) => {
+export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[], enabled = true) {
+  const pendingSequence = useRef<string | null>(null);
+  const sequenceTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return;
 
     const key = event.key;
@@ -50,7 +57,7 @@ export function useKeyboardShortcuts(shortcuts, enabled = true) {
     });
 
     if (shortcut) {
-      const target = event.target;
+      const target = event.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
       if (!isInput || shortcut.allowInInput) {
         event.preventDefault();

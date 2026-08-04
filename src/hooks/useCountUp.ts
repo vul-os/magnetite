@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 
-export function useCountUp(end, duration = 2000) {
+export function useCountUp(end: number, duration = 2000) {
   const [count, setCount] = useState(0);
-  const startTimeRef = useRef(null);
-  const rafRef = useRef(null);
+  const startTimeRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   // Animates a count via requestAnimationFrame, an external timing system that
   // legitimately drives state from inside the effect.
@@ -14,7 +14,7 @@ export function useCountUp(end, duration = 2000) {
       return;
     }
 
-    const animate = (timestamp) => {
+    const animate = (timestamp: number) => {
       if (!startTimeRef.current) startTimeRef.current = timestamp;
       const progress = Math.min((timestamp - startTimeRef.current) / duration, 1);
       setCount(Math.floor(progress * end));

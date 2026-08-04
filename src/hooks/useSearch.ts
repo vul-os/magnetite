@@ -1,20 +1,30 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '../api/client';
+import type { SearchResultItem, SearchResults } from '../types/domain';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 const RECENT_SEARCHES_KEY = 'magnetite_recent_searches';
 const MAX_RECENT_SEARCHES = 5;
 const DEBOUNCE_MS = 300;
 
-function getRecentSearches() {
+export interface SearchFilters {
+  genre?: string;
+  [key: string]: unknown;
+}
+
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
+function getRecentSearches(): string[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY)) || [];
+    return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || 'null') || [];
   } catch {
     return [];
   }
 }
 
-function saveRecentSearch(query) {
+function saveRecentSearch(query: string) {
   const recent = getRecentSearches();
   const filtered = recent.filter(s => s.toLowerCase() !== query.toLowerCase());
   const updated = [query, ...filtered].slice(0, MAX_RECENT_SEARCHES);
@@ -29,48 +39,61 @@ const CATEGORIES = ['All', 'Games', 'Users', 'Leaderboard', 'Achievements'];
 
 const GENRES = ['Action', 'Adventure', 'Puzzle', 'Racing', 'RPG', 'Shooter', 'Strategy', 'Simulation', 'Sports', 'Other'];
 
-async function fetchSearchResults(query, searchType = 'all', filters = {}) {
+interface SearchApiResult {
+  id: string | number;
+  result_type: 'game' | 'user';
+  title?: string;
+  username?: string;
+  description?: string;
+  avatar_url?: string;
+  genre?: string;
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+async function fetchSearchResults(query: string, searchType = 'all', filters: SearchFilters = {}): Promise<SearchResults> {
   if (USE_MOCKS) {
     const q = query.toLowerCase();
     const { mockGames }       = await import('../data/mockGames');
     const { mockSearchUsers } = await import('../data/mockFriends');
-    const results = { games: [], users: [] };
+    const results: SearchResults = { games: [], users: [] };
     if (searchType === 'All' || searchType === 'Games') {
       results.games = mockGames
         .filter(g => g.title.toLowerCase().includes(q) || (g.developer ?? '').toLowerCase().includes(q))
         .filter(g => !filters.genre || (g.genre ?? '').toLowerCase() === filters.genre.toLowerCase())
         .slice(0, 5)
-        .map(g => ({ type: 'game', id: g.id, title: g.title, subtitle: g.developer ?? '', ...g }));
+        .map(g => ({ ...g, type: 'game' as const, id: g.id, title: g.title, subtitle: g.developer ?? '' }));
     }
     if (searchType === 'All' || searchType === 'Users') {
       results.users = mockSearchUsers
         .filter(u => u.username.toLowerCase().includes(q))
         .slice(0, 5)
-        .map(u => ({ type: 'user', id: u.id, title: u.username, subtitle: u.status ?? '', ...u }));
+        .map(u => ({ ...u, type: 'user' as const, id: u.id, title: u.username, subtitle: u.status ?? '' }));
     }
     return results;
   }
 
   // Real API path — let errors propagate so callers can show an error state
-  const data = await api.search.query(query, searchType.toLowerCase(), 20, 0, filters);
+  const data = await api.search.query(query, searchType.toLowerCase(), 20, 0, filters) as { results?: SearchApiResult[] };
+  const apiResults = data.results ?? [];
   return {
-    games: (data.results ?? [])
+    games: apiResults
       .filter(r => r.result_type === 'game')
-      .map(g => ({
+      .map((g): SearchResultItem => ({
         type: 'game',
         id: g.id,
-        title: g.title,
+        title: g.title ?? '',
         subtitle: g.description || '',
         result_type: 'game',
         genre: g.genre ?? null,
         tags: g.tags ?? [],
       })),
-    users: (data.results ?? [])
+    users: apiResults
       .filter(r => r.result_type === 'user')
-      .map(u => ({
+      .map((u): SearchResultItem => ({
         type: 'user',
         id: u.id,
-        title: u.username,
+        title: u.username ?? '',
         subtitle: u.avatar_url || '',
         result_type: 'user',
       })),
@@ -79,15 +102,15 @@ async function fetchSearchResults(query, searchType = 'all', filters = {}) {
 
 export function useSearch() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recentSearches, setRecentSearches] = useState(getRecentSearches);
-  const debounceRef = useRef(null);
-  const [filters, setFilters] = useState({});
+  const [recentSearches, setRecentSearches] = useState<string[]>(getRecentSearches);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [filters, setFilters] = useState<SearchFilters>({});
 
-  const [searchError, setSearchError] = useState(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  const search = useCallback(async (searchQuery, category = 'All', activeFilters = {}) => {
+  const search = useCallback((searchQuery: string, category = 'All', activeFilters: SearchFilters = {}): Promise<SearchResults | null> => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -96,7 +119,7 @@ export function useSearch() {
       setResults(null);
       setLoading(false);
       setSearchError(null);
-      return null;
+      return Promise.resolve(null);
     }
 
     setLoading(true);
@@ -111,7 +134,7 @@ export function useSearch() {
           resolve(data);
         } catch (err) {
           setResults(null);
-          setSearchError(err.message ?? 'Search failed');
+          setSearchError(errMessage(err, 'Search failed'));
           setLoading(false);
           resolve(null);
         }
@@ -119,7 +142,7 @@ export function useSearch() {
     });
   }, []);
 
-  const addRecentSearch = useCallback((searchQuery) => {
+  const addRecentSearch = useCallback((searchQuery: string) => {
     if (!searchQuery.trim()) return;
     saveRecentSearch(searchQuery);
     setRecentSearches(getRecentSearches());

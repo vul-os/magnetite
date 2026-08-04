@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export function useMediaQuery(query) {
+export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
 
   // Subscribes to a matchMedia list (external system) and seeds the initial
@@ -10,7 +10,7 @@ export function useMediaQuery(query) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMatches(mq.matches);
 
-    function handler(e) {
+    function handler(e: MediaQueryListEvent) {
       setMatches(e.matches);
     }
 

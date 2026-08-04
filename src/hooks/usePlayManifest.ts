@@ -15,8 +15,23 @@ import { api } from '../api/client';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+export interface PlayManifest {
+  game_id: string;
+  version: string;
+  commit_sha: string;
+  wasm_url: string | null;
+  server_url: string;
+  artifact_type: string;
+  sha256_hash: string | null;
+  file_size_bytes: number | null;
+}
+
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
 // ── Mock data — only used when VITE_USE_MOCKS=true ───────────────────────────
-function buildMockManifest(gameId) {
+function buildMockManifest(gameId: string): PlayManifest {
   return {
     game_id: gameId,
     version: '0.1.0-mock',
@@ -32,13 +47,12 @@ function buildMockManifest(gameId) {
 /**
  * Fetch the play manifest for a game.
  *
- * @param {string|null|undefined} gameId  UUID of the game.
- * @returns {{ manifest: object|null, loading: boolean, error: string|null, reload: () => void }}
+ * @param gameId  UUID of the game.
  */
-export function usePlayManifest(gameId) {
-  const [manifest, setManifest] = useState(null);
+export function usePlayManifest(gameId: string | null | undefined) {
+  const [manifest, setManifest] = useState<PlayManifest | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [rev, setRev] = useState(0);
 
   const reload = () => setRev((r) => r + 1);
@@ -72,13 +86,13 @@ export function usePlayManifest(gameId) {
         const body = await api.distribution.playManifest(gameId);
         if (cancelled) return;
         // Unwrap optional { data: ... } wrapper
-        const m = body?.data ?? body;
+        const m = (body as { data?: PlayManifest } | null)?.data ?? (body as PlayManifest | null);
         setManifest(m);
         setError(null);
       } catch (err) {
         if (cancelled) return;
         setManifest(null);
-        setError(err?.message ?? 'Failed to load play manifest');
+        setError(errMessage(err, 'Failed to load play manifest'));
       } finally {
         if (!cancelled) setLoading(false);
       }

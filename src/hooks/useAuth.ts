@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
+import type { AuthUser } from '../types/domain';
 
 // Single canonical token key shared across all auth modules and client.js.
 // client.js (not owned by this agent) reads localStorage.getItem('token') —
@@ -13,8 +14,15 @@ const USER_KEY = 'magnetite_user';
 // not running and floods the console with 503s on every mock/screenshot boot.
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+interface AuthResult {
+  token?: string;
+  access_token?: string;
+  user?: AuthUser;
+  [key: string]: unknown;
+}
+
 export function useAuth() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -37,7 +45,7 @@ export function useAuth() {
       }
       // Try to validate token against real API
       try {
-        const me = await api.auth.me();
+        const me = await api.auth.me() as AuthUser;
         setUser(me);
         localStorage.setItem(USER_KEY, JSON.stringify(me));
       } catch {
@@ -55,10 +63,10 @@ export function useAuth() {
     restoreSession();
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const result = await api.auth.login({ email, password });
+  const login = useCallback(async (email: string, password: string) => {
+    const result = await api.auth.login({ email, password }) as AuthResult;
     const token = result.token || result.access_token;
-    const userData = result.user || result;
+    const userData = result.user || (result as unknown as AuthUser);
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
     }
@@ -66,10 +74,10 @@ export function useAuth() {
     setUser(userData);
   }, []);
 
-  const register = useCallback(async (username, email, password) => {
-    const result = await api.auth.register({ username, email, password });
+  const register = useCallback(async (username: string, email: string, password: string) => {
+    const result = await api.auth.register({ username, email, password }) as AuthResult;
     const token = result.token || result.access_token;
-    const userData = result.user || result;
+    const userData = result.user || (result as unknown as AuthUser);
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
     }

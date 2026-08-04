@@ -1,10 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 
 export function useFocusTrap(isActive = true) {
-  const containerRef = useRef(null);
-  const previousActiveElement = useRef(null);
+  const containerRef = useRef<HTMLElement | null>(null);
+  const previousActiveElement = useRef<Element | null>(null);
 
-  const getFocusableElements = useCallback((container) => {
+  const getFocusableElements = useCallback((container: HTMLElement | null): HTMLElement[] => {
     if (!container) return [];
 
     const focusableSelectors = [
@@ -16,7 +16,7 @@ export function useFocusTrap(isActive = true) {
       '[tabindex]:not([tabindex="-1"])',
     ].join(', ');
 
-    return Array.from(container.querySelectorAll(focusableSelectors));
+    return Array.from(container.querySelectorAll<HTMLElement>(focusableSelectors));
   }, []);
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export function useFocusTrap(isActive = true) {
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
 
       const activeElement = document.activeElement;
@@ -52,8 +52,9 @@ export function useFocusTrap(isActive = true) {
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
-      if (previousActiveElement.current && previousActiveElement.current.focus) {
-        previousActiveElement.current.focus();
+      const prev = previousActiveElement.current as HTMLElement | null;
+      if (prev && prev.focus) {
+        prev.focus();
       }
     };
   }, [isActive, getFocusableElements]);

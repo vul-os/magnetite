@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export function useTypingEffect(text, speed = 50) {
+export function useTypingEffect(text: string | null | undefined, speed = 50): string {
   const [displayedText, setDisplayedText] = useState('');
 
   // Drives a typewriter animation via setInterval (external timer); resetting the

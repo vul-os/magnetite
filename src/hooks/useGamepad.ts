@@ -12,7 +12,27 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  *  - setActiveGamepad, updateBinding, clearBinding, resetBindings
  */
 
-const DEFAULT_BINDINGS = {
+export type BindingAction =
+  | 'move_forward' | 'move_backward' | 'move_left' | 'move_right'
+  | 'aim_horizontal' | 'aim_vertical'
+  | 'fire' | 'aim' | 'jump' | 'interact' | 'reload' | 'sprint' | 'map' | 'pause';
+
+export interface AxisBinding {
+  type: 'axis';
+  index: number;
+  invert: boolean;
+}
+
+export interface ButtonBinding {
+  type: 'button';
+  index: number;
+}
+
+export type Binding = AxisBinding | ButtonBinding;
+
+export type Bindings = Partial<Record<BindingAction, Binding>>;
+
+const DEFAULT_BINDINGS: Bindings = {
   move_forward:   { type: 'axis',   index: 1, invert: true  },
   move_backward:  { type: 'axis',   index: 1, invert: false },
   move_left:      { type: 'axis',   index: 0, invert: true  },
@@ -31,7 +51,7 @@ const DEFAULT_BINDINGS = {
 
 const STORAGE_KEY = 'magnetite_gamepad_bindings';
 
-function loadBindings() {
+function loadBindings(): Bindings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : DEFAULT_BINDINGS;
@@ -40,20 +60,34 @@ function loadBindings() {
   }
 }
 
-function saveBindings(bindings) {
+function saveBindings(bindings: Bindings) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
   } catch { /* ignore */ }
 }
 
+export interface GamepadSnapshot {
+  id: string;
+  index: number;
+  connected: boolean;
+  buttonCount: number;
+  axisCount: number;
+}
+
+export interface ButtonState {
+  pressed: boolean;
+  touched: boolean;
+  value: number;
+}
+
 export function useGamepad() {
-  const [gamepads, setGamepads]         = useState([]);
+  const [gamepads, setGamepads]         = useState<GamepadSnapshot[]>([]);
   const [activeGamepad, setActiveGamepad] = useState(0);
-  const [axes, setAxes]                 = useState([]);
-  const [buttons, setButtons]           = useState([]);
-  const [bindings, setBindings]         = useState(loadBindings);
-  const [listening, setListening]       = useState(null); // action key being re-bound
-  const rafRef                          = useRef(null);
+  const [axes, setAxes]                 = useState<number[]>([]);
+  const [buttons, setButtons]           = useState<ButtonState[]>([]);
+  const [bindings, setBindings]         = useState<Bindings>(loadBindings);
+  const [listening, setListening]       = useState<BindingAction | null>(null); // action key being re-bound
+  const rafRef                          = useRef<number | null>(null);
   const mountedRef                      = useRef(true);
 
   // Poll gamepads
@@ -62,7 +96,7 @@ export function useGamepad() {
 
     function poll() {
       if (!mountedRef.current) return;
-      const raw = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+      const raw: Gamepad[] = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter((g): g is Gamepad => g !== null) : [];
       setGamepads(raw.map(g => ({
         id: g.id,
         index: g.index,
@@ -91,7 +125,7 @@ export function useGamepad() {
 
     return () => {
       mountedRef.current = false;
-      cancelAnimationFrame(rafRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       window.removeEventListener('gamepadconnected', onConnect);
       window.removeEventListener('gamepaddisconnected', onDisconnect);
     };
@@ -101,16 +135,16 @@ export function useGamepad() {
   useEffect(() => {
     if (!listening) return;
 
-    let rafId;
+    let rafId: number;
     function detectInput() {
-      const raw = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+      const raw: Gamepad[] = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter((g): g is Gamepad => g !== null) : [];
       const gp  = raw[activeGamepad];
-      if (gp) {
+      if (gp && listening) {
         // Check buttons
         for (let i = 0; i < gp.buttons.length; i++) {
           if (gp.buttons[i].pressed) {
             setBindings(prev => {
-              const next = { ...prev, [listening]: { type: 'button', index: i } };
+              const next: Bindings = { ...prev, [listening]: { type: 'button', index: i } };
               saveBindings(next);
               return next;
             });
@@ -122,7 +156,7 @@ export function useGamepad() {
         for (let i = 0; i < gp.axes.length; i++) {
           if (Math.abs(gp.axes[i]) > 0.7) {
             setBindings(prev => {
-              const next = { ...prev, [listening]: { type: 'axis', index: i, invert: gp.axes[i] < 0 } };
+              const next: Bindings = { ...prev, [listening]: { type: 'axis', index: i, invert: gp.axes[i] < 0 } };
               saveBindings(next);
               return next;
             });
@@ -137,10 +171,10 @@ export function useGamepad() {
     return () => cancelAnimationFrame(rafId);
   }, [listening, activeGamepad]);
 
-  const startListening = useCallback((action) => setListening(action), []);
+  const startListening = useCallback((action: BindingAction) => setListening(action), []);
   const cancelListening = useCallback(() => setListening(null), []);
 
-  const clearBinding = useCallback((action) => {
+  const clearBinding = useCallback((action: BindingAction) => {
     setBindings(prev => {
       const next = { ...prev };
       delete next[action];

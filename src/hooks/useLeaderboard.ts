@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import type { LeaderboardEntry } from '../types/domain';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-export function useLeaderboard(gameId) {
-  const [entries, setEntries] = useState([]);
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
+export function useLeaderboard(gameId: string | number | null | undefined) {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetches leaderboard data (external API); loading/reset state is necessarily
   // driven from within the effect.
@@ -28,18 +33,20 @@ export function useLeaderboard(gameId) {
           const { mockLeaderboard } = await import('../data/mockLeaderboard');
           if (!cancelled) {
             const key = String(gameId);
-            setEntries(mockLeaderboard[key] || mockLeaderboard['1'] || []);
+            const table = mockLeaderboard as Record<string, LeaderboardEntry[]>;
+            setEntries(table[key] || table['1'] || []);
           }
           return;
         }
 
-        const data = await api.games.leaderboard(gameId);
+        const data = await api.games.leaderboard(gameId as string | number);
         if (!cancelled) {
-          setEntries(Array.isArray(data) ? data : (data?.entries ?? []));
+          const body = data as { entries?: LeaderboardEntry[] } | LeaderboardEntry[] | null;
+          setEntries(Array.isArray(body) ? body : (body?.entries ?? []));
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message ?? 'Failed to load leaderboard');
+          setError(errMessage(err, 'Failed to load leaderboard'));
           setEntries([]);
         }
       } finally {

@@ -47,7 +47,41 @@ const HASH_COSMIC = '7f41c0a8e35d92b6104fa7cd8e2059b3746ac1de92f80b5537ea16c4d09
 const HASH_SPEED = '2ad9e6104b73fc85a01d7e29c4b850fa3e6d1927cc4f0b83a71e5d6294fb03c8';
 const HASH_VOID = 'c184de0a7b29635f10e4a8cd7b3902fe58d64a1cbb730e95d2416af8073c5e29';
 
-const MOCK_SESSIONS = [
+export interface SessionCapacity {
+  cpu_cores: number;
+  ram_mb: number;
+  bandwidth_mbps: number;
+  free_slots: number;
+  max_shards: number;
+}
+
+export interface SessionPrice {
+  amount: number;
+  currency: string;
+  unit: string;
+}
+
+/** One row of `GET /api/v1/discovery/sessions` — see field-provenance table above. */
+export interface SessionAd {
+  id: string;
+  game: string;
+  game_title: string | null;
+  game_version: string | null;
+  node: string;
+  operator: string | null;
+  region: string | null;
+  capacity: SessionCapacity;
+  ping_hint: number;
+  price: SessionPrice | null;
+  chat_room: string | null;
+  voice_room: string | null;
+  node_key: string;
+  players: number | null;
+  max_players: number | null;
+  expires_at: number;
+}
+
+const MOCK_SESSIONS: SessionAd[] = [
   {
     id: '3f2a1b6c-0d4e-4a71-9c83-1e5f7a2b9d04',
     game: HASH_COSMIC,
@@ -163,25 +197,42 @@ const MOCK_SESSIONS = [
   },
 ];
 
-function asList(payload) {
-  const body = payload?.data ?? payload;
+function asList(payload: unknown): SessionAd[] {
+  const body = (payload as { data?: unknown } | null)?.data ?? payload;
   if (Array.isArray(body)) return body;
-  if (Array.isArray(body?.sessions)) return body.sessions;
-  if (Array.isArray(body?.ads)) return body.ads;
+  const sessions = (body as { sessions?: unknown } | null)?.sessions;
+  if (Array.isArray(sessions)) return sessions;
+  const ads = (body as { ads?: unknown } | null)?.ads;
+  if (Array.isArray(ads)) return ads;
   return [];
 }
 
-/**
- * @param {object} filter
- * @param {string} [filter.game]      content address to narrow to
- * @param {number} [filter.maxPing]   drop ads slower than this
- * @param {boolean} [filter.freeSlotsOnly] drop full ads
- * @param {boolean} [filter.freeOnly] drop ads that charge a hosting fee
- */
-export function useDiscovery(filter = {}) {
-  const [sessions, setSessions] = useState(USE_MOCKS ? MOCK_SESSIONS : []);
+export interface DiscoveryFilter {
+  /** content address to narrow to */
+  game?: string;
+  /** drop ads slower than this */
+  maxPing?: number;
+  /** drop full ads */
+  freeSlotsOnly?: boolean;
+  /** drop ads that charge a hosting fee */
+  freeOnly?: boolean;
+}
+
+interface DiscoveredGame {
+  hash: string;
+  title: string | null;
+  version: string | null;
+  nodes: number;
+}
+
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
+export function useDiscovery(filter: DiscoveryFilter = {}) {
+  const [sessions, setSessions] = useState<SessionAd[]>(USE_MOCKS ? MOCK_SESSIONS : []);
   const [loading, setLoading] = useState(!USE_MOCKS);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (USE_MOCKS) return;
@@ -198,7 +249,7 @@ export function useDiscovery(filter = {}) {
         if (!cancelled) {
           // Discovery is a hint layer: a tracker being down is not fatal, it
           // just means we found nobody this time.
-          setError(err.message || 'No discovery tracker reachable');
+          setError(errMessage(err, 'No discovery tracker reachable'));
           setSessions([]);
         }
       } finally {
@@ -233,7 +284,7 @@ export function useDiscovery(filter = {}) {
    * identity anyway.
    */
   const games = useMemo(() => {
-    const seen = new Map();
+    const seen = new Map<string, DiscoveredGame>();
     for (const s of sessions) {
       if (!s.game) continue;
       if (!seen.has(s.game)) {
@@ -244,7 +295,7 @@ export function useDiscovery(filter = {}) {
           nodes: 0,
         });
       }
-      const entry = seen.get(s.game);
+      const entry = seen.get(s.game) as DiscoveredGame;
       entry.nodes += 1;
       // First non-null title wins; trackers may resolve some rows and not others.
       if (entry.title == null && s.game_title != null) entry.title = s.game_title;

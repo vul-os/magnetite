@@ -1,9 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
+import type { ApiError } from '../api/client';
 
 // ── Mock data — only used when VITE_USE_MOCKS=true ──────────────────────────
 
-const MOCK_BALANCE = {
+export interface PointsSeason {
+  name: string;
+  ends_at: string;
+  tier: string;
+  next_tier: string;
+  progress: number;
+  points_needed: number;
+}
+
+export interface PointsBalance {
+  points: number;
+  lifetime_points: number;
+  rank: number;
+  season: PointsSeason;
+}
+
+export interface PointsHistoryEntry {
+  id: number;
+  type: string;
+  amount: number;
+  description: string;
+  created_at: string;
+}
+
+export interface PointsReward {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  type: string;
+  image: string;
+  available: boolean;
+}
+
+export interface PointsLeaderboardEntry {
+  rank: number;
+  username: string;
+  points: number;
+  avatar: string;
+}
+
+const MOCK_BALANCE: PointsBalance = {
   points: 4_820,
   lifetime_points: 32_400,
   rank: 142,
@@ -17,7 +59,7 @@ const MOCK_BALANCE = {
   },
 };
 
-const MOCK_HISTORY = [
+const MOCK_HISTORY: PointsHistoryEntry[] = [
   { id: 1, type: 'earn',   amount: +500,  description: 'Win streak bonus — Cosmic Raiders', created_at: '2026-05-28T18:04:00Z' },
   { id: 2, type: 'earn',   amount: +250,  description: 'Daily login streak (7 days)',        created_at: '2026-05-27T09:00:00Z' },
   { id: 3, type: 'redeem', amount: -1000, description: 'Redeemed: Neon HUD Skin',            created_at: '2026-05-25T14:30:00Z' },
@@ -26,7 +68,7 @@ const MOCK_HISTORY = [
   { id: 6, type: 'earn',   amount: +200,  description: 'Referral bonus',                     created_at: '2026-05-20T08:45:00Z' },
 ];
 
-const MOCK_REWARDS = [
+const MOCK_REWARDS: PointsReward[] = [
   { id: 'r1', name: 'Neon HUD Skin',      description: 'Electric-teal HUD for any game.',  cost: 1_000, type: 'cosmetic', image: 'https://picsum.photos/seed/reward1/80/80', available: true },
   { id: 'r2', name: 'XP Boost (24h)',     description: '2× points for 24 hours.',           cost: 500,   type: 'boost',    image: 'https://picsum.photos/seed/reward2/80/80', available: true },
   { id: 'r3', name: 'Season Frame',       description: 'Exclusive Iron Core profile frame.', cost: 2_000, type: 'cosmetic', image: 'https://picsum.photos/seed/reward3/80/80', available: true },
@@ -34,7 +76,7 @@ const MOCK_REWARDS = [
   { id: 'r5', name: 'Gold Badge',         description: 'Permanent Gold tier profile badge.', cost: 5_000, type: 'cosmetic', image: 'https://picsum.photos/seed/reward5/80/80', available: false },
 ];
 
-const MOCK_LEADERBOARD = [
+const MOCK_LEADERBOARD: PointsLeaderboardEntry[] = [
   { rank: 1,  username: 'VoidStriker',   points: 98_450, avatar: 'https://picsum.photos/seed/void/40/40' },
   { rank: 2,  username: 'NeonHunter',    points: 87_220, avatar: 'https://picsum.photos/seed/neon/40/40' },
   { rank: 3,  username: 'IronCorePilot', points: 74_100, avatar: 'https://picsum.photos/seed/iron/40/40' },
@@ -49,15 +91,19 @@ const MOCK_LEADERBOARD = [
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+function errMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null)?.message ?? fallback;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function usePoints() {
-  const [balance, setBalance]         = useState(USE_MOCKS ? MOCK_BALANCE : null);
-  const [history, setHistory]         = useState(USE_MOCKS ? MOCK_HISTORY : []);
-  const [rewards, setRewards]         = useState(USE_MOCKS ? MOCK_REWARDS : []);
-  const [leaderboard, setLeaderboard] = useState(USE_MOCKS ? MOCK_LEADERBOARD : []);
+  const [balance, setBalance]         = useState<PointsBalance | null>(USE_MOCKS ? MOCK_BALANCE : null);
+  const [history, setHistory]         = useState<PointsHistoryEntry[]>(USE_MOCKS ? MOCK_HISTORY : []);
+  const [rewards, setRewards]         = useState<PointsReward[]>(USE_MOCKS ? MOCK_REWARDS : []);
+  const [leaderboard, setLeaderboard] = useState<PointsLeaderboardEntry[]>(USE_MOCKS ? MOCK_LEADERBOARD : []);
   const [loading, setLoading]         = useState(!USE_MOCKS);
-  const [error, setError]             = useState(null);
+  const [error, setError]             = useState<string | null>(null);
   const [redeeming, setRedeeming]     = useState(false);
   /**
    * The rewards catalogue and redemption are NOT implemented on this backend —
@@ -86,31 +132,31 @@ export function usePoints() {
 
         if (!cancelled) {
           if (balRes.status === 'fulfilled' && balRes.value) {
-            setBalance(balRes.value);
+            setBalance(balRes.value as PointsBalance);
           } else if (balRes.status === 'rejected') {
-            setError(balRes.reason?.message ?? 'Failed to load points balance');
+            setError(errMessage(balRes.reason, 'Failed to load points balance'));
           }
 
-          if (histRes.status === 'fulfilled' && Array.isArray(histRes.value?.history)) {
-            setHistory(histRes.value.history);
+          if (histRes.status === 'fulfilled' && Array.isArray((histRes.value as { history?: unknown })?.history)) {
+            setHistory((histRes.value as { history: PointsHistoryEntry[] }).history);
           } else if (histRes.status === 'fulfilled' && Array.isArray(histRes.value)) {
-            setHistory(histRes.value);
+            setHistory(histRes.value as PointsHistoryEntry[]);
           }
 
-          if (rewRes.status === 'fulfilled' && Array.isArray(rewRes.value?.rewards)) {
-            setRewards(rewRes.value.rewards);
+          if (rewRes.status === 'fulfilled' && Array.isArray((rewRes.value as { rewards?: unknown })?.rewards)) {
+            setRewards((rewRes.value as { rewards: PointsReward[] }).rewards);
           } else if (rewRes.status === 'fulfilled' && Array.isArray(rewRes.value)) {
-            setRewards(rewRes.value);
+            setRewards(rewRes.value as PointsReward[]);
           } else if (rewRes.status === 'rejected') {
             // 404 = the route is not mounted. Anything else = a real failure.
-            setRewardsUnavailable(rewRes.reason?.notFound === true);
+            setRewardsUnavailable((rewRes.reason as ApiError)?.notFound === true);
             setRewards([]);
           }
 
-          if (lbRes.status === 'fulfilled' && Array.isArray(lbRes.value?.entries)) {
-            setLeaderboard(lbRes.value.entries);
+          if (lbRes.status === 'fulfilled' && Array.isArray((lbRes.value as { entries?: unknown })?.entries)) {
+            setLeaderboard((lbRes.value as { entries: PointsLeaderboardEntry[] }).entries);
           } else if (lbRes.status === 'fulfilled' && Array.isArray(lbRes.value)) {
-            setLeaderboard(lbRes.value);
+            setLeaderboard(lbRes.value as PointsLeaderboardEntry[]);
           }
         }
       } finally {
@@ -122,13 +168,17 @@ export function usePoints() {
     return () => { cancelled = true; };
   }, []);
 
-  const redeem = useCallback(async (rewardId) => {
+  const redeem = useCallback(async (rewardId: string) => {
     setRedeeming(true);
     try {
-      const result = await api.points.redeem({ reward_id: rewardId });
+      const result = await api.points.redeem({ reward_id: rewardId }) as { points?: number } | null;
       const reward = rewards.find(r => r.id === rewardId);
       if (result?.points != null) {
-        setBalance(b => ({ ...b, points: result.points }));
+        const nextPoints = result.points;
+        // Mirrors the original's `{ ...b, points }` even when b is still null
+        // (spreading null contributes nothing) — the balance object is
+        // deliberately allowed to be points-only until the next full load.
+        setBalance(b => ({ ...(b ?? {}), points: nextPoints } as PointsBalance));
       } else if (reward) {
         setBalance(b => b ? { ...b, points: Math.max(0, b.points - reward.cost) } : b);
       }
@@ -138,7 +188,7 @@ export function usePoints() {
       ]);
       return { success: true };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: errMessage(err, 'unknown error') };
     } finally {
       setRedeeming(false);
     }

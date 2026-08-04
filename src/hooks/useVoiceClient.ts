@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useVoice } from './useVoice';
 import { useCommsSocket } from './useCommsSocket';
+import type { WsFrame, VoiceParticipant } from '../types/comms';
 
 /**
  * useVoiceClient — the real voice experience orchestrator for Wave 7.
@@ -15,27 +16,36 @@ import { useCommsSocket } from './useCommsSocket';
  *  - Reduced-motion safe (animation flags only; CSS guards the motion)
  *
  * Designed to be composed *inside* VoicePanel — it owns NO global state.
- *
- * @param {object} opts
- *   communityId          {string|null}  — for useVoice room listing
- *   onVoiceStateChange   {function}     — called with server voice_state_update msgs
- *
- * @returns {object}  — see shape at bottom of hook
  */
+
+export interface UseVoiceClientOptions {
+  /** for useVoice room listing */
+  communityId?: string | null;
+  /** called with server voice_state_update msgs */
+  onVoiceStateChange?: (msg: WsFrame) => void;
+}
+
+export type PermissionState = 'idle' | 'granted' | 'denied' | 'unavailable';
+
+interface RemoteAudioEntry {
+  audioEl: HTMLAudioElement;
+  stream: MediaStream;
+  stopDetector: () => void;
+}
 
 const SPEAKING_THRESHOLD = 18;   // RMS dB above floor that counts as "speaking"
 const POLL_INTERVAL_MS   = 80;   // analyse speaking at ~12 fps
 
 // ── Web Audio speaking detector ────────────────────────────────────────────
-function createSpeakingDetector(stream, onSpeaking) {
+function createSpeakingDetector(stream: MediaStream | null, onSpeaking: (isSpeaking: boolean) => void): () => void {
   if (!stream || typeof AudioContext === 'undefined') {
     return () => {};
   }
 
-  let ctx;
-  let analyser;
-  let source;
-  let rafId;
+  let ctx: AudioContext;
+  let analyser: AnalyserNode;
+  let source: MediaStreamAudioSourceNode;
+  let rafId: number;
   let stopped = false;
 
   try {
@@ -53,7 +63,7 @@ function createSpeakingDetector(stream, onSpeaking) {
   const dataArray = new Uint8Array(analyser.fftSize);
   let lastTick = 0;
 
-  function tick(now) {
+  function tick(now: number) {
     if (stopped) return;
     rafId = requestAnimationFrame(tick);
 
@@ -83,7 +93,7 @@ function createSpeakingDetector(stream, onSpeaking) {
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────
-export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) {
+export function useVoiceClient({ communityId = null, onVoiceStateChange }: UseVoiceClientOptions = {}) {
   // ── Underlying data-layer hooks (frozen, do NOT edit) ─────────────────
   const voice = useVoice(communityId);
 
@@ -95,12 +105,12 @@ export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) 
 
   // Stable voice-state handler — never re-creates so useCommsSocket options
   // don't trigger a new WS subscription on every render.
-  const handleVoiceState = useCallback((msg) => {
+  const handleVoiceState = useCallback((msg: WsFrame) => {
     if (onVoiceStateChangeRef.current) onVoiceStateChangeRef.current(msg);
     const v = voiceRef.current;
-    if (msg.action === 'join')        v.addParticipant(msg.participant);
-    else if (msg.action === 'leave')  v.removeParticipant(msg.user_id);
-    else if (msg.action === 'update') v.updateParticipant(msg.user_id, msg.updates);
+    if (msg.action === 'join')        v.addParticipant(msg.participant as VoiceParticipant);
+    else if (msg.action === 'leave')  v.removeParticipant(String(msg.user_id));
+    else if (msg.action === 'update') v.updateParticipant(String(msg.user_id), msg.updates as Partial<VoiceParticipant>);
   }, []);
 
   // We use useCommsSocket for signaling only — no chat handlers needed here
@@ -109,18 +119,18 @@ export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) 
   });
 
   // ── Local connection / permission state ───────────────────────────────
-  const [permissionState, setPermissionState] = useState('idle'); // idle|granted|denied|unavailable
+  const [permissionState, setPermissionState] = useState<PermissionState>('idle');
   const [localSpeaking, setLocalSpeaking]     = useState(false);
 
   // ── Remote audio tracking: userId → { audioEl, stream, stopDetector } ──
-  const remoteAudioRef = useRef({});
+  const remoteAudioRef = useRef<Record<string, RemoteAudioEntry>>({});
   // ── Local stream analyser cleanup ──────────────────────────────────────
-  const localDetectorCleanupRef = useRef(null);
+  const localDetectorCleanupRef = useRef<(() => void) | null>(null);
   // ── Local stream ref (for mute track enable/disable) ───────────────────
-  const localStreamRef = useRef(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   // ── Attach / detach a remote audio element for a stream ──────────────
-  const attachRemoteStream = useCallback((userId, stream) => {
+  const attachRemoteStream = useCallback((userId: string, stream: MediaStream) => {
     // Detach any existing element first
     const existing = remoteAudioRef.current[userId];
     if (existing) {
@@ -140,7 +150,7 @@ export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) 
     remoteAudioRef.current[userId] = { audioEl, stream, stopDetector };
   }, [voice]);
 
-  const detachRemoteStream = useCallback((userId) => {
+  const detachRemoteStream = useCallback((userId: string) => {
     const entry = remoteAudioRef.current[userId];
     if (!entry) return;
     entry.stopDetector?.();
@@ -166,7 +176,7 @@ export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) 
   }, [voice.muted]);
 
   // ── Join a voice room ─────────────────────────────────────────────────
-  const joinVoiceRoom = useCallback(async (roomId) => {
+  const joinVoiceRoom = useCallback(async (roomId: string) => {
     // Leave any current room first (clean slate)
     if (voice.currentRoom) {
       socket.destroyPeer();
@@ -185,7 +195,7 @@ export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) 
       return joinResult;
     }
 
-    const { token } = joinResult;
+    const token = joinResult.token as string;
 
     try {
       const { localStream } = await socket.initPeer(roomId, token, {
@@ -219,9 +229,10 @@ export function useVoiceClient({ communityId = null, onVoiceStateChange } = {}) 
         setPermissionState('denied');
       }
     } catch (err) {
-      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+      const name = (err as { name?: string } | null)?.name;
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         setPermissionState('denied');
-      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
         setPermissionState('unavailable');
       } else {
         setPermissionState('denied');
