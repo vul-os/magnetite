@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { NavigationPage } from './page-objects/navigation.page.js';
+import { NavigationPage } from './page-objects/navigation.page';
 
 test.describe('Navigation', () => {
-  let navigationPage;
+  let navigationPage: NavigationPage;
 
   test.beforeEach(async ({ page }) => {
     navigationPage = new NavigationPage(page);
