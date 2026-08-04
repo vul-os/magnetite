@@ -17,6 +17,8 @@
  */
 
 import { lazy, Suspense, useCallback, useRef } from 'react';
+import type { Monaco, OnChange, OnMount } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
 import './CodeEditor.css';
 
 // Lazy-load Monaco — this will be split into a separate chunk by Vite/Rollup.
@@ -123,7 +125,7 @@ fn broadcast_all(world: &WorldState, msg: ServerMsg) -> Vec<(PlayerId, ServerMsg
 
 // ── Monaco editor options ────────────────────────────────────────────────────
 
-function buildEditorOptions(readOnly) {
+function buildEditorOptions(readOnly: boolean): editor.IStandaloneEditorConstructionOptions {
   return {
     readOnly,
     minimap: { enabled: false },
@@ -157,7 +159,7 @@ function buildEditorOptions(readOnly) {
 
 // ── Custom theme definition ──────────────────────────────────────────────────
 
-function defineTheme(monaco) {
+function defineTheme(monaco: Monaco) {
   monaco.editor.defineTheme('magnetite-dark', {
     base: 'vs-dark',
     inherit: true,
@@ -216,7 +218,7 @@ function defineTheme(monaco) {
 
 // ── Fallback while Monaco loads ───────────────────────────────────────────────
 
-function EditorSkeleton({ height }) {
+function EditorSkeleton({ height }: { height: string }) {
   return (
     <div
       className="ce-skeleton"
@@ -237,6 +239,17 @@ function EditorSkeleton({ height }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+export interface CodeEditorProps {
+  value?: string;
+  onChange?: (value: string) => void;
+  language?: string;
+  theme?: string;
+  height?: string;
+  readOnly?: boolean;
+  filename?: string;
+  className?: string;
+}
+
 export default function CodeEditor({
   value = STARTER_RUST_SOURCE,
   onChange,
@@ -246,19 +259,19 @@ export default function CodeEditor({
   readOnly = false,
   filename,
   className = '',
-}) {
-  const editorRef = useRef(null);
+}: CodeEditorProps) {
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
-  const handleMount = useCallback((editor, monaco) => {
-    editorRef.current = editor;
+  const handleMount: OnMount = useCallback((editorInstance, monaco) => {
+    editorRef.current = editorInstance;
     // Define and apply our custom theme
     defineTheme(monaco);
     monaco.editor.setTheme(theme);
     // Give focus for immediate keyboard use
-    editor.focus();
+    editorInstance.focus();
   }, [theme]);
 
-  const handleChange = useCallback((val) => {
+  const handleChange: OnChange = useCallback((val) => {
     if (onChange) onChange(val ?? '');
   }, [onChange]);
 
