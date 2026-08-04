@@ -6,6 +6,7 @@
 //   Step 3 — Result:           CLI instructions + next steps
 //   A11y:                      aria labels, role="alert" on errors
 
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -21,22 +22,22 @@ const mockTemplatesList = vi.fn();
 vi.mock('../api/client', () => ({
   api: {
     templates: {
-      list: (...args) => mockTemplatesList(...args),
+      list: (...args: unknown[]) => mockTemplatesList(...args),
     },
     developer: {
-      scaffold: (...args) => mockScaffold(...args),
+      scaffold: (...args: unknown[]) => mockScaffold(...args),
     },
   },
 }));
 
 // Stub Layout so tests don't need full router/context from it.
 vi.mock('../components/Layout', () => ({
-  default: ({ children }) => <div data-testid="layout">{children}</div>,
+  default: ({ children }: { children: ReactNode }) => <div data-testid="layout">{children}</div>,
 }));
 
 // Stub GamePreview so it doesn't try to instantiate the web client.
 vi.mock('../components/GamePreview', () => ({
-  default: ({ devMode, onClose }) => (
+  default: ({ devMode, onClose }: { devMode?: boolean; onClose?: () => void }) => (
     <div data-testid="game-preview">
       {devMode && <span>DEV PREVIEW</span>}
       {onClose && <button onClick={onClose}>Close Preview</button>}
@@ -123,7 +124,7 @@ describe('GameStudio — template gallery (step 1)', () => {
 
     await waitFor(() => expect(screen.getByText('Arena Shooter')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Arena Shooter').closest('button'));
+    fireEvent.click(screen.getByText('Arena Shooter').closest('button')!);
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /configure your game/i })).toBeInTheDocument();
@@ -140,7 +141,7 @@ describe('GameStudio — configure step (step 2)', () => {
     mockTemplatesList.mockResolvedValue([MOCK_TEMPLATE]);
     renderStudio();
     await waitFor(() => expect(screen.getByText('Arena Shooter')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Arena Shooter').closest('button'));
+    fireEvent.click(screen.getByText('Arena Shooter').closest('button')!);
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /configure your game/i })).toBeInTheDocument()
     );
@@ -199,7 +200,7 @@ describe('GameStudio — scaffold flow', () => {
     mockTemplatesList.mockResolvedValue([MOCK_TEMPLATE]);
     renderStudio();
     await waitFor(() => expect(screen.getByText('Arena Shooter')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Arena Shooter').closest('button'));
+    fireEvent.click(screen.getByText('Arena Shooter').closest('button')!);
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /configure your game/i })).toBeInTheDocument()
     );
@@ -300,7 +301,7 @@ describe('GameStudio — accessibility', () => {
     renderStudio();
 
     await waitFor(() => expect(screen.getByText('Arena Shooter')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Arena Shooter').closest('button'));
+    fireEvent.click(screen.getByText('Arena Shooter').closest('button')!);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/game name/i)).toBeInTheDocument();
@@ -314,7 +315,7 @@ describe('GameStudio — accessibility', () => {
     renderStudio();
 
     await waitFor(() => expect(screen.getByText('Arena Shooter')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Arena Shooter').closest('button'));
+    fireEvent.click(screen.getByText('Arena Shooter').closest('button')!);
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /configure your game/i })).toBeInTheDocument()
     );
