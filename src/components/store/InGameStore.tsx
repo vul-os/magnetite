@@ -14,7 +14,9 @@
  *   3. Owned items show "Owned" badge; previously purchased show receipt
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useMarketplace } from '../../hooks/useMarketplace';
+import type { MarketplaceItem } from '../../hooks/useMarketplace';
 import './InGameStore.css';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -84,9 +86,18 @@ function ItemPlaceholderGlyph() {
  * item must never see a random stock photo standing in for the product, so we
  * never substitute unrelated imagery.
  */
-function ItemThumb({ item, imgClassName, fallbackClassName, width, height, alt = '' }) {
+interface ItemThumbProps {
+  item: MarketplaceItem;
+  imgClassName: string;
+  fallbackClassName: string;
+  width: number;
+  height: number;
+  alt?: string;
+}
+
+function ItemThumb({ item, imgClassName, fallbackClassName, width, height, alt = '' }: ItemThumbProps) {
   const [broken, setBroken] = useState(false);
-  const src = !broken && item.image ? item.image : null;
+  const src = !broken && item.image ? (item.image as string) : null;
 
   if (src) {
     return (
@@ -111,7 +122,7 @@ function ItemThumb({ item, imgClassName, fallbackClassName, width, height, alt =
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ITEM_TYPE_LABELS = {
+const ITEM_TYPE_LABELS: Record<string, string> = {
   cosmetic: 'Cosmetic',
   boost:    'Boost',
   bundle:   'Bundle',
@@ -119,26 +130,36 @@ const ITEM_TYPE_LABELS = {
   other:    'Item',
 };
 
-const MOCK_FALLBACK_ITEMS = [
-  { id: 'igs1', name: 'Neon Helm Skin',    description: 'Glowing teal helmet.',      price_points: 800,  price_usdc: 0.99, item_type: 'cosmetic', active: true },
-  { id: 'igs2', name: 'XP Accelerator',   description: '2× XP for 24 hours.',       price_points: 500,  price_usdc: 0.49, item_type: 'boost',    active: true },
-  { id: 'igs3', name: 'Starter Bundle',   description: 'Skin + boost combo deal.',   price_points: 1200, price_usdc: 1.49, item_type: 'bundle',   active: true },
-  { id: 'igs4', name: 'Point Pack (500)', description: 'Top-up 500 bonus points.',   price_points: 0,    price_usdc: 0.99, item_type: 'currency', active: true },
-  { id: 'igs5', name: 'Carbon Visor',     description: 'Matte-black visor skin.',    price_points: 600,  price_usdc: 0.79, item_type: 'cosmetic', active: true },
-  { id: 'igs6', name: 'Drop Shield Pack', description: 'Three extra shield drops.',  price_points: 400,  price_usdc: 0.39, item_type: 'boost',    active: true },
+// store_id: 'mock' — MarketplaceItem requires it, but these dev-only fallback
+// items are never looked up by store, so the value is inert filler.
+const MOCK_FALLBACK_ITEMS: MarketplaceItem[] = [
+  { id: 'igs1', store_id: 'mock', name: 'Neon Helm Skin',    description: 'Glowing teal helmet.',      price_points: 800,  price_usdc: 0.99, item_type: 'cosmetic', active: true },
+  { id: 'igs2', store_id: 'mock', name: 'XP Accelerator',   description: '2× XP for 24 hours.',       price_points: 500,  price_usdc: 0.49, item_type: 'boost',    active: true },
+  { id: 'igs3', store_id: 'mock', name: 'Starter Bundle',   description: 'Skin + boost combo deal.',   price_points: 1200, price_usdc: 1.49, item_type: 'bundle',   active: true },
+  { id: 'igs4', store_id: 'mock', name: 'Point Pack (500)', description: 'Top-up 500 bonus points.',   price_points: 0,    price_usdc: 0.99, item_type: 'currency', active: true },
+  { id: 'igs5', store_id: 'mock', name: 'Carbon Visor',     description: 'Matte-black visor skin.',    price_points: 600,  price_usdc: 0.79, item_type: 'cosmetic', active: true },
+  { id: 'igs6', store_id: 'mock', name: 'Drop Shield Pack', description: 'Three extra shield drops.',  price_points: 400,  price_usdc: 0.39, item_type: 'boost',    active: true },
 ];
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
 
-function ConfirmPurchaseModal({ item, priceLabel, onConfirm, onCancel, confirming }) {
-  const cancelRef = useRef(null);
+interface ConfirmPurchaseModalProps {
+  item: MarketplaceItem;
+  priceLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirming: boolean;
+}
+
+function ConfirmPurchaseModal({ item, priceLabel, onConfirm, onCancel, confirming }: ConfirmPurchaseModalProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   // Focus the cancel button on open for safer UX
   useEffect(() => {
     cancelRef.current?.focus();
   }, []);
 
-  function handleKeyDown(e) {
+  function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === 'Escape') onCancel();
   }
 
@@ -168,7 +189,7 @@ function ConfirmPurchaseModal({ item, priceLabel, onConfirm, onCancel, confirmin
           />
           <div className="igs-confirm-item-info">
             <span className="igs-confirm-item-name">{item.name}</span>
-            <span className="igs-confirm-item-type">{ITEM_TYPE_LABELS[item.item_type] ?? item.item_type}</span>
+            <span className="igs-confirm-item-type">{ITEM_TYPE_LABELS[item.item_type ?? ''] ?? item.item_type}</span>
             <span className="igs-confirm-item-desc">{item.description}</span>
           </div>
         </div>
@@ -211,7 +232,13 @@ function ConfirmPurchaseModal({ item, priceLabel, onConfirm, onCancel, confirmin
 
 // ── Receipt / Success overlay ──────────────────────────────────────────────────
 
-function ReceiptToast({ item, priceLabel, onDismiss }) {
+interface ReceiptToastProps {
+  item: MarketplaceItem;
+  priceLabel: string;
+  onDismiss: () => void;
+}
+
+function ReceiptToast({ item, priceLabel, onDismiss }: ReceiptToastProps) {
   useEffect(() => {
     const t = setTimeout(onDismiss, 3500);
     return () => clearTimeout(t);
@@ -234,27 +261,43 @@ function ReceiptToast({ item, priceLabel, onDismiss }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface InGameStoreProps {
+  storeId?: string;
+  gameTitle?: string;
+  onClose?: () => void;
+  pointBalance?: number;
+  usdcBalance?: number;
+}
+
+type Currency = 'points' | 'usdc';
+type ItemStatus = 'success' | 'error' | 'insufficient' | null;
+
+interface ReceiptState {
+  item: MarketplaceItem;
+  priceLabel: string;
+}
+
 export function InGameStore({
   storeId,
   gameTitle = 'Game Store',
   onClose,
   pointBalance = 2500,
   usdcBalance = 10.0,
-}) {
+}: InGameStoreProps) {
   const { items, loadItems, purchase, hasEntitlement, purchasing } = useMarketplace();
 
-  const [currency, setCurrency]     = useState('points');  // 'points' | 'usdc'
+  const [currency, setCurrency]     = useState<Currency>('points');
   const [filterType, setFilterType] = useState('all');
 
   // Confirm modal state
-  const [confirmItem, setConfirmItem] = useState(null);  // item to confirm
+  const [confirmItem, setConfirmItem] = useState<MarketplaceItem | null>(null);
   const [confirming,  setConfirming]  = useState(false); // mid-request
 
   // Per-item status: 'success' | 'error' | 'insufficient' | null
-  const [statusMap, setStatusMap]   = useState({});
+  const [statusMap, setStatusMap]   = useState<Record<string, ItemStatus>>({});
 
   // Receipt toast
-  const [receipt, setReceipt] = useState(null); // { item, priceLabel }
+  const [receipt, setReceipt] = useState<ReceiptState | null>(null);
 
   // Load items on mount
   useEffect(() => {
@@ -272,29 +315,29 @@ export function InGameStore({
     : fallbackItems;
 
   const activeItems = storeItems.filter(i => i.active !== false);
-  const types       = ['all', ...new Set(activeItems.map(i => i.item_type))];
-  const displayed   = filterType === 'all' ? activeItems : activeItems.filter(i => i.item_type === filterType);
+  const types       = ['all', ...new Set(activeItems.map(i => i.item_type ?? ''))];
+  const displayed   = filterType === 'all' ? activeItems : activeItems.filter(i => (i.item_type ?? '') === filterType);
 
   // ── Purchase helpers ────────────────────────────────────────────────────────
 
-  function getPriceLabel(item) {
+  function getPriceLabel(item: MarketplaceItem) {
     return currency === 'points'
-      ? `${item.price_points.toLocaleString()} pts`
-      : `$${Number(item.price_usdc).toFixed(2)}`;
+      ? `${(item.price_points ?? 0).toLocaleString()} pts`
+      : `$${Number(item.price_usdc ?? 0).toFixed(2)}`;
   }
 
-  function canAffordItem(item) {
+  function canAffordItem(item: MarketplaceItem) {
     return currency === 'points'
-      ? pointBalance >= item.price_points
-      : usdcBalance  >= item.price_usdc;
+      ? pointBalance >= (item.price_points ?? 0)
+      : usdcBalance  >= (item.price_usdc ?? 0);
   }
 
-  function isItemFree(item) {
-    return currency === 'points' ? item.price_points === 0 : item.price_usdc === 0;
+  function isItemFree(item: MarketplaceItem) {
+    return currency === 'points' ? (item.price_points ?? 0) === 0 : (item.price_usdc ?? 0) === 0;
   }
 
   // Clicking "Buy" on an item — show confirm modal (or proceed for free items)
-  const handleBuyClick = useCallback((item) => {
+  const handleBuyClick = useCallback((item: MarketplaceItem) => {
     if (!canAffordItem(item)) {
       setStatusMap(m => ({ ...m, [item.id]: 'insufficient' }));
       setTimeout(() => setStatusMap(m => ({ ...m, [item.id]: null })), 2500);
@@ -329,7 +372,7 @@ export function InGameStore({
   }, []);
 
   // Trap Escape key inside panel
-  function handleKeyDown(e) {
+  function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === 'Escape') {
       if (confirmItem) {
         handleCancelConfirm();
@@ -453,7 +496,7 @@ export function InGameStore({
                       height={80}
                     />
                     <span className="igs-item-type-badge">
-                      {ITEM_TYPE_LABELS[item.item_type] ?? item.item_type}
+                      {ITEM_TYPE_LABELS[item.item_type ?? ''] ?? item.item_type}
                     </span>
                   </div>
 
