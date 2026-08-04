@@ -1,11 +1,34 @@
 import { useState, useMemo } from 'react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import type { BadgeVariant, BadgeColor } from '../../components/common/Badge';
 import BuildLogs from './BuildLogs';
 import BuildTimeline from './BuildTimeline';
 import './DeploymentStatus.css';
 
-const STATUS_CONFIG = {
+interface Deployment {
+  id?: string | number;
+  status?: string;
+  name?: string;
+  version?: string | number;
+  startedAt?: string;
+  duration?: string;
+  commit?: string;
+  repo?: string;
+  branch?: string;
+  url?: string;
+  logs?: string;
+  [key: string]: unknown;
+}
+
+interface StatusConfigEntry {
+  label: string;
+  variant: BadgeVariant;
+  color: BadgeColor;
+  description: string;
+}
+
+const STATUS_CONFIG: Record<string, StatusConfigEntry> = {
   pending: {
     label: 'Pending',
     variant: 'subtle',
@@ -44,13 +67,21 @@ const STATUS_CONFIG = {
   },
 };
 
+interface DeploymentStatusProps {
+  deployment?: Deployment | null;
+  onRollback?: (deployment?: Deployment | null) => void;
+  onCancel?: (id?: Deployment['id']) => void;
+  onViewLogs?: (deployment?: Deployment | null) => void;
+  onPromote?: (deployment?: Deployment | null) => void;
+}
+
 export default function DeploymentStatus({
   deployment,
   onRollback,
   onCancel,
   onViewLogs,
   onPromote,
-}) {
+}: DeploymentStatusProps) {
   const [showLogs, setShowLogs]           = useState(false);
   const [showTimeline, setShowTimeline]   = useState(true);
 
@@ -143,10 +174,12 @@ export default function DeploymentStatus({
           <span className="detail-label">Commit</span>
           <span className="detail-value commit">
             {deployment?.commit?.slice(0, 7) || '—'}
+            {/* Guarded by `deployment?.commit &&` here; narrowing doesn't carry
+                into the onClick closure below, hence the assertion. */}
             {deployment?.commit && (
               <button
                 className="copy-commit"
-                onClick={() => navigator.clipboard.writeText(deployment.commit)}
+                onClick={() => navigator.clipboard.writeText(deployment.commit!)}
                 title="Copy commit hash"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
