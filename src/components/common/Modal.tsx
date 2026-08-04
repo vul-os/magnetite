@@ -45,7 +45,7 @@ export default function Modal({
   // CSS animation and document.body scroll lock, so setState here is required.
   useEffect(() => {
     if (isOpen) {
-      previousActiveElement.current = document.activeElement;
+      previousActiveElement.current = document.activeElement as HTMLElement | null;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsVisible(true);
       requestAnimationFrame(() => {

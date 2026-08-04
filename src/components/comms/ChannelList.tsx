@@ -115,8 +115,8 @@ export default function ChannelList({ server, channels, activeChannelId, onSelec
                   <span className="channel-item__icon" aria-hidden="true"><HashIcon /></span>
                   <span className="channel-item__name">{ch.name}</span>
                   {ch.private && <span className="channel-item__lock" aria-hidden="true"><LockIcon /></span>}
-                  {ch.unread > 0 && ch.id !== activeChannelId && (
-                    <span className="channel-item__badge" aria-hidden="true">{ch.unread > 9 ? '9+' : ch.unread}</span>
+                  {(ch.unread ?? 0) > 0 && ch.id !== activeChannelId && (
+                    <span className="channel-item__badge" aria-hidden="true">{(ch.unread ?? 0) > 9 ? '9+' : ch.unread}</span>
                   )}
                 </button>
               </li>
@@ -160,16 +160,16 @@ export default function ChannelList({ server, channels, activeChannelId, onSelec
                 >
                   <span className="channel-item__icon" aria-hidden="true"><VolumeIcon /></span>
                   <span className="channel-item__name">{ch.name}</span>
-                  {ch.participants?.length > 0 && (
+                  {(ch.participants?.length ?? 0) > 0 && (
                     <span className="channel-item__count" aria-hidden="true">
-                      {ch.participants.length}
+                      {ch.participants?.length}
                     </span>
                   )}
                 </button>
                 {/* Inline participants for active voice channel */}
-                {ch.participants?.length > 0 && (
+                {(ch.participants?.length ?? 0) > 0 && (
                   <ul className="voice-participants-inline" aria-label={`Users in ${ch.name}`}>
-                    {ch.participants.map(p => (
+                    {ch.participants?.map(p => (
                       <li key={p.id} className="voice-participant-inline">
                         <span className="voice-participant-inline__avatar" aria-hidden="true">
                           {p.username?.charAt(0).toUpperCase()}

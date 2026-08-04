@@ -72,9 +72,9 @@ export default function ServerRail({ servers, activeId, onSelect }: ServerRailPr
               )}
 
               {/* Unread badge */}
-              {server.unread > 0 && !isActive && (
+              {(server.unread ?? 0) > 0 && !isActive && (
                 <span className="server-badge" aria-label={`${server.unread} unread`}>
-                  {server.unread > 9 ? '9+' : server.unread}
+                  {(server.unread ?? 0) > 9 ? '9+' : server.unread}
                 </span>
               )}
             </button>
