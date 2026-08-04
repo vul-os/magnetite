@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
@@ -6,7 +7,7 @@ import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './auth.css';
 
 /* Shared auth page shell — defined at module level to avoid lint errors */
-function AuthShell({ children }) {
+function AuthShell({ children }: { children: ReactNode }) {
   return (
     <div className="auth-page">
       <div className="auth-background" aria-hidden="true">
@@ -32,7 +33,7 @@ export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
-  const [status, setStatus] = useState(token ? 'loading' : 'invalid');
+  const [status, setStatus] = useState<'loading' | 'invalid' | 'success' | 'error'>(token ? 'loading' : 'invalid');
   const [error, setError] = useState('');
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
@@ -43,11 +44,13 @@ export default function VerifyEmail() {
 
     async function verify() {
       try {
-        await api.auth.verifyEmail(token);
+        // Narrowed by the `if (!token) return;` above; TS doesn't carry that
+        // narrowing into this nested function declaration.
+        await api.auth.verifyEmail(token!);
         if (!cancelled) setStatus('success');
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || 'Verification failed');
+          setError((err instanceof Error && err.message) || 'Verification failed');
           setStatus('error');
         }
       }
@@ -60,10 +63,13 @@ export default function VerifyEmail() {
     setResending(true);
     setError('');
     try {
-      await api.auth.resendVerification(token);
+      // resendVerification expects an email, but this pre-existing call passes
+      // the (non-null, since we're only in the error state after a token-bearing
+      // verify attempt) verification token instead — preserved as-is.
+      await api.auth.resendVerification(token!);
       setResent(true);
     } catch (err) {
-      setError(err.message || t('auth.failedToResendVerification'));
+      setError((err instanceof Error && err.message) || t('auth.failedToResendVerification'));
     } finally {
       setResending(false);
     }
