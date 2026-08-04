@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
@@ -13,7 +14,7 @@ const PASSWORD_LEVELS = [
   { min: 1, label: 'Very Weak',   color: 'var(--color-error)' },
 ];
 
-function getScore(pw) {
+function getScore(pw: string) {
   let s = 0;
   if (pw.length >= 8)            s++;
   if (pw.length >= 12)           s++;
@@ -23,7 +24,7 @@ function getScore(pw) {
   return s;
 }
 
-function PasswordStrengthBar({ password }) {
+function PasswordStrengthBar({ password }: { password: string }) {
   const score = getScore(password);
   if (!password) return null;
   const level = PASSWORD_LEVELS.find((l) => score >= l.min) || PASSWORD_LEVELS[PASSWORD_LEVELS.length - 1];
@@ -108,7 +109,7 @@ export default function ResetPassword() {
     );
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
 
@@ -127,7 +128,7 @@ export default function ResetPassword() {
       setSuccess(true);
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
-      setError(err.message || t('auth.failedToResetPassword'));
+      setError((err instanceof Error && err.message) || t('auth.failedToResetPassword'));
     } finally {
       setLoading(false);
     }
@@ -141,7 +142,7 @@ export default function ResetPassword() {
         <div className="auth-hero-glow-amber" aria-hidden="true" />
         <div className="auth-hero-grain" aria-hidden="true" />
         <div className="auth-hero-content">
-          <Link to="/" className="auth-hero-logo" tabIndex="-1">
+          <Link to="/" className="auth-hero-logo" tabIndex={-1}>
             <img src={magnetiteLogo} className="auth-hero-logo-mark" aria-hidden="true" alt="" />
             <span className="auth-hero-logo-name">Magnetite</span>
           </Link>
