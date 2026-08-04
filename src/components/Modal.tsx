@@ -1,14 +1,27 @@
-import { useEffect, useRef, useState, useId } from 'react';
+import { useEffect, useRef, useState, useId, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../i18n/useTranslation';
 import './Modal.css';
 
-const sizeClasses = {
+type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+
+const sizeClasses: Record<ModalSize, string> = {
   sm: 'modal-sm',
   md: 'modal-md',
   lg: 'modal-lg',
   xl: 'modal-xl',
 };
+
+export interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: ReactNode;
+  children?: ReactNode;
+  size?: ModalSize;
+  showCloseButton?: boolean;
+  closeOnBackdrop?: boolean;
+  closeOnEscape?: boolean;
+}
 
 export default function Modal({
   isOpen,
@@ -19,18 +32,18 @@ export default function Modal({
   showCloseButton = true,
   closeOnBackdrop = true,
   closeOnEscape = true,
-}) {
+}: ModalProps) {
   const { t } = useTranslation();
   const uid = useId();
   const titleId = `${uid}-title`;
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const modalRef = useRef(null);
-  const previousActiveElement = useRef(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      previousActiveElement.current = document.activeElement;
+      previousActiveElement.current = document.activeElement as HTMLElement | null;
       document.body.style.overflow = 'hidden';
       requestAnimationFrame(() => {
         setIsVisible(true);
@@ -54,7 +67,7 @@ export default function Modal({
   useEffect(() => {
     if (!isOpen || !closeOnEscape) return;
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
@@ -71,10 +84,10 @@ export default function Modal({
     const focusableElements = modal.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
+    const firstElement = focusableElements[0] as HTMLElement | undefined;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement | undefined;
 
-    const handleTabKey = (e) => {
+    const handleTabKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
 
       if (e.shiftKey) {
@@ -96,7 +109,7 @@ export default function Modal({
     return () => modal.removeEventListener('keydown', handleTabKey);
   }, [isOpen]);
 
-  const handleBackdropClick = (e) => {
+  const handleBackdropClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (closeOnBackdrop && e.target === e.currentTarget) {
       onClose();
     }
@@ -112,7 +125,7 @@ export default function Modal({
     >
       <div
         ref={modalRef}
-        className={`modal ${sizeClasses[size]} ${isAnimating ? 'modal-visible' : ''}`}
+        className={`modal ${sizeClasses[size] || sizeClasses.md} ${isAnimating ? 'modal-visible' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}

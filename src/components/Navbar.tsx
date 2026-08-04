@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type SVGProps, type RefObject, type FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useWallet } from '../hooks/useWallet';
 import { usePresence } from '../hooks/usePresence';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTranslation } from '../i18n/useTranslation';
+import type { TranslationVars } from '../i18n/useTranslation';
+import type { PresenceEntry, PresenceStatus } from '../types/comms';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
 import {
   MenuIcon,
@@ -21,8 +23,10 @@ import {
 } from '../assets/icons';
 import './Navbar.css';
 
+type TFn = (key: string, vars?: TranslationVars) => string;
+
 // Inline DM icon (not in shared icon set)
-function DmIcon(props) {
+function DmIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -40,7 +44,7 @@ function DmIcon(props) {
 }
 
 /** Discovery / server-browser glyph — stacked nodes, not a single datacenter. */
-function ServerIcon(props) {
+function ServerIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -68,7 +72,7 @@ const NAV_LINKS = [
 ];
 
 /** Map a presence status to its dot CSS class. */
-function presenceDotClass(status) {
+function presenceDotClass(status: PresenceStatus | undefined) {
   switch (status) {
     case 'online':  return 'presence-dot-online';
     case 'idle':    return 'presence-dot-idle';
@@ -88,7 +92,7 @@ const USER_MENU_ITEMS = [
  * Relative-time formatter for a notification timestamp.
  * Returns null when there is no usable date, so callers can omit the <time>.
  */
-function notificationTimeAgo(dateString) {
+function notificationTimeAgo(dateString: string | null | undefined) {
   if (!dateString) return null;
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return null;
@@ -106,7 +110,14 @@ function notificationTimeAgo(dateString) {
  * authenticated users, which is also the only context in which the
  * NotificationProvider is present.
  */
-function NotificationsMenu({ isOpen, onToggle, containerRef, t }) {
+interface NotificationsMenuProps {
+  isOpen: boolean;
+  onToggle: () => void;
+  containerRef: RefObject<HTMLDivElement | null>;
+  t: TFn;
+}
+
+function NotificationsMenu({ isOpen, onToggle, containerRef, t }: NotificationsMenuProps) {
   const { notifications, unreadCount, markAllAsRead } = useNotifications();
 
   return (
@@ -173,14 +184,19 @@ function NotificationsMenu({ isOpen, onToggle, containerRef, t }) {
 export default function Navbar() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
-  const { balance } = useWallet();
+  // NOTE (pre-existing bug, not introduced by this migration): useWallet() no
+  // longer returns `balance` (the node is non-custodial, see WalletContext) —
+  // this always evaluates to undefined, so the UI always shows "0.00 USDC".
+  const { balance } = useWallet() as ReturnType<typeof useWallet> & { balance?: number };
   const navigate   = useNavigate();
   const location   = useLocation();
 
   // Current user presence
   const currentUserId = user?.id ?? null;
   const { getPresence } = usePresence(currentUserId ? [currentUserId] : []);
-  const myPresence = currentUserId ? getPresence(currentUserId) : { status: 'offline' };
+  const myPresence: PresenceEntry = currentUserId
+    ? getPresence(currentUserId)
+    : { status: 'offline' };
   const myDotClass = presenceDotClass(myPresence.status);
 
   const [isSearchOpen,        setIsSearchOpen]        = useState(false);
@@ -190,9 +206,9 @@ export default function Navbar() {
   const [searchQuery,         setSearchQuery]         = useState('');
   const [isScrolled,          setIsScrolled]          = useState(false);
 
-  const userMenuRef       = useRef(null);
-  const notificationsRef  = useRef(null);
-  const searchRef         = useRef(null);
+  const userMenuRef       = useRef<HTMLDivElement>(null);
+  const notificationsRef  = useRef<HTMLDivElement>(null);
+  const searchRef         = useRef<HTMLDivElement>(null);
 
   // Scroll detection for glass-blur enhancement
   useEffect(() => {
@@ -203,10 +219,10 @@ export default function Navbar() {
 
   // Click-outside to close dropdowns
   useEffect(() => {
-    function onMouseDown(e) {
-      if (userMenuRef.current      && !userMenuRef.current.contains(e.target))      setIsUserMenuOpen(false);
-      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) setIsNotificationsOpen(false);
-      if (searchRef.current        && !searchRef.current.contains(e.target))        setIsSearchOpen(false);
+    function onMouseDown(e: MouseEvent) {
+      if (userMenuRef.current      && !userMenuRef.current.contains(e.target as Node))      setIsUserMenuOpen(false);
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) setIsNotificationsOpen(false);
+      if (searchRef.current        && !searchRef.current.contains(e.target as Node))        setIsSearchOpen(false);
     }
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
@@ -224,7 +240,7 @@ export default function Navbar() {
 
   // Escape key
   useEffect(() => {
-    function onKeyDown(e) {
+    function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         setIsSearchOpen(false);
         setIsUserMenuOpen(false);
@@ -241,7 +257,7 @@ export default function Navbar() {
     navigate('/');
   }, [logout, navigate]);
 
-  const handleSearch = (e) => {
+  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = searchQuery.trim();
     if (q) {
