@@ -32,12 +32,12 @@
   },
   "include": [
     "src",
-    "magnetite-web-client/src"
+    "magnetite-web-client/src",
+    "e2e"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "e2e",
     "scripts",
     "site",
     "backend"
