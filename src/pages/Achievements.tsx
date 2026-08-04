@@ -11,6 +11,26 @@ import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
+// Structurally matches AchievementCard's (unexported) internal Achievement type.
+interface AchievementItem {
+  id: string | number;
+  name: string;
+  description?: string;
+  category?: string;
+  icon?: string;
+  progress: number;
+  maxProgress: number;
+  unlockedAt?: string | null;
+  [key: string]: unknown;
+}
+
+interface RecentUnlock {
+  id: string | number;
+  name: string;
+  icon: string;
+  unlockedAt: string;
+}
+
 const TrophyIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
     <path d="M8 21h8" />
@@ -32,8 +52,8 @@ export default function Achievements() {
   const { t } = useTranslation();
   const [category, setCategory]         = useState('all');
   const [showUnlocked, setShowUnlocked] = useState(true);
-  const [achievements, setAchievements] = useState(useMocks ? mockAchievements : []);
-  const [recent, setRecent]             = useState(useMocks ? recentUnlocks : []);
+  const [achievements, setAchievements] = useState<AchievementItem[]>(useMocks ? mockAchievements : []);
+  const [recent, setRecent]             = useState<RecentUnlock[]>(useMocks ? recentUnlocks : []);
   const [loading, setLoading]           = useState(!useMocks);
 
   const showUnlockedId = 'achievements-show-unlocked';
@@ -44,14 +64,17 @@ export default function Achievements() {
 
     async function loadAchievements() {
       try {
-        const me = await api.auth.me();
+        const me = await api.auth.me() as { id?: string; user_id?: string } | null;
         const userId = me?.id || me?.user_id;
         if (!userId) {
           if (!cancelled) setLoading(false);
           return;
         }
 
-        const data = await api.achievements.list(userId);
+        const data = await api.achievements.list(userId) as
+          | AchievementItem[]
+          | { achievements?: AchievementItem[] }
+          | null;
         if (!cancelled) {
           if (data) {
             const list = Array.isArray(data) ? data : (data?.achievements ?? null);
@@ -59,8 +82,8 @@ export default function Achievements() {
               setAchievements(list);
               const recentList = list
                 .filter(a => a.unlockedAt)
-                .sort((a, b) => new Date(b.unlockedAt) - new Date(a.unlockedAt))
-                .slice(0, 3);
+                .sort((a, b) => new Date(b.unlockedAt as string).getTime() - new Date(a.unlockedAt as string).getTime())
+                .slice(0, 3) as unknown as RecentUnlock[];
               if (recentList.length > 0) setRecent(recentList);
             }
           }
