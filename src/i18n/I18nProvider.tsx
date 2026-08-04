@@ -24,13 +24,23 @@ import {
   useEffect,
   useMemo,
   useState,
+  type ReactNode,
 } from 'react';
 import enMessages from './en.json';
 
-/** @type {React.Context<import('./useTranslation').I18nContextValue|null>} */
+/** A nested translation dictionary, as loaded from a locale JSON file. */
+export type Messages = Record<string, unknown>;
+
+export interface I18nContextValue {
+  messages: Messages;
+  fallback: Messages;
+  locale: string;
+  setLocale: (locale: string) => void;
+}
+
 // Context object is colocated with its Provider component by design.
 // eslint-disable-next-line react-refresh/only-export-components
-export const I18nContext = createContext(null);
+export const I18nContext = createContext<I18nContextValue | null>(null);
 
 /** localStorage key used to persist the user's locale choice. */
 const LOCALE_STORAGE_KEY = 'magnetite_locale';
@@ -50,7 +60,7 @@ const SUPPORTED_LOCALES = ['en', 'es', 'fr'];
  * The document <html dir="rtl"> attribute is set automatically below when the
  * active locale appears in this set.
  */
-const RTL_LOCALES = new Set([
+const RTL_LOCALES = new Set<string>([
   // 'ar', // Arabic  — add ar.json + uncomment to activate
   // 'he', // Hebrew  — add he.json + uncomment to activate
   // 'fa', // Persian — add fa.json + uncomment to activate
@@ -59,10 +69,8 @@ const RTL_LOCALES = new Set([
 /**
  * Read the persisted locale from localStorage, falling back to browser
  * detection and finally to "en".
- *
- * @returns {string}
  */
-function readPersistedLocale() {
+function readPersistedLocale(): string {
   try {
     const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
     if (stored && SUPPORTED_LOCALES.includes(stored)) return stored;
@@ -78,15 +86,14 @@ function readPersistedLocale() {
  * Dynamically import a locale JSON file.  Falls back to `enMessages` if the
  * locale is "en" or if the import fails.
  *
- * @param {string} locale
- * @returns {Promise<object>}  Resolves to the translation dictionary.
+ * Resolves to the translation dictionary.
  */
-async function loadLocale(locale) {
+async function loadLocale(locale: string): Promise<Messages> {
   if (locale === 'en') return enMessages;
   try {
     // Dynamic imports for additional locales — add entries here as new
     // locale JSON files are created under src/i18n/<locale>.json.
-    const modules = {
+    const modules: Record<string, () => Promise<{ default: Messages }>> = {
       'es': () => import('./es.json'),
       'fr': () => import('./fr.json'),
       // 'de': () => import('./de.json'),
@@ -101,24 +108,19 @@ async function loadLocale(locale) {
   return enMessages;
 }
 
-/**
- * I18nProvider props.
- *
- * @typedef {Object} I18nProviderProps
- * @property {React.ReactNode} children
- * @property {string} [defaultLocale]   Override the auto-detected locale.
- */
+export interface I18nProviderProps {
+  children: ReactNode;
+  /** Override the auto-detected locale. */
+  defaultLocale?: string;
+}
 
-/**
- * @param {I18nProviderProps} props
- */
-export function I18nProvider({ children, defaultLocale }) {
+export function I18nProvider({ children, defaultLocale }: I18nProviderProps) {
   const [locale, setLocaleState] = useState(() => {
     // Explicit prop takes precedence; otherwise restore from localStorage.
     return defaultLocale ?? readPersistedLocale();
   });
 
-  const [messages, setMessages] = useState(
+  const [messages, setMessages] = useState<Messages>(
     // Eagerly populate English so the UI never renders bare keys on first paint.
     locale === 'en' ? enMessages : {}
   );
@@ -142,7 +144,7 @@ export function I18nProvider({ children, defaultLocale }) {
     document.documentElement.dir = RTL_LOCALES.has(locale) ? 'rtl' : 'ltr';
   }, [locale]);
 
-  const setLocale = useCallback((newLocale) => {
+  const setLocale = useCallback((newLocale: string) => {
     try {
       localStorage.setItem(LOCALE_STORAGE_KEY, newLocale);
     } catch {
