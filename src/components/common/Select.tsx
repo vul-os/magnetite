@@ -1,6 +1,29 @@
-import { useState, useRef, useEffect, useMemo, useId } from 'react';
+import { useState, useRef, useEffect, useMemo, useId, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
 import { ChevronDownIcon, SearchIcon, CloseIcon, CheckIcon } from '../../assets/icons';
 import './Select.css';
+
+export type SelectOptionValue = string | number;
+
+export interface SelectOption {
+  value: SelectOptionValue;
+  label: string;
+  group?: string;
+}
+
+interface SelectProps {
+  options?: SelectOption[];
+  value?: SelectOptionValue | SelectOptionValue[];
+  onChange: (value: SelectOptionValue | SelectOptionValue[]) => void;
+  placeholder?: string;
+  isSearchable?: boolean;
+  isMulti?: boolean;
+  isClearable?: boolean;
+  disabled?: boolean;
+  error?: string;
+  className?: string;
+  label?: ReactNode;
+  id?: string;
+}
 
 export default function Select({
   options = [],
@@ -15,19 +38,19 @@ export default function Select({
   className = '',
   label,
   id,
-}) {
+}: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dropdownPosition, setDropdownPosition] = useState('bottom');
+  const [dropdownPosition, setDropdownPosition] = useState<'top' | 'bottom'>('bottom');
   const [focusedIndex, setFocusedIndex] = useState(-1);
-  const containerRef = useRef(null);
-  const dropdownRef = useRef(null);
-  const searchInputRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const uid = useId();
   const selectId = id || uid;
   const listboxId = `${selectId}-listbox`;
 
-  const selectedValues = isMulti ? (Array.isArray(value) ? value : []) : value;
+  const selectedValues: SelectOptionValue[] = isMulti ? (Array.isArray(value) ? value : []) : (value !== undefined ? [value as SelectOptionValue] : []);
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options;
@@ -40,7 +63,7 @@ export default function Select({
   }, [filteredOptions]);
 
   const groupedOptions = useMemo(() => {
-    const groups = {};
+    const groups: Record<string, SelectOption[]> = {};
     filteredOptions.forEach((opt) => {
       const groupKey = opt.group || '';
       if (!groups[groupKey]) groups[groupKey] = [];
@@ -50,8 +73,8 @@ export default function Select({
   }, [filteredOptions]);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent | globalThis.MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         setSearchTerm('');
         setFocusedIndex(-1);
@@ -89,7 +112,7 @@ export default function Select({
     focused?.scrollIntoView({ block: 'nearest' });
   }, [focusedIndex, isOpen]);
 
-  const handleSelect = (optionValue) => {
+  const handleSelect = (optionValue: SelectOptionValue) => {
     if (isMulti) {
       const newValue = selectedValues.includes(optionValue)
         ? selectedValues.filter((v) => v !== optionValue)
@@ -103,12 +126,12 @@ export default function Select({
     }
   };
 
-  const handleClear = (e) => {
+  const handleClear = (e: MouseEvent<HTMLSpanElement> | KeyboardEvent<HTMLSpanElement>) => {
     e.stopPropagation();
     onChange(isMulti ? [] : '');
   };
 
-  const handleTriggerKeyDown = (e) => {
+  const handleTriggerKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
     switch (e.key) {
       case 'Enter':
@@ -159,16 +182,17 @@ export default function Select({
       }
       return `${selectedValues.length} selected`;
     }
-    if (!value) return placeholder;
-    const opt = options.find((o) => o.value === value);
-    return opt?.label || value;
+    const singleValue = value as SelectOptionValue | undefined;
+    if (!singleValue) return placeholder;
+    const opt = options.find((o) => o.value === singleValue);
+    return opt?.label || singleValue;
   };
 
-  const isSelected = (optValue) => {
+  const isSelected = (optValue: SelectOptionValue) => {
     if (isMulti) {
       return selectedValues.includes(optValue);
     }
-    return value === optValue;
+    return (value as SelectOptionValue | undefined) === optValue;
   };
 
   const activeFlatIndex = focusedIndex >= 0 && flatFilteredOptions[focusedIndex]
