@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import './BuildLogs.css';
 
-const ANSI_COLORS = {
+interface AnsiPart {
+  content: string;
+  color: string | null;
+}
+
+interface HighlightPart {
+  text: string;
+  highlight: boolean;
+}
+
+const ANSI_COLORS: Record<string, string> = {
   black: '#000',
   red: '#ef4444',
   green: '#22c55e',
@@ -20,14 +31,14 @@ const ANSI_COLORS = {
   brightWhite: '#f9fafb',
 };
 
-const parseAnsi = (text) => {
-  const parts = [];
+const parseAnsi = (text: string): AnsiPart[] => {
+  const parts: AnsiPart[] = [];
   const ESC = '\x1b';
   const regex = new RegExp(`${ESC}\\[([0-9;]*)m`, 'g');
   let lastIndex = 0;
-  let currentColor = null;
+  let currentColor: string | null = null;
 
-  const processSequence = (sequence) => {
+  const processSequence = (sequence: string) => {
     if (!sequence) {
       currentColor = null;
       return;
@@ -66,17 +77,23 @@ const parseAnsi = (text) => {
   return parts;
 };
 
-const getStyle = (color) => {
+const getStyle = (color: string | null | undefined): CSSProperties => {
   if (!color) return {};
   const [, colorName] = color.split(':');
   return { color: ANSI_COLORS[colorName] || ANSI_COLORS.white };
 };
 
-export default function BuildLogs({ logs = '', isBuilding = false, onClear }) {
+interface BuildLogsProps {
+  logs?: string;
+  isBuilding?: boolean;
+  onClear?: () => void;
+}
+
+export default function BuildLogs({ logs = '', isBuilding = false, onClear }: BuildLogsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
-  const logsEndRef = useRef(null);
-  const logsContainerRef = useRef(null);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   const filteredLogs = useMemo(() => {
     if (!searchTerm.trim()) {
@@ -105,10 +122,10 @@ export default function BuildLogs({ logs = '', isBuilding = false, onClear }) {
     setAutoScroll(isAtBottom);
   };
 
-  const highlightSearch = (line) => {
+  const highlightSearch = (line: string): string | HighlightPart[] => {
     if (!searchTerm.trim()) return line;
 
-    const parts = [];
+    const parts: HighlightPart[] = [];
     const lowerLine = line.toLowerCase();
     const lowerSearch = searchTerm.toLowerCase();
     let lastIndex = 0;
@@ -130,7 +147,7 @@ export default function BuildLogs({ logs = '', isBuilding = false, onClear }) {
     return parts;
   };
 
-  const renderLine = (line, index) => {
+  const renderLine = (line: string, index: number) => {
     const parsed = parseAnsi(line);
     const highlighted = highlightSearch(line);
 
