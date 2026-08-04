@@ -1,7 +1,28 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
+import type HlsType from 'hls.js';
 import MessageList from '../comms/MessageList';
 import MessageComposer from '../comms/MessageComposer';
+import type { MessageListMessage } from '../comms/MessageList';
 import './StreamPlayer.css';
+
+export interface StreamPlayerStream {
+  id?: string | number;
+  title?: string;
+  game?: string;
+  streamer?: string;
+  viewerCount?: number;
+  hlsUrl?: string;
+  webrtcOffer?: unknown;
+  [key: string]: unknown;
+}
+
+export interface StreamPlayerProps {
+  stream?: StreamPlayerStream | null;
+  messages?: MessageListMessage[];
+  onSend?: (text: string) => void;
+  onClose?: () => void;
+}
 
 /**
  * StreamPlayer — HLS/WebRTC-ready <video> player with live chat sidebar.
@@ -12,15 +33,15 @@ import './StreamPlayer.css';
  *   onSend   (text)=>void
  *   onClose  ()=>void
  */
-export default function StreamPlayer({ stream, messages = [], onSend, onClose }) {
-  const videoRef = useRef(null);
+export default function StreamPlayer({ stream, messages = [], onSend, onClose }: StreamPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true); // start muted to allow autoplay
   const [volume, setVolume] = useState(0.8);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const controlsTimerRef = useRef(null);
-  const containerRef = useRef(null);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const {
     title = 'Live Stream',
@@ -32,10 +53,11 @@ export default function StreamPlayer({ stream, messages = [], onSend, onClose })
 
   // ── Video setup ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    const video: HTMLVideoElement = videoEl;
 
-    let hlsInstance = null;
+    let hlsInstance: HlsType | null = null;
 
     async function attachHls() {
       if (!hlsUrl) return;
@@ -102,7 +124,7 @@ export default function StreamPlayer({ stream, messages = [], onSend, onClose })
     setMuted(v.muted);
   }, []);
 
-  const handleVolumeChange = useCallback((e) => {
+  const handleVolumeChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const val = Number(e.target.value);
     setVolume(val);
     if (videoRef.current) {
