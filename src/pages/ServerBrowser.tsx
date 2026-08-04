@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Layout from '../components/Layout';
 import { useDiscovery } from '../hooks/useDiscovery';
+import type { SessionAd, SessionCapacity, SessionPrice } from '../hooks/useDiscovery';
 import { formatReceiptAmount, shortKey } from '../utils/currency';
 import './ServerBrowser.css';
 
@@ -27,17 +28,17 @@ const PING_TIERS = [
   { max: 150, label: 'fair' },
 ];
 
-function pingClass(ms) {
+function pingClass(ms: number) {
   return PING_TIERS.find((t) => ms <= t.max)?.label ?? 'poor';
 }
 
-function formatCapacity(capacity) {
+function formatCapacity(capacity: SessionCapacity | null | undefined) {
   if (!capacity) return '—';
   const ram = Math.round((capacity.ram_mb ?? 0) / 1024);
   return `${capacity.cpu_cores}c · ${ram}GB · ${capacity.bandwidth_mbps}Mbps`;
 }
 
-function formatPrice(price) {
+function formatPrice(price: SessionPrice | null | undefined) {
   if (!price) return 'Free';
   const unit = price.unit === 'per_hour' ? '/hr' : price.unit === 'per_seat' ? '/seat' : '';
   return `${formatReceiptAmount(price.amount, price.currency)}${unit}`;
@@ -50,7 +51,7 @@ function formatPrice(price) {
  * inside the signed ad so they cannot be edited in flight, which is a different
  * (and much weaker) guarantee than being vouched for. The UI says so.
  */
-function declaredBy(session) {
+function declaredBy(session: SessionAd) {
   return [session.operator, session.region].filter(Boolean).join(' · ');
 }
 
@@ -288,7 +289,9 @@ export default function ServerBrowser() {
                   // both title and chip.
                   const titled = s.game_title != null;
                   const declared = declaredBy(s);
-                  const hasCounts = s.players != null && s.max_players > 0;
+                  // (s.max_players ?? 0) preserves `null > 0`'s original (false)
+                  // result under JS's numeric coercion of null.
+                  const hasCounts = s.players != null && (s.max_players ?? 0) > 0;
                   return (
                     <tr key={s.id}>
                       <td className="lead cell-game edge-field">
@@ -335,6 +338,7 @@ export default function ServerBrowser() {
                       </td>
 
                       <td className="num cell-players edge-boundary">
+                        {/* hasCounts above guarantees both are non-null here. */}
                         {hasCounts ? (
                           <>
                             <span className="players-count">
@@ -345,7 +349,7 @@ export default function ServerBrowser() {
                               <span
                                 className="players-fill"
                                 style={{
-                                  width: `${Math.min(100, (s.players / s.max_players) * 100)}%`,
+                                  width: `${Math.min(100, (s.players! / s.max_players!) * 100)}%`,
                                 }}
                               />
                             </span>
