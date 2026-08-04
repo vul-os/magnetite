@@ -1,7 +1,11 @@
 import GameCardSkeleton from './GameCardSkeleton';
 import './GameGridSkeleton.css';
 
-export default function GameGridSkeleton({ count = 6 }) {
+interface GameGridSkeletonProps {
+  count?: number;
+}
+
+export default function GameGridSkeleton({ count = 6 }: GameGridSkeletonProps) {
   return (
     <div className="game-grid-skeleton">
       {Array.from({ length: count }).map((_, i) => (
