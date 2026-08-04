@@ -6,7 +6,7 @@ import './admin.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint, options = {}) {
+function authFetch(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token');
   return fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -18,7 +18,22 @@ function authFetch(endpoint, options = {}) {
   });
 }
 
-const MOCK_STATS = import.meta.env.VITE_USE_MOCKS === 'true'
+interface DashboardStats {
+  totalUsers: number;
+  totalGames: number;
+  totalRevenue: number;
+  activeSessions: number;
+  newUsersToday: number;
+}
+
+interface ActivityItem {
+  id: number;
+  type: string;
+  message: string;
+  time: string;
+}
+
+const MOCK_STATS: DashboardStats | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? {
       totalUsers: 12847,
       totalGames: 342,
@@ -28,7 +43,7 @@ const MOCK_STATS = import.meta.env.VITE_USE_MOCKS === 'true'
     }
   : null;
 
-const MOCK_RECENT_ACTIVITY = import.meta.env.VITE_USE_MOCKS === 'true'
+const MOCK_RECENT_ACTIVITY: ActivityItem[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
       { id: 1, type: 'user_register',     message: 'New user registered: CryptoGamer42',              time: '2 min ago'  },
       { id: 2, type: 'game_submitted',    message: 'Game submitted: Neon Drift by StarForge Studios',  time: '15 min ago' },
@@ -46,8 +61,8 @@ const QUICK_ACTIONS = [
   { id: 'settings', label: 'Platform Settings', icon: '⚙',  link: '/admin/settings' },
 ];
 
-function getActivityClass(type) {
-  const classes = {
+function getActivityClass(type: string) {
+  const classes: Record<string, string> = {
     user_register:     'activity-new',
     game_submitted:    'activity-game',
     payout_request:    'activity-payout',
@@ -58,8 +73,8 @@ function getActivityClass(type) {
   return classes[type] || '';
 }
 
-function getActivityEmoji(type) {
-  const icons = {
+function getActivityEmoji(type: string) {
+  const icons: Record<string, string> = {
     user_register:     '👤',
     game_submitted:    '⬡',
     payout_request:    '💸',
@@ -71,9 +86,9 @@ function getActivityEmoji(type) {
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats]     = useState(MOCK_STATS);
+  const [stats, setStats]     = useState<DashboardStats | null>(MOCK_STATS);
   const [loading, setLoading] = useState(!MOCK_STATS);
-  const [error, setError]     = useState(null);
+  const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
     if (import.meta.env.VITE_USE_MOCKS === 'true') return;
@@ -85,14 +100,20 @@ export default function AdminDashboard() {
         const overviewRes = await authFetch('/api/admin/analytics/overview');
 
         if (overviewRes.ok) {
-          const data = await overviewRes.json();
+          const data = await overviewRes.json() as {
+            total_users?: number;
+            total_games?: number;
+            total_revenue_usd?: number | string;
+            active_users_24h?: number;
+            new_users_today?: number;
+          };
           setStats({
             totalUsers:     data.total_users        ?? 0,
             totalGames:     data.total_games        ?? 0,
             // `total_revenue_usd` — gross value settled wallet-to-wallet through
             // verified, non-voided payment receipts (non-custodial: the
             // platform never holds this money, it only witnesses the transfer).
-            totalRevenue:   parseFloat(data.total_revenue_usd ?? 0),
+            totalRevenue:   parseFloat(String(data.total_revenue_usd ?? 0)),
             // `active_users_24h` — distinct players with a play session in the
             // last 24h. Real activity data, not a stand-in for "total users".
             activeSessions: data.active_users_24h ?? 0,
@@ -100,7 +121,7 @@ export default function AdminDashboard() {
           });
         }
       } catch (err) {
-        setError(err.message || 'Failed to load dashboard');
+        setError((err instanceof Error && err.message) || 'Failed to load dashboard');
       } finally {
         setLoading(false);
       }
