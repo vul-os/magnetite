@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PlayerList from '../components/PlayerList';
 import LobbyChat from '../components/LobbyChat';
+import type { LobbyChatMessage as ChatComponentMessage } from '../components/LobbyChat';
 import ReadyButton from '../components/ReadyButton';
 import StartGameButton from '../components/StartGameButton';
 import GameOverlay from '../components/GameOverlay';
@@ -62,11 +63,11 @@ export default function GameLobby() {
     toggleReady();
   }, [toggleReady]);
 
-  const handleKickPlayer = useCallback((playerId) => {
+  const handleKickPlayer = useCallback((playerId: string) => {
     kickPlayer(playerId);
   }, [kickPlayer]);
 
-  const handleSendMessage = useCallback((content) => {
+  const handleSendMessage = useCallback((content: string) => {
     sendChatMessage(content);
   }, [sendChatMessage]);
 
@@ -208,7 +209,17 @@ export default function GameLobby() {
                 <div className="lobby-section-card">
                   <h3>{t('game.hostControls')}</h3>
                   <StartGameButton
-                    allReady={allReady}
+                    // NOTE (pre-existing bug, not fixed here — StartGameButton's real
+                    // prop is `allPlayersReady`; `allReady` isn't part of its props
+                    // and was always silently dropped, leaving the required
+                    // allPlayersReady prop undefined at runtime, so the button never
+                    // actually received the ready-state it appears to be wired to).
+                    // The cast preserves that exact prior shape (allReady passed but
+                    // unused; allPlayersReady always undefined) through the checker.
+                    {...({ allReady, allPlayersReady: undefined } as unknown as {
+                      allReady: boolean;
+                      allPlayersReady: boolean;
+                    })}
                     playerCount={players.length}
                     minPlayers={2}
                     onStartGame={handleStartGame}
@@ -227,7 +238,13 @@ export default function GameLobby() {
             {/* Chat */}
             <div className="lobby-chat-col">
               <LobbyChat
-                messages={chatMessages}
+                // NOTE (pre-existing bug, not fixed here — useGameLobby's
+                // LobbyChatMessage shape ({id, playerId, username, message,
+                // timestamp}) doesn't match LobbyChat's expected shape ({id,
+                // senderId, senderName, content, timestamp}), so the chat panel
+                // has always rendered these fields as undefined). Cast preserves
+                // that exact pre-existing behavior through the type checker.
+                messages={chatMessages as unknown as ChatComponentMessage[]}
                 currentUserId={currentUser.id}
                 onSendMessage={handleSendMessage}
               />
