@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { NotificationProvider, useNotificationContext } from '../context/NotificationContext';
 
 // ── mock api client ───────────────────────────────────────────────────────────
@@ -28,7 +28,11 @@ vi.mock('../api/client', () => ({
 
 import { api } from '../api/client';
 
-const wrapper = ({ children }) => (
+const mockNotificationsList = vi.mocked(api.notifications.list);
+const mockMarkAsRead = vi.mocked(api.notifications.markAsRead);
+const mockMarkAllAsRead = vi.mocked(api.notifications.markAllAsRead);
+
+const wrapper = ({ children }: { children: ReactNode }) => (
   React.createElement(NotificationProvider, null, children)
 );
 
@@ -37,9 +41,9 @@ const wrapper = ({ children }) => (
 describe('NotificationContext — REST load', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.notifications.list.mockRejectedValue(new Error('No backend'));
-    api.notifications.markAsRead.mockResolvedValue({});
-    api.notifications.markAllAsRead.mockResolvedValue({});
+    mockNotificationsList.mockRejectedValue(new Error('No backend'));
+    mockMarkAsRead.mockResolvedValue({});
+    mockMarkAllAsRead.mockResolvedValue({});
   });
 
   afterEach(() => vi.clearAllMocks());
@@ -57,7 +61,7 @@ describe('NotificationContext — REST load', () => {
       { id: '1', type: 'FRIEND_REQUEST', title: 'Alice wants to be friends', read: false, createdAt: new Date().toISOString() },
       { id: '2', type: 'PAYOUT_COMPLETE', title: 'Payout sent', read: true, createdAt: new Date().toISOString() },
     ];
-    api.notifications.list.mockResolvedValue(mockList);
+    mockNotificationsList.mockResolvedValue(mockList);
 
     const { result } = renderHook(() => useNotificationContext(), { wrapper });
     await vi.waitFor(() => expect(result.current.initialized).toBe(true));
@@ -66,7 +70,7 @@ describe('NotificationContext — REST load', () => {
   });
 
   it('handles API response with { notifications: [] } shape', async () => {
-    api.notifications.list.mockResolvedValue({ notifications: [
+    mockNotificationsList.mockResolvedValue({ notifications: [
       { id: '3', type: 'SYSTEM', title: 'Welcome!', read: false },
     ]});
 
@@ -80,12 +84,12 @@ describe('NotificationContext — REST load', () => {
 describe('NotificationContext — unreadCount', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.notifications.markAsRead.mockResolvedValue({});
-    api.notifications.markAllAsRead.mockResolvedValue({});
+    mockMarkAsRead.mockResolvedValue({});
+    mockMarkAllAsRead.mockResolvedValue({});
   });
 
   it('counts only unread notifications', async () => {
-    api.notifications.list.mockResolvedValue([
+    mockNotificationsList.mockResolvedValue([
       { id: '1', read: false, type: 'SYSTEM', title: 'A' },
       { id: '2', read: false, type: 'SYSTEM', title: 'B' },
       { id: '3', read: true,  type: 'SYSTEM', title: 'C' },
@@ -98,7 +102,7 @@ describe('NotificationContext — unreadCount', () => {
   });
 
   it('unreadCount is 0 when all notifications are read', async () => {
-    api.notifications.list.mockResolvedValue([
+    mockNotificationsList.mockResolvedValue([
       { id: '1', read: true, type: 'SYSTEM', title: 'Done' },
     ]);
 
@@ -112,9 +116,9 @@ describe('NotificationContext — unreadCount', () => {
 describe('NotificationContext — addNotification (WS push)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.notifications.list.mockResolvedValue([]);
-    api.notifications.markAsRead.mockResolvedValue({});
-    api.notifications.markAllAsRead.mockResolvedValue({});
+    mockNotificationsList.mockResolvedValue([]);
+    mockMarkAsRead.mockResolvedValue({});
+    mockMarkAllAsRead.mockResolvedValue({});
   });
 
   it('addNotification pushes a new unread entry to the list', async () => {
@@ -135,7 +139,7 @@ describe('NotificationContext — addNotification (WS push)', () => {
   });
 
   it('pushed notification is prepended (most recent first)', async () => {
-    api.notifications.list.mockResolvedValue([
+    mockNotificationsList.mockResolvedValue([
       { id: 'old', read: true, type: 'SYSTEM', title: 'Old notification' },
     ]);
 
@@ -202,12 +206,12 @@ describe('NotificationContext — addNotification (WS push)', () => {
 describe('NotificationContext — markAsRead / markAllAsRead', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.notifications.list.mockResolvedValue([
+    mockNotificationsList.mockResolvedValue([
       { id: '1', read: false, type: 'SYSTEM', title: 'A' },
       { id: '2', read: false, type: 'SYSTEM', title: 'B' },
     ]);
-    api.notifications.markAsRead.mockResolvedValue({});
-    api.notifications.markAllAsRead.mockResolvedValue({});
+    mockMarkAsRead.mockResolvedValue({});
+    mockMarkAllAsRead.mockResolvedValue({});
   });
 
   it('markAsRead marks a single notification as read', async () => {
@@ -219,10 +223,10 @@ describe('NotificationContext — markAsRead / markAllAsRead', () => {
     });
 
     const n = result.current.notifications.find(n => n.id === '1');
-    expect(n.read).toBe(true);
+    expect(n!.read).toBe(true);
     // Other notification still unread
     const m = result.current.notifications.find(n => n.id === '2');
-    expect(m.read).toBe(false);
+    expect(m!.read).toBe(false);
   });
 
   it('markAllAsRead marks every notification as read', async () => {
@@ -247,22 +251,22 @@ describe('api.notifications client', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('list() returns an array', async () => {
-    api.notifications.list.mockResolvedValue([
+    mockNotificationsList.mockResolvedValue([
       { id: '1', type: 'SYSTEM', title: 'Hi', read: false },
     ]);
-    const result = await api.notifications.list();
+    const result = await mockNotificationsList();
     expect(Array.isArray(result)).toBe(true);
   });
 
   it('markAsRead(id) is called with the correct id', async () => {
-    api.notifications.markAsRead.mockResolvedValue({});
-    await api.notifications.markAsRead('notif-123');
-    expect(api.notifications.markAsRead).toHaveBeenCalledWith('notif-123');
+    mockMarkAsRead.mockResolvedValue({});
+    await mockMarkAsRead('notif-123');
+    expect(mockMarkAsRead).toHaveBeenCalledWith('notif-123');
   });
 
   it('markAllAsRead() is called without arguments', async () => {
-    api.notifications.markAllAsRead.mockResolvedValue({});
-    await api.notifications.markAllAsRead();
-    expect(api.notifications.markAllAsRead).toHaveBeenCalledTimes(1);
+    mockMarkAllAsRead.mockResolvedValue({});
+    await mockMarkAllAsRead();
+    expect(mockMarkAllAsRead).toHaveBeenCalledTimes(1);
   });
 });
