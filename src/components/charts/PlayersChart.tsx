@@ -12,7 +12,19 @@ const colors = {
   border:     '#23232e',   /* --color-border */
 };
 
-function CustomTooltip({ active, payload, label }) {
+interface CustomTooltipPayloadEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: CustomTooltipPayloadEntry[];
+  label?: string | number;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   return (
@@ -32,20 +44,30 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-function formatDate(value) {
+function formatDate(value: string | number): string {
   if (!value) return '';
   const date = new Date(value);
-  if (isNaN(date.getTime())) return value;
+  if (isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function calculateRetentionData(registrations) {
+interface DailyActiveDatum {
+  date: string;
+  users?: number;
+}
+
+interface RegistrationDatum {
+  date: string;
+  newUsers?: number;
+}
+
+function calculateRetentionData(registrations: RegistrationDatum[]) {
   const retentionBuckets = [0, 1, 7, 14, 30, 60, 90];
   return retentionBuckets.map(days => {
     const retained = registrations.filter(reg => {
       const regDate = new Date(reg.date);
       const now = new Date();
-      const diffDays = Math.floor((now - regDate) / (1000 * 60 * 60 * 24));
+      const diffDays = Math.floor((now.getTime() - regDate.getTime()) / (1000 * 60 * 60 * 24));
       return diffDays >= days;
     }).length;
     const retentionRate = registrations.length > 0 ? (retained / registrations.length * 100) : 0;
@@ -56,6 +78,19 @@ function calculateRetentionData(registrations) {
   });
 }
 
+export interface PlayersChartData {
+  dailyActive?: DailyActiveDatum[];
+  registrations?: RegistrationDatum[];
+}
+
+export interface PlayersChartProps {
+  data?: PlayersChartData;
+  title?: string;
+  height?: number;
+}
+
+type PlayersView = 'active' | 'new' | 'retention';
+
 export default function PlayersChart({
   data = {
     dailyActive: [],
@@ -63,8 +98,8 @@ export default function PlayersChart({
   },
   title = 'Player Analytics',
   height = 300,
-}) {
-  const [view, setView] = useState('active');
+}: PlayersChartProps) {
+  const [view, setView] = useState<PlayersView>('active');
 
   const dailyActive = data.dailyActive || [];
   const registrations = data.registrations || [];
@@ -83,11 +118,13 @@ export default function PlayersChart({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         {title && <h4 className="chart-title" style={{ margin: 0 }}>{title}</h4>}
         <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { key: 'active', label: 'Daily Active' },
-            { key: 'new', label: 'New Users' },
-            { key: 'retention', label: 'Retention' },
-          ].map(v => (
+          {(
+            [
+              { key: 'active', label: 'Daily Active' },
+              { key: 'new', label: 'New Users' },
+              { key: 'retention', label: 'Retention' },
+            ] as const
+          ).map(v => (
             <button
               key={v.key}
               onClick={() => setView(v.key)}
@@ -123,7 +160,7 @@ export default function PlayersChart({
           </p>
           {view !== 'retention' && (
             <p style={{
-              color: parseFloat(view === 'active' ? activeChange : regChange) >= 0 ? colors.tertiary : '#ef4444',
+              color: parseFloat(String(view === 'active' ? activeChange : regChange)) >= 0 ? colors.tertiary : '#ef4444',
               fontSize: 12,
               margin: 0,
             }}>
