@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import FriendCard from '../components/FriendCard';
+import type { Friend } from '../components/FriendCard';
 import { Unavailable } from '../components/state/Unavailable';
 import { api } from '../api/client';
 import { usePresence } from '../hooks/usePresence';
@@ -9,28 +10,68 @@ import './social.css';
 
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
 
+// Structurally matches FriendCard's exported Friend type, plus the id every
+// row here is keyed/filtered by.
+interface FriendItem {
+  id: string;
+  username: string;
+  status?: string;
+  activity?: string | null;
+  avatar?: string | null;
+  [key: string]: unknown;
+}
+
+interface FriendRequest {
+  id: string;
+  from_user_id?: string;
+  to_user_id?: string;
+  username?: string;
+  from_username?: string;
+  to_username?: string;
+  avatar?: string | null;
+  from_avatar?: string | null;
+  to_avatar?: string | null;
+  status?: string;
+  created_at?: string;
+  sentAt?: string;
+}
+
+interface BlockedUser {
+  id: string;
+  username: string;
+  avatar?: string | null;
+  blockedAt: string;
+}
+
+interface SearchUser {
+  id: string;
+  username: string;
+  status?: string;
+  avatar?: string | null;
+}
+
 // Pure date formatter: returns a localized date string, or an em-dash when the
 // value is missing. Avoids calling Date.now() during render (impure fallback).
-function formatRequestDate(value) {
+function formatRequestDate(value: string | undefined) {
   if (!value) return '—';
   return new Date(value).toLocaleDateString();
 }
 
 export default function Friends() {
   const { t } = useTranslation();
-  const [friends, setFriends]               = useState([]);
-  const [pendingRequests, setPendingRequests] = useState([]);
-  const [sentRequests, setSentRequests]       = useState([]);
-  const [blockedUsers, setBlockedUsers]       = useState([]);
+  const [friends, setFriends]               = useState<FriendItem[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
+  const [sentRequests, setSentRequests]       = useState<FriendRequest[]>([]);
+  const [blockedUsers, setBlockedUsers]       = useState<BlockedUser[]>([]);
   const [loading, setLoading]               = useState(true);
-  const [loadError, setLoadError]           = useState(null);
+  const [loadError, setLoadError]           = useState<string | null>(null);
 
   // Presence indicators for each friend
   const friendIds = friends.map((f) => f.id);
   const { presenceMap } = usePresence(friendIds);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchError, setSearchError]     = useState(null);
+  const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
+  const [searchError, setSearchError]     = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('friends');
 
   useEffect(() => {
@@ -60,21 +101,27 @@ export default function Friends() {
       if (cancelled) return;
 
       if (friendsResult.status === 'fulfilled') {
-        const data = friendsResult.value;
+        const data = friendsResult.value as FriendItem[] | { friends?: FriendItem[] } | null;
         const list = Array.isArray(data) ? data : (data?.friends ?? []);
         setFriends(list);
       } else {
-        setLoadError(friendsResult.reason?.message || t('friends.loadError'));
+        setLoadError((friendsResult.reason as { message?: string } | null)?.message || t('friends.loadError'));
       }
 
       if (pendingResult.status === 'fulfilled') {
-        const data = pendingResult.value;
+        const data = pendingResult.value as
+          | FriendRequest[]
+          | { requests?: FriendRequest[]; friend_requests?: FriendRequest[] }
+          | null;
         const list = Array.isArray(data) ? data : (data?.requests ?? data?.friend_requests ?? []);
         setPendingRequests(list);
       }
 
       if (sentResult.status === 'fulfilled') {
-        const data = sentResult.value;
+        const data = sentResult.value as
+          | FriendRequest[]
+          | { requests?: FriendRequest[]; friend_requests?: FriendRequest[] }
+          | null;
         const list = Array.isArray(data) ? data : (data?.requests ?? data?.friend_requests ?? []);
         setSentRequests(list);
       }
@@ -82,7 +129,7 @@ export default function Friends() {
       setLoading(false);
     }).catch((err) => {
       if (!cancelled) {
-        setLoadError(err.message || t('friends.loadError'));
+        setLoadError((err instanceof Error && err.message) || t('friends.loadError'));
         setLoading(false);
       }
     });
@@ -90,7 +137,7 @@ export default function Friends() {
     return () => { cancelled = true; };
   }, [t]);
 
-  const handleSearch = useCallback(async (query) => {
+  const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
     setSearchError(null);
     if (query.trim()) {
@@ -103,14 +150,15 @@ export default function Friends() {
         return;
       }
       api.social.searchUsers(query).then(data => {
-        const list = Array.isArray(data) ? data : (data?.users ?? null);
+        const typed = data as SearchUser[] | { users?: SearchUser[] } | null;
+        const list = Array.isArray(typed) ? typed : (typed?.users ?? null);
         if (list) {
           setSearchResults(list);
         } else {
           setSearchResults([]);
         }
       }).catch((err) => {
-        setSearchError(err.message || t('friends.searchError'));
+        setSearchError((err instanceof Error && err.message) || t('friends.searchError'));
         setSearchResults([]);
       });
     } else {
@@ -118,7 +166,7 @@ export default function Friends() {
     }
   }, [t]);
 
-  const handleAddFriend = useCallback(async (user) => {
+  const handleAddFriend = useCallback(async (user: SearchUser) => {
     try {
       await api.social.addFriend(user.id);
       // Move from search results to sent requests (optimistic)
@@ -143,12 +191,16 @@ export default function Friends() {
   // locally", which it was not. There is no handler now, so FriendCard renders
   // no Invite button; the panel says why once, at the top.
 
-  const handleBlock = useCallback((friend) => {
+  // Typed as FriendCard's Friend (its onBlock contract) rather than our local
+  // FriendItem; every friend actually passed to FriendCard here is a
+  // FriendItem (has `id`), so the cast is safe in practice.
+  const handleBlock = useCallback((friendArg: Friend) => {
+    const friend = friendArg as FriendItem;
     setFriends(prev => prev.filter(f => f.id !== friend.id));
     setBlockedUsers(prev => [...prev, { ...friend, blockedAt: new Date().toISOString() }]);
   }, []);
 
-  const handleAcceptRequest = useCallback(async (request) => {
+  const handleAcceptRequest = useCallback(async (request: FriendRequest) => {
     try {
       // Use the backend's accept route: POST /friends/accept/:id
       await api.social.acceptRequest(request.id).catch(() =>
@@ -164,7 +216,7 @@ export default function Friends() {
     }]);
   }, []);
 
-  const handleDeclineRequest = useCallback(async (request) => {
+  const handleDeclineRequest = useCallback(async (request: FriendRequest) => {
     try {
       await api.social.rejectRequest(request.id).catch(() =>
         api.social.declineInvite(request.id)
@@ -173,14 +225,14 @@ export default function Friends() {
     setPendingRequests(prev => prev.filter(r => r.id !== request.id));
   }, []);
 
-  const handleCancelSentRequest = useCallback(async (request) => {
+  const handleCancelSentRequest = useCallback(async (request: FriendRequest) => {
     try {
       await api.social.cancelRequest(request.id);
     } catch { /* optimistic */ }
     setSentRequests(prev => prev.filter(r => r.id !== request.id));
   }, []);
 
-  const handleUnblock = useCallback((user) => {
+  const handleUnblock = useCallback((user: BlockedUser) => {
     setBlockedUsers(prev => prev.filter(u => u.id !== user.id));
   }, []);
 
@@ -236,7 +288,7 @@ export default function Friends() {
               <div id="friends-search-results" className="search-results" role="listbox" aria-label={t('friends.searchResults')}>
                 {searchResults.map(user => (
                   <div key={user.id} className="search-result-item" role="option">
-                    <img src={user.avatar} alt="" loading="lazy" />
+                    <img src={user.avatar ?? undefined} alt="" loading="lazy" />
                     <span>{user.username}</span>
                     <button
                       onClick={() => handleAddFriend(user)}
@@ -406,7 +458,7 @@ export default function Friends() {
               ) : (
                 blockedUsers.map(user => (
                   <div key={user.id} className="blocked-card">
-                    <img src={user.avatar} alt={t('friends.avatarAlt', { name: user.username })} loading="lazy" />
+                    <img src={user.avatar ?? undefined} alt={t('friends.avatarAlt', { name: user.username })} loading="lazy" />
                     <div className="blocked-info">
                       <h4>{user.username}</h4>
                       <span>{t('friends.blockedDate', { date: new Date(user.blockedAt).toLocaleDateString() })}</span>
