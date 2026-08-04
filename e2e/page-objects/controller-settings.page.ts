@@ -1,4 +1,5 @@
-import { BasePage } from './base.page.js';
+import type { Page } from '@playwright/test';
+import { BasePage } from './base.page';
 
 /**
  * ControllerSettingsPage — Gamepad controller binding editor.
@@ -14,7 +15,16 @@ import { BasePage } from './base.page.js';
  * Key selectors aligned to real component classes.
  */
 export class ControllerSettingsPage extends BasePage {
-  constructor(page) {
+  readonly pageHeading: string;
+  readonly kicker: string;
+  readonly statusBar: string;
+  readonly bindingRows: string;
+  readonly resetButton: string;
+  readonly bindButton: string;
+  readonly axesSection: string;
+  readonly buttonsSection: string;
+
+  constructor(page: Page) {
     super(page);
     this.pageHeading = 'h1, [class*="controller"] h1, [class*="cs-title"]';
     this.kicker = '[class*="kicker"], [class*="cs-kicker"]';
@@ -26,15 +36,15 @@ export class ControllerSettingsPage extends BasePage {
     this.buttonsSection = '[class*="buttons"], .cs-buttons-panel';
   }
 
-  async getBindingRowCount() {
+  async getBindingRowCount(): Promise<number> {
     return this.page.locator(this.bindingRows).count();
   }
 
-  async clickReset() {
+  async clickReset(): Promise<void> {
     await this.page.locator(this.resetButton).first().click();
   }
 
-  async isHeadingVisible() {
+  async isHeadingVisible(): Promise<boolean> {
     return this.page.locator(this.pageHeading).isVisible();
   }
 }
