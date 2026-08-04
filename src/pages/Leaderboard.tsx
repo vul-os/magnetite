@@ -1,11 +1,18 @@
 import { useState, useMemo, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
 import Layout from '../components/Layout';
 import LeaderboardRow from '../components/LeaderboardRow';
+import type { LeaderboardRowEntry } from '../components/LeaderboardRow';
 import LeaderboardSkeleton from '../components/skeletons/LeaderboardSkeleton';
 import EmptyState from '../components/empty/EmptyState';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 import './social.css';
+
+interface LeaderboardGame {
+  id: number;
+  title: string;
+}
 
 const TrophyIcon = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -26,15 +33,15 @@ const TIME_FILTERS = [
 
 const ITEMS_PER_PAGE = 10;
 
-function seededRand(a, b) {
+function seededRand(a: number, b: number) {
   const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return x - Math.floor(x);
 }
 
-async function buildMockFallbackData(gameId, timeFilter) {
+async function buildMockFallbackData(gameId: number, timeFilter: string): Promise<LeaderboardRowEntry[]> {
   const { mockLeaderboard } = await import('../data/mockLeaderboard');
   const key = String(gameId);
-  const baseData = mockLeaderboard[key] || mockLeaderboard['1'];
+  const baseData: LeaderboardRowEntry[] = (mockLeaderboard as Record<string, LeaderboardRowEntry[]>)[key] || mockLeaderboard['1'];
   const tf = TIME_FILTERS.findIndex(f => f.key === timeFilter);
 
   const enriched = baseData.map((entry, i) => ({
@@ -70,13 +77,13 @@ export default function Leaderboard() {
     { id: 6, title: 'Retro Arcade'     },
   ];
 
-  const [games, setGames]             = useState(USE_MOCKS ? MOCK_GAMES : []);
-  const [selectedGame, setSelectedGame] = useState(USE_MOCKS ? 1 : null);
+  const [games, setGames]             = useState<LeaderboardGame[]>(USE_MOCKS ? MOCK_GAMES : []);
+  const [selectedGame, setSelectedGame] = useState<number | null>(USE_MOCKS ? 1 : null);
   const [timeFilter, setTimeFilter]   = useState('all-time');
   const [currentPage, setCurrentPage] = useState(1);
-  const [apiEntries, setApiEntries]   = useState(null);
-  const [loadedGame, setLoadedGame]   = useState(null);
-  const [fetchError, setFetchError]   = useState(null);
+  const [apiEntries, setApiEntries]   = useState<LeaderboardRowEntry[] | null>(null);
+  const [loadedGame, setLoadedGame]   = useState<number | null>(null);
+  const [fetchError, setFetchError]   = useState<string | null>(null);
   /* loading = true until we've completed a fetch for the selectedGame */
   const loading = loadedGame !== selectedGame;
 
@@ -84,8 +91,9 @@ export default function Leaderboard() {
     if (USE_MOCKS) return;
     let cancelled = false;
     api.games.list().then(data => {
-      if (!cancelled && data) {
-        const list = Array.isArray(data) ? data : (data?.games ?? null);
+      const typed = data as LeaderboardGame[] | { games?: LeaderboardGame[] } | null;
+      if (!cancelled && typed) {
+        const list = Array.isArray(typed) ? typed : (typed?.games ?? null);
         if (list && list.length > 0) {
           setGames(list.map(g => ({ id: g.id, title: g.title })));
           setSelectedGame(list[0].id);
@@ -114,15 +122,16 @@ export default function Leaderboard() {
 
     api.games.leaderboard(selectedGame).then(data => {
       if (!cancelled) {
-        const entries = data
-          ? (Array.isArray(data) ? data : (data?.entries ?? null))
+        const typed = data as LeaderboardRowEntry[] | { entries?: LeaderboardRowEntry[] } | null;
+        const entries = typed
+          ? (Array.isArray(typed) ? typed : (typed?.entries ?? null))
           : null;
         setApiEntries(entries && entries.length > 0 ? entries : null);
         setLoadedGame(selectedGame);
       }
     }).catch((err) => {
       if (!cancelled) {
-        setFetchError(err.message ?? t('leaderboard.loadError'));
+        setFetchError((err instanceof Error ? err.message : undefined) ?? t('leaderboard.loadError'));
         setApiEntries(null);
         setLoadedGame(selectedGame);
       }
@@ -142,8 +151,8 @@ export default function Leaderboard() {
   const currentData = leaderboardData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   const userRank    = leaderboardData.findIndex(e => e.username === currentUser.username) + 1;
 
-  const handleGameChange = (id) => { setSelectedGame(Number(id)); setCurrentPage(1); setApiEntries(null); setLoadedGame(null); };
-  const handleFilterChange = (key) => { setTimeFilter(key); setCurrentPage(1); };
+  const handleGameChange = (id: string) => { setSelectedGame(Number(id)); setCurrentPage(1); setApiEntries(null); setLoadedGame(null); };
+  const handleFilterChange = (key: string) => { setTimeFilter(key); setCurrentPage(1); };
 
   return (
     <Layout>
@@ -165,8 +174,10 @@ export default function Leaderboard() {
             <label htmlFor="game-selector">{t('leaderboard.gameLabel')}</label>
             <select
               id="game-selector"
-              value={selectedGame}
-              onChange={(e) => handleGameChange(e.target.value)}
+              // React's <select> value prop type doesn't include null; undefined
+              // is the same "uncontrolled" case React treats null as here.
+              value={selectedGame ?? undefined}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => handleGameChange(e.target.value)}
               aria-label={t('leaderboard.selectGame')}
             >
               {games.map(game => (
