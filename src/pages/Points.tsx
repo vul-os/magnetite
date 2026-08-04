@@ -1,10 +1,21 @@
 import { useState } from 'react';
+import type { ComponentType } from 'react';
 import Layout from '../components/Layout';
 import Skeleton from '../components/skeletons/Skeleton';
 import EmptyState from '../components/empty/EmptyState';
 import { Unavailable, LoadError } from '../components/state/Unavailable';
 import { usePoints } from '../hooks/usePoints';
+import type { PointsSeason, PointsReward } from '../hooks/usePoints';
 import './Points.css';
+
+/** Structurally widens PointsBalance's non-nullable rank/season for the
+ * pre-data-load placeholder used below (see `balance` derivation). */
+interface DisplayBalance {
+  points: number;
+  lifetime_points: number;
+  rank: number | null;
+  season: PointsSeason | null;
+}
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -48,7 +59,7 @@ function TrophySmIcon() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Map tier names to CSS variable tokens (no hardcoded hex).
-const TIER_CSS_VARS = {
+const TIER_CSS_VARS: Record<string, string> = {
   Bronze:   'var(--color-tier-bronze,  #cd7f32)',
   Silver:   'var(--color-tier-silver,  var(--color-text-secondary))',
   Gold:     'var(--color-tier-gold,    var(--color-amber))',
@@ -58,15 +69,15 @@ const TIER_CSS_VARS = {
 // Alias kept as TIER_COLORS so all downstream references remain valid.
 const TIER_COLORS = TIER_CSS_VARS;
 
-function formatDate(iso) {
+function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function formatPts(n) {
+function formatPts(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
-const TABS = [
+const TABS: { key: string; label: string; icon: ComponentType }[] = [
   { key: 'overview',    label: 'Overview',    icon: StarIcon    },
   { key: 'history',     label: 'History',     icon: HistoryIcon },
   { key: 'rewards',     label: 'Rewards',     icon: GiftIcon    },
@@ -77,7 +88,7 @@ const TABS = [
 
 export default function Points() {
   const [tab, setTab]                 = useState('overview');
-  const [redeemMsg, setRedeemMsg]     = useState(null);
+  const [redeemMsg, setRedeemMsg]     = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const {
     balance: rawBalance, history, rewards, leaderboard,
     loading, error, redeeming, redeem, rewardsUnavailable,
@@ -88,9 +99,9 @@ export default function Points() {
    * render for any real user and the error boundary rendered nothing at all.
    * Nothing is invented here — the zeroes are only ever shown while `loading`
    * is true or alongside the error state below. */
-  const balance = rawBalance ?? { points: 0, lifetime_points: 0, rank: null, season: null };
+  const balance: DisplayBalance = rawBalance ?? { points: 0, lifetime_points: 0, rank: null, season: null };
 
-  async function handleRedeem(reward) {
+  async function handleRedeem(reward: PointsReward) {
     if (balance.points < reward.cost) {
       setRedeemMsg({ type: 'error', text: 'Not enough points.' });
       setTimeout(() => setRedeemMsg(null), 3000);
@@ -104,8 +115,8 @@ export default function Points() {
     setTimeout(() => setRedeemMsg(null), 3500);
   }
 
-  const season = balance.season ?? {};
-  const tierColor = TIER_COLORS[season.tier] ?? 'var(--color-accent)';
+  const season: Partial<PointsSeason> = balance.season ?? {};
+  const tierColor = (season.tier && TIER_COLORS[season.tier]) ?? 'var(--color-accent)';
 
   return (
     <Layout>
