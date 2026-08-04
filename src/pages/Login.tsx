@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getOAuthUrl } from '../api/client';
@@ -30,7 +31,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(null);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
 
   // Stable, collision-free ids: this page may be rendered more than once in a
   // test tree, and duplicate ids are an accessibility violation.
@@ -40,19 +41,19 @@ export default function Login() {
   const errorId = `${uid}-error`;
   const statusId = `${uid}-status`;
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       await login(email, password);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
     }
   };
 
-  const handleOAuth = (provider) => {
+  const handleOAuth = (provider: string) => {
     setOauthLoading(provider);
     setError('');
 
