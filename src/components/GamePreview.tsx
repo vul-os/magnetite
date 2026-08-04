@@ -25,11 +25,57 @@ import './GamePreview.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'disconnected';
+
+interface GameClientState {
+  players?: unknown[];
+  other_players?: unknown[];
+  self_state?: unknown;
+}
+
+interface GameClientConnection {
+  onOpen?: () => void;
+  onClose?: () => void;
+  onError?: () => void;
+  isConnected: boolean;
+}
+
+/**
+ * The subset of magnetite-web-client's MagnetiteClient (an unexported class —
+ * only its `createClient` factory is exported) that this component actually
+ * touches, including its underscore-prefixed internals. client.js is a plain
+ * JSDoc'd JS module (not converted here — see the TS migration plan), so its
+ * real inferred type is precise for the public surface but doesn't model the
+ * ad hoc extra fields some internals expose (e.g. PredictionBuffer.lag isn't
+ * part of its declared type). Rather than fight that per-property, the
+ * createClient() call result is cast through `unknown` to this interface —
+ * the standard escape hatch for "structurally close but not provably
+ * assignable" — once, at the integration boundary.
+ */
+interface GameClient {
+  connect: () => unknown;
+  disconnect: () => void;
+  onState: (fn: (state: GameClientState | null) => void) => () => void;
+  _conn: GameClientConnection;
+  _handleWelcome: (msg: unknown) => void;
+  _prediction?: { lag?: number | null };
+}
+
+interface CreateClientOptions {
+  url: string;
+  token?: string;
+  canvas: HTMLCanvasElement;
+  autoReconnect?: boolean;
+}
+
 // ── Mock canvas renderer (when no server is available) ───────────────────────
-function runMockRenderer(canvas) {
-  let rafId = null;
+function runMockRenderer(canvas: HTMLCanvasElement) {
+  let rafId: number | null = null;
   let tick = 0;
-  const cx = canvas.getContext('2d');
+  // Non-null assertion: preserves the original's unchecked-null behavior (a
+  // real canvas context practically never returns null here) rather than
+  // introducing a new no-op-on-null code path that didn't exist before.
+  const cx = canvas.getContext('2d')!;
 
   function frame() {
     const W = canvas.width;
@@ -89,6 +135,14 @@ function runMockRenderer(canvas) {
   return () => { if (rafId) cancelAnimationFrame(rafId); };
 }
 
+export interface GamePreviewProps {
+  wsEndpoint?: string | null;
+  devMode?: boolean;
+  onClose?: (() => void) | null;
+  token?: string | null;
+  title?: string;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function GamePreview({
   wsEndpoint = null,
@@ -96,21 +150,21 @@ export default function GamePreview({
   onClose = null,
   token = null,
   title = 'Game Preview',
-}) {
+}: GamePreviewProps) {
   const { t } = useTranslation();
-  const canvasRef   = useRef(null);
-  const clientRef   = useRef(null);
-  const mockCleanup = useRef(null);
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const clientRef   = useRef<GameClient | null>(null);
+  const mockCleanup = useRef<(() => void) | null>(null);
 
-  const [status, setStatus]     = useState('idle');     // idle | connecting | connected | error | disconnected
-  const [error, setError]       = useState(null);
+  const [status, setStatus]     = useState<ConnectionStatus>('idle');
+  const [error, setError]       = useState<string | null>(null);
   const [playerCount, setPlayerCount] = useState(0);
-  const [latency, setLatency]   = useState(null);
-  const [pingHandle, setPingHandle] = useState(null);
+  const [latency, setLatency]   = useState<number | null>(null);
+  const [pingHandle, setPingHandle] = useState<ReturnType<typeof setInterval> | null>(null);
 
   // For devMode — the user can type a ws:// URL
   const [devUrl, setDevUrl]     = useState('ws://localhost:9001');
-  const [activeUrl, setActiveUrl] = useState(wsEndpoint);
+  const [activeUrl, setActiveUrl] = useState<string | null>(wsEndpoint);
 
   // Sync activeUrl when wsEndpoint prop changes (e.g. manifest loaded after mount).
   // This mirrors an async-arriving prop into local state that the user can also
@@ -121,8 +175,9 @@ export default function GamePreview({
   }, [wsEndpoint]);
 
   // ── Start / stop the client ───────────────────────────────────────────────
-  const startClient = useCallback((url) => {
-    if (!url || !canvasRef.current) return;
+  const startClient = useCallback((url: string) => {
+    const canvasEl = canvasRef.current;
+    if (!url || !canvasEl) return;
 
     // Tear down any existing client or mock renderer
     if (clientRef.current) {
@@ -141,7 +196,7 @@ export default function GamePreview({
     setStatus('connecting');
     setError(null);
 
-    const canvas = canvasRef.current;
+    const canvas = canvasEl;
     // Resize canvas to its display size
     canvas.width  = canvas.clientWidth  || 640;
     canvas.height = canvas.clientHeight || 360;
@@ -153,7 +208,7 @@ export default function GamePreview({
       token:  authToken,
       canvas: canvas,
       autoReconnect: false,
-    });
+    } satisfies CreateClientOptions) as unknown as GameClient;
 
     clientRef.current = client;
 
@@ -161,7 +216,7 @@ export default function GamePreview({
     client._conn.onOpen = () => setStatus('connecting'); // waiting for Welcome
     client._conn.onClose = () => {
       setStatus('disconnected');
-      clearInterval(pingHandle);
+      clearInterval(pingHandle ?? undefined);
     };
     client._conn.onError = () => {
       setStatus('error');
@@ -170,7 +225,7 @@ export default function GamePreview({
 
     // Welcome → connected
     const origWelcome = client._handleWelcome.bind(client);
-    client._handleWelcome = (msg) => {
+    client._handleWelcome = (msg: unknown) => {
       origWelcome(msg);
       setStatus('connected');
     };
