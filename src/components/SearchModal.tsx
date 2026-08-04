@@ -1,30 +1,38 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSearch } from '../hooks/useSearch';
+import { useSearch, type SearchFilters } from '../hooks/useSearch';
 import { useTranslation } from '../i18n/useTranslation';
 import Spinner from './common/Spinner';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
+import type { SearchResultItem } from '../types/domain';
 import './SearchModal.css';
 
 const CATEGORY_FILTERS = ['All', 'Games', 'Users'];
 
-export function SearchModal({ isOpen, onClose }) {
+interface SearchModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+type FlatResult = SearchResultItem & { category: 'game' | 'user' };
+
+export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { query, setQuery, search, recentSearches, addRecentSearch, clearRecentSearches, loading, results, filters, setFilters, genres } = useSearch();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeIndex, setActiveIndex] = useState(-1);
   const [showFilters, setShowFilters] = useState(false);
-  const inputRef = useRef(null);
-  const modalRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef(false);
   const titleId = 'search-modal-title';
 
-  const flatResults = useMemo(() => {
+  const flatResults = useMemo((): FlatResult[] => {
     if (!results) return [];
     return [
-      ...(results.games || []).map(g => ({ ...g, category: 'game' })),
-      ...(results.users || []).map(u => ({ ...u, category: 'user' })),
+      ...(results.games || []).map(g => ({ ...g, category: 'game' as const })),
+      ...(results.users || []).map(u => ({ ...u, category: 'user' as const })),
     ];
   }, [results]);
 
@@ -37,7 +45,7 @@ export function SearchModal({ isOpen, onClose }) {
   }, [results]);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         if (!isOpen) {
@@ -79,8 +87,8 @@ export function SearchModal({ isOpen, onClose }) {
   }, [isOpen, setQuery]);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (modalRef.current && !modalRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
@@ -90,7 +98,7 @@ export function SearchModal({ isOpen, onClose }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  const handleInputChange = useCallback((e) => {
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
     setActiveIndex(-1);
@@ -99,7 +107,7 @@ export function SearchModal({ isOpen, onClose }) {
     }
   }, [setQuery, search, selectedCategory, filters]);
 
-  const handleSelect = useCallback((result) => {
+  const handleSelect = useCallback((result: SearchResultItem) => {
     addRecentSearch(result.title);
     if (result.type === 'game') {
       navigate(`/game/${result.id}`);
@@ -109,7 +117,7 @@ export function SearchModal({ isOpen, onClose }) {
     onClose();
   }, [addRecentSearch, navigate, onClose]);
 
-  const handleRecentSelect = useCallback((recent) => {
+  const handleRecentSelect = useCallback((recent: string) => {
     setQuery(recent);
     search(recent, selectedCategory, filters);
   }, [setQuery, search, selectedCategory, filters]);
@@ -127,7 +135,7 @@ export function SearchModal({ isOpen, onClose }) {
     return 0;
   }, [groupedResults, selectedCategory]);
 
-  const handleKeyDown = useCallback((e) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     const totalItems = getTotalItems();
 
     if (!totalItems && !recentSearches.length) return;
@@ -153,15 +161,15 @@ export function SearchModal({ isOpen, onClose }) {
     }
   }, [activeIndex, flatResults, query, recentSearches, handleSelect, addRecentSearch, onClose, getTotalItems]);
 
-  const handleCategoryChange = useCallback((cat) => {
+  const handleCategoryChange = useCallback((cat: string) => {
     setSelectedCategory(cat);
     if (query.trim()) {
       search(query, cat, filters);
     }
   }, [query, search, filters]);
 
-  const handleFilterChange = useCallback((key, value) => {
-    const newFilters = { ...filters };
+  const handleFilterChange = useCallback((key: string, value: string | boolean | null) => {
+    const newFilters: SearchFilters = { ...filters };
     if (value === '' || value == null) {
       delete newFilters[key];
     } else {
@@ -173,7 +181,7 @@ export function SearchModal({ isOpen, onClose }) {
     }
   }, [filters, setFilters, query, search, selectedCategory]);
 
-  const renderResultsGroup = (title, items, icon, type) => {
+  const renderResultsGroup = (title: string, items: SearchResultItem[], icon: ReactNode, type: 'games' | 'users') => {
     if (!items.length) return null;
 
     return (
@@ -183,7 +191,7 @@ export function SearchModal({ isOpen, onClose }) {
           {title}
         </div>
         <ul className="search-results-list" role="group" aria-label={title}>
-          {items.map((item, index) => {
+          {items.map((item, index: number) => {
             const flatIndex = type === 'games' ? index : groupedResults.games.length + index;
             return (
               <li
