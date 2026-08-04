@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { CommunitiesPage } from './page-objects/communities.page.js';
+import { test, expect, type Page } from '@playwright/test';
+import { CommunitiesPage } from './page-objects/communities.page';
 
 // The Discord-style layout only renders once communities data loads (otherwise
 // the page shows a "Join a community" empty state). CommsContext cascades:
@@ -34,14 +34,14 @@ const MESSAGES = [
   { id: 'msg2', channel_id: 'ch1', content: 'Welcome in',    created_at: '2026-07-23T10:01:00Z', author: { id: 'm2', username: 'bob',   display_name: 'Bob' } },
 ];
 
-async function stubComms(page) {
+async function stubComms(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: CORS });
       return;
     }
     const path = new URL(route.request().url()).pathname;
-    const json = (obj) =>
+    const json = (obj: unknown) =>
       route.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
     if (path === '/api/v1/communities') return json({ communities: COMMUNITIES });
     if (/\/api\/v1\/communities\/[^/]+\/channels$/.test(path)) return json({ channels: CHANNELS });
@@ -53,7 +53,7 @@ async function stubComms(page) {
 }
 
 test.describe('Communities', () => {
-  let communitiesPage;
+  let communitiesPage: CommunitiesPage;
 
   test.beforeEach(async ({ page }) => {
     communitiesPage = new CommunitiesPage(page);
