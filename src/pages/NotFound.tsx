@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Button from '../components/common/Button';
@@ -7,7 +8,7 @@ import '../styles/error-pages.css';
 export default function NotFound() {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleSearch = (e) => {
+  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       window.location.href = `/?search=${encodeURIComponent(searchQuery)}`;
