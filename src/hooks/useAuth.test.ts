@@ -15,6 +15,9 @@ vi.mock('../api/client', () => ({
 // Import the mock AFTER vi.mock so we get the mocked version.
 import { api } from '../api/client';
 
+const mockLogin = vi.mocked(api.auth.login);
+const mockMe = vi.mocked(api.auth.me);
+
 describe('useAuth', () => {
   // Must match the canonical TOKEN_KEY in useAuth.js and client.js.
   const TOKEN_KEY = 'token';
@@ -24,9 +27,9 @@ describe('useAuth', () => {
     vi.clearAllMocks();
     localStorage.clear();
     // Default: api.auth.me rejects (no backend), so restore falls back to stored user.
-    api.auth.me.mockRejectedValue(new Error('No backend'));
+    mockMe.mockRejectedValue(new Error('No backend'));
     // Default: api.auth.login resolves with real token + user.
-    api.auth.login.mockResolvedValue({
+    mockLogin.mockResolvedValue({
       token: 'real_token_123',
       user: { id: 1, email: 'test@example.com', username: 'testuser' },
     });
@@ -38,7 +41,7 @@ describe('useAuth', () => {
   });
 
   it('login function stores token and user', async () => {
-    api.auth.login.mockResolvedValue({
+    mockLogin.mockResolvedValue({
       token: 'real_token_123',
       user: { id: 1, email: 'test@example.com', username: 'testuser' },
     });
@@ -51,7 +54,7 @@ describe('useAuth', () => {
 
     expect(localStorage.getItem(TOKEN_KEY)).toBe('real_token_123');
     expect(localStorage.getItem(USER_KEY)).toBeTruthy();
-    const storedUser = JSON.parse(localStorage.getItem(USER_KEY));
+    const storedUser = JSON.parse(localStorage.getItem(USER_KEY) ?? '');
     expect(storedUser.email).toBe('test@example.com');
   });
 
@@ -70,7 +73,7 @@ describe('useAuth', () => {
   });
 
   it('token storage works correctly', async () => {
-    api.auth.login.mockResolvedValue({
+    mockLogin.mockResolvedValue({
       token: 'real_token_abc',
       user: { id: 2, email: 'user@test.com', username: 'user' },
     });
@@ -93,21 +96,21 @@ describe('useAuth', () => {
   });
 
   it('login throws error with invalid credentials', async () => {
-    api.auth.login.mockRejectedValue(new Error('Invalid credentials'));
+    mockLogin.mockRejectedValue(new Error('Invalid credentials'));
 
     const { result } = renderHook(() => useAuth());
 
-    let caughtError;
+    let caughtError: Error | undefined;
     await act(async () => {
       try {
         await result.current.login('', '');
       } catch (e) {
-        caughtError = e;
+        caughtError = e as Error;
       }
     });
 
     expect(caughtError).toBeDefined();
-    expect(caughtError.message).toBe('Invalid credentials');
+    expect(caughtError?.message).toBe('Invalid credentials');
   });
 
   it('loads user from localStorage on mount', async () => {

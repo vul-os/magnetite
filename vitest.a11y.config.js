@@ -39,7 +39,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
-    include: ['src/**/*.a11y.test.jsx'],
+    include: ['src/**/*.a11y.test.{jsx,tsx}'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**', '**/target/**'],
     // Serialize axe so two runs are never in flight at once.
     fileParallelism: false,
