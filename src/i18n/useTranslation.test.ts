@@ -13,14 +13,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { I18nProvider } from './I18nProvider';
 import { useTranslation } from './useTranslation';
 
 // ── Wrapper using English locale ───────────────────────────────────────────────
 
-const EnglishWrapper = ({ children }) =>
-  React.createElement(I18nProvider, { defaultLocale: 'en' }, children);
+const EnglishWrapper = ({ children }: { children: ReactNode }) =>
+  React.createElement(I18nProvider, { defaultLocale: 'en', children });
 
 // ── 1. Resolves known English strings ─────────────────────────────────────────
 
