@@ -1,9 +1,10 @@
 import { useState, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from '../i18n/useTranslation';
+import type { Game } from '../types/domain';
 import './GameCard.css';
 
-const StarRating = memo(function StarRating({ rating }) {
+const StarRating = memo(function StarRating({ rating }: { rating: number }) {
   // Honest absence, not an invented 0.0 — a game with no rating yet is
   // unrated, not "rated zero". See DESIGN.md §7 (never invent a placeholder
   // rating) and GameDetail's identical rule for the same widget.
@@ -40,7 +41,7 @@ const StarRating = memo(function StarRating({ rating }) {
   );
 });
 
-const Badge = memo(function Badge({ type }) {
+const Badge = memo(function Badge({ type }: { type?: string }) {
   if (!type) return null;
   return <span className={`card-badge ${type.toLowerCase()}`}>{type}</span>;
 });
@@ -63,7 +64,7 @@ const GameCardSkeleton = memo(function GameCardSkeleton() {
 
 // A small, stable hash so the generated tile is deterministic per game — the
 // same title always draws the same field signature.
-function hashString(str) {
+function hashString(str: string): number {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
@@ -80,7 +81,7 @@ function hashString(str) {
  * platform-generated art, which is exactly the honest thing to show for a game
  * with no thumbnail (see DESIGN.md §7 / GameCard's no-stock-photo rule).
  */
-const BrandTile = memo(function BrandTile({ seedText }) {
+const BrandTile = memo(function BrandTile({ seedText }: { seedText?: string }) {
   const h = hashString(seedText || 'magnetite');
   const rot = h % 40 - 20;                 // field tilt
   const spread = 60 + (h >> 5) % 80;       // arc spread
@@ -105,7 +106,13 @@ const BrandTile = memo(function BrandTile({ seedText }) {
   );
 });
 
-export default memo(function GameCard({ game, loading = false, showPlayButton = true }) {
+export interface GameCardProps {
+  game?: Game | null;
+  loading?: boolean;
+  showPlayButton?: boolean;
+}
+
+export default memo(function GameCard({ game, loading = false, showPlayButton = true }: GameCardProps) {
   const { t } = useTranslation();
   const [imageError, setImageError] = useState(false);
 
