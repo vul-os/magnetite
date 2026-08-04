@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { StreamsPage } from './page-objects/streams.page.js';
+import { test, expect, type Page } from '@playwright/test';
+import { StreamsPage } from './page-objects/streams.page';
 
 // The live-stream grid comes from GET /api/v1/streams (api.streams.list('global')),
 // called cross-origin (VITE_API_URL, default http://localhost:8080), so a fulfilled
@@ -16,7 +16,7 @@ const STREAMS = [
   { id: 's3', title: 'Speedrun attempts',       game: 'Nebula Drift',   streamer: 'CarolFast', viewerCount: 88,   thumbnailUrl: null, liveAt: '2026-07-23T09:00:00Z' },
 ];
 
-async function stubStreams(page) {
+async function stubStreams(page: Page) {
   await page.route('**/api/v1/streams', async (route) => {
     if (route.request().method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: CORS });
@@ -31,7 +31,7 @@ async function stubStreams(page) {
 }
 
 test.describe('Streams Browse', () => {
-  let streamsPage;
+  let streamsPage: StreamsPage;
 
   test.beforeEach(async ({ page }) => {
     streamsPage = new StreamsPage(page);
