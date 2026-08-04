@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/smoke.test.js
+ * magnetite-web-client/src/smoke.test.ts
  *
  * Node/vitest smoke test — drives the full MagnetiteClient protocol pipeline
  * against a MOCK WebSocket server emitting:
@@ -23,6 +23,29 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { createClient } from './client.js';
 import { parseServerMessage } from './protocol.js';
+import type { ArenaDelta, ArenaSnapshot, ArenaView, Input, MatchConfig, ShooterPlayer } from './types';
+
+// ---------------------------------------------------------------------------
+// The private surface this test reaches into on the client MagnetiteClient
+// returns. createClient's return type doesn't expose `_prediction` (it's a
+// private class field) — this mirrors GamePreview.tsx's boundary: a single
+// documented cast through `unknown` describing exactly the members exercised
+// here, rather than an `any` escape.
+// ---------------------------------------------------------------------------
+
+interface TestClient {
+  playerId: string | null;
+  matchConfig: MatchConfig | null;
+  state: ArenaView | null;
+  connect(): void;
+  disconnect(): void;
+  onState(fn: (state: ArenaView | null) => void): () => void;
+  sendInput(input: Input): void;
+  _prediction: {
+    pendingCount: number;
+    authoritativeState: ArenaView | null;
+  };
+}
 
 // ---------------------------------------------------------------------------
 // MockWebSocket — intercepts new WebSocket(...) calls in the jsdom environment
@@ -36,16 +59,22 @@ import { parseServerMessage } from './protocol.js';
  * the real server would.
  */
 class MockWebSocket extends EventTarget {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static lastInstance: MockWebSocket | null = null;
 
-  constructor(url) {
+  url: string;
+  readyState: number;
+  /** records raw strings sent by the client */
+  sent: string[];
+
+  constructor(url: string) {
     super();
     this.url = url;
     this.readyState = MockWebSocket.CONNECTING;
-    this.sent = []; // records raw strings sent by the client
+    this.sent = [];
     MockWebSocket.lastInstance = this;
 
     // Simulate async open on the next tick
@@ -55,67 +84,66 @@ class MockWebSocket extends EventTarget {
     });
   }
 
-  /** Called by the client code (connection.js) */
-  send(data) {
+  /** Called by the client code (connection.ts) */
+  send(data: string): void {
     this.sent.push(data);
   }
 
   /** Called by the test to push a server message to the client */
-  serverSend(raw) {
+  serverSend(raw: string): void {
     const evt = new MessageEvent('message', { data: raw });
     this.dispatchEvent(evt);
   }
 
-  close(code, reason) {
+  close(code?: number, reason?: string): void {
     this.readyState = MockWebSocket.CLOSED;
     this.dispatchEvent(new CloseEvent('close', { code: code ?? 1000, reason: reason ?? '' }));
   }
 }
-MockWebSocket.lastInstance = null;
 
 // ---------------------------------------------------------------------------
 // Encode a server payload as base64 (mirrors serde_json Vec<u8> encoding)
 // ---------------------------------------------------------------------------
 
-function encodePayload(obj) {
+function encodePayload(obj: unknown): string {
   const json = JSON.stringify(obj);
-  return btoa(json); // base64 string, matches decodeBytes in protocol.js
+  return btoa(json); // base64 string, matches decodeBytes in protocol.ts
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makePlayer(id, x = 0, y = 0, hp = 100, alive = true) {
+function makePlayer(id: string, x = 0, y = 0, hp = 100, alive = true): ShooterPlayer {
   return { id, x, y, angle: 0, hp, alive, last_shot_tick: 0, score: 0 };
 }
 
-function makeArenaSnapshot(players = [], projectiles = [], tick = 0) {
+function makeArenaSnapshot(players: ShooterPlayer[] = [], projectiles: ArenaSnapshot['projectiles'] = [], tick = 0): ArenaSnapshot {
   return { players, projectiles, tick };
 }
 
 /** Build a Welcome message (ServerNet::Welcome) */
-function welcome(playerId = 'p1', config = { tick_hz: 20, max_players: 4, seed: 1 }) {
+function welcome(playerId = 'p1', config: MatchConfig = { tick_hz: 20, max_players: 4, seed: 1 }): string {
   return JSON.stringify({ type: 'welcome', player_id: playerId, config });
 }
 
 /** Build a Snapshot message (ServerNet::Snapshot) */
-function snapshot(tick, snapshotObj) {
+function snapshot(tick: number, snapshotObj: ArenaSnapshot): string {
   return JSON.stringify({ type: 'snapshot', tick, full: encodePayload(snapshotObj) });
 }
 
 /** Build a Delta message (ServerNet::Delta) */
-function delta(tick, sinceTick, deltaObj) {
+function delta(tick: number, sinceTick: number, deltaObj: ArenaDelta): string {
   return JSON.stringify({ type: 'delta', tick, since_tick: sinceTick, diff: encodePayload(deltaObj) });
 }
 
 /** Build an Ack message (ServerNet::Ack) */
-function ack(seq, tick) {
+function ack(seq: number, tick: number): string {
   return JSON.stringify({ type: 'ack', seq, tick });
 }
 
 /** Build a Reject message (ServerNet::Reject) */
-function reject(seq, reason = 'RateLimited') {
+function reject(seq: number, reason = 'RateLimited'): string {
   return JSON.stringify({ type: 'reject', seq, reason });
 }
 
@@ -124,14 +152,18 @@ function reject(seq, reason = 'RateLimited') {
 // ---------------------------------------------------------------------------
 
 describe('MagnetiteClient mock-WS smoke test', () => {
-  let originalWebSocket;
-  let client;
-  let stateEvents;
+  let originalWebSocket: typeof WebSocket = globalThis.WebSocket;
+  let client: TestClient | null = null;
+  let stateEvents: (ArenaView | null)[] = [];
 
   beforeEach(() => {
     // Replace the global WebSocket with our mock BEFORE createClient is called
     originalWebSocket = globalThis.WebSocket;
-    globalThis.WebSocket = MockWebSocket;
+    // MockWebSocket implements the subset of the WebSocket surface actually
+    // exercised by ConnectionManager (addEventListener/send/close/readyState) —
+    // not the full DOM interface — so this is a single documented boundary
+    // cast, matching the FakeSocket convention in follow.test.ts.
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     MockWebSocket.lastInstance = null;
     stateEvents = [];
   });
@@ -150,11 +182,11 @@ describe('MagnetiteClient mock-WS smoke test', () => {
   // Helper: connect and wait for the mock WS to open
   // --------------------------------------------------------------------------
 
-  async function connectAndOpen(_playerId = 'p1') {
+  async function connectAndOpen(_playerId = 'p1'): Promise<MockWebSocket> {
     client = createClient({
       url: 'ws://localhost:9001',
       autoReconnect: false,
-    });
+    }) as unknown as TestClient;
 
     // Subscribe to state events BEFORE connecting
     client.onState((s) => stateEvents.push(s));
@@ -166,9 +198,9 @@ describe('MagnetiteClient mock-WS smoke test', () => {
 
     const ws = MockWebSocket.lastInstance;
     expect(ws).not.toBeNull();
-    expect(ws.readyState).toBe(MockWebSocket.OPEN);
+    expect(ws!.readyState).toBe(MockWebSocket.OPEN);
 
-    return ws;
+    return ws!;
   }
 
   // --------------------------------------------------------------------------
@@ -180,8 +212,8 @@ describe('MagnetiteClient mock-WS smoke test', () => {
 
     ws.serverSend(welcome('player-42', { tick_hz: 30, max_players: 8, seed: 99 }));
 
-    expect(client.playerId).toBe('player-42');
-    expect(client.matchConfig).toMatchObject({ tick_hz: 30, max_players: 8 });
+    expect(client!.playerId).toBe('player-42');
+    expect(client!.matchConfig).toMatchObject({ tick_hz: 30, max_players: 8 });
   });
 
   // --------------------------------------------------------------------------
@@ -197,15 +229,15 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     ws.serverSend(snapshot(5, snap));
 
     // state should now be the ArenaView of p1
-    const state = client.state;
+    const state = client!.state;
     expect(state).not.toBeNull();
-    expect(state.self_state).not.toBeNull();
-    expect(state.self_state.id).toBe('p1');
-    expect(state.self_state.x).toBe(10);
-    expect(state.self_state.y).toBe(20);
-    expect(state.other_players).toHaveLength(1);
-    expect(state.other_players[0].id).toBe('p2');
-    expect(state.tick).toBe(5);
+    expect(state!.self_state).not.toBeNull();
+    expect(state!.self_state!.id).toBe('p1');
+    expect(state!.self_state!.x).toBe(10);
+    expect(state!.self_state!.y).toBe(20);
+    expect(state!.other_players).toHaveLength(1);
+    expect(state!.other_players[0].id).toBe('p2');
+    expect(state!.tick).toBe(5);
   });
 
   // --------------------------------------------------------------------------
@@ -225,19 +257,19 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     ws.serverSend(snapshot(1, initialSnap));
 
     // Server sends a delta — p1 moved to (30, 40)
-    const d = {
+    const d: ArenaDelta = {
       changed_players: [makePlayer('p1', 30, 40, 90)],
       removed_projectile_ids: [],
       new_projectiles: [],
     };
     ws.serverSend(delta(2, 1, d));
 
-    const state = client.state;
+    const state = client!.state;
     expect(state).not.toBeNull();
-    expect(state.self_state.x).toBe(30);
-    expect(state.self_state.y).toBe(40);
-    expect(state.self_state.hp).toBe(90);
-    expect(state.tick).toBe(2);
+    expect(state!.self_state!.x).toBe(30);
+    expect(state!.self_state!.y).toBe(40);
+    expect(state!.self_state!.hp).toBe(90);
+    expect(state!.tick).toBe(2);
   });
 
   // --------------------------------------------------------------------------
@@ -252,7 +284,7 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     ws.serverSend(snapshot(0, snap));
 
     // Manually push some inputs so the prediction buffer has pending frames
-    const input = {
+    const input: Input = {
       keys: { forward: true, backward: false, left: false, right: false, jump: false,
                crouch: false, attack: false, secondary_attack: false, interact: false, sprint: false },
       mouse: { x: 0, y: 0, delta_x: 0, delta_y: 0, left_button: false, right_button: false,
@@ -261,18 +293,18 @@ describe('MagnetiteClient mock-WS smoke test', () => {
       timestamp_ms: 1000,
     };
 
-    client.sendInput({ ...input, sequence: 1 });
-    client.sendInput({ ...input, sequence: 2 });
-    client.sendInput({ ...input, sequence: 3 });
+    client!.sendInput({ ...input, sequence: 1 });
+    client!.sendInput({ ...input, sequence: 2 });
+    client!.sendInput({ ...input, sequence: 3 });
 
     // Access internals to verify pending count
-    const pendingBefore = client._prediction.pendingCount;
+    const pendingBefore = client!._prediction.pendingCount;
     expect(pendingBefore).toBeGreaterThanOrEqual(1);
 
     // Server acks seq 2 (acknowledges frames 1 and 2)
     ws.serverSend(ack(2, 2));
 
-    const pendingAfter = client._prediction.pendingCount;
+    const pendingAfter = client!._prediction.pendingCount;
     expect(pendingAfter).toBeLessThan(pendingBefore);
     // Only seq=3 should remain
     expect(pendingAfter).toBe(1);
@@ -289,7 +321,7 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     ws.serverSend(welcome('p1'));
     ws.serverSend(snapshot(0, snap));
 
-    const input = {
+    const input: Input = {
       keys: { forward: false, backward: false, left: false, right: true, jump: false,
                crouch: false, attack: false, secondary_attack: false, interact: false, sprint: false },
       mouse: { x: 0, y: 0, delta_x: 0, delta_y: 0, left_button: false, right_button: false,
@@ -298,19 +330,19 @@ describe('MagnetiteClient mock-WS smoke test', () => {
       timestamp_ms: 0,
     };
 
-    client.sendInput({ ...input, sequence: 1 });
-    client.sendInput({ ...input, sequence: 2 });
+    client!.sendInput({ ...input, sequence: 1 });
+    client!.sendInput({ ...input, sequence: 2 });
 
-    const stateBeforeReject = client.state;
+    const stateBeforeReject = client!.state;
     expect(stateBeforeReject).not.toBeNull();
 
     // Server rejects seq 1
     ws.serverSend(reject(1, 'RateLimited'));
 
     // State should still be non-null (replayed from authority + seq=2)
-    expect(client.state).not.toBeNull();
+    expect(client!.state).not.toBeNull();
     // Pending count should be 1 (only seq=2 remains)
-    expect(client._prediction.pendingCount).toBe(1);
+    expect(client!._prediction.pendingCount).toBe(1);
   });
 
   // --------------------------------------------------------------------------
@@ -324,7 +356,7 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     ws.serverSend(welcome('p1'));
     ws.serverSend(snapshot(1, snap));
 
-    const d = {
+    const d: ArenaDelta = {
       changed_players: [makePlayer('p1', 10, 10)],
       removed_projectile_ids: [],
       new_projectiles: [],
@@ -335,8 +367,8 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     // should have at least: one from snapshot + one from delta
     expect(stateEvents.length).toBeGreaterThanOrEqual(2);
     const last = stateEvents[stateEvents.length - 1];
-    expect(last.self_state.x).toBe(10);
-    expect(last.self_state.y).toBe(10);
+    expect(last!.self_state!.x).toBe(10);
+    expect(last!.self_state!.y).toBe(10);
   });
 
   // --------------------------------------------------------------------------
@@ -351,7 +383,7 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     ws.serverSend(snapshot(1, snap1));
 
     // Client sends some inputs (locally predicted rightward movement)
-    const rightInput = {
+    const rightInput: Input = {
       keys: { forward: false, backward: false, left: false, right: true, jump: false,
                crouch: false, attack: false, secondary_attack: false, interact: false, sprint: false },
       mouse: { x: 0, y: 0, delta_x: 0, delta_y: 0, left_button: false, right_button: false,
@@ -359,8 +391,8 @@ describe('MagnetiteClient mock-WS smoke test', () => {
       sequence: 1,
       timestamp_ms: 0,
     };
-    client.sendInput({ ...rightInput, sequence: 1 });
-    client.sendInput({ ...rightInput, sequence: 2 });
+    client!.sendInput({ ...rightInput, sequence: 1 });
+    client!.sendInput({ ...rightInput, sequence: 2 });
 
     // Server sends a corrective snapshot at tick 2 placing p1 at (8, 0)
     const snap2 = makeArenaSnapshot([makePlayer('p1', 8, 0)], [], 2);
@@ -370,9 +402,9 @@ describe('MagnetiteClient mock-WS smoke test', () => {
     // Both our frames had implicit tick = 0 (sendInput uses client._tick which
     // started at 0 before Welcome and was not incremented in this test), so
     // they are all discarded and the authoritative state is (8, 0).
-    expect(client._prediction.authoritativeState).not.toBeNull();
-    const auth = client._prediction.authoritativeState;
-    expect(auth.self_state.x).toBe(8);
+    expect(client!._prediction.authoritativeState).not.toBeNull();
+    const auth = client!._prediction.authoritativeState;
+    expect(auth!.self_state!.x).toBe(8);
   });
 
   // --------------------------------------------------------------------------
@@ -388,7 +420,7 @@ describe('MagnetiteClient mock-WS smoke test', () => {
 
     ws.sent = []; // clear any sent before our input
 
-    const input = {
+    const input: Input = {
       keys: { forward: true, backward: false, left: false, right: false, jump: false,
                crouch: false, attack: false, secondary_attack: false, interact: false, sprint: false },
       mouse: { x: 0, y: 0, delta_x: 0, delta_y: 0, left_button: false, right_button: false,
@@ -397,13 +429,13 @@ describe('MagnetiteClient mock-WS smoke test', () => {
       timestamp_ms: 42,
     };
 
-    client.sendInput(input);
+    client!.sendInput(input);
 
     expect(ws.sent.length).toBeGreaterThanOrEqual(1);
     const raw = ws.sent[ws.sent.length - 1];
     const parsed = parseServerMessage(raw); // reuse our parser — works for client frames too
-    expect(parsed.type).toBe('input_frame');
-    expect(parsed.seq).toBeGreaterThan(0);
-    expect(parsed.input.keys.forward).toBe(true);
+    expect(parsed!.type).toBe('input_frame');
+    expect(parsed!.seq).toBeGreaterThan(0);
+    expect((parsed!.input as Input).keys.forward).toBe(true);
   });
 });
