@@ -3,7 +3,11 @@ import Layout from '../components/Layout';
 import Button from '../components/common/Button';
 import '../styles/error-pages.css';
 
-export default function ServerError({ onRetry }) {
+interface ServerErrorProps {
+  onRetry?: () => void;
+}
+
+export default function ServerError({ onRetry }: ServerErrorProps) {
   return (
     <Layout>
       <div className="error-page reveal">

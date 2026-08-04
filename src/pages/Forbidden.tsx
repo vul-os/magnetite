@@ -3,7 +3,11 @@ import Layout from '../components/Layout';
 import Button from '../components/common/Button';
 import '../styles/error-pages.css';
 
-export default function Forbidden({ reason }) {
+interface ForbiddenProps {
+  reason?: string;
+}
+
+export default function Forbidden({ reason }: ForbiddenProps) {
   const navigate = useNavigate();
   const displayReason = reason || 'You do not have permission to access this resource.';
 
