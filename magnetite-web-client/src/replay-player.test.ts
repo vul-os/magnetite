@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/replay-player.test.js
+ * magnetite-web-client/src/replay-player.test.ts
  *
  * Unit tests for ReplayPlayer.
  *
@@ -18,7 +18,12 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ReplayPlayer } from './replay-player.js';
-import { defaultKeyState, defaultMouseState } from './protocol.js';
+import { defaultKeyState, defaultMouseState } from './protocol';
+import type { ArenaView, Input, KeyState, MouseState } from './types';
+
+/** The exact shape ReplayPlayer's constructor (declared via replay-player.js's
+ * own JSDoc `ReplayLog` typedef) expects. */
+type ReplayLogArg = ConstructorParameters<typeof ReplayPlayer>[0];
 
 // ---------------------------------------------------------------------------
 // Helpers — build sample ReplayLog fixtures
@@ -27,7 +32,11 @@ import { defaultKeyState, defaultMouseState } from './protocol.js';
 /**
  * Build a minimal Input for a player, optionally overriding keys/mouse.
  */
-function makeInput(keysOverride = {}, mouseOverride = {}, seq = 0) {
+function makeInput(
+  keysOverride: Partial<KeyState> = {},
+  mouseOverride: Partial<MouseState> = {},
+  seq = 0,
+): Input {
   return {
     keys: { ...defaultKeyState(), ...keysOverride },
     mouse: { ...defaultMouseState(), ...mouseOverride },
@@ -39,13 +48,9 @@ function makeInput(keysOverride = {}, mouseOverride = {}, seq = 0) {
 /**
  * Build a ReplayLog with two players and N ticks.
  * Player "p1" moves right every tick. Player "p2" is idle.
- *
- * @param {number} numTicks
- * @param {number} tickHz
- * @returns {import('./replay-player.js').ReplayLog}
  */
-function makeReplayLog(numTicks = 10, tickHz = 60) {
-  const frames = [];
+function makeReplayLog(numTicks = 10, tickHz = 60): ReplayLogArg {
+  const frames: [number, [string, Input][]][] = [];
   for (let t = 1; t <= numTicks; t++) {
     frames.push([
       t,
@@ -64,19 +69,23 @@ function makeReplayLog(numTicks = 10, tickHz = 60) {
       topology: 'SingleRoom',
     },
     frames,
+    // state_hashes carries bigint values (ids above 2^53 stay exact) even
+    // though ReplayPlayer never reads this field; replay-player.js's own
+    // JSDoc typedef declares `number`, so the cast documents the mismatch
+    // rather than silently widening the typedef or changing the fixture data.
     state_hashes: frames.map(([t]) => [t, BigInt(t)]),
-  };
+  } as unknown as ReplayLogArg;
 }
 
 /** Single-player, single-tick log */
-function makeSingleTickLog() {
+function makeSingleTickLog(): ReplayLogArg {
   return {
     config: { tick_hz: 60, max_players: 2, seed: 1, snapshot_every: 300, topology: 'SingleRoom' },
     frames: [
       [5, [['alice', makeInput({ forward: true })]]],
     ],
     state_hashes: [[5, 0n]],
-  };
+  } as unknown as ReplayLogArg;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,12 +104,16 @@ describe('ReplayPlayer construction', () => {
   });
 
   it('throws on missing frames array', () => {
-    expect(() => new ReplayPlayer({})).toThrow('[ReplayPlayer]');
-    expect(() => new ReplayPlayer(null)).toThrow('[ReplayPlayer]');
+    expect(() => new ReplayPlayer({} as unknown as ReplayLogArg)).toThrow('[ReplayPlayer]');
+    expect(() => new ReplayPlayer(null as unknown as ReplayLogArg)).toThrow('[ReplayPlayer]');
   });
 
   it('handles an empty frames array', () => {
-    const log = { config: { tick_hz: 60 }, frames: [], state_hashes: [] };
+    const log = {
+      config: { tick_hz: 60, max_players: 0, seed: 0, snapshot_every: 0, topology: 'SingleRoom' },
+      frames: [],
+      state_hashes: [],
+    } as unknown as ReplayLogArg;
     const player = new ReplayPlayer(log);
     expect(player.totalTicks).toBe(0);
     expect(player.currentTick).toBe(0);
@@ -150,7 +163,7 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(10);
     const player = new ReplayPlayer(log);
 
-    const frames = [];
+    const frames: { tick: number; view: ArenaView }[] = [];
     player.onFrame = (tick, view) => frames.push({ tick, view });
 
     // Seek twice to the same tick — must produce identical views
@@ -171,7 +184,7 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(5);
     const player = new ReplayPlayer(log);
 
-    const frames = [];
+    const frames: { tick: number; view: ArenaView }[] = [];
     player.onFrame = (tick, view) => frames.push({ tick, view });
 
     // Tick 100 doesn't exist — should go to tick 5 (last)
@@ -192,15 +205,15 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(1);
     const player = new ReplayPlayer(log);
 
-    let capturedView = null;
+    let capturedView: ArenaView | null = null;
     player.onFrame = (_tick, view) => { capturedView = view; };
     player.seek(1);
 
     expect(capturedView).not.toBeNull();
-    const p1 = capturedView.other_players.find(p => String(p.id) === 'p1');
+    const p1 = capturedView!.other_players.find(p => String(p.id) === 'p1');
     expect(p1).toBeDefined();
     // After 1 right-key step from x=0, x = 4.0
-    expect(p1.x).toBeCloseTo(4.0, 5);
+    expect(p1!.x).toBeCloseTo(4.0, 5);
 
     player.dispose();
   });
@@ -211,13 +224,13 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(n);
     const player = new ReplayPlayer(log);
 
-    let capturedView = null;
+    let capturedView: ArenaView | null = null;
     player.onFrame = (_tick, view) => { capturedView = view; };
     player.seek(n);
 
-    const p1 = capturedView.other_players.find(p => String(p.id) === 'p1');
+    const p1 = capturedView!.other_players.find(p => String(p.id) === 'p1');
     // 5 * 4.0 = 20, well within arena bounds
-    expect(p1.x).toBeCloseTo(n * 4.0, 4);
+    expect(p1!.x).toBeCloseTo(n * 4.0, 4);
 
     player.dispose();
   });
@@ -226,14 +239,14 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(10);
     const player = new ReplayPlayer(log);
 
-    let lastTick = null;
-    let lastView = null;
+    let lastTick: number | null = null;
+    let lastView: ArenaView | null = null;
     player.onFrame = (t, v) => { lastTick = t; lastView = v; };
 
     player.seek(7);
 
     expect(lastTick).toBe(7);
-    expect(lastView.tick).toBe(7);
+    expect(lastView!.tick).toBe(7);
 
     player.dispose();
   });
@@ -242,12 +255,12 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(3);
     const player = new ReplayPlayer(log);
 
-    let view = null;
+    let view: ArenaView | null = null;
     player.onFrame = (_t, v) => { view = v; };
     player.seek(3);
 
-    expect(view.other_players).toHaveLength(2);
-    const ids = view.other_players.map(p => String(p.id)).sort();
+    expect(view!.other_players).toHaveLength(2);
+    const ids = view!.other_players.map(p => String(p.id)).sort();
     expect(ids).toEqual(['p1', 'p2']);
 
     player.dispose();
@@ -257,11 +270,11 @@ describe('ReplayPlayer.seek()', () => {
     const log = makeReplayLog(5);
     const player = new ReplayPlayer(log);
 
-    let view = null;
+    let view: ArenaView | null = null;
     player.onFrame = (_t, v) => { view = v; };
     player.seek(3);
 
-    expect(view.self_state).toBeNull();
+    expect(view!.self_state).toBeNull();
     player.dispose();
   });
 });
@@ -282,7 +295,7 @@ describe('ReplayPlayer.setSpeed()', () => {
     const player = new ReplayPlayer(makeReplayLog(5));
     expect(() => player.setSpeed(0)).toThrow('[ReplayPlayer]');
     expect(() => player.setSpeed(-1)).toThrow('[ReplayPlayer]');
-    expect(() => player.setSpeed('fast')).toThrow('[ReplayPlayer]');
+    expect(() => player.setSpeed('fast' as unknown as number)).toThrow('[ReplayPlayer]');
     player.dispose();
   });
 });
@@ -337,7 +350,7 @@ describe('ReplayPlayer play / pause lifecycle', () => {
   it('fires onFrame callback during play', () => {
     const log = makeReplayLog(10, 60);
     const player = new ReplayPlayer(log);
-    const events = [];
+    const events: { tick: number; view: ArenaView }[] = [];
     player.onFrame = (tick, view) => events.push({ tick, view });
 
     player.play();
@@ -385,14 +398,14 @@ describe('ReplayPlayer.onFrame setter', () => {
   it('can be replaced with a new callback', () => {
     const log = makeReplayLog(5);
     const player = new ReplayPlayer(log);
-    const calls = [];
+    const calls: number[] = [];
     player.onFrame = (t, _v) => calls.push(t);
 
     player.seek(3);
     expect(calls).toEqual([3]);
 
     // Replace callback
-    const calls2 = [];
+    const calls2: number[] = [];
     player.onFrame = (t, _v) => calls2.push(t);
     player.seek(4);
     expect(calls2).toEqual([4]);
@@ -404,9 +417,9 @@ describe('ReplayPlayer.onFrame setter', () => {
   it('accepts null to remove callback', () => {
     const log = makeReplayLog(5);
     const player = new ReplayPlayer(log);
-    const calls = [];
+    const calls: number[] = [];
     player.onFrame = (t, _v) => calls.push(t);
-    player.onFrame = null;
+    player.onFrame = null as unknown as (tick: number, view: ArenaView) => void;
     player.seek(3);
     expect(calls).toHaveLength(0);
     player.dispose();
@@ -447,30 +460,30 @@ describe('ReplayPlayer edge cases', () => {
     const player = new ReplayPlayer(log);
     expect(player.totalTicks).toBe(1);
 
-    let view = null;
+    let view: ArenaView | null = null;
     player.onFrame = (_t, v) => { view = v; };
     player.seek(5);
 
     expect(view).not.toBeNull();
-    expect(view.tick).toBe(5);
-    const alice = view.other_players.find(p => String(p.id) === 'alice');
+    expect(view!.tick).toBe(5);
+    const alice = view!.other_players.find(p => String(p.id) === 'alice');
     expect(alice).toBeDefined();
     // forward key → y increased by MAX_SPEED=4
-    expect(alice.y).toBeCloseTo(4.0, 5);
+    expect(alice!.y).toBeCloseTo(4.0, 5);
 
     player.dispose();
   });
 
   it('duplicate ticks in frames are deduplicated in tickList', () => {
     const log = {
-      config: { tick_hz: 60, max_players: 2, seed: 1, snapshot_every: 300 },
+      config: { tick_hz: 60, max_players: 2, seed: 1, snapshot_every: 300, topology: 'SingleRoom' },
       frames: [
         [1, [['p1', makeInput({ right: true })]]],
         [1, [['p2', makeInput({ forward: true })]]],
         [2, [['p1', makeInput({ right: true })]]],
       ],
       state_hashes: [],
-    };
+    } as unknown as ReplayLogArg;
     const player = new ReplayPlayer(log);
     // Tick 1 appears twice but should only count once in totalTicks
     expect(player.totalTicks).toBe(2);
@@ -480,7 +493,7 @@ describe('ReplayPlayer edge cases', () => {
   it('seeking beyond last tick lands on last tick', () => {
     const log = makeReplayLog(5);
     const player = new ReplayPlayer(log);
-    let tick = null;
+    let tick: number | null = null;
     player.onFrame = (t) => { tick = t; };
     player.seek(9999);
     expect(tick).toBe(5);
@@ -490,7 +503,7 @@ describe('ReplayPlayer edge cases', () => {
   it('seeking to tick 0 on a log starting at tick 1 lands on tick 1', () => {
     const log = makeReplayLog(5);
     const player = new ReplayPlayer(log);
-    let tick = null;
+    let tick: number | null = null;
     player.onFrame = (t) => { tick = t; };
     player.seek(0);
     expect(tick).toBe(1);
