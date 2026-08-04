@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { FormEvent } from 'react';
 import Layout from '../components/Layout';
 import { Unavailable, LoadError } from '../components/state/Unavailable';
 import { api } from '../api/client';
@@ -9,12 +10,25 @@ import { useTranslation } from '../i18n/useTranslation';
    supposedly blocked. */
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-const MOCK_BLOCKED_USERS = USE_MOCKS ? [
+interface BlockedUser {
+  id: string | number;
+  username: string;
+  blockedDate: string;
+}
+
+const MOCK_BLOCKED_USERS: BlockedUser[] = USE_MOCKS ? [
   { id: 'user_001', username: 'cheater123', blockedDate: '2026-04-10' },
   { id: 'user_002', username: 'toxic_player', blockedDate: '2026-05-02' },
 ] : [];
 
-function ToggleSetting({ label, description, checked, onChange }) {
+interface ToggleSettingProps {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+function ToggleSetting({ label, description, checked, onChange }: ToggleSettingProps) {
   return (
     <div className="settings-toggle-row">
       <div className="settings-toggle-text">
@@ -43,11 +57,11 @@ export default function PrivacySettings() {
     showOnlineStatus:   true,
     allowFriendRequests: true,
   });
-  const [blockedUsers, setBlockedUsers] = useState(MOCK_BLOCKED_USERS);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>(MOCK_BLOCKED_USERS);
   const [saving, setSaving]             = useState(false);
   const [saveSuccess, setSaveSuccess]   = useState(false);
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     try {
@@ -60,23 +74,26 @@ export default function PrivacySettings() {
 
   /* GET /api/v1/friends/blocked is mounted — read the real list. */
   const [blockedLoading, setBlockedLoading] = useState(!USE_MOCKS);
-  const [blockedError, setBlockedError] = useState(null);
+  const [blockedError, setBlockedError] = useState<string | null>(null);
 
   const loadBlocked = useCallback(async () => {
     setBlockedLoading(true);
     setBlockedError(null);
     try {
-      const data = await api.social.blocked();
+      const data = await api.social.blocked() as
+        | Record<string, unknown>[]
+        | { blocked?: Record<string, unknown>[]; users?: Record<string, unknown>[] }
+        | null;
       const list = Array.isArray(data) ? data : (data?.blocked ?? data?.users ?? []);
       setBlockedUsers(
         (Array.isArray(list) ? list : []).map(u => ({
-          id: u.id ?? u.user_id,
-          username: u.username ?? 'user',
-          blockedDate: (u.blocked_at ?? u.created_at ?? '').slice(0, 10) || '—',
+          id: (u.id ?? u.user_id) as string | number,
+          username: (u.username as string | undefined) ?? 'user',
+          blockedDate: String(u.blocked_at ?? u.created_at ?? '').slice(0, 10) || '—',
         }))
       );
     } catch (err) {
-      setBlockedError(err.message || 'Failed to load blocked users');
+      setBlockedError((err instanceof Error && err.message) || 'Failed to load blocked users');
     } finally {
       setBlockedLoading(false);
     }
@@ -88,12 +105,12 @@ export default function PrivacySettings() {
     loadBlocked();
   }, [loadBlocked]);
 
-  const handleUnblockUser = async (userId) => {
+  const handleUnblockUser = async (userId: BlockedUser['id']) => {
     try {
       await api.social.unblockUser(userId);
       setBlockedUsers(prev => prev.filter(u => u.id !== userId));
     } catch (err) {
-      setBlockedError(err.message || 'Failed to unblock');
+      setBlockedError((err instanceof Error && err.message) || 'Failed to unblock');
     }
   };
 
