@@ -1,5 +1,5 @@
 /**
- * magnetite-web-client/src/replay-player.js
+ * magnetite-web-client/src/replay-player.ts
  *
  * ReplayPlayer — pure local playback of a ReplayLog JSON.
  *
@@ -40,70 +40,100 @@
 
 import { arenaApplyInput } from './prediction.js';
 import { renderArenaView } from './renderer.js';
+import type { ArenaView, Input } from './types';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ReplayLogConfig {
+  tick_hz: number;
+  max_players: number;
+  seed: number;
+  topology?: unknown;
+  snapshot_every?: number;
+  [key: string]: unknown;
+}
+
+export interface ReplayLog {
+  config: ReplayLogConfig;
+  frames: Array<[number, Array<[string, Input]>]>;
+  state_hashes: Array<[number, number]>;
+}
+
+export type ReplayRenderFn = (
+  ctx: CanvasRenderingContext2D,
+  view: ArenaView,
+  playerId: string | null,
+) => void;
+
+export type ReplayFrameCallback = (tick: number, view: ArenaView) => void;
+
+export interface ReplayPlayerOptions {
+  /** Canvas context for rendering */
+  ctx?: CanvasRenderingContext2D | null;
+  /** Custom render fn (ctx, view, playerId) => void */
+  render?: ReplayRenderFn | null;
+  /** Frame callback */
+  onFrame?: ReplayFrameCallback | null;
+  /** Playback speed multiplier (default 1.0) */
+  speed?: number;
+}
 
 // ---------------------------------------------------------------------------
 // ReplayPlayer
 // ---------------------------------------------------------------------------
 
-/**
- * @typedef {Object} ReplayLog
- * @property {object} config
- * @property {number} config.tick_hz
- * @property {number} config.max_players
- * @property {number} config.seed
- * @property {Array<[number, Array<[string, import('./types.js').Input]>]>} frames
- * @property {Array<[number, number]>} state_hashes
- */
-
-/**
- * @typedef {Object} ReplayPlayerOptions
- * @property {CanvasRenderingContext2D | null} [ctx]    - Canvas context for rendering
- * @property {Function | null} [render]                 - Custom render fn (ctx, view, playerId) => void
- * @property {(tick: number, view: import('./types.js').ArenaView) => void} [onFrame] - Frame callback
- * @property {number} [speed]                            - Playback speed multiplier (default 1.0)
- */
-
 export class ReplayPlayer {
-  /**
-   * @param {ReplayLog} replayLog  - Parsed ReplayLog JSON
-   * @param {ReplayPlayerOptions} [opts]
-   */
-  constructor(replayLog, opts = {}) {
+  private _log: ReplayLog;
+
+  /** playback speed multiplier */
+  _speed: number;
+
+  /** frame callback, settable via the `onFrame` setter */
+  _onFrameCb: ReplayFrameCallback | null;
+
+  private _ctx: CanvasRenderingContext2D | null;
+  private _renderFn: ReplayRenderFn;
+  private _playing: boolean;
+
+  /** current playback tick index (index into _tickList) */
+  private _tickIndex: number;
+
+  /** setInterval/setTimeout handle */
+  _playHandle: ReturnType<typeof setTimeout> | null;
+
+  /** sorted ascending */
+  private _tickList: number[];
+
+  private _viewCache: Map<number, ArenaView>;
+
+  constructor(replayLog: ReplayLog, opts: ReplayPlayerOptions = {}) {
     if (!replayLog || !Array.isArray(replayLog.frames)) {
       throw new Error('[ReplayPlayer] replayLog must have a frames array');
     }
 
-    /** @type {ReplayLog} */
     this._log = replayLog;
 
-    /** @type {number} playback speed multiplier */
     this._speed = typeof opts.speed === 'number' && opts.speed > 0 ? opts.speed : 1.0;
 
-    /** @type {(tick: number, view: import('./types.js').ArenaView) => void | null} */
     this._onFrameCb = typeof opts.onFrame === 'function' ? opts.onFrame : null;
 
-    /** @type {CanvasRenderingContext2D | null} */
     this._ctx = opts.ctx || null;
 
-    /** @type {Function} */
     this._renderFn = typeof opts.render === 'function' ? opts.render : renderArenaView;
 
-    /** @type {boolean} */
     this._playing = false;
 
-    /** @type {number} current playback tick index (index into _tickList) */
     this._tickIndex = 0;
 
-    /** @type {number | null} setInterval/setTimeout handle */
     this._playHandle = null;
 
     // Build a sorted list of unique ticks from the frames
-    /** @type {number[]} sorted ascending */
     this._tickList = _buildTickList(replayLog.frames);
 
     // Build a per-player state map indexed by tick for O(1) seeks:
     // We eagerly simulate the full replay once and cache every tick's ArenaView.
-    /** @type {Map<number, import('./types.js').ArenaView>} */
     this._viewCache = _buildViewCache(replayLog.frames, this._tickList);
   }
 
@@ -113,42 +143,37 @@ export class ReplayPlayer {
 
   /**
    * Total number of distinct ticks in the replay.
-   * @type {number}
    */
-  get totalTicks() {
+  get totalTicks(): number {
     return this._tickList.length;
   }
 
   /**
    * The tick value at the current playback position.
-   * @type {number}
    */
-  get currentTick() {
+  get currentTick(): number {
     return this._tickList[this._tickIndex] ?? 0;
   }
 
   /**
    * Whether the player is currently playing.
-   * @type {boolean}
    */
-  get isPlaying() {
+  get isPlaying(): boolean {
     return this._playing;
   }
 
   /**
    * Set or replace the onFrame callback.
    * Called each time the player advances to a new tick.
-   *
-   * @param {(tick: number, view: import('./types.js').ArenaView) => void} fn
    */
-  set onFrame(fn) {
+  set onFrame(fn: ReplayFrameCallback) {
     this._onFrameCb = typeof fn === 'function' ? fn : null;
   }
 
   /**
    * Start or resume playback from the current tick.
    */
-  play() {
+  play(): void {
     if (this._playing) return;
     if (this._tickIndex >= this._tickList.length - 1) {
       // At end — restart from beginning
@@ -161,7 +186,7 @@ export class ReplayPlayer {
   /**
    * Pause playback. The current tick position is retained.
    */
-  pause() {
+  pause(): void {
     this._playing = false;
     this._clearHandle();
   }
@@ -169,10 +194,8 @@ export class ReplayPlayer {
   /**
    * Seek to a specific tick value.
    * If the exact tick is not in the log, seeks to the nearest preceding tick.
-   *
-   * @param {number} tick
    */
-  seek(tick) {
+  seek(tick: number): void {
     const idx = _findTickIndex(this._tickList, tick);
     this._tickIndex = idx;
     this._emitCurrentFrame();
@@ -182,9 +205,9 @@ export class ReplayPlayer {
    * Set the playback speed multiplier.
    * 1.0 = real-time, 2.0 = 2x, 0.5 = half speed.
    *
-   * @param {number} x - must be > 0
+   * @param x - must be > 0
    */
-  setSpeed(x) {
+  setSpeed(x: number): void {
     if (typeof x !== 'number' || x <= 0) {
       throw new Error('[ReplayPlayer] speed must be a positive number');
     }
@@ -199,7 +222,7 @@ export class ReplayPlayer {
   /**
    * Stop playback and release resources.
    */
-  dispose() {
+  dispose(): void {
     this.pause();
     this._onFrameCb = null;
     this._ctx = null;
@@ -209,7 +232,7 @@ export class ReplayPlayer {
   // Internal
   // --------------------------------------------------------------------------
 
-  _scheduleNext() {
+  private _scheduleNext(): void {
     if (!this._playing) return;
     if (this._tickIndex >= this._tickList.length - 1) {
       // Reached end of replay
@@ -228,14 +251,14 @@ export class ReplayPlayer {
     }, msPerTick);
   }
 
-  _clearHandle() {
+  private _clearHandle(): void {
     if (this._playHandle !== null) {
       clearTimeout(this._playHandle);
       this._playHandle = null;
     }
   }
 
-  _emitCurrentFrame() {
+  private _emitCurrentFrame(): void {
     const tick = this._tickList[this._tickIndex];
     const view = this._viewCache.get(tick);
     if (!view) return;
@@ -266,11 +289,8 @@ export class ReplayPlayer {
 
 /**
  * Build a sorted list of unique tick values from the frames array.
- *
- * @param {Array<[number, Array<[string, import('./types.js').Input]>]>} frames
- * @returns {number[]}
  */
-function _buildTickList(frames) {
+function _buildTickList(frames: Array<[number, Array<[string, Input]>]>): number[] {
   const ticks = frames.map(f => Number(f[0]));
   const unique = Array.from(new Set(ticks));
   unique.sort((a, b) => a - b);
@@ -288,15 +308,13 @@ function _buildTickList(frames) {
  *   { self_state: null, other_players: ShooterPlayer[], projectiles: [], tick }
  *
  * (No "self" in replay — the UI may pick one for highlight via the scrubber.)
- *
- * @param {Array<[number, Array<[string, import('./types.js').Input]>]>} frames
- * @param {number[]} tickList
- * @returns {Map<number, import('./types.js').ArenaView>}
  */
-function _buildViewCache(frames, tickList) {
+function _buildViewCache(
+  frames: Array<[number, Array<[string, Input]>]>,
+  tickList: number[],
+): Map<number, ArenaView> {
   // Indexed frames by tick for fast lookup
-  /** @type {Map<number, Array<[string, import('./types.js').Input]>>} */
-  const framesByTick = new Map();
+  const framesByTick = new Map<number, Array<[string, Input]>>();
   for (const [tick, inputs] of frames) {
     framesByTick.set(Number(tick), inputs);
   }
@@ -304,12 +322,10 @@ function _buildViewCache(frames, tickList) {
   /**
    * Running per-player state, keyed by player id.
    * Each entry is an ArenaView where self_state holds that player's data.
-   * @type {Map<string, import('./types.js').ArenaView>}
    */
-  const playerViews = new Map();
+  const playerViews = new Map<string, ArenaView>();
 
-  /** @type {Map<number, import('./types.js').ArenaView>} */
-  const cache = new Map();
+  const cache = new Map<number, ArenaView>();
 
   for (const tick of tickList) {
     const inputs = framesByTick.get(tick) || [];
@@ -351,12 +367,8 @@ function _buildViewCache(frames, tickList) {
 
 /**
  * Create a default per-player ArenaView for a newly seen player.
- *
- * @param {string} playerId
- * @param {number} tick
- * @returns {import('./types.js').ArenaView}
  */
-function _defaultPlayerView(playerId, tick) {
+function _defaultPlayerView(playerId: string, tick: number): ArenaView {
   return {
     self_state: {
       id: playerId,
@@ -378,11 +390,9 @@ function _defaultPlayerView(playerId, tick) {
  * Binary search for the index of the nearest tick at or before `target`.
  * Returns 0 if target is before all ticks.
  *
- * @param {number[]} tickList - sorted ascending
- * @param {number} target
- * @returns {number} index into tickList
+ * @param tickList - sorted ascending
  */
-function _findTickIndex(tickList, target) {
+function _findTickIndex(tickList: number[], target: number): number {
   if (tickList.length === 0) return 0;
   if (target <= tickList[0]) return 0;
   if (target >= tickList[tickList.length - 1]) return tickList.length - 1;
