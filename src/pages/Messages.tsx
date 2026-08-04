@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import type { KeyboardEvent, SVGProps } from 'react';
 import { useMessages } from '../hooks/useMessages';
 import { usePresence } from '../hooks/usePresence';
 import { useCommsSocket } from '../hooks/useCommsSocket';
@@ -6,10 +7,26 @@ import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
 import { LoadError } from '../components/state/Unavailable';
 import { useTranslation } from '../i18n/useTranslation';
+import type { ChatMessage, PresenceEntry, WsFrame } from '../types/comms';
 import './Messages.css';
 
+interface DmThreadUser {
+  id: string;
+  username: string;
+  display_name?: string;
+  avatar?: string;
+}
+
+interface DmThread {
+  id: string;
+  user: DmThreadUser;
+  preview?: string;
+  unread: number;
+  updated_at: string;
+}
+
 // ── Icons (inline SVG to avoid import churn) ─────────────────────────────
-function ChatBubbleIcon(props) {
+function ChatBubbleIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -27,7 +44,7 @@ function ChatBubbleIcon(props) {
   );
 }
 
-function SendIcon(props) {
+function SendIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -46,7 +63,7 @@ function SendIcon(props) {
   );
 }
 
-function PlusIcon(props) {
+function PlusIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -71,7 +88,7 @@ function PlusIcon(props) {
 // their real threads.
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-const MOCK_THREADS = USE_MOCKS ? [
+const MOCK_THREADS: DmThread[] = USE_MOCKS ? [
   {
     id: '1',
     user: { id: '1', username: 'SpeedDemon', display_name: 'SpeedDemon', avatar: 'https://picsum.photos/seed/user1/100/100' },
@@ -96,31 +113,31 @@ const MOCK_THREADS = USE_MOCKS ? [
 ] : [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-function formatTime(iso) {
-  const d = new Date(iso);
+function formatTime(iso: string | undefined) {
+  const d = new Date(iso ?? '');
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(iso) {
-  const d = new Date(iso);
+function formatDate(iso: string | undefined) {
+  const d = new Date(iso ?? '');
   const now = new Date();
-  const diff = now - d;
+  const diff = now.getTime() - d.getTime();
   if (diff < 86_400_000) return 'Today';
   if (diff < 172_800_000) return 'Yesterday';
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function formatThreadTime(iso) {
+function formatThreadTime(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  const diff = now - d;
+  const diff = now.getTime() - d.getTime();
   if (diff < 60_000) return 'now';
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function getPresenceLabel(status) {
+function getPresenceLabel(status: string | undefined) {
   switch (status) {
     case 'online':  return 'Online';
     case 'idle':    return 'Idle';
@@ -130,12 +147,12 @@ function getPresenceLabel(status) {
   }
 }
 
-function getInitials(name) {
+function getInitials(name: string | undefined | null) {
   return (name ?? 'U').charAt(0).toUpperCase();
 }
 
 // ── Presence dot ─────────────────────────────────────────────────────────
-function PresenceDot({ status, className = '' }) {
+function PresenceDot({ status, className = '' }: { status?: string; className?: string }) {
   return (
     <span
       className={`presence-dot ${status ?? 'offline'} ${className}`}
@@ -146,7 +163,7 @@ function PresenceDot({ status, className = '' }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────
-function DmMessage({ message, isMine }) {
+function DmMessage({ message, isMine }: { message: ChatMessage; isMine: boolean }) {
   const { t } = useTranslation();
   const displayName = message.author?.display_name ?? message.author?.username ?? t('messages.unknown');
   const initial = getInitials(displayName);
@@ -155,7 +172,7 @@ function DmMessage({ message, isMine }) {
     <div className={`dm-message${isMine ? ' mine' : ''}${message.pending ? ' pending' : ''}${message.failed ? ' failed' : ''}`}>
       <div className="dm-msg-avatar" aria-hidden="true">
         {message.author?.avatar ? (
-          <img src={message.author.avatar} alt="" style={{ width: 32, height: 32, borderRadius: 'var(--radius-xs)', objectFit: 'cover', display: 'block' }} />
+          <img src={message.author.avatar as string} alt="" style={{ width: 32, height: 32, borderRadius: 'var(--radius-xs)', objectFit: 'cover', display: 'block' }} />
         ) : (
           initial
         )}
@@ -177,14 +194,20 @@ function DmMessage({ message, isMine }) {
 }
 
 // ── Composer ──────────────────────────────────────────────────────────────
-function DmComposer({ onSend, disabled, recipientName }) {
+interface DmComposerProps {
+  onSend: (content: string) => void;
+  disabled?: boolean;
+  recipientName?: string;
+}
+
+function DmComposer({ onSend, disabled, recipientName }: DmComposerProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
-  const textareaRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputId = 'dm-composer-input';
 
   const handleKeyDown = useCallback(
-    (e) => {
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (value.trim() && !disabled) {
@@ -236,11 +259,17 @@ function DmComposer({ onSend, disabled, recipientName }) {
 }
 
 // ── Conversation view ─────────────────────────────────────────────────────
-function DmConversation({ thread, isConnected, currentUserId }) {
+interface DmConversationProps {
+  thread: DmThread;
+  isConnected: boolean;
+  currentUserId: string;
+}
+
+function DmConversation({ thread, isConnected, currentUserId }: DmConversationProps) {
   const { t } = useTranslation();
   const { user } = thread;
   const { presenceMap } = usePresence([user.id]);
-  const presence = presenceMap[user.id] ?? { status: 'offline' };
+  const presence: PresenceEntry = presenceMap[user.id] ?? { status: 'offline' };
 
   const {
     messages,
@@ -252,9 +281,9 @@ function DmConversation({ thread, isConnected, currentUserId }) {
   } = useMessages(null, { isDM: true, dmUserId: user.id });
 
   const handleIncomingDM = useCallback(
-    (msg) => {
+    (msg: WsFrame) => {
       if (msg.sender_id === user.id) {
-        appendMessage({ ...msg, pending: false });
+        appendMessage({ ...(msg as unknown as ChatMessage), pending: false });
       }
     },
     [user.id, appendMessage]
@@ -264,9 +293,9 @@ function DmConversation({ thread, isConnected, currentUserId }) {
     onDM: handleIncomingDM,
   });
 
-  const bottomRef = useRef(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const isTypingRef = useRef(false);
-  const typingTimeoutRef = useRef(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -274,7 +303,7 @@ function DmConversation({ thread, isConnected, currentUserId }) {
   }, [messages]);
 
   const handleSend = useCallback(
-    async (content) => {
+    async (content: string) => {
       // Stop typing indicator
       if (isTypingRef.current) {
         sendTypingStop();
@@ -290,8 +319,11 @@ function DmConversation({ thread, isConnected, currentUserId }) {
   );
 
   // Group messages by date for dividers
-  const groupedMessages = [];
-  let lastDate = null;
+  type GroupedItem =
+    | { type: 'divider'; label: string; key: string }
+    | { type: 'message'; msg: ChatMessage; key: string };
+  const groupedMessages: GroupedItem[] = [];
+  let lastDate: string | null = null;
   for (const msg of messages) {
     const dateLabel = formatDate(msg.created_at);
     if (dateLabel !== lastDate) {
@@ -390,7 +422,14 @@ function DmConversation({ thread, isConnected, currentUserId }) {
 }
 
 // ── Thread item ───────────────────────────────────────────────────────────
-function DmThreadItem({ thread, active, presence, onClick }) {
+interface DmThreadItemProps {
+  thread: DmThread;
+  active: boolean;
+  presence?: PresenceEntry;
+  onClick: () => void;
+}
+
+function DmThreadItem({ thread, active, presence, onClick }: DmThreadItemProps) {
   const { t } = useTranslation();
   const { user, preview, unread, updated_at } = thread;
   return (
@@ -428,8 +467,8 @@ export default function Messages() {
   const { user } = useAuth();
   const currentUserId = user?.id ? String(user.id) : 'me';
 
-  const [threads, setThreads] = useState(MOCK_THREADS);
-  const [activeThreadId, setActiveThreadId] = useState(null);
+  const [threads, setThreads] = useState<DmThread[]>(MOCK_THREADS);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Presence for all users in threads
@@ -439,18 +478,21 @@ export default function Messages() {
   // Socket for DM events and presence updates
   const { isConnected } = useCommsSocket({
     onPresence: useCallback(
-      (msg) => {
-        setPresence(msg.user_id, { status: msg.status, activity: msg.activity ?? null });
+      (msg: WsFrame) => {
+        setPresence(msg.user_id as string, {
+          status: msg.status as PresenceEntry['status'],
+          activity: (msg.activity as string | null | undefined) ?? null,
+        });
       },
       [setPresence]
     ),
     onDM: useCallback(
-      (msg) => {
+      (msg: WsFrame) => {
         // Update thread preview when a DM arrives
         setThreads((prev) =>
           prev.map((th) =>
             th.user.id === msg.sender_id
-              ? { ...th, preview: msg.content, updated_at: new Date().toISOString(), unread: (th.unread ?? 0) + 1 }
+              ? { ...th, preview: msg.content as string, updated_at: new Date().toISOString(), unread: (th.unread ?? 0) + 1 }
               : th
           )
         );
@@ -460,7 +502,7 @@ export default function Messages() {
   });
 
   const [threadsLoading, setThreadsLoading] = useState(!USE_MOCKS);
-  const [threadsError, setThreadsError] = useState(null);
+  const [threadsError, setThreadsError] = useState<string | null>(null);
 
   /* Load the real DM threads. GET /api/v1/dms is mounted and returns the
    * current user's threads. (The previous code called
@@ -471,11 +513,14 @@ export default function Messages() {
     setThreadsLoading(true);
     setThreadsError(null);
     try {
-      const data = await api.messages.dmThreads();
+      const data = await api.messages.dmThreads() as
+        | DmThread[]
+        | { threads?: DmThread[]; data?: DmThread[] }
+        | null;
       const list = Array.isArray(data) ? data : (data?.threads ?? data?.data ?? []);
       setThreads(Array.isArray(list) ? list : []);
     } catch (err) {
-      setThreadsError(err.message || 'Failed to load conversations');
+      setThreadsError((err instanceof Error && err.message) || 'Failed to load conversations');
     } finally {
       setThreadsLoading(false);
     }
@@ -490,7 +535,7 @@ export default function Messages() {
   const activeThread = threads.find((th) => th.id === activeThreadId) ?? null;
 
   // Clear unread count on open
-  const handleSelectThread = useCallback((threadId) => {
+  const handleSelectThread = useCallback((threadId: string) => {
     setActiveThreadId(threadId);
     setThreads((prev) =>
       prev.map((th) => (th.id === threadId ? { ...th, unread: 0 } : th))
