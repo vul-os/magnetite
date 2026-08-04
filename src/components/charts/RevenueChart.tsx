@@ -11,7 +11,19 @@ const colors = {
   border:     '#23232e',   /* --color-border */
 };
 
-function CustomTooltip({ active, payload, label }) {
+interface CustomTooltipPayloadEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: CustomTooltipPayloadEntry[];
+  label?: string | number;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   return (
@@ -31,10 +43,12 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-function formatTimeAxis(value, period) {
+type Period = 'daily' | 'weekly' | 'monthly';
+
+function formatTimeAxis(value: string | number, period: Period): string {
   if (!value) return '';
   const date = new Date(value);
-  if (isNaN(date.getTime())) return value;
+  if (isNaN(date.getTime())) return String(value);
   if (period === 'daily') {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
@@ -44,21 +58,41 @@ function formatTimeAxis(value, period) {
   return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 }
 
-function calculateChange(current, previous) {
+function calculateChange(current: number, previous: number): string | null {
   if (!previous || previous === 0) return null;
   return ((current - previous) / previous * 100).toFixed(1);
+}
+
+export interface RevenueChartDatum {
+  date: string;
+  platformFees?: number;
+  developerEarnings?: number;
+  totalRevenue?: number;
+}
+
+interface AggregatedDatum {
+  date: string;
+  platformFees: number;
+  developerEarnings: number;
+  totalRevenue: number;
+}
+
+export interface RevenueChartProps {
+  data?: RevenueChartDatum[];
+  title?: string;
+  height?: number;
 }
 
 export default function RevenueChart({
   data = [],
   title = 'Revenue Overview',
   height = 350,
-}) {
-  const [period, setPeriod] = useState('daily');
+}: RevenueChartProps) {
+  const [period, setPeriod] = useState<Period>('daily');
 
-  const aggregatedData = data.reduce((acc, item) => {
+  const aggregatedData = data.reduce<AggregatedDatum[]>((acc, item) => {
     const date = new Date(item.date);
-    let key;
+    let key: string;
     if (period === 'daily') {
       key = item.date;
     } else if (period === 'weekly') {
@@ -85,7 +119,7 @@ export default function RevenueChart({
     return acc;
   }, []);
 
-  aggregatedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+  aggregatedData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const currentPeriodTotals = aggregatedData.slice(-7).reduce((sum, d) => ({
     revenue: sum.revenue + d.totalRevenue,
@@ -105,7 +139,7 @@ export default function RevenueChart({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         {title && <h4 className="chart-title" style={{ margin: 0 }}>{title}</h4>}
         <div style={{ display: 'flex', gap: 8 }}>
-          {['daily', 'weekly', 'monthly'].map(p => (
+          {(['daily', 'weekly', 'monthly'] as const).map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
