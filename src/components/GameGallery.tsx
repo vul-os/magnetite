@@ -1,17 +1,24 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import type { KeyboardEvent, TouchEvent } from 'react';
 import Modal from './Modal';
 import GameScreenshot from './GameScreenshot';
 import './GameGallery.css';
 
-export default memo(function GameGallery({ images, title, initialIndex = 0 }) {
+export interface GameGalleryProps {
+  images: string[];
+  title?: string;
+  initialIndex?: number;
+}
+
+export default memo(function GameGallery({ images, title, initialIndex = 0 }: GameGalleryProps) {
   const [isOpen, setIsOpen]           = useState(false);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isZoomed, setIsZoomed]       = useState(false);
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
-  const openGallery = useCallback((index) => {
+  const openGallery = useCallback((index: number) => {
     setCurrentIndex(index);
     setIsOpen(true);
     setIsZoomed(false);
@@ -39,7 +46,7 @@ export default memo(function GameGallery({ images, title, initialIndex = 0 }) {
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       switch (e.key) {
         case 'ArrowLeft':  goToPrevious(); break;
         case 'ArrowRight': goToNext(); break;
@@ -56,12 +63,12 @@ export default memo(function GameGallery({ images, title, initialIndex = 0 }) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, goToPrevious, goToNext, closeGallery, isFullscreen, toggleFullscreen]);
 
-  const handleTouchStart = (e) => {
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
   };
 
-  const handleTouchMove = (e) => {
+  const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
     if (!touchStartX.current || !touchStartY.current) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
