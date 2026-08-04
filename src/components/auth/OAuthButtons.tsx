@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import type { CSSProperties, SVGProps } from 'react';
 import { GithubIcon, DiscordIcon } from '../../assets/icons';
 
-const GoogleIcon = (props) => (
+const GoogleIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" {...props}>
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -10,13 +11,13 @@ const GoogleIcon = (props) => (
   </svg>
 );
 
-const GitlabIcon = (props) => (
+const GitlabIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
     <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .39.39 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"/>
   </svg>
 );
 
-const PROVIDER_COLORS = {
+const PROVIDER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   google: { bg: '#fff', text: '#3c4043', border: '#dadce0' },
   discord: { bg: '#5865F2', text: '#fff', border: '#5865F2' },
   github: { bg: '#24292e', text: '#fff', border: '#24292e' },
@@ -30,15 +31,22 @@ const OAuthProviders = [
   { id: 'gitlab', name: 'GitLab', Icon: GitlabIcon },
 ];
 
+export interface OAuthButtonsProps {
+  layout?: 'vertical' | 'horizontal';
+  loadingProvider?: string | null;
+  error?: string;
+  onProviderClick: (providerId: string, done: () => void) => void;
+}
+
 export default function OAuthButtons({
   layout = 'vertical',
   loadingProvider = null,
   error,
   onProviderClick,
-}) {
-  const [localLoading, setLocalLoading] = useState(null);
+}: OAuthButtonsProps) {
+  const [localLoading, setLocalLoading] = useState<string | null>(null);
 
-  const handleClick = (providerId) => {
+  const handleClick = (providerId: string) => {
     if (localLoading) return;
     setLocalLoading(providerId);
     onProviderClick(providerId, () => setLocalLoading(null));
@@ -63,7 +71,7 @@ export default function OAuthButtons({
                 '--provider-bg': colors.bg,
                 '--provider-text': colors.text,
                 '--provider-border': colors.border,
-              }}
+              } as CSSProperties}
             >
               {isLoading ? (
                 <span className="spinner spinner-sm" />
