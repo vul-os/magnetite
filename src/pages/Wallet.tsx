@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import Layout from '../components/Layout';
 import { useWallet } from '../hooks/useWallet';
 import { useTranslation } from '../i18n/useTranslation';
@@ -14,7 +15,7 @@ import './Wallet.css';
  * access by verifying a signature, not by consulting a ledger it owns.
  */
 
-const RECEIPT_KIND_LABEL = {
+const RECEIPT_KIND_LABEL: Record<string, string> = {
   item_purchase: 'Item purchase',
   hosting_fee: 'Hosting fee',
   tier: 'Tier',
@@ -27,24 +28,24 @@ export default function Wallet() {
 
   const [draftAddress, setDraftAddress] = useState('');
   const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const linkInputId = 'wallet-link-address';
 
-  const formatDate = (value) => {
+  const formatDate = (value: string) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const formatTime = (value) => {
+  const formatTime = (value: string) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const handleLink = async (e) => {
+  const handleLink = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!draftAddress.trim()) return;
     setLinkError(null);
@@ -53,7 +54,7 @@ export default function Wallet() {
       await link(draftAddress);
       setDraftAddress('');
     } catch (err) {
-      setLinkError(err.message || 'Could not link that wallet address.');
+      setLinkError((err instanceof Error && err.message) || 'Could not link that wallet address.');
     } finally {
       setLinking(false);
     }
@@ -153,7 +154,10 @@ export default function Wallet() {
                     id={linkInputId}
                     className="link-input"
                     type="text"
-                    inputMode="latin"
+                    // NOTE (pre-existing bug, not fixed here — "latin" isn't a
+                    // valid inputMode token; the browser just ignores it). Cast
+                    // preserves the exact original attribute value.
+                    inputMode={'latin' as 'text'}
                     spellCheck="false"
                     autoComplete="off"
                     placeholder={t('walletPage.addressPlaceholder')}
