@@ -24,15 +24,22 @@
 // store. See CONTRIBUTING.md → "Accessibility (axe) tests".
 export { axe, configureAxe } from 'vitest-axe-real';
 
+import type AxeCore from 'axe-core';
+
 // Custom matcher that asserts no SERIOUS or CRITICAL axe violations — the a11y
 // suite's stated contract. Minor/moderate best-practice findings (e.g. an
 // aria-label on a non-interactive span) are reported but do not fail the suite,
 // keeping the regression tests focused on impactful issues.
 const BLOCKING = new Set(['serious', 'critical']);
 
-function toHaveNoViolationsImpl(received) {
+interface ToHaveNoViolationsResult {
+  pass: boolean;
+  message: () => string;
+}
+
+function toHaveNoViolationsImpl(received: AxeCore.AxeResults): ToHaveNoViolationsResult {
   const all = (received && received.violations) || [];
-  const blocking = all.filter((v) => BLOCKING.has(v.impact));
+  const blocking = all.filter((v) => v.impact != null && BLOCKING.has(v.impact));
   const pass = blocking.length === 0;
   return {
     pass,

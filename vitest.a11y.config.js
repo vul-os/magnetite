@@ -29,7 +29,7 @@ export default defineConfig({
       // from 'vitest-axe'` resolves to the serious/critical-filtering matcher.
       {
         find: /^vitest-axe$/,
-        replacement: resolve(__dirname, 'src/test/vitest-axe-shim.js'),
+        replacement: resolve(__dirname, 'src/test/vitest-axe-shim.ts'),
       },
       // The shim's non-recursive way back to the real package (see its header).
       { find: /^vitest-axe-real$/, replacement: require.resolve('vitest-axe') },

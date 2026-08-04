@@ -16,7 +16,7 @@ export default defineConfig({
       // even though the package only exports toHaveNoViolations from vitest-axe/matchers.
       {
         find: /^vitest-axe$/,
-        replacement: resolve(__dirname, 'src/test/vitest-axe-shim.js'),
+        replacement: resolve(__dirname, 'src/test/vitest-axe-shim.ts'),
       },
       // The shim's non-recursive way back to the real package. Resolved through
       // Node's own resolver, so it honours the package `exports` map and does
