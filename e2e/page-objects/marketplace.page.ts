@@ -1,4 +1,5 @@
-import { BasePage } from './base.page.js';
+import type { Locator, Page } from '@playwright/test';
+import { BasePage } from './base.page';
 
 /**
  * MarketplacePage — Industrial Magnetite marketplace UI.
@@ -14,7 +15,13 @@ import { BasePage } from './base.page.js';
  * Categories:    <nav class="category-pills" aria-label="Game categories">
  */
 export class MarketplacePage extends BasePage {
-  constructor(page) {
+  readonly gameCards: string;
+  readonly pageHeading: string;
+  readonly searchInput: string;
+  readonly categoryNav: string;
+  readonly loadingSpinner: string;
+
+  constructor(page: Page) {
     super(page);
     // Game card selector (GameCard component renders .game-card root div)
     this.gameCards = '.game-card';
@@ -28,28 +35,28 @@ export class MarketplacePage extends BasePage {
     this.loadingSpinner = '.loading-spinner, .spinner, [role="status"]';
   }
 
-  async getGameCards() {
+  async getGameCards(): Promise<Locator[]> {
     return this.page.locator(this.gameCards).all();
   }
 
-  async getGameCardCount() {
+  async getGameCardCount(): Promise<number> {
     return this.page.locator(this.gameCards).count();
   }
 
-  async getPageHeading() {
+  async getPageHeading(): Promise<string | null> {
     return this.getText(this.pageHeading);
   }
 
-  async search(query) {
+  async search(query: string): Promise<void> {
     await this.fill(this.searchInput, query);
     await this.page.keyboard.press('Enter');
   }
 
-  async selectCategory(categoryName) {
+  async selectCategory(categoryName: string): Promise<void> {
     await this.click(`${this.categoryNav} button:has-text("${categoryName}")`);
   }
 
-  async waitForLoading() {
+  async waitForLoading(): Promise<void> {
     // Wait for any spinner to disappear; fall back to short timeout if none appears
     try {
       await this.page.waitForSelector(this.loadingSpinner, { state: 'hidden', timeout: 5000 });
