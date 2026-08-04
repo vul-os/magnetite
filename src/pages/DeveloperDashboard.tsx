@@ -16,20 +16,48 @@ import './DeveloperDashboard.css';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+interface DashboardStats {
+  totalGames: number;
+  totalEarnings: number;
+  totalPlayers: number;
+  thisMonthRevenue: number;
+}
+
+interface DashboardGame {
+  id: string | number;
+  title: string;
+  status: string;
+  players: number;
+  earnings: number;
+  category: string;
+}
+
+interface DashboardActivity {
+  id: number;
+  type: string;
+  message: string;
+  time: string;
+}
+
+interface RevenuePoint {
+  date: string;
+  revenue: number;
+}
+
 // Mock data — only used when VITE_USE_MOCKS === 'true'
-const MOCK_STATS = {
+const MOCK_STATS: DashboardStats = {
   totalGames: 4,
   totalEarnings: 24580.50,
   totalPlayers: 12847,
   thisMonthRevenue: 4820.75,
 };
 
-const MOCK_GAMES = [
+const MOCK_GAMES: DashboardGame[] = [
   { id: 1, title: 'Cosmic Raiders', status: 'Active', players: 8420, earnings: 12450.00, category: 'Action' },
   { id: 2, title: 'Galaxy Conquest', status: 'Active', players: 2941, earnings: 2970.50, category: 'Strategy' },
 ];
 
-const MOCK_ACTIVITIES = [
+const MOCK_ACTIVITIES: DashboardActivity[] = [
   { id: 1, type: 'player', message: '128 new players joined Cosmic Raiders', time: '2 hours ago' },
   { id: 2, type: 'earnings', message: 'Earned $450.00 from Dungeon Realms', time: '6 hours ago' },
 ];
@@ -40,19 +68,31 @@ const CHART_GRID  = '#23232e';
 const CHART_TEXT  = '#6b6b78';
 const CHART_BG    = '#111319';
 
-const CustomTooltip = ({ active, payload, label }) => {
+interface CustomTooltipPayloadEntry {
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: CustomTooltipPayloadEntry[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="chart-tooltip">
         <p className="tooltip-label">{label}</p>
-        <p className="tooltip-value">${payload[0].value.toLocaleString()}</p>
+        {/* Always a number in practice (revenue chart data); cast preserves the
+            original direct .toLocaleString() call rather than coercing via Number(). */}
+        <p className="tooltip-value">${(payload[0].value as number).toLocaleString()}</p>
       </div>
     );
   }
   return null;
 };
 
-const getStatusClass = (status) => {
+const getStatusClass = (status: string) => {
   switch (status.toLowerCase()) {
     case 'active':   return 'status-active';
     case 'pending':  return 'status-pending';
@@ -62,7 +102,7 @@ const getStatusClass = (status) => {
   }
 };
 
-const getActivityIcon = (type) => {
+const getActivityIcon = (type: string) => {
   switch (type) {
     case 'player':   return '👥';
     case 'review':   return '⭐';
@@ -74,12 +114,12 @@ const getActivityIcon = (type) => {
 export default function DeveloperDashboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [stats, setStats]         = useState(USE_MOCKS ? MOCK_STATS : null);
-  const [games, setGames]         = useState(USE_MOCKS ? MOCK_GAMES : []);
-  const [revenueData, setRevenueData] = useState([]);
-  const [activities]              = useState(USE_MOCKS ? MOCK_ACTIVITIES : []);
+  const [stats, setStats]         = useState<DashboardStats | null>(USE_MOCKS ? MOCK_STATS : null);
+  const [games, setGames]         = useState<DashboardGame[]>(USE_MOCKS ? MOCK_GAMES : []);
+  const [revenueData, setRevenueData] = useState<RevenuePoint[]>([]);
+  const [activities]              = useState<DashboardActivity[]>(USE_MOCKS ? MOCK_ACTIVITIES : []);
   const [loading, setLoading]     = useState(!USE_MOCKS);
-  const [loadError, setLoadError] = useState(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (USE_MOCKS) return;
@@ -98,16 +138,17 @@ export default function DeveloperDashboard() {
         if (cancelled) return;
 
         if (dashData.status === 'fulfilled') {
-          const d = dashData.value?.data ?? dashData.value;
+          const wrapped = dashData.value as { data?: Record<string, unknown> } & Record<string, unknown>;
+          const d = (wrapped?.data ?? wrapped ?? {}) as Record<string, unknown>;
           setStats({
-            totalGames: d?.total_games ?? 0,
-            totalEarnings: Number(d?.total_earnings ?? 0),
-            totalPlayers: Number(d?.total_players ?? 0),
+            totalGames: (d.total_games as number | undefined) ?? 0,
+            totalEarnings: Number(d.total_earnings ?? 0),
+            totalPlayers: Number(d.total_players ?? 0),
             thisMonthRevenue: 0,
           });
-          if (Array.isArray(d?.revenue_chart)) {
-            setRevenueData(d.revenue_chart.map(p => ({
-              date: p.date,
+          if (Array.isArray(d.revenue_chart)) {
+            setRevenueData((d.revenue_chart as Record<string, unknown>[]).map(p => ({
+              date: p.date as string,
               revenue: Number(p.revenue ?? 0),
             })));
           }
@@ -116,19 +157,23 @@ export default function DeveloperDashboard() {
         }
 
         if (gamesData.status === 'fulfilled') {
-          const d = gamesData.value?.data ?? gamesData.value;
+          const wrapped = gamesData.value as { data?: unknown } | unknown[];
+          const d = (!Array.isArray(wrapped) ? wrapped?.data : wrapped) as
+            | Record<string, unknown>[]
+            | { games?: Record<string, unknown>[] }
+            | undefined;
           const list = Array.isArray(d) ? d : (d?.games ?? []);
           setGames(list.map(g => ({
-            id: g.id,
-            title: g.title,
-            status: g.status ?? 'active',
+            id: g.id as string | number,
+            title: g.title as string,
+            status: (g.status as string | undefined) ?? 'active',
             players: Number(g.total_players ?? g.players ?? 0),
             earnings: Number(g.total_revenue ?? g.earnings ?? 0),
-            category: g.category ?? '',
+            category: (g.category as string | undefined) ?? '',
           })));
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err.message || t('dashboard.loadError'));
+        if (!cancelled) setLoadError((err instanceof Error && err.message) || t('dashboard.loadError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -138,7 +183,7 @@ export default function DeveloperDashboard() {
     return () => { cancelled = true; };
   }, [t]);
 
-  const handleDeleteGame = (gameId, gameTitle) => {
+  const handleDeleteGame = (gameId: DashboardGame['id'], gameTitle: string) => {
     if (window.confirm(t('dashboard.deleteConfirm', { title: gameTitle }))) {
       setGames(prev => prev.filter(g => g.id !== gameId));
     }
