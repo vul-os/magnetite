@@ -5,6 +5,7 @@ import OnboardingProgress from '../components/OnboardingProgress';
 import GameCard from '../components/GameCard';
 import { api } from '../api/client';
 import { shortKey } from '../utils/currency';
+import type { Game } from '../types/domain';
 import magnetiteLogo from '../assets/magnetite-logo.svg';
 import './Onboarding.css';
 
@@ -19,7 +20,7 @@ const STEPS = ['Welcome', 'Link Wallet', 'Browse Games'];
 // invented titles never reach a real first paint — production shows only games
 // the API actually returns. See DESIGN.md §7.
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
-const FEATURED_GAMES_MOCK = [
+const FEATURED_GAMES_MOCK: Game[] = [
   { id: 1, title: 'Cosmic Raiders',   developer: 'StarForge Studios', fee_per_session: 0.50, category: 'Action',  thumbnail: 'https://picsum.photos/seed/game1/400/225' },
   { id: 2, title: 'Puzzle Dimension', developer: 'MindBend Games',    fee_per_session: 0.25, category: 'Puzzle',  thumbnail: 'https://picsum.photos/seed/game2/400/225' },
   { id: 3, title: 'Speed Legends',    developer: 'Velocity Labs',     fee_per_session: 0.75, category: 'Racing',  thumbnail: 'https://picsum.photos/seed/game3/400/225' },
@@ -28,7 +29,7 @@ const FEATURED_GAMES_MOCK = [
 /** A wallet address is a 32-byte hex Ed25519 public key. */
 const HEX_KEY_RE = /^[0-9a-fA-F]{64}$/;
 
-function WelcomeStep({ onNext }) {
+function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="onboarding-step welcome-step">
       <div className="welcome-visual">
@@ -62,11 +63,16 @@ function WelcomeStep({ onNext }) {
   );
 }
 
-function WalletStep({ onNext, onSkip }) {
+interface WalletStepProps {
+  onNext: () => void;
+  onSkip: () => void;
+}
+
+function WalletStep({ onNext, onSkip }: WalletStepProps) {
   const [input, setInput]           = useState('');
   const [linking, setLinking]       = useState(false);
-  const [linked, setLinked]         = useState(null);
-  const [error, setError]           = useState(null);
+  const [linked, setLinked]         = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
 
   const clean = input.trim().replace(/^0x/, '');
   const valid = HEX_KEY_RE.test(clean);
@@ -79,11 +85,11 @@ function WalletStep({ onNext, onSkip }) {
     setLinking(true);
     setError(null);
     try {
-      const data = await api.wallet.link(clean);
+      const data = await api.wallet.link(clean) as { data?: { wallet_address?: string }; wallet_address?: string } | null;
       const payload = data?.data ?? data;
       setLinked(payload?.wallet_address ?? clean.toLowerCase());
     } catch (err) {
-      setError(err.message || 'Could not link that wallet. You can link one later in Wallet settings.');
+      setError((err instanceof Error && err.message) || 'Could not link that wallet. You can link one later in Wallet settings.');
     } finally {
       setLinking(false);
     }
@@ -124,7 +130,15 @@ function WalletStep({ onNext, onSkip }) {
           <p id="onboarding-wallet-hint" className="wallet-key-hint">
             64 hex characters. Nothing is custodied — settlement is USDC, wallet to wallet.
           </p>
-          <Button onClick={linkWallet} loading={linking} disabled={!valid || linking}>
+          {/* NOTE (pre-existing bug, not fixed here — Button's real loading prop
+              is `isLoading`; `loading` isn't part of ButtonProps and is silently
+              forwarded onto the DOM <button> as an unknown attribute). Spread
+              rather than a plain prop to preserve that exact behavior. */}
+          <Button
+            onClick={linkWallet}
+            disabled={!valid || linking}
+            {...({ loading: linking } as Record<string, boolean>)}
+          >
             Link Wallet
           </Button>
         </div>
@@ -152,7 +166,12 @@ function WalletStep({ onNext, onSkip }) {
   );
 }
 
-function BrowseGamesStep({ onComplete, featuredGames }) {
+interface BrowseGamesStepProps {
+  onComplete: () => void;
+  featuredGames: Game[];
+}
+
+function BrowseGamesStep({ onComplete, featuredGames }: BrowseGamesStepProps) {
   return (
     <div className="onboarding-step browse-step">
       <h2>Discover Games</h2>
@@ -189,7 +208,7 @@ function BrowseGamesStep({ onComplete, featuredGames }) {
 
 export default function Onboarding() {
   const [currentStep, setCurrentStep]       = useState(0);
-  const [featuredGames, setFeaturedGames]   = useState(USE_MOCKS ? FEATURED_GAMES_MOCK : []);
+  const [featuredGames, setFeaturedGames]   = useState<Game[]>(USE_MOCKS ? FEATURED_GAMES_MOCK : []);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -204,7 +223,8 @@ export default function Onboarding() {
   useEffect(() => {
     api.games.list()
       .then(data => {
-        const list = Array.isArray(data) ? data : (data?.games ?? null);
+        const typed = data as Game[] | { games?: Game[] } | null;
+        const list = Array.isArray(typed) ? typed : (typed?.games ?? null);
         if (list && list.length > 0) {
           setFeaturedGames(list.slice(0, 3));
         }
