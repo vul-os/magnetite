@@ -3,6 +3,24 @@ import Button from './common/Button';
 import TourStep from './TourStep';
 import './OnboardingTour.css';
 
+interface OnboardingStep {
+  targetSelector?: string;
+  title?: string;
+  description?: string;
+  position?: 'top' | 'bottom' | 'left' | 'right';
+}
+
+interface OnboardingTourProps {
+  steps: OnboardingStep[];
+  currentStep: number;
+  isActive: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onNext: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+}
+
 export default function OnboardingTour({
   steps,
   currentStep,
@@ -12,7 +30,7 @@ export default function OnboardingTour({
   onNext,
   onBack,
   onSkip,
-}) {
+}: OnboardingTourProps) {
   useEffect(() => {
     if (isActive) {
       document.body.style.overflow = 'hidden';
@@ -25,7 +43,7 @@ export default function OnboardingTour({
   }, [isActive]);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (!isActive) return;
       if (e.key === 'Escape') onSkip();
       if (e.key === 'ArrowRight') onNext();
@@ -49,7 +67,7 @@ export default function OnboardingTour({
       >
         <div className="tour-controls">
           <div className="tour-progress">
-            {steps.map((_, index) => (
+            {steps.map((_: OnboardingStep, index: number) => (
               <span
                 key={index}
                 className={`tour-progress-dot ${index === currentStep ? 'active' : ''} ${index < currentStep ? 'completed' : ''}`}

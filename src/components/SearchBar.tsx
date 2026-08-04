@@ -1,20 +1,33 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useSearch } from '../hooks/useSearch';
 import Spinner from './common/Spinner';
+import type { SearchResultItem } from '../types/domain';
+
+interface SearchBarProps {
+  onSearch?: (query: string, category?: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+  onResultSelect?: (result: SearchResultItem) => void;
+}
 
 export default function SearchBar({
   onSearch,
   placeholder = 'Search games, users...',
   autoFocus = false,
   onResultSelect,
-}) {
-  const { search, results, isLoading, categories } = useSearch();
+}: SearchBarProps) {
+  const searchHook = useSearch();
+  const { search, results, categories } = searchHook;
+  // NOTE: useSearch() returns `loading`, not `isLoading` — this mismatch
+  // (isLoading always undefined) predates the TS migration and is preserved
+  // as-is per the zero-behavior-change constraint.
+  const isLoading = (searchHook as unknown as { isLoading?: boolean }).isLoading;
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const inputRef = useRef(null);
-  const containerRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const allResults = useMemo(
     () => results
@@ -30,8 +43,8 @@ export default function SearchBar({
   }, [autoFocus]);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -39,7 +52,7 @@ export default function SearchBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleInputChange = useCallback((e) => {
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
     setActiveIndex(-1);
@@ -57,7 +70,7 @@ export default function SearchBar({
     inputRef.current?.focus();
   }, []);
 
-  const handleSelect = useCallback((result) => {
+  const handleSelect = useCallback((result: SearchResultItem & { category?: string }) => {
     setQuery(result.title);
     setIsOpen(false);
     setActiveIndex(-1);
@@ -65,7 +78,7 @@ export default function SearchBar({
     onSearch?.(result.title, result.category);
   }, [onResultSelect, onSearch]);
 
-  const handleKeyDown = useCallback((e) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen || allResults.length === 0) return;
 
     switch (e.key) {
@@ -92,7 +105,7 @@ export default function SearchBar({
     }
   }, [isOpen, allResults, activeIndex, query, onSearch, handleSelect]);
 
-  const handleCategoryChange = useCallback((cat) => {
+  const handleCategoryChange = useCallback((cat: string) => {
     setSelectedCategory(cat);
     if (query.trim()) {
       search(query, cat);
