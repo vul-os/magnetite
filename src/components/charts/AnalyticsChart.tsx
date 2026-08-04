@@ -30,7 +30,7 @@ const SERIES_VAR = {
 };
 
 /** Read the live computed value of a CSS custom property off <html>. */
-function readVar(name, fallback) {
+function readVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
@@ -56,7 +56,17 @@ function useThemeTick() {
   return tick;
 }
 
-function useChartTokens() {
+interface ChartTokens {
+  amber: string;
+  field: string;
+  grid: string;
+  text: string;
+  bg: string;
+  border: string;
+  ink: string;
+}
+
+function useChartTokens(): ChartTokens {
   const tick = useThemeTick();
   return useMemo(() => ({
     amber:  readVar(SERIES_VAR.amber, '#FFB020'),
@@ -71,7 +81,20 @@ function useChartTokens() {
 }
 
 /* ── Custom tooltip ──────────────────────────────────────────────────────── */
-function ChartTooltip({ active, payload, label, formatter, tokens }) {
+interface ChartTooltipPayloadEntry {
+  value?: number;
+  color?: string;
+}
+
+interface ChartTooltipProps {
+  active?: boolean;
+  payload?: ChartTooltipPayloadEntry[];
+  label?: string;
+  formatter?: (value: number) => string;
+  tokens: ChartTokens;
+}
+
+function ChartTooltip({ active, payload, label, formatter, tokens }: ChartTooltipProps) {
   if (!active || !payload || !payload.length) return null;
   const raw = payload[0]?.value ?? 0;
   return (
@@ -93,11 +116,26 @@ function ChartTooltip({ active, payload, label, formatter, tokens }) {
 }
 
 /* ── Short-date label (May 15, Jun 1, …) ─────────────────────────────────── */
-function shortDate(str) {
+function shortDate(str: string): string {
   if (!str) return '';
   const d = new Date(str + 'T00:00:00');
   if (isNaN(d.getTime())) return str;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export interface AnalyticsChartDatum {
+  date: string;
+  value: number;
+}
+
+export interface AnalyticsChartProps {
+  data?: AnalyticsChartDatum[];
+  color?: 'amber' | 'field';
+  gradientId?: string;
+  yFormatter?: (value: number) => string;
+  tooltipFormatter?: (value: number) => string;
+  height?: number;
+  emptyMessage?: string;
 }
 
 /* ── AnalyticsChart ──────────────────────────────────────────────────────── */
@@ -109,7 +147,7 @@ export default function AnalyticsChart({
   tooltipFormatter,    // (value) => string
   height = 260,
   emptyMessage = 'No data for this period.',
-}) {
+}: AnalyticsChartProps) {
   const tokens = useChartTokens();
   const stroke = color === 'field' ? tokens.field : tokens.amber;
   const gId = gradientId ?? `grad-${color}`;
