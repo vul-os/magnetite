@@ -15,7 +15,20 @@ const colors = {
 
 const GAME_COLORS = [colors.primary, colors.secondary, colors.tertiary, colors.quaternary, colors.quinary, '#f472b6'];
 
-function CustomTooltip({ active, payload, label }) {
+interface CustomTooltipPayloadEntry {
+  color?: string;
+  fill?: string;
+  name?: string;
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: CustomTooltipPayloadEntry[];
+  label?: string | number;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   return (
@@ -35,15 +48,30 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-function formatDate(value) {
+function formatDate(value: string | number): string {
   if (!value) return '';
   const date = new Date(value);
-  if (isNaN(date.getTime())) return value;
+  if (isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function aggregateByGame(data) {
-  const gameTotals = {};
+export interface EarningsChartDatum {
+  gameId: string;
+  gameName?: string;
+  date: string;
+  earnings?: number;
+}
+
+interface GameTotal {
+  gameId: string;
+  gameName: string;
+  totalEarnings: number;
+}
+
+type AggregatedRow = Record<string, string | number>;
+
+function aggregateByGame(data: EarningsChartDatum[]): GameTotal[] {
+  const gameTotals: Record<string, GameTotal> = {};
   data.forEach(item => {
     if (!gameTotals[item.gameId]) {
       gameTotals[item.gameId] = {
@@ -59,11 +87,13 @@ function aggregateByGame(data) {
     .slice(0, 6);
 }
 
-function aggregateByPeriod(data, period = 'daily') {
-  const result = {};
+type Period = 'daily' | 'weekly' | 'monthly';
+
+function aggregateByPeriod(data: EarningsChartDatum[], period: Period = 'daily'): AggregatedRow[] {
+  const result: Record<string, AggregatedRow> = {};
   data.forEach(item => {
     const date = new Date(item.date);
-    let key;
+    let key: string;
     if (period === 'daily') {
       key = item.date;
     } else if (period === 'weekly') {
@@ -77,22 +107,30 @@ function aggregateByPeriod(data, period = 'daily') {
     if (!result[key]) {
       result[key] = { date: key };
     }
-    result[key][item.gameId] = (result[key][item.gameId] || 0) + (item.earnings || 0);
+    result[key][item.gameId] = ((result[key][item.gameId] as number) || 0) + (item.earnings || 0);
   });
 
-  return Object.values(result).sort((a, b) => new Date(a.date) - new Date(b.date));
+  return Object.values(result).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
+
+export interface EarningsChartProps {
+  data?: EarningsChartDatum[];
+  title?: string;
+  height?: number;
+}
+
+type EarningsView = 'stacked' | 'compare';
 
 export default function EarningsChart({
   data = [],
   title = 'Earnings Over Time',
   height = 350,
-}) {
-  const [view, setView] = useState('stacked');
-  const [period, setPeriod] = useState('daily');
+}: EarningsChartProps) {
+  const [view, setView] = useState<EarningsView>('stacked');
+  const [period, setPeriod] = useState<Period>('daily');
 
   const games = [...new Set(data.map(d => d.gameId))];
-  const gameColors = {};
+  const gameColors: Record<string, string> = {};
   games.forEach((gameId, i) => {
     gameColors[gameId] = GAME_COLORS[i % GAME_COLORS.length];
   });
@@ -106,10 +144,10 @@ export default function EarningsChart({
   const lastPeriodData = aggregatedData.slice(-7);
   const prevPeriodData = aggregatedData.slice(-14, -7);
   const lastPeriodTotal = lastPeriodData.reduce((sum, d) => {
-    return sum + games.reduce((s, g) => s + (d[g] || 0), 0);
+    return sum + games.reduce((s, g) => s + ((d[g] as number) || 0), 0);
   }, 0);
   const prevPeriodTotal = prevPeriodData.reduce((sum, d) => {
-    return sum + games.reduce((s, g) => s + (d[g] || 0), 0);
+    return sum + games.reduce((s, g) => s + ((d[g] as number) || 0), 0);
   }, 0);
   const change = prevPeriodTotal > 0 ? (((lastPeriodTotal - prevPeriodTotal) / prevPeriodTotal) * 100).toFixed(1) : null;
 
@@ -199,7 +237,7 @@ export default function EarningsChart({
         {title && <h4 className="chart-title" style={{ margin: 0 }}>{title}</h4>}
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ display: 'flex', gap: 4 }}>
-            {['stacked', 'compare'].map(v => (
+            {(['stacked', 'compare'] as const).map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -221,7 +259,7 @@ export default function EarningsChart({
           </div>
           {view === 'stacked' && (
             <div style={{ display: 'flex', gap: 4 }}>
-              {['daily', 'weekly', 'monthly'].map(p => (
+              {(['daily', 'weekly', 'monthly'] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
