@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { sanitizeRedirect } from '../utils/sanitize';
@@ -11,8 +12,14 @@ const USER_KEY   = 'magnetite_user';
 // sessionStorage key where Login.jsx stores the generated CSRF state nonce.
 const STATE_KEY  = 'oauth_state_nonce';
 
+interface CallbackState {
+  type: 'processing' | 'error' | 'success';
+  error: string;
+  success: string;
+}
+
 /* Defined at module level to satisfy react-hooks/static-components */
-function AuthShell({ children }) {
+function AuthShell({ children }: { children: ReactNode }) {
   return (
     <div className="auth-page">
       <div className="auth-background" aria-hidden="true">
@@ -48,7 +55,7 @@ export default function AuthCallback() {
   //
   // Compute once at module-load time for this component instance.  searchParams is stable
   // on the first render so reading it here (outside the effect) is safe.
-  const [callbackState, setCallbackState] = useState(() => {
+  const [callbackState, setCallbackState] = useState<CallbackState>(() => {
     if (errorParam) {
       return { type: 'error', error: decodeURIComponent(errorParam), success: '' };
     }
@@ -110,7 +117,7 @@ export default function AuthCallback() {
         }
       } catch (err) {
         localStorage.removeItem(TOKEN_KEY);
-        setCallbackState({ type: 'error', error: err.message || 'Authentication failed', success: '' });
+        setCallbackState({ type: 'error', error: (err instanceof Error && err.message) || 'Authentication failed', success: '' });
       }
     };
 
