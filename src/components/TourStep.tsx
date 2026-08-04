@@ -1,13 +1,37 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import './TourStep.css';
 
-const positionClasses = {
+type TourPosition = 'top' | 'bottom' | 'left' | 'right';
+
+const positionClasses: Record<TourPosition, string> = {
   top: 'tour-step-top',
   bottom: 'tour-step-bottom',
   left: 'tour-step-left',
   right: 'tour-step-right',
 };
+
+interface TourStepProps {
+  targetSelector?: string;
+  title?: string;
+  description?: string;
+  position?: TourPosition;
+  children?: ReactNode;
+}
+
+/* coords never actually carries `bottom`/`right` (only top/left/width/height
+   are set below) — accessed anyway further down for the 'bottom'/'right'
+   tooltip placements, which was already silently producing NaN offsets
+   before the migration. Typed as optional + asserted at the read sites to
+   preserve that pre-existing behavior exactly rather than "fixing" it. */
+interface TourCoords {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  bottom?: number;
+  right?: number;
+}
 
 export default function TourStep({
   targetSelector,
@@ -15,14 +39,14 @@ export default function TourStep({
   description,
   position = 'bottom',
   children,
-}) {
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
+}: TourStepProps) {
+  const [coords, setCoords] = useState<TourCoords>({ top: 0, left: 0, width: 0, height: 0 });
   const [isVisible, setIsVisible] = useState(false);
-  const [finalPosition, setFinalPosition] = useState(position);
+  const [finalPosition, setFinalPosition] = useState<TourPosition>(position);
   // Tooltip dimensions are measured from the DOM in an effect and stored here so
   // render never reads the live ref (which is impure during render).
   const [tooltipSize, setTooltipSize] = useState({ width: 200, height: 0 });
-  const tooltipRef = useRef(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!targetSelector) return;
@@ -83,7 +107,7 @@ export default function TourStep({
     height: coords.height + 8,
   };
 
-  let tooltipStyle = { top: 0, left: 0 };
+  let tooltipStyle: { top: number; left: number; transform?: string } = { top: 0, left: 0 };
   const margin = 12;
 
   switch (finalPosition) {
@@ -95,7 +119,8 @@ export default function TourStep({
       break;
     case 'bottom':
       tooltipStyle = {
-        top: coords.bottom + margin + 8,
+        // coords.bottom is never populated (see TourCoords) — preserved NaN behavior.
+        top: (coords.bottom as number) + margin + 8,
         left: coords.left + coords.width / 2,
       };
       break;
@@ -108,7 +133,8 @@ export default function TourStep({
     case 'right':
       tooltipStyle = {
         top: coords.top + coords.height / 2,
-        left: coords.right + margin + 8,
+        // coords.right is never populated (see TourCoords) — preserved NaN behavior.
+        left: (coords.right as number) + margin + 8,
       };
       break;
   }

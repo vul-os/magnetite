@@ -1,9 +1,10 @@
 import { memo } from 'react';
 import Button from './common/Button';
 import { usePresence } from '../hooks/usePresence';
+import type { PresenceStatus } from '../types/comms';
 
 /** Resolve presence status to { cssClass, label, dotColor } */
-function resolvePresence(status) {
+function resolvePresence(status: PresenceStatus) {
   switch (status) {
     case 'online':  return { cssClass: 'online', label: 'Online', dotColor: 'var(--color-success)' };
     case 'idle':    return { cssClass: 'idle',   label: 'Idle',   dotColor: 'var(--color-amber)' };
@@ -13,6 +14,31 @@ function resolvePresence(status) {
   }
 }
 
+interface ProfileUser {
+  id?: string;
+  username?: string;
+  avatar?: string;
+  coverImage?: string;
+  bio?: string;
+  location?: string;
+  joinedAt?: string;
+  isOnline?: boolean;
+  stats: {
+    gamesPlayed?: number;
+    achievements?: number;
+    friends?: number;
+  };
+}
+
+interface ProfileCardProps {
+  user: ProfileUser;
+  isOwnProfile?: boolean;
+  isFollowing?: boolean;
+  onEdit?: () => void;
+  onFollow?: () => void;
+  onUnfollow?: () => void;
+}
+
 export default memo(function ProfileCard({
   user,
   isOwnProfile = false,
@@ -20,7 +46,7 @@ export default memo(function ProfileCard({
   onEdit,
   onFollow,
   onUnfollow,
-}) {
+}: ProfileCardProps) {
   // Pull live presence for this user if we have an id; fall back to user.isOnline boolean
   const { getPresence } = usePresence(user?.id ? [user.id] : []);
   const livePresence = user?.id ? getPresence(user.id) : null;
@@ -62,7 +88,8 @@ export default memo(function ProfileCard({
         )}
 
         <p className="profile-joined">
-          Joined {new Date(user.joinedAt).toLocaleDateString()}
+          {/* joinedAt is optional; Date(undefined) renders "Invalid Date" same as before. */}
+          Joined {new Date(user.joinedAt as string).toLocaleDateString()}
         </p>
       </div>
 
