@@ -60,7 +60,7 @@ export function useChannels(communityId: string | null) {
       }
     }
 
-    fetchChannels();
+    void fetchChannels();
     return () => { cancelled = true; };
   }, [communityId]);
 
