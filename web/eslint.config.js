@@ -52,8 +52,15 @@ export default defineConfig([
   },
 
   // Playwright e2e + Node-side tooling/config
+  // 'scripts' is '../scripts': that directory stays at the repo root (mixed
+  // Rust/ops tooling, not part of the frontend project — see the repo root's
+  // scripts/ vs this file's own location in web/). ESLint refuses to lint a
+  // target outside a config's own directory tree in the SAME invocation as
+  // '.', so package.json's `lint` script runs a second, separate invocation
+  // (`cd .. && eslint --config web/eslint.config.js scripts`) to still cover
+  // these files — see that script.
   {
-    files: ['e2e/**/*.{js,jsx}', '*.config.js', 'scripts/**/*.{js,jsx,mjs,cjs}'],
+    files: ['e2e/**/*.{js,jsx}', '*.config.js', '../scripts/**/*.{js,jsx,mjs,cjs}'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

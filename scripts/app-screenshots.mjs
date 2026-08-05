@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
-const DIST = path.join(ROOT, 'dist')
+const DIST = path.join(ROOT, 'web', 'dist')
 const UPDATE_SCREENSHOTS = process.argv.includes('--update-screenshots')
 const TRACKED_OUT = path.join(ROOT, 'docs', 'screenshots', 'app')
 const SCRATCH_OUT = path.join(ROOT, '.responsive-check', 'app')
@@ -230,7 +230,7 @@ function serve(dir) {
 
 const main = async () => {
   if (!existsSync(DIST)) {
-    console.error('dist/ not found — run `npm run build` first.')
+    console.error('web/dist/ not found — run `npm run build` (in web/) first.')
     process.exit(1)
   }
   await mkdir(OUT, { recursive: true })

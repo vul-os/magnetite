@@ -13,21 +13,21 @@ backend-test:
 backend-lint:
 	cd backend && cargo fmt && cargo clippy
 
-# Frontend commands
+# Frontend commands (project lives in web/)
 frontend-install:
-	npm install
+	cd web && npm install
 
 frontend-dev:
-	npm run dev
+	cd web && npm run dev
 
 frontend-build:
-	npm run build
+	cd web && npm run build
 
 frontend-test:
-	npm test
+	cd web && npm test
 
 frontend-lint:
-	npm run lint
+	cd web && npm run lint
 
 # Docker commands
 docker-up:

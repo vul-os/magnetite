@@ -184,10 +184,10 @@ const DEV_PORT = 5183 // avoid colliding with a real dev server on 5174
 function startViteDevServer() {
   return new Promise((resolve, reject) => {
     const proc = spawn(
-      path.join(ROOT, 'node_modules', '.bin', 'vite'),
+      path.join(ROOT, 'web', 'node_modules', '.bin', 'vite'),
       ['--port', String(DEV_PORT), '--strictPort', '--host', '127.0.0.1'],
       {
-        cwd: ROOT,
+        cwd: path.join(ROOT, 'web'),
         env: { ...process.env, VITE_USE_MOCKS: 'true', VITE_USE_MOCK_WS: 'true' },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
@@ -262,7 +262,7 @@ async function captureReactApp(browser) {
   let viteProc = null
   const DEV_BASE = `http://127.0.0.1:${DEV_PORT}`
 
-  if (!existsSync(path.join(ROOT, 'node_modules', '.bin', 'vite'))) {
+  if (!existsSync(path.join(ROOT, 'web', 'node_modules', '.bin', 'vite'))) {
     console.log('\n  [app] vite not installed — run `npm install` first')
     return APP_ROUTES.flatMap((r) => ['light', 'dark'].map((theme) => ({
       name: r.name, theme, status: 'failed', error: 'vite not installed',

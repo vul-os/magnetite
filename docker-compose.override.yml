@@ -40,13 +40,16 @@ services:
     environment:
       VITE_API_URL: http://localhost:8080
       VITE_WS_URL: ws://localhost:8080
+    # The frontend project lives in web/; the builder stage's last WORKDIR is
+    # /app/web (see Dockerfile.frontend), which is where `npm run dev` (the
+    # command override below) actually runs.
     volumes:
-      - ./src:/app/src
-      - ./public:/app/public
-      - ./index.html:/app/index.html
-      - ./package.json:/app/package.json
-      - ./vite.config.js:/app/vite.config.js
-      - node_modules:/app/node_modules
+      - ./web/src:/app/web/src
+      - ./web/public:/app/web/public
+      - ./web/index.html:/app/web/index.html
+      - ./web/package.json:/app/web/package.json
+      - ./web/vite.config.js:/app/web/vite.config.js
+      - node_modules:/app/web/node_modules
     ports:
       - "5173:5173"
       - "${FRONTEND_PORT:-3000}:80"
