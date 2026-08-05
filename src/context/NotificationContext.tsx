@@ -77,7 +77,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setInitialized(true);
       }
     }
-    load();
+    void load();
     return () => { cancelled = true; };
   }, []);
 
