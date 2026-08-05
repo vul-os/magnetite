@@ -302,7 +302,7 @@ export function InGameStore({
   // Load items on mount
   useEffect(() => {
     if (storeId) {
-      loadItems(storeId);
+      void loadItems(storeId);
     }
   }, [storeId, loadItems]);
 
