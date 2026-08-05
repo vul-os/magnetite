@@ -82,6 +82,70 @@ jobs:
       - name: cargo test
         run: cargo test --locked ${{ matrix.crate.flags }}
 
+  # ── Backend integration tests that require a live, migrated Postgres ──────
+  #
+  # backend/tests/session_revoke_tests.rs and admin_analytics_tests.rs each
+  # carry `#[ignore = "requires DATABASE_URL against a migrated Postgres"]`
+  # tests — including the ONLY test proving the cross-user session-revoke
+  # route (`revoke_session`) is not an IDOR. `cargo test --locked` in the
+  # `rust` job above never runs ignored tests, so that authorization
+  # guarantee never executed anywhere in CI.
+  #
+  # Migrations are applied with `sqlx migrate run` — the same migration
+  # runner the app itself uses (`sqlx::migrate!("./migrations")` in
+  # backend/src/db/pool.rs, see backend/migrations/20250119000000_baseline.sql).
+  # Deliberately NOT backend/tools/migrate.sh: that script is vestigial and
+  # masked a broken migration chain by piping to psql with no
+  # `ON_ERROR_STOP` (see the baseline migration's header comment).
+  #
+  # The two `--test` flags scope the run to exactly the two DB-backed
+  # integration test binaries. A bare `--ignored` across the whole crate
+  # would also pick up an unrelated doc-test fragment
+  # (src/middleware/request_metrics.rs, fenced ```ignore because it is a
+  # non-compiling usage snippet) and fail the job for a reason that has
+  # nothing to do with DATABASE_URL.
+  backend-db-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: magnetite_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/magnetite_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      # Pinned to the sqlx version this crate actually builds against
+      # (backend/Cargo.lock: sqlx 0.8.6) so the CLI's migration bookkeeping
+      # matches the `sqlx::migrate!` macro's exactly.
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --version 0.8.6 --no-default-features --features postgres,rustls --locked
+
+      - name: Apply migrations (same runner as backend/src/db/pool.rs)
+        run: sqlx migrate run
+
+      - name: cargo test -- --ignored (DB-backed tests, incl. the IDOR proof)
+        run: cargo test --locked --test session_revoke_tests --test admin_analytics_tests -- --ignored --test-threads=1
+
   # The frontend project lives in web/ (its own package.json/package-lock.json).
   frontend:
     runs-on: ubuntu-latest
