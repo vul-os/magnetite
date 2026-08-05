@@ -12,7 +12,7 @@ interface PlayerListProps {
   players: Player[];
   hostId?: string;
   currentUserId?: string;
-  onKickPlayer?: (playerId: string) => void;
+  onKickPlayer?: ((playerId: string) => void) | undefined;
 }
 
 export default memo(function PlayerList({

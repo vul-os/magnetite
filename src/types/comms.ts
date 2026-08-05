@@ -47,7 +47,7 @@ export interface MessageAuthor {
 
 export interface ChatMessage {
   id: string;
-  channel_id?: string;
+  channel_id?: string | undefined;
   sender_id?: string;
   author?: MessageAuthor;
   content: string;

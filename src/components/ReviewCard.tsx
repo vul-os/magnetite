@@ -32,7 +32,7 @@ interface ReviewCardProps {
   /* Accepted but currently unused by this component (pre-existing;
      preserved as-is per zero-behavior-change constraint). */
   onHelpful?: (reviewId: unknown) => void;
-  onReport?: (reviewId: unknown) => void;
+  onReport?: ((reviewId: unknown) => void) | undefined;
   isHelpfulVoted?: boolean;
 }
 

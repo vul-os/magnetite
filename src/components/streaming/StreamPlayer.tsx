@@ -12,7 +12,7 @@ export interface StreamPlayerStream {
   game?: string;
   streamer?: string;
   viewerCount?: number;
-  hlsUrl?: string;
+  hlsUrl?: string | undefined;
   webrtcOffer?: unknown;
   [key: string]: unknown;
 }

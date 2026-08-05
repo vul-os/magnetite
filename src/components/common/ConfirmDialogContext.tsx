@@ -11,7 +11,7 @@ export interface ConfirmOptions {
 
 interface DialogState {
   isOpen: boolean;
-  title?: string;
+  title?: string | undefined;
   message: ReactNode;
   confirmText: string;
   cancelText: string;

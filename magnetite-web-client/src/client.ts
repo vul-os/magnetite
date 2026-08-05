@@ -52,7 +52,7 @@ export interface ClientOptions {
   /** WebSocket URL */
   url: string;
   /** Optional auth token */
-  token?: string;
+  token?: string | undefined;
   /** Canvas to render into */
   canvas?: HTMLCanvasElement;
   /** Custom render function */

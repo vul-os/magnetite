@@ -240,7 +240,7 @@ function EditorSkeleton({ height }: { height: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export interface CodeEditorProps {
-  value?: string;
+  value?: string | undefined;
   onChange?: (value: string) => void;
   language?: string;
   theme?: string;

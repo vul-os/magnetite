@@ -11,7 +11,7 @@ export interface LobbyPlayer {
 export interface LobbyChatMessage {
   id: number;
   playerId: string;
-  username?: string;
+  username?: string | undefined;
   message: string;
   timestamp: string;
 }

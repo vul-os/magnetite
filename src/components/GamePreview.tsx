@@ -63,7 +63,7 @@ interface GameClient {
 
 interface CreateClientOptions {
   url: string;
-  token?: string;
+  token?: string | undefined;
   canvas: HTMLCanvasElement;
   autoReconnect?: boolean;
 }

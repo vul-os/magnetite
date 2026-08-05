@@ -27,7 +27,7 @@ interface RawRepo {
 
 interface RawDeploy {
   id: string;
-  game_id?: string;
+  game_id?: string | undefined;
   version_id?: string;
   name?: string;
   game_title?: string;
@@ -43,7 +43,7 @@ interface RawDeploy {
   url?: string;
   artifact_url?: string;
   started_at?: string;
-  created_at?: string;
+  created_at?: string | undefined;
   progress?: number;
 }
 

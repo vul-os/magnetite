@@ -1,7 +1,7 @@
 import type { PresenceStatus } from '../../types/comms';
 
 export interface PresenceDotProps {
-  status?: PresenceStatus;
+  status?: PresenceStatus | undefined;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }

@@ -80,9 +80,9 @@ function resolveStageState(status: string, stageId: string) {
 
 interface BuildTimelineProps {
   status?: string;
-  startedAt?: string;
-  duration?: string;
-  commitSha?: string;
+  startedAt?: string | undefined;
+  duration?: string | undefined;
+  commitSha?: string | undefined;
 }
 
 export default function BuildTimeline({ status = 'queued', startedAt, duration, commitSha }: BuildTimelineProps) {

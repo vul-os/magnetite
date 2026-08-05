@@ -11,7 +11,7 @@ export interface PriceRangeSliderProps {
   min?: number;
   max?: number;
   value?: PriceRange;
-  onChange?: (value: PriceRange) => void;
+  onChange?: ((value: PriceRange) => void) | undefined;
   onClose?: () => void;
 }
 

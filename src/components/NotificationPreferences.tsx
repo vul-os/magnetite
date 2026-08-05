@@ -106,7 +106,7 @@ interface ToggleSwitchProps {
   label: string;
   checked: boolean;
   onChange: () => void;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 }
 
 function ToggleSwitch({ id, label, checked, onChange, disabled }: ToggleSwitchProps) {

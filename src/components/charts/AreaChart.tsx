@@ -123,7 +123,7 @@ export default function AreaChart({
               stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
               strokeWidth={2}
               fill={`url(#areaGradient-${i})`}
-              stackId={stack ? 'stack' : undefined}
+              {...(stack ? { stackId: 'stack' } : {})}
             />
           ))}
         </RechartsAreaChart>

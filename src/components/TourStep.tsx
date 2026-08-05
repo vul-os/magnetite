@@ -12,10 +12,10 @@ const positionClasses: Record<TourPosition, string> = {
 };
 
 interface TourStepProps {
-  targetSelector?: string;
-  title?: string;
-  description?: string;
-  position?: TourPosition;
+  targetSelector?: string | undefined;
+  title?: string | undefined;
+  description?: string | undefined;
+  position?: TourPosition | undefined;
   children?: ReactNode;
 }
 

@@ -28,7 +28,7 @@ export interface ConnectionManagerOptions {
   /** WebSocket URL (ws:// or wss://) */
   url: string;
   /** Optional auth token (appended as ?token=) */
-  token?: string;
+  token?: string | undefined;
   reconnectInitialMs?: number;
   reconnectMaxMs?: number;
   /** default true */

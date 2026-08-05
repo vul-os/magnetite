@@ -20,7 +20,7 @@ export interface MemberListProps {
 interface MemberGroupProps {
   label: string;
   members: MemberListMember[];
-  currentUserId?: string;
+  currentUserId?: string | undefined;
 }
 
 /**

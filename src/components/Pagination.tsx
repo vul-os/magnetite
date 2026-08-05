@@ -5,7 +5,7 @@ export interface PaginationProps {
   total?: number;
   perPage?: number;
   currentPage?: number;
-  onPageChange?: (page: number) => void;
+  onPageChange?: ((page: number) => void) | undefined;
   showFirstLast?: boolean;
   showPerPageSelector?: boolean;
   perPageOptions?: number[];

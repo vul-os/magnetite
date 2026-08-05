@@ -38,7 +38,7 @@ export interface ConfirmDialogProps {
   onClose?: () => void;
   onConfirm?: () => void;
   onCancel?: () => void;
-  title?: string;
+  title?: string | undefined;
   message?: ReactNode;
   confirmText?: string;
   cancelText?: string;

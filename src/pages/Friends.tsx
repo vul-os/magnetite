@@ -28,7 +28,7 @@ interface FriendRequest {
   username?: string;
   from_username?: string;
   to_username?: string;
-  avatar?: string | null;
+  avatar?: string | null | undefined;
   from_avatar?: string | null;
   to_avatar?: string | null;
   status?: string;

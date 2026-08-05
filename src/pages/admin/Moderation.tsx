@@ -148,7 +148,7 @@ const MOCK_REPORTS: Report[] = [
 
 // ── ReasonBadge ───────────────────────────────────────────────────────────────
 
-function ReasonBadge({ reason }: { reason?: string }) {
+function ReasonBadge({ reason }: { reason?: string | undefined }) {
   const meta = REASON_META[reason ?? ''] ?? REASON_META.other;
   return (
     <span
@@ -188,7 +188,7 @@ function StarRating({ rating }: { rating?: number }) {
 
 // ── AutoFlagBanner ────────────────────────────────────────────────────────────
 
-function AutoFlagBanner({ reason }: { reason?: string | null }) {
+function AutoFlagBanner({ reason }: { reason?: string | null | undefined }) {
   if (!reason) return null;
   return (
     <div className="mod-auto-flag" role="note">

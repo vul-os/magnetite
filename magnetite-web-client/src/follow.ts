@@ -355,8 +355,8 @@ export interface FollowRedirectOpts {
   /** the verified `SignedRedirect` body */
   redirect: object;
   /** injectable for tests */
-  openSocket?: (url: string) => WebSocket;
-  timeoutMs?: number;
+  openSocket?: ((url: string) => WebSocket) | undefined;
+  timeoutMs?: number | undefined;
 }
 
 /**

@@ -209,9 +209,9 @@ function asList(payload: unknown): SessionAd[] {
 
 export interface DiscoveryFilter {
   /** content address to narrow to */
-  game?: string;
+  game?: string | undefined;
   /** drop ads slower than this */
-  maxPing?: number;
+  maxPing?: number | undefined;
   /** drop full ads */
   freeSlotsOnly?: boolean;
   /** drop ads that charge a hosting fee */

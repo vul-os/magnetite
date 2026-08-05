@@ -4,7 +4,7 @@ import { initialsAvatar } from '../utils/initialsAvatar';
 export interface Friend {
   username: string;
   status?: string;
-  activity?: string | null;
+  activity?: string | null | undefined;
   avatar?: string | null;
   [key: string]: unknown;
 }

@@ -9,8 +9,8 @@ export interface ActiveFilter {
 
 interface ActiveFiltersProps {
   filters?: ActiveFilter[];
-  onRemove?: (filter: ActiveFilter) => void;
-  onClearAll?: () => void;
+  onRemove?: ((filter: ActiveFilter) => void) | undefined;
+  onClearAll?: (() => void) | undefined;
 }
 
 export default function ActiveFilters({ filters = [], onRemove, onClearAll }: ActiveFiltersProps) {

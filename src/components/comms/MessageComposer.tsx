@@ -7,7 +7,7 @@ export interface MessageComposerChannel {
 
 export interface MessageComposerProps {
   channel?: MessageComposerChannel | null;
-  onSend?: (text: string) => void;
+  onSend?: ((text: string) => void) | undefined;
   disabled?: boolean;
   onTypingStart?: () => void;
   onTypingStop?: () => void;

@@ -90,7 +90,7 @@ interface ChartTooltipProps {
   active?: boolean;
   payload?: ChartTooltipPayloadEntry[];
   label?: string;
-  formatter?: (value: number) => string;
+  formatter?: ((value: number) => string) | undefined;
   tokens: ChartTokens;
 }
 

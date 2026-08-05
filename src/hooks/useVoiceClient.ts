@@ -20,7 +20,7 @@ import type { WsFrame, VoiceParticipant } from '../types/comms';
 
 export interface UseVoiceClientOptions {
   /** for useVoice room listing */
-  communityId?: string | null;
+  communityId?: string | null | undefined;
   /** called with server voice_state_update msgs */
   onVoiceStateChange?: (msg: WsFrame) => void;
 }

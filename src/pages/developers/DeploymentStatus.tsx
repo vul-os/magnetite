@@ -16,7 +16,7 @@ export interface Deployment {
   commit?: string;
   repo?: string;
   branch?: string;
-  url?: string;
+  url?: string | undefined;
   logs?: string;
   [key: string]: unknown;
 }
@@ -72,7 +72,7 @@ interface DeploymentStatusProps {
   onRollback?: (deployment?: Deployment | null) => void;
   onCancel?: (id?: Deployment['id']) => void;
   onViewLogs?: (deployment?: Deployment | null) => void;
-  onPromote?: (deployment?: Deployment | null) => void;
+  onPromote?: ((deployment?: Deployment | null) => void) | undefined;
 }
 
 export default function DeploymentStatus({

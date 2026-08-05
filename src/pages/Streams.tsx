@@ -21,7 +21,7 @@ interface StreamItem {
   thumbnailUrl?: string;
   liveAt?: string;
   communityId?: string;
-  hlsUrl?: string;
+  hlsUrl?: string | undefined;
   [key: string]: unknown;
 }
 

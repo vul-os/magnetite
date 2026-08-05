@@ -262,7 +262,7 @@ function ReceiptToast({ item, priceLabel, onDismiss }: ReceiptToastProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface InGameStoreProps {
-  storeId?: string;
+  storeId?: string | undefined;
   gameTitle?: string;
   onClose?: () => void;
   pointBalance?: number;

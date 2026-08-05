@@ -42,7 +42,7 @@ function normaliseMessage(msg: ChatMessage): MessageListMessage {
 }
 
 /** Members from the API have `display_name`; MemberList uses `username`. */
-function normaliseMember(m: CommunityMember & { activity?: string | null }): MemberListMember {
+function normaliseMember(m: CommunityMember & { activity?: string | null | undefined }): MemberListMember {
   return {
     ...m,
     username: m.display_name ?? m.username ?? 'Unknown',
