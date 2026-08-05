@@ -55,7 +55,7 @@ const CATEGORIES = ['All', 'Action', 'Puzzle', 'Racing', 'RPG', 'Strategy', 'Arc
 function LoadingSkeleton() {
   return (
     <div className="game-grid">
-      {[...Array(6)].map((_, i) => (
+      {Array.from({ length: 6 }).map((_, i) => (
         <GameCard key={i} game={null} loading />
       ))}
     </div>
