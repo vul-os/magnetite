@@ -201,7 +201,7 @@ export default function GameDeploy() {
         /* not connected */
       }
     }
-    checkGitHub();
+    void checkGitHub();
   }, []);
 
   /* Handle OAuth callback return */
