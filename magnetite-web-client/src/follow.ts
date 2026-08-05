@@ -402,7 +402,12 @@ export function followRedirect({
       ws.send(JSON.stringify({ type: 'hello', nonce }));
     });
 
-    ws.addEventListener('message', async (event: MessageEvent<string>) => {
+    // addEventListener wants a `(event) => void` listener; the handler body
+    // needs `await` for the signature check below, so it's declared async
+    // and invoked through a sync wrapper (`void handleMessage(...)`) rather
+    // than passed directly — every path inside is already caught, so there
+    // is nothing for the wrapper itself to await or handle.
+    async function handleMessage(event: MessageEvent<string>) {
       if (settled) return;
       let msg;
       try {
@@ -445,7 +450,8 @@ export function followRedirect({
         clearTimeout(timer);
         resolve(ws);
       }
-    });
+    }
+    ws.addEventListener('message', (event: MessageEvent<string>) => { void handleMessage(event); });
 
     ws.addEventListener('close', () =>
       fail(new RedirectError('no_proof', 'target closed the connection — follow refused')),
