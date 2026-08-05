@@ -3,9 +3,8 @@ import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Pagination from '../../components/Pagination';
 import Button from '../../components/common/Button';
+import { api } from '../../api/client';
 import './admin.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 interface AdminUser {
   id: string | number;
@@ -26,18 +25,6 @@ interface RawUser {
   is_developer?: boolean;
   created_at?: string;
   games?: number;
-}
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
@@ -93,10 +80,8 @@ export default function Users() {
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch('/api/admin/users?limit=200');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json() as { data?: RawUser[] } | RawUser[];
-      const raw = (!Array.isArray(json) ? json.data : json) ?? [];
+      const json = await api.admin.users({ limit: 200 }) as { data?: RawUser[] } | RawUser[] | null;
+      const raw = (json && !Array.isArray(json) ? json.data : json) ?? [];
       setUsers(Array.isArray(raw) ? raw.map(normaliseUser) : []);
     } catch (err) {
       setError((err instanceof Error && err.message) || 'Failed to load users');
@@ -137,26 +122,12 @@ export default function Users() {
     setActionLoading(userId);
     setActionError(null);
     try {
-      let res: Response | undefined;
       if (action === 'ban') {
-        res = await authFetch(`/api/admin/users/${userId}/ban`, {
-          method: 'PUT',
-          body: JSON.stringify({ banned: true }),
-        });
+        await api.admin.banUser(userId);
       } else if (action === 'unban') {
-        res = await authFetch(`/api/admin/users/${userId}/ban`, {
-          method: 'PUT',
-          body: JSON.stringify({ banned: false }),
-        });
+        await api.admin.unbanUser(userId);
       } else if (action === 'verify') {
-        res = await authFetch(`/api/admin/users/${userId}/role`, {
-          method: 'PUT',
-          body: JSON.stringify({ role: 'user' }),
-        });
-      }
-      if (res && !res.ok) {
-        const err = await res.json().catch(() => ({})) as { message?: string };
-        throw new Error(err.message || `Action failed (HTTP ${res.status})`);
+        await api.admin.setUserRole(userId, 'user');
       }
       /* optimistic update */
       setUsers(prev => prev.map(u => {
