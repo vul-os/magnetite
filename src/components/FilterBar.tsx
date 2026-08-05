@@ -45,7 +45,7 @@ export default function FilterBar({
     function handleClickOutside(event: MouseEvent) {
       Object.keys(openDropdown || {}).forEach((key) => {
         const dropdownKey = key as DropdownName;
-        if (dropdownRefs.current[dropdownKey] && !dropdownRefs.current[dropdownKey]!.contains(event.target as Node)) {
+        if (dropdownRefs.current[dropdownKey] && !dropdownRefs.current[dropdownKey].contains(event.target as Node)) {
           setOpenDropdown((prev) => ({ ...prev, [dropdownKey]: false }));
         }
       });
