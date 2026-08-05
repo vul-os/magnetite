@@ -61,7 +61,7 @@ export function useCommunities() {
   // communities API (external system) and manages its own loading state.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchCommunities();
+    void fetchCommunities();
   }, [fetchCommunities]);
 
   const createCommunity = useCallback(async (data: { name: string; description?: string; icon_url?: string | null }): Promise<ActionResult> => {
@@ -159,7 +159,7 @@ export function useCommunityMembers(communityId: string | null) {
       }
     }
 
-    fetchMembers();
+    void fetchMembers();
     return () => { cancelled = true; };
   }, [communityId]);
 
