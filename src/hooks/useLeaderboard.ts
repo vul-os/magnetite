@@ -54,7 +54,7 @@ export function useLeaderboard(gameId: string | number | null | undefined) {
       }
     }
 
-    fetchLeaderboard();
+    void fetchLeaderboard();
     return () => { cancelled = true; };
   }, [gameId]);
 
