@@ -116,7 +116,7 @@ export default function Leaderboard() {
           setApiEntries(data);
           setLoadedGame(selectedGame);
         }
-      });
+      }).catch(() => { /* mock data build failed — keep prior entries */ });
       return () => { cancelled = true; };
     }
 
