@@ -289,7 +289,7 @@ export default function GameDeploy() {
     void loadDeployments();
   }, [loadDeployments]);
 
-  const handleConnectGithub = async () => {
+  const handleConnectGithub = () => {
     setConnecting(true);
     setConnectError(null);
     try {
