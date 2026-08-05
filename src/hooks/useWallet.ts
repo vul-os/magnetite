@@ -142,7 +142,7 @@ export function useWallet() {
       }
     }
 
-    loadWallet();
+    void loadWallet();
     return () => {
       cancelled = true;
     };
