@@ -148,7 +148,7 @@ export default function GameAnalytics() {
 
       if (analyticsRes.status === 'fulfilled') {
         const wrapped = analyticsRes.value as { data?: Record<string, unknown> } & Record<string, unknown>;
-        const raw = (wrapped?.data ?? wrapped ?? {}) as Record<string, unknown>;
+        const raw = wrapped?.data ?? wrapped ?? {};
         const summary = (raw.summary ?? {}) as Record<string, unknown>;
         // Normalise daily_revenue → [{ date, value }]
         const daily_revenue = ((raw.daily_revenue ?? []) as Record<string, unknown>[]).map(p => ({
@@ -200,7 +200,7 @@ export default function GameAnalytics() {
   // Load analytics from the API (external system) on mount / when inputs change.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
+    void loadData();
   }, [loadData]);
 
   const days = RANGES[range].days;
@@ -251,7 +251,7 @@ export default function GameAnalytics() {
         {loadError && (
           <div role="alert" className="analytics-error">
             <span>{loadError}</span>
-            <button className="analytics-retry" onClick={loadData} aria-label={t('common.retry')}>
+            <button className="analytics-retry" onClick={() => { void loadData(); }} aria-label={t('common.retry')}>
               {t('common.retry')}
             </button>
           </div>
