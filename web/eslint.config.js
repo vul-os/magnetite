@@ -66,6 +66,22 @@ export default defineConfig([
     },
   },
 
+  // web/scripts/check-lint-config.mjs is ".mjs" and lives under web/scripts —
+  // distinct from the repo-root '../scripts/**' covered above (that's a
+  // sibling directory, not this one) — so no block matched it: it was
+  // enumerated in `eslint .`'s file count but had zero rules applied
+  // (confirmed via --print-config showing 0 resolved rules, and an injected
+  // unused-var probe that went unflagged before this block existed). It
+  // runs under Node only.
+  {
+    files: ['scripts/check-lint-config.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: globals.node,
+      sourceType: 'module',
+    },
+  },
+
   // The TypeScript-migrated app source (src/**). Mirrors the JS block above
   // but swaps the parser/no-unused-vars rule for TS-aware equivalents.
   {
