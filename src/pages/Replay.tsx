@@ -170,7 +170,7 @@ export default function Replay() {
       .then((data) => {
         // data may be wrapped in { data: ... } or plain
         const typed = data as { data?: ReplayLog } | ReplayLog | null | undefined;
-        setReplay(((typed && !('frames' in typed) ? typed.data : typed) ?? null) as ReplayLog | null);
+        setReplay((typed && !('frames' in typed) ? typed.data : typed) ?? null);
       })
       .catch((err) => setError((err instanceof Error && err.message) || 'Failed to load replay'))
       .finally(() => setLoading(false));
