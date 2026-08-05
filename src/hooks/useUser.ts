@@ -23,7 +23,7 @@ export function useUser() {
       }
     }
 
-    fetchUser();
+    void fetchUser();
     return () => { cancelled = true; };
   }, []);
 
