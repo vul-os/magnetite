@@ -46,12 +46,12 @@ export default function LinkAccount() {
   useEffect(() => {
     const userData = localStorage.getItem(USER_KEY);
     if (!userData) {
-      navigate('/login', { replace: true });
+      void navigate('/login', { replace: true });
       return;
     }
     // Load linked accounts from the auth API (external system).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLinkedAccounts();
+    void loadLinkedAccounts();
   }, [navigate, loadLinkedAccounts]);
 
   const handleLinkAccount = (provider: string) => {
