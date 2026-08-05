@@ -56,7 +56,9 @@ export default function SearchBar({
     const value = e.target.value;
     setQuery(value);
     setActiveIndex(-1);
-    search(value, selectedCategory).then((data) => {
+    // useSearch's search() always resolves (it catches its own errors and
+    // resolves null on failure), so there is no rejection to handle here.
+    void search(value, selectedCategory).then((data) => {
       if (data && (data.games?.length || data.users?.length)) {
         setIsOpen(true);
       }
@@ -108,7 +110,7 @@ export default function SearchBar({
   const handleCategoryChange = useCallback((cat: string) => {
     setSelectedCategory(cat);
     if (query.trim()) {
-      search(query, cat);
+      void search(query, cat);
     }
   }, [query, search]);
 
