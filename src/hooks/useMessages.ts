@@ -119,14 +119,14 @@ export function useMessages(channelId: string | null, { isDM = false, dmUserId =
   useEffect(() => {
     if (channelId || (isDM && dmUserId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchMessages({ limit: 50 });
+      void fetchMessages({ limit: 50 });
     }
   }, [fetchMessages, channelId, isDM, dmUserId]);
 
   /** Load older messages (pagination — prepend). */
   const loadMore = useCallback(() => {
     if (!hasMore || loading || !oldestIdRef.current) return;
-    fetchMessages({ limit: 50, before: oldestIdRef.current });
+    void fetchMessages({ limit: 50, before: oldestIdRef.current });
   }, [hasMore, loading, fetchMessages]);
 
   /** Append a locally-sent message optimistically. */
