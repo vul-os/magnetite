@@ -82,14 +82,19 @@ jobs:
       - name: cargo test
         run: cargo test --locked ${{ matrix.crate.flags }}
 
+  # The frontend project lives in web/ (its own package.json/package-lock.json).
   frontend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run lint
       # The unit/integration suite and the axe a11y suite run under separate
@@ -142,12 +147,16 @@ jobs:
     # 22.04 is a Playwright-supported image (alternative: the mcr playwright
     # Docker image).
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
       - run: npm ci
       # The Playwright config's webServer starts `npm run dev` itself (fresh in
       # CI) and every spec stubs its own API, so no backend is needed. All 8
@@ -174,16 +183,24 @@ jobs:
     # committed screenshots is a deliberate, manual
     # `npm run screenshots:app -- --update-screenshots`, never something CI does.
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # The script serves dist/ itself and refuses to run without it.
+      # The script serves web/dist itself and refuses to run without it.
       - run: npm run build
+      # screenshots:app runs scripts/app-screenshots.mjs (repo root, invoked
+      # via `../scripts/...` from web/'s package.json) and writes to the
+      # gitignored .responsive-check/app/ at the REPO ROOT — see that script's
+      # ROOT (computed from its own file location, not this job's cwd).
       - run: npm run screenshots:app
       - uses: actions/upload-artifact@v4
         if: always()

@@ -1,11 +1,19 @@
 # Build stage
+#
+# The frontend project (package.json, node_modules) lives in web/ — this
+# Dockerfile is still built with the repo root as context (see
+# docker-compose.yml / release.yml's `context: .`), so every COPY below is
+# rooted there and steps into web/ explicitly.
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY package*.json ./
+COPY web/package*.json ./web/
+WORKDIR /app/web
 RUN npm ci
 
+WORKDIR /app
 COPY . .
+WORKDIR /app/web
 RUN npm run build
 
 # Production stage
@@ -13,7 +21,7 @@ FROM nginx:alpine
 
 RUN apk add --no-cache nginx gzip
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/web/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
