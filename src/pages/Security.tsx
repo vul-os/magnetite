@@ -144,7 +144,7 @@ export default function Security() {
         setSessionsLoading(false);
       }
     }
-    loadSessions();
+    void loadSessions();
   }, []);
 
   /* Load API keys */
@@ -169,7 +169,7 @@ export default function Security() {
 
   // Load API keys from the API (external system) on mount.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadApiKeys(); }, [loadApiKeys]);
+  useEffect(() => { void loadApiKeys(); }, [loadApiKeys]);
 
   const handlePasswordChange = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
