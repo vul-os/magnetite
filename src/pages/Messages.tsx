@@ -529,7 +529,7 @@ export default function Messages() {
   useEffect(() => {
     if (USE_MOCKS) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadThreads();
+    void loadThreads();
   }, [loadThreads]);
 
   const activeThread = threads.find((th) => th.id === activeThreadId) ?? null;
