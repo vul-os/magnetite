@@ -22,7 +22,10 @@ export interface LobbyUser {
   [key: string]: unknown;
 }
 
-export type LobbyState = 'connecting' | 'invalid' | 'waiting' | 'starting' | 'left' | string;
+// Trailing `string` alone would swallow the 5 named literals (TS widens the
+// whole union to `string`); `string & {}` keeps them distinct for
+// autocomplete while still accepting any other server-sent state string.
+export type LobbyState = 'connecting' | 'invalid' | 'waiting' | 'starting' | 'left' | (string & {});
 
 export function useGameLobby(lobbyId: string | null | undefined, currentUser: LobbyUser | null | undefined) {
   // /ws/lobby/:id has no backend handler (AUDIT critical).

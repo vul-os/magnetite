@@ -147,7 +147,7 @@ function WalletStep({ onNext, onSkip }: WalletStepProps) {
           <div className="address-label">Linked Wallet</div>
           <div className="address-value">{linked}</div>
           <div className="address-actions">
-            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(linked)}>
+            <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(linked).catch(() => {}); }}>
               Copy {shortKey(linked)}
             </Button>
           </div>
@@ -214,7 +214,7 @@ export default function Onboarding() {
   useEffect(() => {
     const completed = localStorage.getItem(ONBOARDING_STORAGE_KEY);
     if (completed === 'true') {
-      navigate('/');
+      void navigate('/');
     }
   }, [navigate]);
 
@@ -234,7 +234,7 @@ export default function Onboarding() {
 
   const completeOnboarding = () => {
     localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
-    navigate('/');
+    void navigate('/');
   };
 
   const handleNext = () => {

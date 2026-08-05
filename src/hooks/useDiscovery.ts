@@ -199,11 +199,16 @@ const MOCK_SESSIONS: SessionAd[] = [
 
 function asList(payload: unknown): SessionAd[] {
   const body = (payload as { data?: unknown } | null)?.data ?? payload;
-  if (Array.isArray(body)) return body;
+  // Array.isArray's built-in signature is `(arg: any): arg is any[]`, so it
+  // narrows to any[] regardless of the checked variable's prior type — these
+  // casts make the trust this function already documents (coercing an
+  // unvalidated backend envelope into the expected shape) explicit instead
+  // of an implicit any[] return.
+  if (Array.isArray(body)) return body as SessionAd[];
   const sessions = (body as { sessions?: unknown } | null)?.sessions;
-  if (Array.isArray(sessions)) return sessions;
+  if (Array.isArray(sessions)) return sessions as SessionAd[];
   const ads = (body as { ads?: unknown } | null)?.ads;
-  if (Array.isArray(ads)) return ads;
+  if (Array.isArray(ads)) return ads as SessionAd[];
   return [];
 }
 
@@ -257,7 +262,7 @@ export function useDiscovery(filter: DiscoveryFilter = {}) {
       }
     }
 
-    load();
+    void load();
     return () => {
       cancelled = true;
     };

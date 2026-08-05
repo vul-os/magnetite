@@ -151,7 +151,7 @@ export function useMarketplace() {
       }
     }
 
-    load();
+    void load();
     return () => { cancelled = true; };
   }, []);
 

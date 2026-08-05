@@ -186,7 +186,7 @@ export default function AnalyticsChart({
           tick={{ fill: tokens.text, fontSize: 11, fontFamily: MONO_STACK }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={yFormatter ?? ((v) => v)}
+          tickFormatter={yFormatter ?? ((v: number) => String(v))}
           width={56}
         />
         <Tooltip

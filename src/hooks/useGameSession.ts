@@ -6,7 +6,10 @@ export interface SessionPlayer {
   [key: string]: unknown;
 }
 
-export type SessionStatus = 'connecting' | 'invalid' | 'active' | 'finished' | 'left' | string;
+// Trailing `string` alone would swallow the 5 named literals (TS widens the
+// whole union to `string`); `string & {}` keeps them distinct for
+// autocomplete while still accepting any other server-sent status string.
+export type SessionStatus = 'connecting' | 'invalid' | 'active' | 'finished' | 'left' | (string & {});
 
 export function useGameSession(gameId: string | number | null | undefined) {
   const { isConnected, lastMessage, sendMessage, reconnect } = useWebSocket(`/ws/game/${gameId}`);

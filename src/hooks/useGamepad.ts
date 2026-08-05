@@ -54,7 +54,7 @@ const STORAGE_KEY = 'magnetite_gamepad_bindings';
 function loadBindings(): Bindings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_BINDINGS;
+    return raw ? (JSON.parse(raw) as Bindings) : DEFAULT_BINDINGS;
   } catch {
     return DEFAULT_BINDINGS;
   }

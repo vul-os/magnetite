@@ -138,7 +138,7 @@ export function useCommsSocket({
         if (typingTimersRef.current[uid]) clearTimeout(typingTimersRef.current[uid]);
         // Driven by an inbound WebSocket frame (external system).
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTypingUsers((prev) => ({ ...prev, [uid]: String(msg.username ?? uid) }));
+        setTypingUsers((prev) => ({ ...prev, [uid]: typeof msg.username === 'string' ? msg.username : uid }));
         typingTimersRef.current[uid] = setTimeout(() => {
           setTypingUsers((prev) => {
             const next = { ...prev };
@@ -153,7 +153,7 @@ export function useCommsSocket({
       case 'typing_start': {
         const uid = String(msg.user_id);
         if (typingTimersRef.current[uid]) clearTimeout(typingTimersRef.current[uid]);
-        setTypingUsers((prev) => ({ ...prev, [uid]: String(msg.username ?? uid) }));
+        setTypingUsers((prev) => ({ ...prev, [uid]: typeof msg.username === 'string' ? msg.username : uid }));
         typingTimersRef.current[uid] = setTimeout(() => {
           setTypingUsers((prev) => {
             const next = { ...prev };
@@ -208,7 +208,9 @@ export function useCommsSocket({
 
     if (!pcRef.current) return;
 
-    (async () => {
+    // Fire-and-forget: WebRTC signaling reaction to an inbound frame, all
+    // paths caught internally below — nothing here needs to be awaited.
+    void (async () => {
       const pc = pcRef.current;
       if (!pc) return;
       try {
@@ -332,7 +334,7 @@ export function useCommsSocket({
 
       // Add local tracks
       if (localStream) {
-        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream as MediaStream));
+        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
       }
 
       // Remote track received

@@ -160,6 +160,12 @@ function buildEditorOptions(readOnly: boolean): editor.IStandaloneEditorConstruc
 // ── Custom theme definition ──────────────────────────────────────────────────
 
 function defineTheme(monaco: Monaco) {
+  // monaco-editor's own generated .d.ts is large enough that
+  // typescript-eslint's checker can't fully resolve `Monaco.editor`'s type
+  // through it — tsc itself is clean on this file (0 errors); this is a
+  // third-party type-resolution limit, not a hole in our typing. Verified
+  // narrow: 4 findings total, both on this exact call shape.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   monaco.editor.defineTheme('magnetite-dark', {
     base: 'vs-dark',
     inherit: true,
@@ -266,6 +272,8 @@ export default function CodeEditor({
     editorRef.current = editorInstance;
     // Define and apply our custom theme
     defineTheme(monaco);
+    // Same monaco-editor type-resolution limit as defineTheme() above.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     monaco.editor.setTheme(theme);
     // Give focus for immediate keyboard use
     editorInstance.focus();

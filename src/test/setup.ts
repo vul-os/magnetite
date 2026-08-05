@@ -19,7 +19,10 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
   globalThis.IntersectionObserver = MockObserver as unknown as typeof IntersectionObserver;
 }
 if (typeof globalThis.ResizeObserver === 'undefined') {
-  globalThis.ResizeObserver = MockObserver as unknown as typeof ResizeObserver;
+  // Unlike IntersectionObserver above, ResizeObserver's constructor shape is
+  // exactly { observe, unobserve, disconnect } — MockObserver already
+  // satisfies it structurally, no cast needed.
+  globalThis.ResizeObserver = MockObserver;
 }
 
 // jsdom doesn't implement matchMedia; provide a no-op MediaQueryList so

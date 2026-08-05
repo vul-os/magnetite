@@ -201,7 +201,7 @@ export default function GameDeploy() {
         /* not connected */
       }
     }
-    checkGitHub();
+    void checkGitHub();
   }, []);
 
   /* Handle OAuth callback return */
@@ -237,7 +237,7 @@ export default function GameDeploy() {
   // Load repos from the API (external system) once GitHub is connected.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (githubConnected) loadRepos();
+    if (githubConnected) void loadRepos();
   }, [githubConnected, loadRepos]);
 
   /**
@@ -286,10 +286,10 @@ export default function GameDeploy() {
   useEffect(() => {
     if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadDeployments();
+    void loadDeployments();
   }, [loadDeployments]);
 
-  const handleConnectGithub = async () => {
+  const handleConnectGithub = () => {
     setConnecting(true);
     setConnectError(null);
     try {
@@ -784,7 +784,7 @@ export default function GameDeploy() {
                 <code>{API_BASE}/webhooks/github</code>
                 <button
                   className="copy-btn"
-                  onClick={() => navigator.clipboard.writeText(`${API_BASE}/webhooks/github`)}
+                  onClick={() => { navigator.clipboard.writeText(`${API_BASE}/webhooks/github`).catch(() => {}); }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />

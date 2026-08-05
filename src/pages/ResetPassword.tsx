@@ -126,7 +126,9 @@ export default function ResetPassword() {
     try {
       await api.auth.resetPassword(token, password);
       setSuccess(true);
-      setTimeout(() => navigate('/login'), 3000);
+      // react-router's NavigateFunction returns void | Promise<void>; not
+      // awaited anywhere else in the app either.
+      setTimeout(() => { void navigate('/login'); }, 3000);
     } catch (err) {
       setError((err instanceof Error && err.message) || t('auth.failedToResetPassword'));
     } finally {

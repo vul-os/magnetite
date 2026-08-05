@@ -288,7 +288,7 @@ export default function Playground() {
       wsRef.current.send(JSON.stringify({ type: 'leave_game' }));
       wsRef.current.close();
     }
-    navigate('/matchmaking');
+    void navigate('/matchmaking');
   };
 
   const handleResume = () => {

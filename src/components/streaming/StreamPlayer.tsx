@@ -82,7 +82,13 @@ export default function StreamPlayer({ stream, messages = [], onSend, onClose }:
       }
     }
 
-    attachHls();
+    attachHls().catch(() => {
+      // The dynamic import('hls.js') (or its setup) failed — e.g. a chunk-
+      // load network error. This previously went completely unhandled: no
+      // fallback and a console-level unhandled-rejection warning. Degrade
+      // the same way the "Hls not supported" branch above already does.
+      if (hlsUrl) video.src = hlsUrl;
+    });
 
     const onPlay  = () => setPlaying(true);
     const onPause = () => setPlaying(false);

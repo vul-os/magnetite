@@ -82,7 +82,11 @@ export function useMessages(channelId: string | null, { isDM = false, dmUserId =
 
       // Normalize response: array or { messages: [] }
       const messagesField = (data as { messages?: unknown } | null)?.messages;
-      const fetched: ChatMessage[] = Array.isArray(data) ? data : (Array.isArray(messagesField) ? messagesField : []);
+      // Array.isArray's built-in signature narrows to any[] regardless of
+      // the checked variable's prior type, hence the explicit casts.
+      const fetched: ChatMessage[] = Array.isArray(data)
+        ? data as ChatMessage[]
+        : (Array.isArray(messagesField) ? messagesField as ChatMessage[] : []);
 
       if (!cancelled) {
         if (params.before) {
@@ -119,14 +123,14 @@ export function useMessages(channelId: string | null, { isDM = false, dmUserId =
   useEffect(() => {
     if (channelId || (isDM && dmUserId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchMessages({ limit: 50 });
+      void fetchMessages({ limit: 50 });
     }
   }, [fetchMessages, channelId, isDM, dmUserId]);
 
   /** Load older messages (pagination — prepend). */
   const loadMore = useCallback(() => {
     if (!hasMore || loading || !oldestIdRef.current) return;
-    fetchMessages({ limit: 50, before: oldestIdRef.current });
+    void fetchMessages({ limit: 50, before: oldestIdRef.current });
   }, [hasMore, loading, fetchMessages]);
 
   /** Append a locally-sent message optimistically. */

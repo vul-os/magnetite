@@ -78,7 +78,7 @@ export default function GameLobby() {
   // Navigate to the game session when the lobby transitions to 'starting'
   useEffect(() => {
     if (lobbyState === 'starting' && _gameId) {
-      navigate(`/play/${_gameId}`);
+      void navigate(`/play/${_gameId}`);
     }
   }, [lobbyState, _gameId, navigate]);
 

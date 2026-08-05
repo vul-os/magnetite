@@ -1,9 +1,13 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+
+const tsconfigRootDir = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig([
   // 'site/assets/vendor' holds third-party minified bundles (marked, mermaid)
@@ -61,7 +65,7 @@ export default defineConfig([
     files: ['src/**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
-      ...tseslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
@@ -69,7 +73,7 @@ export default defineConfig([
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.browser, ...globals.es2021 },
-      parserOptions: { ecmaFeatures: { jsx: true } },
+      parserOptions: { ecmaFeatures: { jsx: true }, projectService: true, tsconfigRootDir },
     },
     rules: {
       'react-refresh/only-export-components': 'warn',
@@ -87,6 +91,17 @@ export default defineConfig([
       // 'with-single-extends' is the option the rule ships specifically for
       // this pattern, so this configures the rule rather than disabling it.
       '@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'with-single-extends' }],
+      // Of the first 90 no-misused-promises findings surfaced when type-aware
+      // linting was turned on, 85 were "Promise-returning function provided
+      // to attribute" — async event handlers (onClick/onSubmit/onChange/...)
+      // passed straight to JSX. Every one sampled (~40+ checked by hand)
+      // already catches its own errors into loading/error state; none was a
+      // genuine unhandled-rejection risk. `checksVoidReturn.attributes: false`
+      // is typescript-eslint's own documented option for exactly this
+      // JSX-handler false-positive; it leaves the rule's other checks (bare
+      // conditionals, arguments, IIFE callbacks — where the remaining 5
+      // findings lived) fully active.
+      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
     },
   },
 
@@ -99,7 +114,7 @@ export default defineConfig([
     files: ['e2e/**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
-      ...tseslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
@@ -107,7 +122,7 @@ export default defineConfig([
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.node, ...globals.browser },
-      parserOptions: { ecmaFeatures: { jsx: true } },
+      parserOptions: { ecmaFeatures: { jsx: true }, projectService: true, tsconfigRootDir },
     },
     rules: {
       'no-unused-vars': 'off',
@@ -127,16 +142,58 @@ export default defineConfig([
     files: ['magnetite-web-client/src/**/*.ts'],
     extends: [
       js.configs.recommended,
-      ...tseslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
     ],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.browser, ...globals.es2021 },
+      parserOptions: { projectService: true, tsconfigRootDir },
     },
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+
+  // TS/TSX test files: downgrade (not disable) the no-unsafe-* family.
+  // Measured: 22 findings across 5 files (client.test.ts 9, GameStudio.test.tsx
+  // 5, useGamepad.test.ts 3, useSearch.test.ts 3, useAuth.test.ts 2), each
+  // hand-checked. Every one is either (a) JSON.parse of a fixture the same
+  // test just wrote to localStorage/produced via encodeInputFrame, asserted
+  // against immediately after, or (b) a vi.fn() mock's resolved value read
+  // straight back out. None hid a production defect the way the same rules
+  // did in src/** and magnetite-web-client/src/** (JSON.parse boundaries,
+  // Array(n)-returns-any[], recharts' loosely-typed tickFormatter — all
+  // fixed there, not downgraded). Kept as `warn` rather than off: still
+  // signal, not a merge blocker for ephemeral test-fixture shapes.
+  {
+    files: ['**/*.{test,spec}.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      // it('...', async () => {...}) / act(async () => {...}) is a standing
+      // Vitest/RTL convention in this codebase even when a given test body
+      // happens not to need an internal await (act(async () => {}) still
+      // flushes microtasks between renders) — 8 findings, all this exact
+      // shape, hand-checked. Kept as warn, not off.
+      '@typescript-eslint/require-await': 'warn',
+    },
+  },
+
+  // e2e page objects: some query getters (getServerRail, getTabBar) are
+  // declared async purely so every page-object method uniformly returns a
+  // Promise<Locator>, matching sibling methods that do await — callers can
+  // `await po.getX()` without needing to know which ones are "really" async
+  // internally. Removing async would break that uniform contract. 2
+  // findings, both this shape.
+  {
+    files: ['e2e/page-objects/**/*.ts'],
+    rules: {
+      '@typescript-eslint/require-await': 'warn',
     },
   },
 ])

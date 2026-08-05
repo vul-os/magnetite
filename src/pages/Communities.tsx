@@ -99,17 +99,17 @@ function CommunitiesSkeleton() {
     <div className="communities-page" aria-busy="true" aria-label={t('communities.loadingLabel')}>
       <div className="communities-shell bg-atmosphere">
         <div className="communities-skeleton__rail" aria-hidden="true">
-          {[...Array(5)].map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="communities-skeleton__icon shimmer" />
           ))}
         </div>
         <div className="communities-skeleton__channels" aria-hidden="true">
-          {[...Array(6)].map((_, i) => (
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="communities-skeleton__channel shimmer" />
           ))}
         </div>
         <div className="communities-skeleton__main" aria-hidden="true">
-          {[...Array(4)].map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="communities-skeleton__message shimmer" />
           ))}
         </div>

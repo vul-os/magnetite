@@ -102,7 +102,7 @@ export default function Earnings() {
       }
     }
 
-    loadData();
+    void loadData();
     return () => { cancelled = true; };
   }, []);
 

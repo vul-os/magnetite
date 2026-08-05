@@ -56,7 +56,7 @@ export default function EditProfile() {
         setLoadError((err instanceof Error && err.message) || 'Failed to load profile');
       }
     }
-    loadProfile();
+    void loadProfile();
   }, []);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -80,7 +80,7 @@ export default function EditProfile() {
       await api.profile.update(formData);
     } catch { /* optimistic */ }
     setIsSaving(false);
-    navigate(`/profile/${formData.username}`);
+    void navigate(`/profile/${formData.username}`);
   };
 
   return (

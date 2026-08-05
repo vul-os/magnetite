@@ -6,7 +6,7 @@ export default function ThemeToggle() {
 
   const toggleTheme = () => {
     const themeOrder = ['dark', 'light', 'system'] as const;
-    const currentIndex = themeOrder.indexOf(theme as typeof themeOrder[number]);
+    const currentIndex = themeOrder.indexOf(theme);
     const nextIndex = (currentIndex + 1) % themeOrder.length;
     setTheme(themeOrder[nextIndex]);
   };

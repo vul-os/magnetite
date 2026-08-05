@@ -184,7 +184,7 @@ export default function Settings() {
         setLoading(false);
       }
     }
-    loadData();
+    void loadData();
   }, []);
 
   useEffect(() => {
@@ -204,7 +204,7 @@ export default function Settings() {
         setSessionsLoading(false);
       }
     }
-    loadSessions();
+    void loadSessions();
   }, []);
 
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
@@ -235,7 +235,7 @@ export default function Settings() {
     reader.readAsDataURL(file);
   };
 
-  const handleRevokeSession = async (sessionId: string) => {
+  const handleRevokeSession = (sessionId: string) => {
     if (import.meta.env.VITE_USE_MOCKS === 'true') {
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       return;

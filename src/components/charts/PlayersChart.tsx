@@ -238,7 +238,7 @@ export default function PlayersChart({
             <Tooltip
               content={<CustomTooltip />}
               cursor={{ stroke: colors.grid, strokeWidth: 1 }}
-              formatter={(value) => [`${value}%`, 'Retention']}
+              formatter={(value) => [`${typeof value === 'number' || typeof value === 'string' ? value : ''}%`, 'Retention']}
             />
             <Area
               type="monotone"

@@ -49,7 +49,7 @@ export default function Wishlist() {
       }
     }
 
-    loadWishlist();
+    void loadWishlist();
     return () => { cancelled = true; };
   }, []);
 

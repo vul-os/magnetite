@@ -95,12 +95,12 @@ export function encodeInputFrame(seq: number, tick: number, input: Input): strin
  */
 export function parseServerMessage(raw: string): ServerMessage | null {
   try {
-    const msg = JSON.parse(raw);
-    if (typeof msg !== 'object' || msg === null || typeof msg.type !== 'string') {
+    const msg: unknown = JSON.parse(raw);
+    if (typeof msg !== 'object' || msg === null || typeof (msg as { type?: unknown }).type !== 'string') {
       console.warn('[magnetite] unexpected server message shape:', raw);
       return null;
     }
-    return msg;
+    return msg as ServerMessage;
   } catch (e) {
     console.warn('[magnetite] failed to parse server message:', e, raw);
     return null;
@@ -119,7 +119,10 @@ export function parseServerMessage(raw: string): ServerMessage | null {
  *
  * @param bytesField  - base64 string or array of bytes
  */
-export function decodeBytes(bytesField: string | number[] | null | undefined): unknown | null {
+// `unknown | null` collapses to just `unknown` (unknown is TS's top type,
+// so it already includes null) — the `| null` was documentation-only and
+// added nothing (@typescript-eslint/no-redundant-type-constituents).
+export function decodeBytes(bytesField: string | number[] | null | undefined): unknown {
   if (!bytesField) return null;
   try {
     if (Array.isArray(bytesField)) {

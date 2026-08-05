@@ -185,7 +185,7 @@ export default function Streams() {
       }
     }
 
-    fetchStreams();
+    void fetchStreams();
     return () => { cancelled = true; };
   }, []);
 

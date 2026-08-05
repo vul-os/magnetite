@@ -18,7 +18,7 @@ function errMessage(err: unknown, fallback: string): string {
 
 function getRecentSearches(): string[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || 'null') || [];
+    return (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || 'null') as string[] | null) ?? [];
   } catch {
     return [];
   }
@@ -126,18 +126,24 @@ export function useSearch() {
     setSearchError(null);
 
     return new Promise((resolve) => {
-      debounceRef.current = setTimeout(async () => {
-        try {
-          const data = await fetchSearchResults(searchQuery, category, activeFilters);
-          setResults(data);
-          setLoading(false);
-          resolve(data);
-        } catch (err) {
-          setResults(null);
-          setSearchError(errMessage(err, 'Search failed'));
-          setLoading(false);
-          resolve(null);
-        }
+      // setTimeout wants a `() => void` callback; wrap the async body in an
+      // IIFE and discard its promise with `void` rather than passing the
+      // async function straight through (@typescript-eslint/no-misused-promises).
+      // The try/catch below already handles every rejection.
+      debounceRef.current = setTimeout(() => {
+        void (async () => {
+          try {
+            const data = await fetchSearchResults(searchQuery, category, activeFilters);
+            setResults(data);
+            setLoading(false);
+            resolve(data);
+          } catch (err) {
+            setResults(null);
+            setSearchError(errMessage(err, 'Search failed'));
+            setLoading(false);
+            resolve(null);
+          }
+        })();
       }, DEBOUNCE_MS);
     });
   }, []);

@@ -164,7 +164,7 @@ export function usePoints() {
       }
     }
 
-    load();
+    void load();
     return () => { cancelled = true; };
   }, []);
 

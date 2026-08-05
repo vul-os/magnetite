@@ -80,7 +80,7 @@ export function usePlayManifest(gameId: string | null | undefined) {
     setLoading(true);
     setError(null);
 
-    (async () => {
+    void (async () => {
       try {
         // The backend wraps responses in { data: { ... } } via the success_response helper.
         const body = await api.distribution.playManifest(gameId);

@@ -37,7 +37,7 @@ export default function ConnectedAccounts() {
   // Load linked accounts from the auth API (external system) on mount.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAccounts();
+    void loadAccounts();
   }, [loadAccounts]);
 
   const handleDisconnect = async (accountId: LinkedAccount['id']) => {

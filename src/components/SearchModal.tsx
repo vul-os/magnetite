@@ -103,23 +103,23 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     setQuery(value);
     setActiveIndex(-1);
     if (value.trim()) {
-      search(value, selectedCategory, filters);
+      void search(value, selectedCategory, filters);
     }
   }, [setQuery, search, selectedCategory, filters]);
 
   const handleSelect = useCallback((result: SearchResultItem) => {
     addRecentSearch(result.title);
     if (result.type === 'game') {
-      navigate(`/game/${result.id}`);
+      void navigate(`/game/${result.id}`);
     } else {
-      navigate(`/profile/${result.id}`);
+      void navigate(`/profile/${result.id}`);
     }
     onClose();
   }, [addRecentSearch, navigate, onClose]);
 
   const handleRecentSelect = useCallback((recent: string) => {
     setQuery(recent);
-    search(recent, selectedCategory, filters);
+    void search(recent, selectedCategory, filters);
   }, [setQuery, search, selectedCategory, filters]);
 
   const getTotalItems = useCallback(() => {
@@ -164,7 +164,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const handleCategoryChange = useCallback((cat: string) => {
     setSelectedCategory(cat);
     if (query.trim()) {
-      search(query, cat, filters);
+      void search(query, cat, filters);
     }
   }, [query, search, filters]);
 
@@ -177,7 +177,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }
     setFilters(newFilters);
     if (query.trim()) {
-      search(query, selectedCategory, newFilters);
+      void search(query, selectedCategory, newFilters);
     }
   }, [filters, setFilters, query, search, selectedCategory]);
 
@@ -356,7 +356,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
                 onClick={() => {
                   setFilters({});
-                  if (query.trim()) search(query, selectedCategory, {});
+                  if (query.trim()) void search(query, selectedCategory, {});
                 }}
               >
                 {t('search.clearFilters')}

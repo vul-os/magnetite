@@ -139,7 +139,7 @@ export default function Finance() {
 
   // Fetch receipt data from the admin API (external system) on mount.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const filteredReceipts = receipts.filter(r => {
     if (kindFilter === 'hosting') return r.kind === 'hosting_fee';

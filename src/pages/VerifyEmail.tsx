@@ -55,7 +55,7 @@ export default function VerifyEmail() {
         }
       }
     }
-    verify();
+    void verify();
     return () => { cancelled = true; };
   }, [token]);
 

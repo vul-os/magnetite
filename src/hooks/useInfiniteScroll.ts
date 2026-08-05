@@ -39,7 +39,7 @@ export function useInfiniteScroll({ fetchMore, hasMore, threshold = 100 }: UseIn
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading) {
-          loadMore();
+          void loadMore();
         }
       },
       { rootMargin: `${threshold}px` }

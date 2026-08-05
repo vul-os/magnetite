@@ -84,38 +84,38 @@ describe('ReplayScrubber — tick counter', () => {
 describe('ReplayScrubber — range input', () => {
   it('range input value equals (currentTick / totalTicks) * 100', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 50, totalTicks: 100 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     // 50/100 * 100 = 50
     expect(Number(range.value)).toBe(50);
   });
 
   it('range input value is 0 when at start', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 0, totalTicks: 100 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     expect(Number(range.value)).toBe(0);
   });
 
   it('range input value is 100 at end', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 100, totalTicks: 100 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     expect(Number(range.value)).toBe(100);
   });
 
   it('aria-valuenow reflects currentTick', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 77, totalTicks: 200 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     expect(range.getAttribute('aria-valuenow')).toBe('77');
   });
 
   it('aria-valuemax reflects totalTicks', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 0, totalTicks: 250 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     expect(range.getAttribute('aria-valuemax')).toBe('250');
   });
 
   it('aria-valuetext mentions currentTick and totalTicks', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 10, totalTicks: 50 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     const text = range.getAttribute('aria-valuetext') || '';
     expect(text).toMatch(/10/);
     expect(text).toMatch(/50/);
@@ -170,7 +170,7 @@ describe('ReplayScrubber — callbacks', () => {
   it('calls onSeek with computed tick when range input changes', () => {
     const onSeek = vi.fn();
     render(<ReplayScrubber {...defaultProps({ totalTicks: 200, onSeek })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     // Setting value to 50 → tick = round((50/100) * 200) = 100
     fireEvent.change(range, { target: { value: '50' } });
     expect(onSeek).toHaveBeenCalledWith(100);
@@ -179,7 +179,7 @@ describe('ReplayScrubber — callbacks', () => {
   it('calls onSeek with tick=0 when range is set to 0', () => {
     const onSeek = vi.fn();
     render(<ReplayScrubber {...defaultProps({ currentTick: 50, totalTicks: 100, onSeek })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     fireEvent.change(range, { target: { value: '0' } });
     expect(onSeek).toHaveBeenCalledWith(0);
   });
@@ -235,13 +235,13 @@ describe('ReplayScrubber — accessibility', () => {
 describe('ReplayScrubber — edge cases', () => {
   it('handles totalTicks=0 without division errors', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 0, totalTicks: 0 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     expect(Number(range.value)).toBe(0);
   });
 
   it('clamps pct to 100 if currentTick > totalTicks', () => {
     render(<ReplayScrubber {...defaultProps({ currentTick: 200, totalTicks: 100 })} />);
-    const range = screen.getByRole('slider') as HTMLInputElement;
+    const range = screen.getByRole<HTMLInputElement>('slider');
     expect(Number(range.value)).toBeLessThanOrEqual(100);
   });
 });

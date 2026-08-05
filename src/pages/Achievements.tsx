@@ -97,7 +97,7 @@ export default function Achievements() {
       }
     }
 
-    loadAchievements();
+    void loadAchievements();
     return () => { cancelled = true; };
   }, []);
 

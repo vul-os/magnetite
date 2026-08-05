@@ -117,7 +117,7 @@ export default function Spectator() {
         setChatMessages(prev => [...prev, (lastMessage as unknown as { message: SpectatorChatMessage }).message]);
         break;
       case 'game_ended':
-        navigate('/matchmaking');
+        void navigate('/matchmaking');
         break;
       default:
         break;
@@ -160,7 +160,7 @@ export default function Spectator() {
 
   const handleExit = useCallback(() => {
     sendMessage({ type: 'leave_spectate' });
-    navigate('/matchmaking');
+    void navigate('/matchmaking');
   }, [sendMessage, navigate]);
 
   const handleFollowPlayer = useCallback((playerId: number | string) => {
