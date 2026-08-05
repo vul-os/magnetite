@@ -3,9 +3,8 @@ import type { FormEvent } from 'react';
 import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Button from '../../components/common/Button';
+import { api } from '../../api/client';
 import './admin.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 interface PlatformSettings {
   platformName: string;
@@ -25,18 +24,6 @@ interface ServerPlatformSettings {
   max_game_session_fee?: number | string;
   support_email?: string;
   max_games_per_developer?: number | string;
-}
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
 }
 
 /* Defaults used if the platform settings endpoint returns no data or is unreachable.
@@ -94,17 +81,11 @@ export default function AdminSettings() {
     }
     setLoading(true);
     try {
-      const res = await authFetch('/api/platform/settings');
-      if (res.status === 404 || res.status === 405) {
-        /* endpoint not mounted yet — use defaults, show notice */
-        setEndpointAvailable(false);
-      } else if (res.ok) {
-        const d = await res.json() as ServerPlatformSettings;
-        setSettings(serverToLocal(d));
-        setEndpointAvailable(true);
-      }
+      const d = await api.platform.getSettings() as ServerPlatformSettings;
+      setSettings(serverToLocal(d));
+      setEndpointAvailable(true);
     } catch {
-      /* network error — fall back to defaults silently */
+      /* endpoint not mounted, or a network error — fall back to defaults, show notice */
       setEndpointAvailable(false);
     } finally {
       setLoading(false);
@@ -124,14 +105,7 @@ export default function AdminSettings() {
       if (!endpointAvailable) {
         throw new Error('Platform settings API is not reachable. Check that the backend is running and the platform router is mounted.');
       }
-      const res = await authFetch('/api/platform/settings', {
-        method: 'PUT',
-        body: JSON.stringify(localToServer(settings)),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { message?: string };
-        throw new Error(err.message || `Save failed (HTTP ${res.status})`);
-      }
+      await api.platform.updateSettings({ ...localToServer(settings) });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch (err) {
