@@ -1,9 +1,13 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+
+const tsconfigRootDir = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig([
   // 'site/assets/vendor' holds third-party minified bundles (marked, mermaid)
@@ -61,7 +65,7 @@ export default defineConfig([
     files: ['src/**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
-      ...tseslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
@@ -69,7 +73,7 @@ export default defineConfig([
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.browser, ...globals.es2021 },
-      parserOptions: { ecmaFeatures: { jsx: true } },
+      parserOptions: { ecmaFeatures: { jsx: true }, projectService: true, tsconfigRootDir },
     },
     rules: {
       'react-refresh/only-export-components': 'warn',
@@ -99,7 +103,7 @@ export default defineConfig([
     files: ['e2e/**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,
-      ...tseslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
@@ -107,7 +111,7 @@ export default defineConfig([
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.node, ...globals.browser },
-      parserOptions: { ecmaFeatures: { jsx: true } },
+      parserOptions: { ecmaFeatures: { jsx: true }, projectService: true, tsconfigRootDir },
     },
     rules: {
       'no-unused-vars': 'off',
@@ -127,12 +131,13 @@ export default defineConfig([
     files: ['magnetite-web-client/src/**/*.ts'],
     extends: [
       js.configs.recommended,
-      ...tseslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
     ],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.browser, ...globals.es2021 },
+      parserOptions: { projectService: true, tsconfigRootDir },
     },
     rules: {
       'no-unused-vars': 'off',
