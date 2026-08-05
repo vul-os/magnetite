@@ -61,7 +61,13 @@ mod noncustodial_wallet_tests {
             .await;
 
         assert_eq!(receipt.buyer, buyer);
-        assert_eq!(receipt.total, 1999);
+        // $19.99 in micro-USDC. `1999` was a stale cents-scale literal
+        // (19.99 * 100) — the same bug shape fixed in service_tests.rs and
+        // in commit 863576d's admin_analytics_tests.rs fix, but missed in
+        // this file. Independent literal, not re-derived from
+        // micro_usdc_from_usd, so a reintroduced scale bug still fails
+        // this test.
+        assert_eq!(receipt.total, 19_990_000);
         assert_eq!(
             receipt.stewards_amount, 0,
             "no stewards leg unless one is declared"

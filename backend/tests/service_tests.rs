@@ -33,10 +33,20 @@ mod noncustodial_payment_tests {
             )
             .await;
 
-        assert_eq!(receipt.total, 10_000);
+        // $100.00 in micro-USDC. `10_000` was a stale cents-scale literal
+        // (100.00 * 100) left over from before micro_usdc_from_usd's fix —
+        // see that function's doc comment and commit 863576d, which fixed
+        // the same bug shape in admin_analytics_tests.rs but missed this
+        // file. An independent literal here (not re-derived from the
+        // function under test), so a reintroduced scale bug in
+        // micro_usdc_from_usd still fails this test.
+        assert_eq!(receipt.total, 100_000_000);
         assert_eq!(receipt.stewards_amount, 0);
         assert_eq!(receipt.payouts.len(), 1);
-        assert_eq!(receipt.payouts[0].amount, 10_000);
+        assert_eq!(
+            receipt.payouts[0].amount, receipt.total,
+            "single-leg sale: the developer payout must equal the receipt total"
+        );
     }
 
     #[tokio::test]
