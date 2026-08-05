@@ -6,8 +6,6 @@ import NotificationPreferences from '../components/NotificationPreferences';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
 interface ProfileData {
   name: string;
   email: string;
@@ -45,18 +43,6 @@ interface RawSession {
   last_active?: string;
   updated_at?: string;
   current?: boolean;
-}
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
 }
 
 /* Mock fallbacks — only when VITE_USE_MOCKS=true */
@@ -193,12 +179,9 @@ export default function Settings() {
     async function loadSessions() {
       setSessionsLoading(true);
       try {
-        const res = await authFetch('/api/auth/sessions');
-        if (res.ok) {
-          const data = await res.json() as { sessions?: RawSession[] } | RawSession[];
-          const raw = (!Array.isArray(data) ? data.sessions : data) ?? [];
-          setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
-        }
+        const data = await api.auth.sessions() as { sessions?: RawSession[] } | RawSession[] | null;
+        const raw = (data && !Array.isArray(data) ? data.sessions : data) ?? [];
+        setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
       } catch {
         /* leave mock sessions */
       } finally {
