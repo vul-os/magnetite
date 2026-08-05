@@ -100,7 +100,7 @@ export default function DevMarketplace() {
   // Load items for the active store whenever it changes
   useEffect(() => {
     if (activeStore) {
-      loadItems(activeStore.id);
+      void loadItems(activeStore.id);
     }
   }, [activeStore, loadItems]);
 
