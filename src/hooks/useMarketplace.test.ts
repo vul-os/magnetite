@@ -200,7 +200,9 @@ describe('useMarketplace', () => {
     expect(result.current.purchasing).toBe(false);
 
     act(() => {
-      result.current.purchase('s1', 'i1', 'points');
+      // Deliberately not awaited — asserting the synchronous in-flight state
+      // (purchasing === true) before the mock promise resolves.
+      void result.current.purchase('s1', 'i1', 'points');
     });
 
     expect(result.current.purchasing).toBe(true);
