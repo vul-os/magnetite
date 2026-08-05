@@ -221,10 +221,10 @@ function createMockSocket(url: string): WsLike {
       }
     },
 
-    set onopen(fn: (() => void) | null) { listeners['open'] = fn ? [fn as MockListener] : []; },
-    set onclose(fn: (() => void) | null) { listeners['close'] = fn ? [fn as MockListener] : []; },
+    set onopen(fn: (() => void) | null) { listeners['open'] = fn ? [fn] : []; },
+    set onclose(fn: (() => void) | null) { listeners['close'] = fn ? [fn] : []; },
     set onmessage(fn: ((event: { data: string }) => void) | null) { listeners['message'] = fn ? [fn as MockListener] : []; },
-    set onerror(fn: ((event: unknown) => void) | null) { listeners['error'] = fn ? [fn as MockListener] : []; },
+    set onerror(fn: ((event: unknown) => void) | null) { listeners['error'] = fn ? [fn] : []; },
 
     addEventListener: (event: string, callback: MockListener) => {
       if (!listeners[event]) listeners[event] = [];
