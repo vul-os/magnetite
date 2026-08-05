@@ -72,7 +72,9 @@ describe('useMatchmaking', () => {
     const { result } = renderHook(() => useMatchmaking());
 
     act(() => {
-      result.current.joinQueue(GAME_ID);
+      // Deliberately not awaited — asserting the synchronous in-flight
+      // (status === 'searching') state before the mock promise resolves.
+      void result.current.joinQueue(GAME_ID);
     });
 
     expect(result.current.status).toBe('searching');
