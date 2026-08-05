@@ -78,7 +78,7 @@ class MockWebSocket extends EventTarget {
     MockWebSocket.lastInstance = this;
 
     // Simulate async open on the next tick
-    Promise.resolve().then(() => {
+    void Promise.resolve().then(() => {
       this.readyState = MockWebSocket.OPEN;
       this.dispatchEvent(new Event('open'));
     });
