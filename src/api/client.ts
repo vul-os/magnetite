@@ -98,6 +98,14 @@ export const api = {
     verify2fa: (code: string) => request('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
     /** Disable 2FA. POST /api/v1/auth/2fa/disable */
     disable2fa: (code: string) => request('/api/v1/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+    /** List this user's active sessions. GET /api/v1/auth/sessions (auth-guarded). */
+    sessions: () => request('/api/auth/sessions'),
+    /**
+     * Sign out every session at once. DELETE /api/v1/auth/logout-all.
+     * There is no single-session revoke route — see handleRevokeSession in
+     * Security.tsx/Settings.tsx, which says so rather than pretending.
+     */
+    logoutAll: () => request('/api/auth/logout-all', { method: 'DELETE' }),
   },
   /**
    * Wallet — NON-CUSTODIAL (seam §3.6 `PaymentRail`).
@@ -352,6 +360,40 @@ export const api = {
     /** PUT /api/v1/admin/users/:id/ban with banned:false. */
     unbanUser: (userId: Id) =>
       request(`/api/v1/admin/users/${userId}/ban`, { method: 'PUT', body: JSON.stringify({ banned: false }) }),
+    /** PUT /api/v1/admin/users/:id/role — body: { role: 'user' | 'admin' }. */
+    setUserRole: (userId: Id, role: string) =>
+      request(`/api/v1/admin/users/${userId}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+
+    /**
+     * GET /api/v1/admin/games — list games (admin only).
+     * params: { limit?, offset?, status? }
+     */
+    games: (params: Record<string, unknown> = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)) as Record<string, string>
+      ).toString();
+      return request(`/api/v1/admin/games${qs ? `?${qs}` : ''}`);
+    },
+    /** PUT /api/v1/admin/games/:id/approve — body: { approved: bool }. */
+    setGameApproval: (gameId: Id, approved: boolean) =>
+      request(`/api/v1/admin/games/${gameId}/approve`, { method: 'PUT', body: JSON.stringify({ approved }) }),
+    /** PUT /api/v1/admin/games/:id/feature — body: { featured: bool }. */
+    setGameFeatured: (gameId: Id, featured: boolean) =>
+      request(`/api/v1/admin/games/${gameId}/feature`, { method: 'PUT', body: JSON.stringify({ featured }) }),
+
+    /** GET /api/v1/admin/analytics/overview — platform-wide stats for the admin dashboard. */
+    analyticsOverview: () => request('/api/v1/admin/analytics/overview'),
+
+    /**
+     * GET /api/v1/admin/transactions — the legacy transaction ledger view
+     * (list_transactions). params: { limit?, offset? }
+     */
+    transactions: (params: Record<string, unknown> = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)) as Record<string, string>
+      ).toString();
+      return request(`/api/v1/admin/transactions${qs ? `?${qs}` : ''}`);
+    },
 
     // ── Not mounted on this node ────────────────────────────────────────────
     // The three calls below have no corresponding backend route. They are kept
@@ -447,6 +489,13 @@ export const api = {
     // (There is no requestPayout/payoutStatus call any more — /api/v1/developer/payouts
     // does not exist server-side; GET /api/v1/developer/earnings is the real,
     // receipt-backed record of what a developer was paid.)
+  },
+
+  github: {
+    /** GET /api/v1/github/installations — GitHub App installations for the current user. */
+    installations: () => request('/api/github/installations'),
+    /** GET /api/v1/github/repos — repositories reachable via the connected installation. */
+    repos: () => request('/api/github/repos'),
   },
 
   // ── Wave 6: Comms Core ────────────────────────────────────────────────────
