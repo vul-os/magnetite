@@ -1,7 +1,11 @@
 import { memo, type HTMLAttributes } from 'react';
 
 export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-export type AvatarStatus = 'online' | 'idle' | 'dnd' | 'offline' | string;
+// `string` alone would swallow the 4 named literals (TS widens the whole
+// union to `string`, losing autocomplete for the known statuses); the
+// `string & {}` idiom keeps the literals suggestable while still accepting
+// any other string value.
+export type AvatarStatus = 'online' | 'idle' | 'dnd' | 'offline' | (string & {});
 
 const sizeMap: Record<AvatarSize, number> = {
   xs: 24,
