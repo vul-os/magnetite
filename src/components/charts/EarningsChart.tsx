@@ -169,7 +169,7 @@ export default function EarningsChart({
               dataKey="date"
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
-              tickFormatter={(v) => formatDate(v)}
+              tickFormatter={(v: string | number) => formatDate(v)}
             />
             <YAxis
               stroke={colors.text}
