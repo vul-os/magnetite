@@ -51,7 +51,7 @@ async function request<T = unknown>(endpoint: string, options: RequestInit = {})
   });
 
   if (!response.ok) {
-    const error: { message?: string } = await response.json().catch(() => ({ message: 'Request failed' }));
+    const error = await response.json().catch(() => ({ message: 'Request failed' })) as { message?: string };
     const err: ApiError = new Error(error.message || 'Request failed');
     err.status = response.status;
     err.notFound = response.status === 404;
