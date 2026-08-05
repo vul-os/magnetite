@@ -194,7 +194,9 @@ describe('usePoints', () => {
     expect(result.current.redeeming).toBe(false);
 
     act(() => {
-      result.current.redeem('r1');
+      // Deliberately not awaited — asserting the synchronous in-flight
+      // (redeeming === true) state before the mock promise resolves.
+      void result.current.redeem('r1');
     });
 
     // Immediately after call starts, redeeming should be true
