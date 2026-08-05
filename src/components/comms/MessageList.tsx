@@ -61,7 +61,7 @@ function needsDivider(a: MessageListMessage | undefined, b: MessageListMessage |
 function MessageSkeleton() {
   return (
     <div className="message-list message-list--loading" aria-busy="true" aria-label="Loading messages">
-      {[...Array(4)].map((_, i) => (
+      {Array.from({ length: 4 }).map((_, i) => (
         <div key={i} className="message-row message-skeleton">
           <div className="message-avatar">
             <div className="shimmer message-skeleton__avatar" aria-hidden="true" />
