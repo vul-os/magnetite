@@ -4,9 +4,8 @@ import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import Pagination from '../../components/Pagination';
 import Button from '../../components/common/Button';
+import { api } from '../../api/client';
 import './admin.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 interface AdminGame {
   id: string | number;
@@ -30,18 +29,6 @@ interface RawGame {
   fee_per_session?: number | string;
   revenue?: number | string;
   created_at?: string;
-}
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
 }
 
 /* Mock data — only used when VITE_USE_MOCKS=true */
@@ -90,10 +77,8 @@ export default function Games() {
     setLoading(true);
     setError(null);
     try {
-      const res = await authFetch('/api/admin/games?limit=200');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json() as { data?: RawGame[] } | RawGame[];
-      const raw = (!Array.isArray(json) ? json.data : json) ?? [];
+      const json = await api.admin.games({ limit: 200 }) as { data?: RawGame[] } | RawGame[] | null;
+      const raw = (json && !Array.isArray(json) ? json.data : json) ?? [];
       setGames(Array.isArray(raw) ? raw.map(normaliseGame) : []);
     } catch (err) {
       setError((err instanceof Error && err.message) || 'Failed to load games');
@@ -129,31 +114,14 @@ export default function Games() {
     setActionLoading(gameId);
     setActionError(null);
     try {
-      let res: Response | undefined;
       if (action === 'approve') {
-        res = await authFetch(`/api/admin/games/${gameId}/approve`, {
-          method: 'PUT',
-          body: JSON.stringify({ approved: true }),
-        });
+        await api.admin.setGameApproval(gameId, true);
       } else if (action === 'reject') {
-        res = await authFetch(`/api/admin/games/${gameId}/approve`, {
-          method: 'PUT',
-          body: JSON.stringify({ approved: false }),
-        });
+        await api.admin.setGameApproval(gameId, false);
       } else if (action === 'feature') {
-        res = await authFetch(`/api/admin/games/${gameId}/feature`, {
-          method: 'PUT',
-          body: JSON.stringify({ featured: true }),
-        });
+        await api.admin.setGameFeatured(gameId, true);
       } else if (action === 'unfeature') {
-        res = await authFetch(`/api/admin/games/${gameId}/feature`, {
-          method: 'PUT',
-          body: JSON.stringify({ featured: false }),
-        });
-      }
-      if (res && !res.ok) {
-        const err = await res.json().catch(() => ({})) as { message?: string };
-        throw new Error(err.message || `Action failed (HTTP ${res.status})`);
+        await api.admin.setGameFeatured(gameId, false);
       }
       /* optimistic update */
       setGames(prev => prev.map(g => {

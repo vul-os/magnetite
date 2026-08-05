@@ -4,8 +4,6 @@ import Layout from '../components/Layout';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
 interface SessionItem {
   id: string;
   device: string;
@@ -48,18 +46,6 @@ interface CreatedKey {
   id: string;
   name: string;
   key: string;
-}
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
 }
 
 /* Mock fallbacks — only used when VITE_USE_MOCKS=true */
@@ -132,12 +118,9 @@ export default function Security() {
     async function loadSessions() {
       setSessionsLoading(true);
       try {
-        const res = await authFetch('/api/auth/sessions');
-        if (res.ok) {
-          const data = await res.json() as { sessions?: RawSession[] } | RawSession[];
-          const raw = (!Array.isArray(data) ? data.sessions : data) ?? [];
-          setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
-        }
+        const data = await api.auth.sessions() as { sessions?: RawSession[] } | RawSession[] | null;
+        const raw = (data && !Array.isArray(data) ? data.sessions : data) ?? [];
+        setSessions(Array.isArray(raw) ? raw.map(normaliseSession) : []);
       } catch {
         /* leave empty — not a blocking error */
       } finally {
@@ -266,13 +249,8 @@ export default function Security() {
   const handleSignOutAll = async () => {
     setSessionError(null);
     try {
-      const res = await authFetch('/api/auth/sessions/all', { method: 'DELETE' });
-      if (res.ok) {
-        setSessions(prev => prev.filter(s => s.current));
-      } else {
-        const err = await res.json().catch(() => ({})) as { message?: string };
-        throw new Error(err.message || 'Failed to sign out all sessions');
-      }
+      await api.auth.logoutAll();
+      setSessions(prev => prev.filter(s => s.current));
     } catch (err) {
       setSessionError(err instanceof Error ? err.message : String(err));
     }

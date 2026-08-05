@@ -2,21 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import AdminSidebar from '../../components/admin/AdminSidebar';
+import { api } from '../../api/client';
 import './admin.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-}
 
 interface DashboardStats {
   totalUsers: number;
@@ -97,16 +84,15 @@ export default function AdminDashboard() {
       setLoading(true);
       setError(null);
       try {
-        const overviewRes = await authFetch('/api/admin/analytics/overview');
+        const data = await api.admin.analyticsOverview() as {
+          total_users?: number;
+          total_games?: number;
+          total_revenue_usd?: number | string;
+          active_users_24h?: number;
+          new_users_today?: number;
+        } | null;
 
-        if (overviewRes.ok) {
-          const data = await overviewRes.json() as {
-            total_users?: number;
-            total_games?: number;
-            total_revenue_usd?: number | string;
-            active_users_24h?: number;
-            new_users_today?: number;
-          };
+        if (data) {
           setStats({
             totalUsers:     data.total_users        ?? 0,
             totalGames:     data.total_games        ?? 0,

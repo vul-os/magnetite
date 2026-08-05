@@ -64,18 +64,6 @@ interface DeployGame {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-}
-
 /* Mock data — only used when VITE_USE_MOCKS=true */
 const MOCK_REPOS: RepoOption[] | null = import.meta.env.VITE_USE_MOCKS === 'true'
   ? [
@@ -188,14 +176,11 @@ export default function GameDeploy() {
   useEffect(() => {
     async function checkGitHub() {
       try {
-        const res = await authFetch('/api/github/installations');
-        if (res.ok) {
-          const data = await res.json() as { installations?: unknown[] } | unknown[];
-          const list = Array.isArray(data) ? data : (data.installations ?? []);
-          if (list.length > 0) {
-            setGithubConnected(true);
-            setStep(2);
-          }
+        const data = await api.github.installations() as { installations?: unknown[] } | unknown[] | null;
+        const list = data ? (Array.isArray(data) ? data : (data.installations ?? [])) : [];
+        if (list.length > 0) {
+          setGithubConnected(true);
+          setStep(2);
         }
       } catch {
         /* not connected */
@@ -221,9 +206,8 @@ export default function GameDeploy() {
     if (import.meta.env.VITE_USE_MOCKS === 'true') return;
     setReposLoading(true);
     try {
-      const res = await authFetch('/api/github/repos');
-      if (res.ok) {
-        const data = await res.json() as { repos?: RawRepo[]; repositories?: RawRepo[] } | RawRepo[];
+      const data = await api.github.repos() as { repos?: RawRepo[]; repositories?: RawRepo[] } | RawRepo[] | null;
+      if (data) {
         const raw = Array.isArray(data) ? data : (data.repos ?? data.repositories ?? []);
         setRepos(raw.map(normaliseRepo));
       }
@@ -336,22 +320,14 @@ export default function GameDeploy() {
     setDeployError(null);
     try {
       /* Create the game record first */
-      const res = await authFetch('/api/games', {
-        method: 'POST',
-        body: JSON.stringify({
-          title:        gameSettings.title,
-          description:  gameSettings.description,
-          github_repo:  selectedRepo,
-          branch:       selectedBranch,
-          fee_per_session: 0,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { message?: string };
-        throw new Error(err.message || `Failed to register game (HTTP ${res.status})`);
-      }
-      const game = await res.json() as { id?: string; data?: { id?: string } };
-      const gameId = game.id ?? game.data?.id;
+      const game = await api.games.create({
+        title:        gameSettings.title,
+        description:  gameSettings.description,
+        github_repo:  selectedRepo,
+        branch:       selectedBranch,
+        fee_per_session: 0,
+      }) as { id?: string; data?: { id?: string } } | null;
+      const gameId = game?.id ?? game?.data?.id;
 
       /* The game record now exists. Re-read the real version history rather
        * than inventing an optimistic "queued" row: until a version is
