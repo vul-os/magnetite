@@ -107,13 +107,15 @@ export default function AuthCallback() {
         if (action === 'link') {
           await api.auth.linkAccount(token);
           setCallbackState({ type: 'success', error: '', success: 'Account linked successfully' });
-          setTimeout(() => navigate('/settings/connected-accounts', { replace: true }), 1500);
+          // react-router's NavigateFunction returns void | Promise<void>; not
+          // awaited anywhere else in the app either.
+          setTimeout(() => { void navigate('/settings/connected-accounts', { replace: true }); }, 1500);
         } else {
           localStorage.setItem(TOKEN_KEY, token);
           const user = await api.auth.me();
           localStorage.setItem(USER_KEY, JSON.stringify(user));
           // destination is already validated as a safe relative path by sanitizeRedirect().
-          navigate(destination, { replace: true });
+          void navigate(destination, { replace: true });
         }
       } catch (err) {
         localStorage.removeItem(TOKEN_KEY);
@@ -121,7 +123,8 @@ export default function AuthCallback() {
       }
     };
 
-    processCallback();
+    // Fire-and-forget: every path above is already caught internally.
+    void processCallback();
   }, [searchParams, navigate, callbackState.type]);
 
   const { type, error, success } = callbackState;
