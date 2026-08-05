@@ -89,7 +89,7 @@ export default function AuthCallback() {
     const rawDestination = searchParams.get('destination');
     const destination    = sanitizeRedirect(rawDestination, '/');
 
-    let token = searchParams.get('token');
+    const token = searchParams.get('token');
     // Remove the token from the URL immediately to avoid history/referrer leakage.
     if (token && window.history?.replaceState) {
       const clean = new URL(window.location.href);

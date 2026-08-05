@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
-import type { KeyboardEvent, TouchEvent } from 'react';
+import type { TouchEvent } from 'react';
 import Modal from './Modal';
 import GameScreenshot from './GameScreenshot';
 import './GameGallery.css';
@@ -73,7 +73,11 @@ export default memo(function GameGallery({ images, title, initialIndex = 0 }: Ga
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-      dx > 0 ? goToPrevious() : goToNext();
+      if (dx > 0) {
+        goToPrevious();
+      } else {
+        goToNext();
+      }
       touchStartX.current = null;
       touchStartY.current = null;
     }

@@ -53,7 +53,6 @@ class FakeMagnetiteClient {
     };
     this._prediction = { lag: 12 };
     this._playerId = null;
-    _lastClient = this;
   }
 
   connect() {
@@ -101,7 +100,11 @@ class FakeMagnetiteClient {
 }
 
 vi.mock('../../magnetite-web-client/src/client.js', () => ({
-  createClient: (opts: Record<string, unknown>) => new FakeMagnetiteClient(opts),
+  createClient: (opts: Record<string, unknown>) => {
+    const client = new FakeMagnetiteClient(opts);
+    _lastClient = client;
+    return client;
+  },
 }));
 
 // GamePreview imports CSS — mock it silently.

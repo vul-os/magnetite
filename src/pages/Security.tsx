@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
+import type { FormEvent } from 'react';
 import Layout from '../components/Layout';
 import { api } from '../api/client';
 import { useTranslation } from '../i18n/useTranslation';

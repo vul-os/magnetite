@@ -26,7 +26,7 @@ import {
   useRef,
   useCallback,
 } from 'react';
-import type { FormEvent, ChangeEvent, KeyboardEvent } from 'react';
+import type { ChangeEvent, KeyboardEvent } from 'react';
 import type { CommsContextValue } from '../context/CommsContext';
 import type { ChatMessage, VoiceParticipant } from '../types/comms';
 import './GameOverlay.css';

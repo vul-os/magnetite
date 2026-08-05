@@ -5,7 +5,6 @@ import OnboardingTour from '../components/OnboardingTour';
 import { useTour } from '../hooks/useTour';
 import { useGames } from '../hooks/useGames';
 import { useTranslation } from '../i18n/useTranslation';
-import type { Game } from '../types/domain';
 import './Marketplace.css';
 
 const TOUR_KEY = 'magnetite_marketplace_tour_done';

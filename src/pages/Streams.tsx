@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { ChangeEvent } from 'react';
 import Navbar from '../components/Navbar';
 import StreamCard from '../components/streaming/StreamCard';
 import StreamPlayer from '../components/streaming/StreamPlayer';
