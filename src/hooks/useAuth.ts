@@ -38,7 +38,7 @@ export function useAuth() {
       // rather than firing a doomed /auth/me request.
       if (USE_MOCKS) {
         if (storedUser) {
-          try { setUser(JSON.parse(storedUser)); } catch { /* invalid JSON */ }
+          try { setUser(JSON.parse(storedUser) as AuthUser); } catch { /* invalid JSON */ }
         }
         setIsLoading(false);
         return;
@@ -51,7 +51,7 @@ export function useAuth() {
       } catch {
         // Fall back to stored user if API unavailable
         if (storedUser) {
-          try { setUser(JSON.parse(storedUser)); } catch { /* invalid JSON */ }
+          try { setUser(JSON.parse(storedUser) as AuthUser); } catch { /* invalid JSON */ }
         } else {
           // Token invalid — clear it
           localStorage.removeItem(TOKEN_KEY);
