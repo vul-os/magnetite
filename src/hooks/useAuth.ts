@@ -60,7 +60,7 @@ export function useAuth() {
         setIsLoading(false);
       }
     }
-    restoreSession();
+    void restoreSession();
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
