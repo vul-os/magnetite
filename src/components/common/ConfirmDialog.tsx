@@ -60,10 +60,17 @@ export default function ConfirmDialog({
   const resolvedConfirmText = confirmText ?? t('common.confirm');
   const resolvedCancelText = cancelText ?? t('common.cancel');
 
+  // Modal calls its onClose unconditionally on Escape and on the header close button
+  // (closeOnBackdrop only guards the backdrop click). ConfirmDialogContext never passes
+  // onClose, only onCancel — so onClose was undefined and Escape/close-button dismissal
+  // threw "onClose is not a function", crashing whatever screen the dialog was open on.
+  // Dismissing via Escape or the close button is the same user intent as clicking
+  // Cancel, so fall back to onCancel; a final no-op keeps the handler always callable
+  // if a future caller supplies neither.
+  const handleClose = onClose ?? onCancel ?? (() => {});
+
   return (
-    // @ts-expect-error onClose is optional here (ConfirmDialogContext never passes it, a pre-existing
-    // gap — see report) but Modal's onClose is required since it calls it unconditionally on Escape/backdrop.
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" closeOnBackdrop={false}>
+    <Modal isOpen={isOpen} onClose={handleClose} title={title} size="sm" closeOnBackdrop={false}>
       <div className={`confirm-dialog-body ${variantClasses[variant]}`}>
         <div className="confirm-dialog-icon" aria-hidden="true">{icons[variant]}</div>
         <p className="confirm-dialog-message">{message}</p>

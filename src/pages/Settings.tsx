@@ -159,6 +159,7 @@ export default function Settings() {
   const [sessions, setSessions]       = useState<SessionItem[]>(MOCK_SESSIONS ?? []);
   const [loading, setLoading]         = useState(true);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -240,16 +241,20 @@ export default function Settings() {
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       return;
     }
-    try {
-      /* The backend uses DELETE /api/auth/sessions with a refresh_token body.
-       * Without the exact refresh token we can only do a best-effort call.
-       * The session list endpoint returns session ids; the logout_all endpoint
-       * exists at DELETE /api/auth/sessions/all. For single revoke, optimistically
-       * remove from local state and surface a note. */
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
-    } catch {
-      /* ignore — optimistic removal already done */
-    }
+    /* There is no single-session revoke endpoint on this server: the backend
+     * only exposes DELETE /auth/logout (needs the exact refresh token of the
+     * session being revoked, which the session list never returns) and
+     * DELETE /auth/logout-all (revokes every session at once). A helper that
+     * revokes by session id — session::revoke_session(pool, session_id,
+     * user_id) — exists in the Rust session service but is never wired to a
+     * route (see backend/src/services/session.rs), so there is no route to
+     * call here.
+     *
+     * Silently dropping the row from local state (the old behaviour) told
+     * the user the session was gone when it was still live server-side.
+     * Since we can't make the real call, we no longer pretend to: leave the
+     * session in the list and say plainly that this action isn't available. */
+    setSessionNotice(t('account.revokeUnavailable'));
   };
 
   /* ── Tab panels ─────────────────────────────────────────────────────────── */
@@ -383,6 +388,12 @@ export default function Settings() {
             <p className="settings-section-desc">{t('account.activeSessionsDesc')}</p>
           </div>
         </div>
+        {sessionNotice && (
+          <div className="auth-error" role="alert" aria-live="assertive" style={{ marginBottom: '1rem' }}>
+            <span className="auth-error-icon" aria-hidden="true">!</span>
+            {sessionNotice}
+          </div>
+        )}
         <div className="settings-sessions">
           {sessionsLoading ? (
             <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }} aria-busy="true">
