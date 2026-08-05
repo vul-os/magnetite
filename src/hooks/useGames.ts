@@ -40,7 +40,7 @@ export function useGames(_filters: Record<string, unknown> = {}) {
       }
     }
 
-    fetchGames();
+    void fetchGames();
     return () => { cancelled = true; };
   }, []);
 
