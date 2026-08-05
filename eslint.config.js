@@ -155,4 +155,26 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+
+  // TS/TSX test files: downgrade (not disable) the no-unsafe-* family.
+  // Measured: 22 findings across 5 files (client.test.ts 9, GameStudio.test.tsx
+  // 5, useGamepad.test.ts 3, useSearch.test.ts 3, useAuth.test.ts 2), each
+  // hand-checked. Every one is either (a) JSON.parse of a fixture the same
+  // test just wrote to localStorage/produced via encodeInputFrame, asserted
+  // against immediately after, or (b) a vi.fn() mock's resolved value read
+  // straight back out. None hid a production defect the way the same rules
+  // did in src/** and magnetite-web-client/src/** (JSON.parse boundaries,
+  // Array(n)-returns-any[], recharts' loosely-typed tickFormatter — all
+  // fixed there, not downgraded). Kept as `warn` rather than off: still
+  // signal, not a merge blocker for ephemeral test-fixture shapes.
+  {
+    files: ['**/*.{test,spec}.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+    },
+  },
 ])
