@@ -136,7 +136,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const data = JSON.parse(event.data) as WsFrame;
         if (data.type === 'pong') return;
         setLastMessage(data);
       } catch {
