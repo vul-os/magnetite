@@ -278,14 +278,20 @@ export default function Security() {
     }
   };
 
-  // No backend call here — same limitation Settings.tsx documents on its own
-  // handleRevokeSession: DELETE /api/auth/sessions needs the exact refresh
-  // token, which the session list doesn't expose, and there is no
-  // single-session revoke endpoint (only /api/auth/sessions/all). This is an
-  // optimistic local-only removal, not an actual server-side revoke.
-  const handleRevokeSession = (sessionId: string) => {
-    setSessionError(null);
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
+  // There is no single-session revoke endpoint on this server: the backend only
+  // exposes DELETE /auth/logout (needs the exact refresh token of the session
+  // being revoked, which the session list never returns) and DELETE
+  // /auth/logout-all (revokes every session at once). A helper that revokes by
+  // session id — session::revoke_session(pool, session_id, user_id) — exists in
+  // the Rust session service but is never wired to a route (see
+  // backend/src/services/session.rs), so there is no route to call.
+  //
+  // Silently dropping the row from local state (the old behaviour) told the
+  // user the session was gone when it was still live server-side. Since we
+  // can't make the real call, we no longer pretend to: leave the session in
+  // the list and say plainly that this action isn't available.
+  const handleRevokeSession = (_sessionId: string) => {
+    setSessionError(t('account.revokeUnavailable'));
   };
 
   // ── API Key handlers ──────────────────────────────────────────────────────────

@@ -209,6 +209,7 @@
     "currentSession": "Current",
     "revokeSessionLabel": "Revoke session for {{device}}",
     "revoke": "Revoke",
+    "revokeUnavailable": "Revoking a single session isn't available on this server yet — this session is still active. Nothing was changed.",
     "theme": "Theme",
     "themeDesc": "Choose your preferred colour scheme.",
     "emailNotifications": "Email Notifications",
