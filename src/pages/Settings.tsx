@@ -184,7 +184,7 @@ export default function Settings() {
         setLoading(false);
       }
     }
-    loadData();
+    void loadData();
   }, []);
 
   useEffect(() => {
@@ -204,7 +204,7 @@ export default function Settings() {
         setSessionsLoading(false);
       }
     }
-    loadSessions();
+    void loadSessions();
   }, []);
 
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
