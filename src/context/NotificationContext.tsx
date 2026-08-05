@@ -17,6 +17,24 @@ export interface AppNotification {
   [key: string]: unknown;
 }
 
+/**
+ * Shape of a raw inbound WS frame — either the notification fields directly,
+ * or wrapped as `{ user_id, notification: {...} }`. Everything is optional
+ * because it's attacker/network-controlled JSON; giving JSON.parse's `any`
+ * an explicit type here (instead of leaving it implicit) is what fixed the
+ * ~20 @typescript-eslint/no-unsafe-* findings that cascaded from it.
+ */
+interface InboundNotificationFrame {
+  id?: string;
+  type?: string;
+  notification_type?: string;
+  title?: string;
+  body?: string | null;
+  created_at?: string;
+  data?: unknown;
+  notification?: InboundNotificationFrame;
+}
+
 export interface NotificationContextValue {
   notifications: AppNotification[];
   unreadCount: number;
@@ -103,7 +121,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       ws.onmessage = (event) => {
         if (!mountedRef.current) return;
         try {
-          const msg = JSON.parse(event.data);
+          // MessageEvent<T> defaults to T = any, so event.data is `any` —
+          // WS text frames are always strings here (binaryType is never set
+          // to 'arraybuffer'/'blob'), so the cast is safe.
+          const msg = JSON.parse(event.data as string) as InboundNotificationFrame;
           // Backend sends: { user_id, notification: { id, type, title, body, data, created_at } }
           const notif = msg.notification ?? msg;
           if (notif && (notif.title || notif.type)) {
