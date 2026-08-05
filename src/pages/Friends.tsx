@@ -89,7 +89,7 @@ export default function Friends() {
     }
 
     if (useMocks) {
-      loadMocks();
+      void loadMocks();
       return () => { cancelled = true; };
     }
 
