@@ -113,7 +113,7 @@ export default function Profile() {
       }
     }
 
-    loadProfile();
+    void loadProfile();
     return () => { cancelled = true; };
   }, [username]);
 
