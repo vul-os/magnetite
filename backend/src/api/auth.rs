@@ -307,6 +307,25 @@ pub async fn list_sessions(
     Ok(response::success_response(sessions))
 }
 
+/// DELETE /api/v1/auth/sessions/:id — revoke a single session by id.
+///
+/// `user_id` comes only from the authenticated session (the `Extension`
+/// inserted by `auth_middleware`), never from the path — `session::revoke_session`
+/// scopes the delete to `WHERE id = $1 AND user_id = $2`, so a session id that
+/// exists but belongs to someone else deletes zero rows and this handler
+/// answers with the exact same 404 as a session id that does not exist at
+/// all. Neither the status code nor the message reveals which case occurred.
+pub async fn revoke_session(
+    State(pool): State<PgPool>,
+    Extension(user_id): Extension<Uuid>,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<response::ApiResponse<serde_json::Value>>> {
+    session::revoke_session(&pool, session_id, user_id).await?;
+    Ok(response::success_response(
+        serde_json::json!({ "message": "Session revoked" }),
+    ))
+}
+
 pub async fn me(
     State(pool): State<PgPool>,
     Extension(user_id): Extension<Uuid>,
@@ -925,6 +944,13 @@ pub fn router(pool: PgPool) -> Router {
         .route(
             "/sessions",
             get(list_sessions).layer(from_fn_with_state(
+                pool.clone(),
+                middleware::auth_middleware,
+            )),
+        )
+        .route(
+            "/sessions/:id",
+            delete(revoke_session).layer(from_fn_with_state(
                 pool.clone(),
                 middleware::auth_middleware,
             )),

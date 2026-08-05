@@ -146,6 +146,7 @@ export default function Settings() {
   const [loading, setLoading]         = useState(true);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -219,25 +220,24 @@ export default function Settings() {
     reader.readAsDataURL(file);
   };
 
-  const handleRevokeSession = (sessionId: string) => {
+  const handleRevokeSession = async (sessionId: string) => {
     if (import.meta.env.VITE_USE_MOCKS === 'true') {
+      // Mock mode runs with no backend (see useAuth.ts) — there is no route to
+      // call, so just drop the row from local state like every other mock
+      // mutation in this file.
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       return;
     }
-    /* There is no single-session revoke endpoint on this server: the backend
-     * only exposes DELETE /auth/logout (needs the exact refresh token of the
-     * session being revoked, which the session list never returns) and
-     * DELETE /auth/logout-all (revokes every session at once). A helper that
-     * revokes by session id — session::revoke_session(pool, session_id,
-     * user_id) — exists in the Rust session service but is never wired to a
-     * route (see backend/src/services/session.rs), so there is no route to
-     * call here.
-     *
-     * Silently dropping the row from local state (the old behaviour) told
-     * the user the session was gone when it was still live server-side.
-     * Since we can't make the real call, we no longer pretend to: leave the
-     * session in the list and say plainly that this action isn't available. */
-    setSessionNotice(t('account.revokeUnavailable'));
+    setSessionNotice(null);
+    setRevokingSessionId(sessionId);
+    try {
+      await api.auth.revokeSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch (err) {
+      setSessionNotice((err instanceof Error && err.message) || 'Failed to revoke session');
+    } finally {
+      setRevokingSessionId(null);
+    }
   };
 
   /* ── Tab panels ─────────────────────────────────────────────────────────── */
@@ -408,9 +408,10 @@ export default function Settings() {
                     type="button"
                     className="settings-revoke-btn"
                     onClick={() => handleRevokeSession(session.id)}
+                    disabled={revokingSessionId === session.id}
                     aria-label={t('account.revokeSessionLabel', { device: session.device })}
                   >
-                    {t('account.revoke')}
+                    {revokingSessionId === session.id ? t('account.revoking') : t('account.revoke')}
                   </button>
                 )}
               </div>
