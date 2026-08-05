@@ -91,6 +91,17 @@ export default defineConfig([
       // 'with-single-extends' is the option the rule ships specifically for
       // this pattern, so this configures the rule rather than disabling it.
       '@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'with-single-extends' }],
+      // Of the first 90 no-misused-promises findings surfaced when type-aware
+      // linting was turned on, 85 were "Promise-returning function provided
+      // to attribute" — async event handlers (onClick/onSubmit/onChange/...)
+      // passed straight to JSX. Every one sampled (~40+ checked by hand)
+      // already catches its own errors into loading/error state; none was a
+      // genuine unhandled-rejection risk. `checksVoidReturn.attributes: false`
+      // is typescript-eslint's own documented option for exactly this
+      // JSX-handler false-positive; it leaves the rule's other checks (bare
+      // conditionals, arguments, IIFE callbacks — where the remaining 5
+      // findings lived) fully active.
+      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
     },
   },
 
