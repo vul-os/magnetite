@@ -757,10 +757,10 @@ export default function GameDeploy() {
             <div className="webhook-section">
               <h4>Webhook URL</h4>
               <div className="webhook-url-box">
-                <code>{API_BASE}/webhooks/github</code>
+                <code>{API_BASE}/api/v1/github/webhooks/github</code>
                 <button
                   className="copy-btn"
-                  onClick={() => { navigator.clipboard.writeText(`${API_BASE}/webhooks/github`).catch(() => {}); }}
+                  onClick={() => { navigator.clipboard.writeText(`${API_BASE}/api/v1/github/webhooks/github`).catch(() => {}); }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
