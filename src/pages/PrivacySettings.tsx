@@ -89,7 +89,10 @@ export default function PrivacySettings() {
         (Array.isArray(list) ? list : []).map(u => ({
           id: (u.id ?? u.user_id) as string | number,
           username: (u.username as string | undefined) ?? 'user',
-          blockedDate: String(u.blocked_at ?? u.created_at ?? '').slice(0, 10) || '—',
+          blockedDate: (() => {
+            const raw = u.blocked_at ?? u.created_at;
+            return typeof raw === 'string' ? raw.slice(0, 10) || '—' : '—';
+          })(),
         }))
       );
     } catch (err) {
