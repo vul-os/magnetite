@@ -226,13 +226,13 @@ export default function VoicePanel({ channel, communityId, onLeave }: VoicePanel
 
   // Fetch room list when community is known
   useEffect(() => {
-    if (communityId) fetchRooms();
+    if (communityId) void fetchRooms();
   }, [communityId, fetchRooms]);
 
   // Auto-join this channel's voice room when channel changes
   useEffect(() => {
     if (!channel?.id) return;
-    joinVoiceRoom(channel.id);
+    void joinVoiceRoom(channel.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel?.id]);
 
