@@ -101,10 +101,13 @@ export const api = {
     /** List this user's active sessions. GET /api/v1/auth/sessions (auth-guarded). */
     sessions: () => request('/api/auth/sessions'),
     /**
-     * Sign out every session at once. DELETE /api/v1/auth/logout-all.
-     * There is no single-session revoke route — see handleRevokeSession in
-     * Security.tsx/Settings.tsx, which says so rather than pretending.
+     * Revoke a single session by id. DELETE /api/v1/auth/sessions/:id.
+     * Server-side, `user_id` is taken only from the authenticated session —
+     * never from this `id` — so this can only ever revoke a session that
+     * belongs to the caller.
      */
+    revokeSession: (id: Id) => request(`/api/auth/sessions/${id}`, { method: 'DELETE' }),
+    /** Sign out every session at once. DELETE /api/v1/auth/logout-all. */
     logoutAll: () => request('/api/auth/logout-all', { method: 'DELETE' }),
   },
   /**

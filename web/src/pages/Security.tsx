@@ -101,6 +101,7 @@ export default function Security() {
   const [sessions, setSessions]             = useState<SessionItem[]>(MOCK_SESSIONS ?? []);
   const [sessionsLoading, setSessionsLoading] = useState(!MOCK_SESSIONS);
   const [sessionError, setSessionError]     = useState<string | null>(null);
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
 
   // ── API Keys ──────────────────────────────────────────────────────────────────
   const [apiKeys, setApiKeys]               = useState<ApiKeyItem[]>([]);
@@ -256,20 +257,17 @@ export default function Security() {
     }
   };
 
-  // There is no single-session revoke endpoint on this server: the backend only
-  // exposes DELETE /auth/logout (needs the exact refresh token of the session
-  // being revoked, which the session list never returns) and DELETE
-  // /auth/logout-all (revokes every session at once). A helper that revokes by
-  // session id — session::revoke_session(pool, session_id, user_id) — exists in
-  // the Rust session service but is never wired to a route (see
-  // backend/src/services/session.rs), so there is no route to call.
-  //
-  // Silently dropping the row from local state (the old behaviour) told the
-  // user the session was gone when it was still live server-side. Since we
-  // can't make the real call, we no longer pretend to: leave the session in
-  // the list and say plainly that this action isn't available.
-  const handleRevokeSession = (_sessionId: string) => {
-    setSessionError(t('account.revokeUnavailable'));
+  const handleRevokeSession = async (sessionId: string) => {
+    setSessionError(null);
+    setRevokingSessionId(sessionId);
+    try {
+      await api.auth.revokeSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch (err) {
+      setSessionError((err instanceof Error && err.message) || 'Failed to revoke session');
+    } finally {
+      setRevokingSessionId(null);
+    }
   };
 
   // ── API Key handlers ──────────────────────────────────────────────────────────
@@ -570,9 +568,10 @@ export default function Security() {
                       type="button"
                       className="settings-revoke-btn"
                       onClick={() => handleRevokeSession(session.id)}
+                      disabled={revokingSessionId === session.id}
                       aria-label={t('account.revokeSessionLabel', { device: session.device })}
                     >
-                      {t('account.revoke')}
+                      {revokingSessionId === session.id ? t('account.revoking') : t('account.revoke')}
                     </button>
                   )}
                 </div>
