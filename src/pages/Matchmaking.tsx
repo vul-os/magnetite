@@ -140,27 +140,33 @@ export default function Matchmaking() {
   useEffect(() => {
     if (status !== 'searching') return;
 
-    // Increment wait time locally; real queue count comes from WS/status API
-    statusIntervalRef.current = setInterval(async () => {
+    // Increment wait time locally; real queue count comes from WS/status API.
+    // setInterval wants a `() => void` callback, so the async poll body runs
+    // as a `void`-discarded IIFE rather than being passed directly
+    // (@typescript-eslint/no-misused-promises); the try/catch below already
+    // handles every rejection.
+    statusIntervalRef.current = setInterval(() => {
       setQueueInfo(prev => ({ ...prev, waitTime: prev.waitTime + 1 }));
 
-      // Also poll the REST status endpoint to sync queue count
-      try {
-        const data = await api.matchmaking.status() as {
-          players_in_queue?: number;
-          status?: string;
-          match?: MatchInfo;
-        } | null;
-        if (data?.players_in_queue != null) {
-          setQueueInfo(prev => ({ ...prev, playersInQueue: data.players_in_queue as number }));
+      void (async () => {
+        // Also poll the REST status endpoint to sync queue count
+        try {
+          const data = await api.matchmaking.status() as {
+            players_in_queue?: number;
+            status?: string;
+            match?: MatchInfo;
+          } | null;
+          if (data?.players_in_queue != null) {
+            setQueueInfo(prev => ({ ...prev, playersInQueue: data.players_in_queue as number }));
+          }
+          if (data?.status === 'matched' && data?.match) {
+            setMatch(data.match);
+            setStatus('found');
+          }
+        } catch {
+          // Ignore polling errors — WS is the primary channel
         }
-        if (data?.status === 'matched' && data?.match) {
-          setMatch(data.match);
-          setStatus('found');
-        }
-      } catch {
-        // Ignore polling errors — WS is the primary channel
-      }
+      })();
     }, 1000);
 
     return () => clearInterval(statusIntervalRef.current ?? undefined);
