@@ -14,10 +14,10 @@ const STORAGE_KEY = 'magnetite_announcement_dismissed';
 
 export function AnnouncementProvider({ children, announcement = null }: { children: ReactNode; announcement?: string | null }) {
   const [isVisible, setIsVisible] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(() => {
+  const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : false;
+      return stored ? (JSON.parse(stored) as boolean) : false;
     } catch {
       return false;
     }
