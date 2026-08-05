@@ -139,7 +139,7 @@ export default function DeveloperDashboard() {
 
         if (dashData.status === 'fulfilled') {
           const wrapped = dashData.value as { data?: Record<string, unknown> } & Record<string, unknown>;
-          const d = (wrapped?.data ?? wrapped ?? {}) as Record<string, unknown>;
+          const d = wrapped?.data ?? wrapped ?? {};
           setStats({
             totalGames: (d.total_games as number | undefined) ?? 0,
             totalEarnings: Number(d.total_earnings ?? 0),
@@ -179,7 +179,7 @@ export default function DeveloperDashboard() {
       }
     }
 
-    loadData();
+    void loadData();
     return () => { cancelled = true; };
   }, [t]);
 
@@ -353,7 +353,7 @@ export default function DeveloperDashboard() {
                             className="action-btn analytics"
                             title={t('dashboard.viewAnalytics')}
                             aria-label={t('dashboard.analyticsLabel', { title: game.title })}
-                            onClick={() => navigate(`/developers/analytics/${game.id}`)}
+                            onClick={() => void navigate(`/developers/analytics/${game.id}`)}
                           >
                             📊
                           </button>
