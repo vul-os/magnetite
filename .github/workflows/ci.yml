@@ -97,6 +97,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run check:lint-config
       # The unit/integration suite and the axe a11y suite run under separate
       # vitest configs (the default config excludes *.a11y.test.jsx); both must
       # run or a whole tranche of tests gates nothing.

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . && cd .. && eslint --config web/eslint.config.js scripts",
+    "check:lint-config": "node scripts/check-lint-config.mjs",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
