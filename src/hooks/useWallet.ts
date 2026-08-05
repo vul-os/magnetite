@@ -87,11 +87,16 @@ const MOCK_RECEIPTS: Receipt[] = [
 /** Coerce whatever envelope the backend used into a plain array. */
 function asList(payload: unknown): Receipt[] {
   const body = (payload as { data?: unknown } | null)?.data ?? payload;
-  if (Array.isArray(body)) return body;
+  // Array.isArray's built-in signature is `(arg: any): arg is any[]`, so it
+  // narrows to any[] regardless of the checked variable's prior type — these
+  // casts make the trust this function already documents (coercing an
+  // unvalidated backend envelope into the expected shape) explicit instead
+  // of an implicit any[] return.
+  if (Array.isArray(body)) return body as Receipt[];
   const receipts = (body as { receipts?: unknown } | null)?.receipts;
-  if (Array.isArray(receipts)) return receipts;
+  if (Array.isArray(receipts)) return receipts as Receipt[];
   const items = (body as { items?: unknown } | null)?.items;
-  if (Array.isArray(items)) return items;
+  if (Array.isArray(items)) return items as Receipt[];
   return [];
 }
 
