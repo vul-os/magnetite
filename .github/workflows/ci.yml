@@ -98,6 +98,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run check:lint-config
+      - run: npm run typecheck
       # The unit/integration suite and the axe a11y suite run under separate
       # vitest configs (the default config excludes *.a11y.test.jsx); both must
       # run or a whole tranche of tests gates nothing.
