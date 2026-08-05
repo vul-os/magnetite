@@ -211,7 +211,7 @@ export default function RevenueChart({
             dataKey="date"
             stroke={colors.text}
             tick={{ fill: colors.text, fontSize: 12 }}
-            tickFormatter={(v) => formatTimeAxis(v, period)}
+            tickFormatter={(v: string | number) => formatTimeAxis(v, period)}
           />
           <YAxis
             stroke={colors.text}
