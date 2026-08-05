@@ -347,6 +347,22 @@ export function redirectUrl(addr: string, currentUrl?: string): string {
   return `${secure ? 'wss' : 'ws'}://${addr}`;
 }
 
+/**
+ * Raw shape of the two frames this handshake accepts over the wire —
+ * `ClientNet::NodeIdentity` and `ServerNet::Welcome`. Untrusted, attacker-
+ * controlled JSON, hence everything optional: giving JSON.parse's `any` an
+ * explicit type here (instead of leaving every downstream `msg.foo` access
+ * implicitly `any`) is what fixed the no-unsafe-* findings in this handler —
+ * it does not weaken any of the verification below, which still checks each
+ * field's actual value (equality, signature) before trusting it.
+ */
+interface HandshakeFrame {
+  type?: string;
+  node_key?: string;
+  nonce?: string;
+  sig?: string;
+}
+
 export interface FollowRedirectOpts {
   /** ws URL of the target node */
   url: string;
@@ -409,16 +425,23 @@ export function followRedirect({
     // is nothing for the wrapper itself to await or handle.
     async function handleMessage(event: MessageEvent<string>) {
       if (settled) return;
-      let msg;
+      let msg: HandshakeFrame;
       try {
-        msg = JSON.parse(event.data);
+        msg = JSON.parse(event.data) as HandshakeFrame;
       } catch {
         return;
       }
 
       if (msg.type === 'node_identity') {
+        // A frame missing node_key/sig entirely fails the same way a wrong
+        // key does — explicit here rather than relying on String(undefined)
+        // happening not to collide with a real hex key.
+        if (typeof msg.node_key !== 'string' || typeof msg.sig !== 'string') {
+          fail(new RedirectError('no_proof', 'node_identity frame missing node_key or sig'));
+          return;
+        }
         // THE pin. An impostor at this address answers here, and gets refused.
-        if (String(msg.node_key).toLowerCase() !== String(targetKey).toLowerCase()) {
+        if (msg.node_key.toLowerCase() !== String(targetKey).toLowerCase()) {
           fail(
             new RedirectError('key_mismatch', `target presented ${msg.node_key}, expected ${targetKey}`),
           );
