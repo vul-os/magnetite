@@ -257,7 +257,7 @@ export function useDiscovery(filter: DiscoveryFilter = {}) {
       }
     }
 
-    load();
+    void load();
     return () => {
       cancelled = true;
     };
