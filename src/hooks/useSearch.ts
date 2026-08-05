@@ -18,7 +18,7 @@ function errMessage(err: unknown, fallback: string): string {
 
 function getRecentSearches(): string[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || 'null') || [];
+    return (JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || 'null') as string[] | null) ?? [];
   } catch {
     return [];
   }
