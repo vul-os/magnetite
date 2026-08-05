@@ -6,6 +6,12 @@ export type JsonRecord = Record<string, unknown>;
 /** An id as accepted by template-literal URL interpolation. */
 type Id = string | number;
 
+// `Id | 'global'` collapses to `Id` in TS: Id's `string` branch swallows the
+// 'global' literal, silently losing the documented sentinel from
+// autocomplete (@typescript-eslint/no-redundant-type-constituents). `string
+// & {}` keeps the string branch but stops it absorbing sibling literals.
+type IdOrGlobal = number | (string & {}) | 'global';
+
 /** Error thrown by `request()` on a non-2xx response. */
 export interface ApiError extends Error {
   status?: number;
@@ -521,13 +527,13 @@ export const api = {
      * streams. The old code called /streams/live and swallowed the 404 into a
      * silent fallback, which hid the mistake.
      */
-    list: (communityId: Id | 'global') =>
+    list: (communityId: IdOrGlobal) =>
       communityId === 'global'
         ? request('/api/v1/streams')
         : request(`/api/v1/communities/${communityId}/streams`),
 
     /** Start streaming — community-scoped when given a community. */
-    goLive: (communityId: Id | 'global' | null | undefined, data: JsonRecord) =>
+    goLive: (communityId: IdOrGlobal | null | undefined, data: JsonRecord) =>
       communityId && communityId !== 'global'
         ? request(`/api/v1/communities/${communityId}/streams`, { method: 'POST', body: JSON.stringify(data) })
         : request('/api/v1/streams', { method: 'POST', body: JSON.stringify(data) }),
