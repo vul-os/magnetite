@@ -119,7 +119,10 @@ export function parseServerMessage(raw: string): ServerMessage | null {
  *
  * @param bytesField  - base64 string or array of bytes
  */
-export function decodeBytes(bytesField: string | number[] | null | undefined): unknown | null {
+// `unknown | null` collapses to just `unknown` (unknown is TS's top type,
+// so it already includes null) — the `| null` was documentation-only and
+// added nothing (@typescript-eslint/no-redundant-type-constituents).
+export function decodeBytes(bytesField: string | number[] | null | undefined): unknown {
   if (!bytesField) return null;
   try {
     if (Array.isArray(bytesField)) {
