@@ -88,7 +88,12 @@ function createSpeakingDetector(stream: MediaStream | null, onSpeaking: (isSpeak
     stopped = true;
     if (rafId) cancelAnimationFrame(rafId);
     try { source.disconnect(); } catch { /* ignore */ }
-    try { ctx.close(); } catch { /* ignore */ }
+    // ctx.close() returns a Promise (rejects if the context is already
+    // closing/closed) — a sync try/catch around it does NOT catch that
+    // rejection, so it was silently becoming an unhandled promise
+    // rejection instead of being ignored as intended. .catch() actually
+    // suppresses it.
+    ctx.close().catch(() => { /* ignore: already closing/closed */ });
   };
 }
 
