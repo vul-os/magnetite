@@ -82,7 +82,11 @@ export function useMessages(channelId: string | null, { isDM = false, dmUserId =
 
       // Normalize response: array or { messages: [] }
       const messagesField = (data as { messages?: unknown } | null)?.messages;
-      const fetched: ChatMessage[] = Array.isArray(data) ? data : (Array.isArray(messagesField) ? messagesField : []);
+      // Array.isArray's built-in signature narrows to any[] regardless of
+      // the checked variable's prior type, hence the explicit casts.
+      const fetched: ChatMessage[] = Array.isArray(data)
+        ? data as ChatMessage[]
+        : (Array.isArray(messagesField) ? messagesField as ChatMessage[] : []);
 
       if (!cancelled) {
         if (params.before) {
