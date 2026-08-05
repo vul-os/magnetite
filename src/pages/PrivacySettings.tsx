@@ -102,7 +102,7 @@ export default function PrivacySettings() {
   useEffect(() => {
     if (USE_MOCKS) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadBlocked();
+    void loadBlocked();
   }, [loadBlocked]);
 
   const handleUnblockUser = async (userId: BlockedUser['id']) => {
