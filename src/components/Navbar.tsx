@@ -254,14 +254,14 @@ export default function Navbar() {
 
   const handleLogout = useCallback(() => {
     logout();
-    navigate('/');
+    void navigate('/');
   }, [logout, navigate]);
 
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = searchQuery.trim();
     if (q) {
-      navigate(`/marketplace?search=${encodeURIComponent(q)}`);
+      void navigate(`/marketplace?search=${encodeURIComponent(q)}`);
       setSearchQuery('');
       setIsSearchOpen(false);
     }
