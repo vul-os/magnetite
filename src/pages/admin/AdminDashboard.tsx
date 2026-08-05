@@ -127,7 +127,7 @@ export default function AdminDashboard() {
       }
     }
 
-    load();
+    void load();
   }, []);
 
   const statsConfig = stats
