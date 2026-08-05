@@ -95,12 +95,12 @@ export function encodeInputFrame(seq: number, tick: number, input: Input): strin
  */
 export function parseServerMessage(raw: string): ServerMessage | null {
   try {
-    const msg = JSON.parse(raw);
-    if (typeof msg !== 'object' || msg === null || typeof msg.type !== 'string') {
+    const msg: unknown = JSON.parse(raw);
+    if (typeof msg !== 'object' || msg === null || typeof (msg as { type?: unknown }).type !== 'string') {
       console.warn('[magnetite] unexpected server message shape:', raw);
       return null;
     }
-    return msg;
+    return msg as ServerMessage;
   } catch (e) {
     console.warn('[magnetite] failed to parse server message:', e, raw);
     return null;
