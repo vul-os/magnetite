@@ -278,7 +278,12 @@ export default function Security() {
     }
   };
 
-  const handleRevokeSession = async (sessionId: string) => {
+  // No backend call here — same limitation Settings.tsx documents on its own
+  // handleRevokeSession: DELETE /api/auth/sessions needs the exact refresh
+  // token, which the session list doesn't expose, and there is no
+  // single-session revoke endpoint (only /api/auth/sessions/all). This is an
+  // optimistic local-only removal, not an actual server-side revoke.
+  const handleRevokeSession = (sessionId: string) => {
     setSessionError(null);
     setSessions(prev => prev.filter(s => s.id !== sessionId));
   };
