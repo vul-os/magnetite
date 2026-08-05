@@ -175,6 +175,25 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-return': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/no-unsafe-call': 'warn',
+      // it('...', async () => {...}) / act(async () => {...}) is a standing
+      // Vitest/RTL convention in this codebase even when a given test body
+      // happens not to need an internal await (act(async () => {}) still
+      // flushes microtasks between renders) — 8 findings, all this exact
+      // shape, hand-checked. Kept as warn, not off.
+      '@typescript-eslint/require-await': 'warn',
+    },
+  },
+
+  // e2e page objects: some query getters (getServerRail, getTabBar) are
+  // declared async purely so every page-object method uniformly returns a
+  // Promise<Locator>, matching sibling methods that do await — callers can
+  // `await po.getX()` without needing to know which ones are "really" async
+  // internally. Removing async would break that uniform contract. 2
+  // findings, both this shape.
+  {
+    files: ['e2e/page-objects/**/*.ts'],
+    rules: {
+      '@typescript-eslint/require-await': 'warn',
     },
   },
 ])
