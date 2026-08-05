@@ -128,7 +128,9 @@ export function I18nProvider({ children, defaultLocale }: I18nProviderProps) {
   // Load locale dictionary whenever the locale changes.
   useEffect(() => {
     let cancelled = false;
-    loadLocale(locale).then((dict) => {
+    // loadLocale() catches its own errors and falls back to enMessages, so
+    // it never rejects.
+    void loadLocale(locale).then((dict) => {
       if (!cancelled) setMessages(dict);
     });
     return () => { cancelled = true; };
