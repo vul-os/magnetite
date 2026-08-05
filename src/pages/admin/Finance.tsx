@@ -16,8 +16,6 @@ import './admin.css';
  * carried (which defaults to 0 bps — the developer keeps the full subtotal).
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
 /** Protocol fee charged by this node, in basis points. Default: none. */
 const PROTOCOL_FEE_BPS = 0;
 
@@ -56,18 +54,6 @@ interface RawReceipt {
   date?: string;
   voided?: boolean;
   status?: string;
-}
-
-function authFetch(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
 }
 
 const RAIL_PUBKEY = '3ac9017e5fb2d846902ce15b7a4d3f80c6e1927b5d0af348e2c76b91045fd8a2';
@@ -124,12 +110,9 @@ export default function Finance() {
     setError(null);
 
     try {
-      const res = await authFetch('/api/admin/transactions?limit=100');
-      if (res.ok) {
-        const d = await res.json() as { data?: RawReceipt[] } | RawReceipt[];
-        const raw = (!Array.isArray(d) ? d.data : d) ?? [];
-        setReceipts(Array.isArray(raw) ? raw.map(normaliseReceipt) : []);
-      }
+      const d = await api.admin.transactions({ limit: 100 }) as { data?: RawReceipt[] } | RawReceipt[] | null;
+      const raw = (d && !Array.isArray(d) ? d.data : d) ?? [];
+      setReceipts(Array.isArray(raw) ? raw.map(normaliseReceipt) : []);
     } catch (err) {
       setError((err instanceof Error && err.message) || 'Failed to load receipts');
     } finally {
