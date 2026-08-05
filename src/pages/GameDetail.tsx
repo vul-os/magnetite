@@ -326,7 +326,7 @@ export default function GameDetail() {
       }
     }
 
-    loadGame();
+    void loadGame();
     return () => { cancelled = true; };
   }, [id]);
 
@@ -346,9 +346,14 @@ export default function GameDetail() {
   };
 
   const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setShowShareToast(true);
-    setTimeout(() => setShowShareToast(false), 2000);
+    // Previously fired-and-forgot with no catch: a denied-permission or
+    // insecure-context clipboard failure was an unhandled promise rejection
+    // AND the "copied" toast still showed regardless of success. Only show
+    // the toast once the write actually succeeds.
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setShowShareToast(true);
+      setTimeout(() => setShowShareToast(false), 2000);
+    }).catch(() => { /* clipboard unavailable — no toast, nothing else to do */ });
   };
 
   const formatDate = (d: string | null | undefined) => {
