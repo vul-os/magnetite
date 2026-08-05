@@ -184,7 +184,7 @@ export default function ReviewModeration() {
 
   // Load review-moderation reports from the admin API (external system).
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadReports(); }, [loadReports]);
+  useEffect(() => { void loadReports(); }, [loadReports]);
 
   const applyAction = useCallback(async (reportId: string, action: string) => {
     setActioning(reportId);
