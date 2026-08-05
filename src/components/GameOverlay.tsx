@@ -235,13 +235,13 @@ function ChatTab({ channelId, comms }: ChatTabProps) {
 
   const isMock = comms == null;
 
-  const messages        = isMock ? MOCK_MESSAGES     : (comms!.messages ?? MOCK_MESSAGES);
-  const typingUsers     = isMock ? {}                : (comms!.typingUsers ?? {});
-  const isConnected     = isMock ? false             : (comms!.isConnected ?? false);
-  const sendChatMsg     = isMock ? null              : comms!.sendChatMessage;
-  const postMessage     = isMock ? null              : comms!.postMessage;
-  const sendTypingStart = isMock ? null              : comms!.sendTypingStart;
-  const sendTypingStop  = isMock ? null              : comms!.sendTypingStop;
+  const messages        = isMock ? MOCK_MESSAGES     : (comms.messages ?? MOCK_MESSAGES);
+  const typingUsers     = isMock ? {}                : (comms.typingUsers ?? {});
+  const isConnected     = isMock ? false             : (comms.isConnected ?? false);
+  const sendChatMsg     = isMock ? null              : comms.sendChatMessage;
+  const postMessage     = isMock ? null              : comms.postMessage;
+  const sendTypingStart = isMock ? null              : comms.sendTypingStart;
+  const sendTypingStop  = isMock ? null              : comms.sendTypingStop;
 
   const typingList = Object.values(typingUsers);
 
@@ -262,7 +262,10 @@ function ChatTab({ channelId, comms }: ChatTabProps) {
       setInput('');
       if (sendTypingStop) sendTypingStop();
       if (postMessage) {
-        postMessage(trimmed);
+        // postMessage (useMessages.postMessage) catches its own errors and
+        // resolves an ActionResult; it never rejects, and this handler
+        // doesn't need the result — deliberate fire-and-forget.
+        void postMessage(trimmed);
       } else if (sendChatMsg) {
         sendChatMsg(trimmed, channelId ?? undefined);
       }
@@ -390,15 +393,15 @@ interface VoiceTabProps {
 function VoiceTab({ voiceRoomId, comms }: VoiceTabProps) {
   const isMock = comms == null;
 
-  const currentRoom    = isMock ? { id: 'mock-room', name: 'General Voice' } : (comms!.currentRoom ?? null);
-  const muted          = isMock ? false  : (comms!.muted ?? false);
-  const deafened       = isMock ? false  : (comms!.deafened ?? false);
-  const participants   = isMock ? MOCK_PARTICIPANTS  : (comms!.voiceParticipants ?? []);
-  const toggleMute     = isMock ? null   : comms!.toggleMute;
-  const toggleDeafen   = isMock ? null   : comms!.toggleDeafen;
-  const joinVoiceRoom  = isMock ? null   : comms!.joinVoiceRoom;
-  const leaveVoiceRoom = isMock ? null   : comms!.leaveVoiceRoom;
-  const voiceConnected = isMock ? false  : (comms!.voiceConnected ?? false);
+  const currentRoom    = isMock ? { id: 'mock-room', name: 'General Voice' } : (comms.currentRoom ?? null);
+  const muted          = isMock ? false  : (comms.muted ?? false);
+  const deafened       = isMock ? false  : (comms.deafened ?? false);
+  const participants   = isMock ? MOCK_PARTICIPANTS  : (comms.voiceParticipants ?? []);
+  const toggleMute     = isMock ? null   : comms.toggleMute;
+  const toggleDeafen   = isMock ? null   : comms.toggleDeafen;
+  const joinVoiceRoom  = isMock ? null   : comms.joinVoiceRoom;
+  const leaveVoiceRoom = isMock ? null   : comms.leaveVoiceRoom;
+  const voiceConnected = isMock ? false  : (comms.voiceConnected ?? false);
   const currentRoomId  = currentRoom?.id ?? null;
 
   // Auto-join the target room when voiceRoomId is provided and we are not in it
