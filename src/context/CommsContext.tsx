@@ -175,7 +175,7 @@ export function CommsProvider({ children }: { children: ReactNode }) {
     (msg: WsFrame) => {
       // Real-time chat message → append if it's for the active channel
       if (msg.channel_id === activeChannelId) {
-        appendMessage({ ...msg, id: String(msg.id), content: String(msg.content ?? ''), pending: false });
+        appendMessage({ ...msg, id: String(msg.id), content: typeof msg.content === 'string' ? msg.content : '', pending: false });
       }
     },
     [activeChannelId, appendMessage]
@@ -201,7 +201,7 @@ export function CommsProvider({ children }: { children: ReactNode }) {
     (msg: WsFrame) => {
       // If this DM is from the active DM user, append it
       if (activeDMUserId && msg.sender_id === activeDMUserId) {
-        appendMessage({ ...msg, id: String(msg.id), content: String(msg.content ?? ''), pending: false });
+        appendMessage({ ...msg, id: String(msg.id), content: typeof msg.content === 'string' ? msg.content : '', pending: false });
       }
     },
     [activeDMUserId, appendMessage]
