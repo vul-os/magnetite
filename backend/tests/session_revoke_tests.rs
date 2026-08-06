@@ -93,14 +93,13 @@ mod live_db_tests {
             "seed session must exist before revoking"
         );
 
-        let result = revoke_session(
-            State(pool.clone()),
-            Extension(user_id),
-            Path(session_id),
-        )
-        .await;
+        let result =
+            revoke_session(State(pool.clone()), Extension(user_id), Path(session_id)).await;
 
-        assert!(result.is_ok(), "owner revoking their own session must succeed");
+        assert!(
+            result.is_ok(),
+            "owner revoking their own session must succeed"
+        );
         assert!(
             !session_exists(&pool, session_id).await,
             "session row must be gone from `sessions` after the owner revokes it"
@@ -158,9 +157,9 @@ mod live_db_tests {
         .await;
         let nonexistent_message = match nonexistent_result {
             Err(AppError::NotFound(msg)) => msg,
-            Err(other) => panic!(
-                "expected AppError::NotFound for a nonexistent session id, got: {other:?}"
-            ),
+            Err(other) => {
+                panic!("expected AppError::NotFound for a nonexistent session id, got: {other:?}")
+            }
             Ok(_) => panic!("revoking a nonexistent session id must not succeed"),
         };
         assert_eq!(
