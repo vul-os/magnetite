@@ -180,6 +180,8 @@ jobs:
       - run: npm run lint
       - run: npm run check:lint-config
       - run: npm run typecheck
+      - name: Typecheck the CI gate script itself (scripts/check-lint-config.mjs)
+        run: npm run typecheck:scripts
       # The unit/integration suite and the axe a11y suite run under separate
       # vitest configs (the default config excludes *.a11y.test.jsx); both must
       # run or a whole tranche of tests gates nothing.
