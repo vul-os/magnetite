@@ -36,6 +36,11 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+/**
+ * @typedef {import('eslint').ESLint.LintResult} LintResult
+ * @typedef {import('eslint').Linter.LintMessage} LintMessage
+ */
+
 // ============================================================================
 // CONFIG — the only block a sibling repo should need to edit.
 // ============================================================================
@@ -89,7 +94,11 @@ function probeFloating() {
 const failures = []
 let lastPing = Date.now()
 
-/** Watchdog heartbeat: print progress at least every ~30s of wall time. */
+/**
+ * Watchdog heartbeat: print progress at least every ~30s of wall time.
+ * @param {string} label
+ * @returns {void}
+ */
 function tick(label) {
   const now = Date.now()
   if (now - lastPing >= 15_000) {
@@ -98,11 +107,21 @@ function tick(label) {
   }
 }
 
+/**
+ * @param {string} id
+ * @param {string} message
+ * @returns {void}
+ */
 function fail(id, message) {
   failures.push({ id, message })
   console.log(`FAIL [${id}] ${message}`)
 }
 
+/**
+ * @param {string} id
+ * @param {string} message
+ * @returns {void}
+ */
 function pass(id, message) {
   console.log(`PASS [${id}] ${message}`)
 }
@@ -133,7 +152,9 @@ async function assertTypeAwarenessLive() {
 
     const eslint = new ESLint({ cwd: CONFIG.webRoot })
     const relPath = path.relative(CONFIG.webRoot, fixturePath)
+    /** @type {LintResult[]} */
     const results = await eslint.lintFiles([relPath])
+    /** @type {LintMessage[]} */
     const messages = results.flatMap((r) => r.messages)
     const hit = messages.find((m) => m.ruleId === '@typescript-eslint/no-floating-promises')
 
@@ -160,6 +181,11 @@ async function assertTypeAwarenessLive() {
 // ============================================================================
 const EXACT_SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/
 
+/**
+ * @param {string} dir
+ * @param {string[]} [out]
+ * @returns {string[]}
+ */
 function walkForPackageJsons(dir, out = []) {
   let entries
   try {
@@ -179,6 +205,10 @@ function walkForPackageJsons(dir, out = []) {
   return out
 }
 
+/**
+ * @param {string} startDir
+ * @returns {string | null}
+ */
 function resolveInstalledTypescriptVersion(startDir) {
   // Walk upward from the package.json's own directory looking for
   // node_modules/typescript — handles both a locally-installed typescript
@@ -215,7 +245,10 @@ function assertTypescriptPinned() {
     try {
       pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
     } catch (err) {
-      fail('B', `${pkgPath}: could not parse as JSON (${err.message})`)
+      // `strict` implies useUnknownInCatchVariables, so `err` is `unknown`
+      // here (type-safety only — behaviour is unchanged).
+      const reason = err instanceof Error ? err.message : String(err)
+      fail('B', `${pkgPath}: could not parse as JSON (${reason})`)
       ok = false
       continue
     }
@@ -269,6 +302,7 @@ async function assertCoverageFloor() {
   console.log('\n-- Assertion C: ESLint actually lints a real number of files --')
 
   const eslint = new ESLint({ cwd: CONFIG.webRoot, errorOnUnmatchedPattern: false })
+  /** @type {LintResult[]} */
   const results = await eslint.lintFiles(['.'])
   tick(`eslint . returned ${results.length} results`)
 
