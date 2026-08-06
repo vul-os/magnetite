@@ -54,7 +54,7 @@ magnetite dev
 `magnetite dev` builds your game, boots a `WasmExecutor` inside a sandboxed
 `SingleRoom` server, and serves it at `ws://127.0.0.1:<port>`. No database, no
 Postgres, no Redis, no cloud account. Connect with
-[`magnetite-web-client`](../magnetite-web-client/) or the Bevy client in
+[`magnetite-web-client`](../web/magnetite-web-client/) or the Bevy client in
 [`game-client-bevy/`](../game-client-bevy/).
 
 ## Bring a server
