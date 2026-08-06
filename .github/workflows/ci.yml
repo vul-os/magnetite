@@ -50,6 +50,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+          # The e2e leg additionally needs the wasip1 target to build the
+          # sandbox artifact its tests load (see the step below). An empty
+          # string is a no-op for every other matrix entry.
+          targets: ${{ matrix.crate.name == 'e2e' && 'wasm32-wasip1' || '' }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -62,6 +66,19 @@ jobs:
         if: matrix.crate.apt != ''
         working-directory: .
         run: sudo apt-get update && sudo apt-get install -y ${{ matrix.crate.apt }}
+
+      # magnetite-e2e/tests/wasm_end_to_end.rs asserts sandbox/native parity
+      # against a real game_template_authoritative.wasm. That artifact is
+      # gitignored (**/target/) and built by NO other workflow — game-ci.yml
+      # only builds the browser target (wasm32-unknown-unknown), a different
+      # artifact at a different path. Without this step the e2e leg's three
+      # artifact-dependent tests panic on a fresh checkout (see the fail-closed
+      # `wasm.exists()` checks in that file). Build it here, before this leg's
+      # own build/test steps, so the crate under test never has to do so.
+      - name: Build wasm artifact for e2e (wasm32-wasip1)
+        if: matrix.crate.name == 'e2e'
+        working-directory: game-templates/authoritative
+        run: cargo build --locked --release --target wasm32-wasip1 --features wasm
 
       - name: cargo fmt --check
         run: cargo fmt --check
