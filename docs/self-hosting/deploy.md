@@ -7,8 +7,9 @@
 >
 > **Corrected 2026-07-31: the `ghcr.io/magnetite/*` image names below are not
 > published under those names by any workflow in this repo.** Nothing pushes
-> to GHCR at all. `.github/workflows/deploy.yml` deploys straight to Fly.io
-> via `fly deploy` and is unrelated to container images.
+> to GHCR at all. A `deploy.yml` workflow used to run `fly deploy` on every
+> push to main; it has been removed (it never succeeded once, and targeted
+> the old central backend), so there is no Fly.io deployment either.
 > `.github/workflows/release.yml` does have a real `docker` job, but it
 > pushes to **Docker Hub**, as `magnetite/magnetite` (backend) /
 > `magnetite/magnetite:vX.Y.Z-frontend` — different registry, different

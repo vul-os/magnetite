@@ -113,7 +113,7 @@ The backend API, database schema, and core frontend scaffold are built and compi
 - [x] docker-compose.yml (postgres, redis, backend, frontend, nginx)
 - [x] nginx.conf (reverse proxy + static serving)
 - [x] fly.toml (Fly.io deployment)
-- [x] GitHub Actions: ci.yml, deploy.yml, game-ci.yml, game-deploy.yml, release.yml
+- [x] GitHub Actions: ci.yml, game-ci.yml, game-deploy.yml, release.yml (deploy.yml removed — see below)
 - [x] backend/tools: migrate.sh, backup.sh
 
 ### SDK & game template

@@ -11,8 +11,9 @@ Docker Compose.
 > and `magnetite/magnetite:vX.Y.Z-frontend`, only on a tagged `v*` release,
 > only if the repo's `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets are set,
 > and with **no `:latest` tag** (`docker/metadata-action`'s only pattern is
-> `type=semver`). `.github/workflows/deploy.yml` is unrelated to that job and
-> deploys straight to Fly.io via `fly deploy`. For local development, the
+> `type=semver`). There is no Fly.io deployment: a `deploy.yml` workflow that
+> ran `fly deploy` on every push to main has been removed — it never once
+> succeeded, and it targeted the old central backend. For local development, the
 > only way to run this stack today is to build the images yourself from the
 > `Dockerfile.backend` / `Dockerfile.frontend` in this repo, which is exactly
 > what the real, tracked [`docker-compose.yml`](../../docker-compose.yml) at
