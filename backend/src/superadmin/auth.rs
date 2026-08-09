@@ -66,17 +66,15 @@ impl SuperAdminConfig {
             .filter(|s| !s.trim().is_empty())
         {
             Credential::Argon2(h)
-        } else if let Some(p) = std::env::var("SUPERADMIN_PASSWORD")
-            .ok()
-            .filter(|s| !s.is_empty())
-        {
+        } else {
+            let p = std::env::var("SUPERADMIN_PASSWORD")
+                .ok()
+                .filter(|s| !s.is_empty())?;
             tracing::warn!(
                 "SUPERADMIN_PASSWORD is set in plaintext; set SUPERADMIN_PASSWORD_HASH \
                  (argon2 PHC string) instead for production"
             );
             Credential::Plain(p)
-        } else {
-            return None;
         };
 
         let is_prod = std::env::var("APP_ENV")

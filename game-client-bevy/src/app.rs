@@ -465,7 +465,7 @@ pub fn build_app(player_id: PlayerId, net_config: NetConfig) -> App {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "Magnetite Arena Shooter — Client".to_string(),
-            resolution: (800., 600.).into(),
+            resolution: (800.0_f32, 600.0_f32).into(),
             ..default()
         }),
         ..default()

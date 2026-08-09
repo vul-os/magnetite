@@ -446,7 +446,7 @@ mod tests {
     fn the_builder_accepts_exactly_the_protocol_limit_and_refuses_one_more() {
         let ok: Vec<PaymentLeg> = (0..MAX_OPERATIONS).map(|i| leg(i as u8, 1)).collect();
         let tx = build_payment_transaction([1u8; 32], &ok, 1, 100, [0u8; 32]).unwrap();
-        assert_eq!(tx.operations.len() as usize, MAX_OPERATIONS);
+        assert_eq!(tx.operations.len(), MAX_OPERATIONS);
 
         let too_many: Vec<PaymentLeg> = (0..=MAX_OPERATIONS).map(|i| leg(i as u8, 1)).collect();
         let err = build_payment_transaction([1u8; 32], &too_many, 1, 100, [0u8; 32]).unwrap_err();

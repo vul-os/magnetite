@@ -1,6 +1,6 @@
 //! Keep the JS client's cross-language fixture honest.
 //!
-//! `magnetite-web-client/src/__fixtures__/redirect.json` holds a real signed
+//! `web/magnetite-web-client/src/__fixtures__/redirect.json` holds a real signed
 //! redirect that the web client verifies with WebCrypto. If this crate's
 //! canonical signing bytes ever change without the fixture (and the JS
 //! encoder) being regenerated, the JS client would start refusing legitimate
@@ -10,7 +10,7 @@
 use magnetite_runtime::cluster::SignedRedirect;
 use magnetite_seams::identity::{Identity, PubKey, RawKeypairAuth};
 
-const FIXTURE: &str = include_str!("../../magnetite-web-client/src/__fixtures__/redirect.json");
+const FIXTURE: &str = include_str!("../../web/magnetite-web-client/src/__fixtures__/redirect.json");
 
 #[test]
 fn the_js_client_fixture_still_verifies_under_this_crate() {
