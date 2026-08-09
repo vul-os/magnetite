@@ -16,13 +16,25 @@
  * server (no extra dependency) on an ephemeral local port.
  */
 
-import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { readFile, mkdir, writeFile, copyFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import { spawn } from 'node:child_process'
+
+// playwright is a devDependency of web/, but this script lives at the repo
+// root — and Node resolves bare specifiers by walking up from the *importing
+// file*, so scripts/ sees scripts/node_modules and <root>/node_modules and
+// never web/node_modules. `import { chromium } from 'playwright'` therefore
+// only worked while a stray <root>/node_modules happened to exist, and dies
+// with ERR_MODULE_NOT_FOUND once it does not. Resolve it from where it is
+// actually declared.
+const { chromium } = createRequire(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'package.json'),
+)('playwright')
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')

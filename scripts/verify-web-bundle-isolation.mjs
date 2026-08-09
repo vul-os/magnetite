@@ -35,12 +35,24 @@
 // Requires: a cargo toolchain, and Playwright's Chromium
 // (`npx playwright install chromium`). Exits non-zero on any failed check.
 
-import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module'
+
+// playwright is a devDependency of web/, but this script lives at the repo
+// root — and Node resolves bare specifiers by walking up from the *importing
+// file*, so scripts/ sees scripts/node_modules and <root>/node_modules and
+// never web/node_modules. `import { chromium } from 'playwright'` therefore
+// only worked while a stray <root>/node_modules happened to exist, and dies
+// with ERR_MODULE_NOT_FOUND once it does not. Resolve it from where it is
+// actually declared.
+const { chromium } = createRequire(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'package.json'),
+)('playwright')
+
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CRATE = join(REPO, 'magnetite-web-host');
